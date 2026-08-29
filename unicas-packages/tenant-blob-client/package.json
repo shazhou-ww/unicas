@@ -1,7 +1,7 @@
 {
-  "name": "@unicas/tenant-client",
+  "name": "@unicas/tenant-blob-client",
   "version": "0.1.0",
-  "description": "Cloud-neutral CAS HTTP client for UniDocs",
+  "description": "Blob layer above @unicas/tenant-client: large-content chunking into CAS nodes, blob index CBOR, stream/random reads, and tenant usage/gc",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -20,14 +20,9 @@
     "typecheck": "tsc -b",
     "clean": "rimraf --glob dist \"*.tsbuildinfo\""
   },
-  "dependencies": {
-    "@unicas/tenant-protocol": "workspace:*",
-    "@unicas/codec": "workspace:*"
-  },
   "devDependencies": {
     "typescript": "^5.9.0",
-    "vitest": "^3.2.0",
-    "@unicas/tenant-blob-client": "workspace:*"
+    "vitest": "^3.2.0"
   },
   "publishConfig": {
     "main": "./dist/index.js",
@@ -38,5 +33,10 @@
         "import": "./dist/index.js"
       }
     }
+  },
+  "dependencies": {
+    "@unicas/codec": "workspace:*",
+    "@unicas/tenant-client": "workspace:*",
+    "cborg": "^6.1.1"
   }
 }
