@@ -8,22 +8,9 @@
       "ES2024",
       "DOM"
     ],
-    "types": [
-      "@cloudflare/workers-types"
-    ]
+    "types": []
   },
   "include": [
     "src"
-  ],
-  "references": [
-    {
-      "path": "../control-plane"
-    },
-    {
-      "path": "../tenant-protocol"
-    },
-    {
-      "path": "../codec"
-    }
   ]
 }
