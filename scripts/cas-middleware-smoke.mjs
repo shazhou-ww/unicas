@@ -186,11 +186,14 @@ async function main() {
   }
 
   let concurrencyNodeCount = 0;
-  if (process.env.UNICAS_SMOKE_SKIP_CONCURRENCY !== "1") {
+  const runConcurrencyProbe = process.env.UNICAS_SMOKE_ENABLE_CONCURRENCY === "1"
+    || (!isLiveEdge && process.env.UNICAS_SMOKE_SKIP_CONCURRENCY !== "1");
+  if (runConcurrencyProbe) {
     // Hold one request body mid-stream. Its reservation proves lease begin has
     // completed; usage and a different-hash lease must still finish before the
     // first body is released. Some ingress paths buffer a full client body;
-    // callers may skip this probe while still running the canonical flow.
+    // HTTPS ingress buffers the full client body, so live smoke skips this
+    // probe unless explicitly enabled while still running the canonical flow.
     const slow = await nodeOf("slow-upload-concurrency-probe");
     const paused = pausedBody(slow.body);
     const slowLease = fetch(`${BASE}${prefix}/cas/nodes/${slow.hash}/lease`, {

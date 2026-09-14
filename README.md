@@ -54,6 +54,11 @@ Architecture and operations documentation lives under `docs/`. Package
 boundaries and dependency rules are documented in
 `packages/README.md`.
 
+The planned separation of the product website, machine API, administrator
+console, and documentation origins is recorded in
+[`docs/domain-topology-plan.md`](docs/domain-topology-plan.md). It is a plan,
+not the current deployed topology.
+
 Report suspected vulnerabilities privately as described in
 [`SECURITY.md`](SECURITY.md).
 

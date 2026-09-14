@@ -80,7 +80,10 @@ node scripts/cas-middleware-smoke.mjs           # needs .wrangler/cas-deploy/*.p
 The smoke script uses one dedicated `deploy-smoke` tenant, stable node hashes,
 and per-run request IDs. It releases the parent Root Ref after assertions, so
 subsequent runs reuse the same nodes instead of accumulating tenant/R2 data.
-Running it twice with a 70s gap also proves the authority-cache refresh path.
+HTTPS targets skip the paused-body concurrency probe because Cloudflare ingress
+buffers the request body; set `UNICAS_SMOKE_ENABLE_CONCURRENCY=1` only when the
+target preserves streaming ingress. Running smoke twice with a 70s gap also
+proves the authority-cache refresh path.
 
 ### Rollback
 

@@ -153,6 +153,8 @@ https://unicas.work/oauth/google/callback
 The first serves administrator WebUI and CLI login; the second serves remote
 MCP OAuth. `docs.unicas.work` is reserved for the product documentation site
 and is intentionally not a Worker route or DNS record in this deployment.
+The planned move to separate apex, API, console, and documentation origins is
+documented in [UniCAS domain topology plan](domain-topology-plan.md).
 
 ## Read-only deployment validation
 
