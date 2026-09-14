@@ -54,14 +54,10 @@ Architecture and operations documentation lives under `docs/`. Package
 boundaries and dependency rules are documented in
 `packages/README.md`.
 
-The planned separation of the product website, machine API, administrator
-console, and documentation origins is recorded in
-[`docs/domain-topology-plan.md`](docs/domain-topology-plan.md). It is a plan,
-not the current deployed topology.
-
-The planned public terminology migration from Stack/Tenant to App/Space is
-recorded in
-[`docs/app-space-terminology-plan.md`](docs/app-space-terminology-plan.md).
+The accepted origin architecture is documented in
+[`docs/domain-topology.md`](docs/domain-topology.md). The accepted App/Space
+resource vocabulary is documented in
+[`docs/terminology.md`](docs/terminology.md).
 
 Repository work is tracked alongside the code under [`tasks/`](tasks/README.md).
 New work starts in `backlog/`, moves to `ongoing/` with a maintained

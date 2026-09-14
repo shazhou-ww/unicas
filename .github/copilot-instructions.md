@@ -5,6 +5,8 @@ For planned or multi-step repository work, follow the task workflow in
 
 - Check `tasks/ongoing/` and `tasks/backlog/` before starting related work.
 - Create new tasks under `tasks/backlog/<task-name>/Task.md`.
+- Keep task-specific plans, research, and current-state notes in that task
+  folder. Reserve `docs/` for accepted, stable project consensus.
 - Move a task to `tasks/ongoing/` before implementation and maintain its
   `Progress.md` checklist as work proceeds.
 - Move completed or abandoned work to `tasks/archived/`, preserving its task,

@@ -3,6 +3,17 @@
 This directory is the repository-owned task ledger. Task state travels with the
 code and does not depend on a particular issue tracker or hosting platform.
 
+## Documentation boundary
+
+Put task-specific plans, research, impact inventories, current-state captures,
+and reference material inside the task folder. These files move with the task.
+
+Use `docs/` only for accepted, stable project consensus: architecture,
+terminology, protocols, operations, and current configuration. When a task
+reaches a durable decision, extract that decision into `docs/` and link the
+finalized document from `Task.md`; keep execution details and progress in the
+task folder.
+
 ## Layout
 
 ```text
@@ -97,7 +108,7 @@ Why the task exists and the current behavior.
 
 ## References
 
-- [Canonical design](relative/path.md)
+- Canonical design: `<relative path to finalized document>`
 ```
 
 Keep `Task.md` focused on the durable problem, scope, and acceptance criteria.

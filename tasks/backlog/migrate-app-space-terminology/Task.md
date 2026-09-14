@@ -59,6 +59,7 @@ and names the top-level application/trust boundary App.
 
 ## References
 
-- [App and Space terminology plan](../../../docs/app-space-terminology-plan.md)
-- [UniCAS domain topology plan](../../../docs/domain-topology-plan.md)
+- [Task execution plan](Plan.md)
+- [Finalized terminology](../../../docs/terminology.md)
+- [Finalized domain topology](../../../docs/domain-topology.md)
 - [UniCAS architecture](../../../docs/cas-architecture.md)

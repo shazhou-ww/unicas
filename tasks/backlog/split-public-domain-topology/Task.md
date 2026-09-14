@@ -57,6 +57,8 @@ API and console need distinct security and ownership boundaries.
 
 ## References
 
-- [UniCAS domain topology plan](../../../docs/domain-topology-plan.md)
-- [App and Space terminology plan](../../../docs/app-space-terminology-plan.md)
+- [Task execution plan](Plan.md)
+- [Current deployment state](CurrentState.md)
+- [Finalized domain topology](../../../docs/domain-topology.md)
+- [Finalized terminology](../../../docs/terminology.md)
 - [Deployment and local configuration](../../../docs/deployment-and-local-configuration.md)
