@@ -41,6 +41,9 @@ jobs:
       - name: Check generated OpenAPI documents
         run: pnpm check:openapi
 
+      - name: Check repository task ledger
+        run: pnpm check:tasks
+
       - name: Build
         run: pnpm build
 

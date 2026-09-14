@@ -9,9 +9,10 @@
     "smoke": "node stacks/unicas/deploy/smoke.mjs",
     "build": "pnpm -r build",
     "test": "pnpm check:repo && pnpm -r test",
-    "check:repo": "vitest run tests/deploy-plan.test.mjs tests/workspace-boundaries.test.mjs tests/openapi-drift.test.ts",
+    "check:repo": "vitest run tests/deploy-plan.test.mjs tests/workspace-boundaries.test.mjs tests/openapi-drift.test.ts tests/task-workflow.test.mjs",
     "check:workspace": "vitest run tests/workspace-boundaries.test.mjs tests/deploy-plan.test.mjs",
     "check:openapi": "vitest run tests/openapi-drift.test.ts",
+    "check:tasks": "vitest run tests/task-workflow.test.mjs",
     "typecheck": "pnpm -r typecheck",
     "clean": "pnpm -r run clean",
     "keys:local": "node scripts/generate-local-capability-keys.mjs"

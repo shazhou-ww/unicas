@@ -63,6 +63,10 @@ The planned public terminology migration from Stack/Tenant to App/Space is
 recorded in
 [`docs/app-space-terminology-plan.md`](docs/app-space-terminology-plan.md).
 
+Repository work is tracked alongside the code under [`tasks/`](tasks/README.md).
+New work starts in `backlog/`, moves to `ongoing/` with a maintained
+`Progress.md`, and finishes in `archived/` whether completed or abandoned.
+
 Report suspected vulnerabilities privately as described in
 [`SECURITY.md`](SECURITY.md).
 
