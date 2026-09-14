@@ -1,4 +1,4 @@
-const PRODUCTION_ORIGIN = "https://unicas.work";
+const PRODUCTION_ORIGIN = "https://api.unicas.work";
 const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 export function normalizeSmokeBaseUrl(value, allowOtherOrigin = false) {

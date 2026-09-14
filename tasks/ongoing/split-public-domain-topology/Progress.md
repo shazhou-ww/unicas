@@ -65,6 +65,8 @@ recreating `Production Smoke` on the new origins.
   current legacy `unidocs-cas` version is
   `17f07f91-0771-413d-8b48-ff93c3cbf703`.
 - Focused deployment/reset guardrail tests passed (10 tests).
+- Production smoke now defaults to `https://api.unicas.work`; the default
+  allowlist rejects the apex, legacy, and documentation origins.
 - The guarded live reset plan passed its remote inventory checks and targets
   exactly two R2 objects, one OAuth KV key, and the isolated tenant/control D1
   tables.

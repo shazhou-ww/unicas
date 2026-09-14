@@ -36,8 +36,10 @@ describe("standalone deployment plan", () => {
   });
 
   test("limits smoke mutations to the product origin and local development", () => {
-    expect(normalizeSmokeBaseUrl("https://unicas.work")).toBe("https://unicas.work");
+    expect(normalizeSmokeBaseUrl("https://api.unicas.work")).toBe("https://api.unicas.work");
     expect(normalizeSmokeBaseUrl("http://127.0.0.1:8794")).toBe("http://127.0.0.1:8794");
+    expect(() => normalizeSmokeBaseUrl("https://unicas.work"))
+      .toThrow("is not allowed");
     expect(() => normalizeSmokeBaseUrl("https://unicas.shazhou.work"))
       .toThrow("is not allowed");
     expect(() => normalizeSmokeBaseUrl("https://docs.unicas.work"))

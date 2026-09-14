@@ -2,7 +2,7 @@
  * Smoke-test the deployed CAS middleware through a base URL.
  *
  * Usage: node scripts/cas-middleware-smoke.mjs [baseUrl]
- *   baseUrl defaults to https://unicas.work (the live edge);
+ *   baseUrl defaults to https://api.unicas.work (the live machine API);
  *   pass http://127.0.0.1:<port> to test `wrangler dev --remote` tunnels.
  *   UNICAS_SMOKE_STACK_ID/ISSUER/AUDIENCE/KID/KEY_FILE must identify one
  *   explicitly provisioned control-plane smoke stack.
@@ -28,7 +28,7 @@ import {
 } from "../packages/tenant-protocol/dist/index.js";
 
 const BASE = normalizeSmokeBaseUrl(
-  process.argv[2] ?? "https://unicas.work",
+  process.argv[2] ?? "https://api.unicas.work",
   process.env.UNICAS_SMOKE_ALLOW_OTHER_ORIGIN === "true",
 );
 // Unique per run so the smoke is repeatable: a fixed tenant/requestId would
