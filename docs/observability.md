@@ -1,259 +1,101 @@
-# 调用可观测性
+# Observability
 
-每一次 HTTP 调用产出一条 `http_call` 事件到 stdout。Azure 上由 Container Apps
-收进 Log Analytics 的 `ContainerAppConsoleLogs_CL`;Cloudflare 上进 `wrangler tail`;
-本地 `pnpm dev` 另外落一份 JSONL 到 `.dev-cloudflare.log`(见文末「本地日志文件」)。
+UniCAS exposes three current diagnostic surfaces:
 
-## 事件形状
+1. `Server-Timing` headers on tenant-plane responses.
+2. Worker stdout/stderr through Cloudflare logs or the local Miniflare terminal.
+3. Durable control-plane and Root Ref audit records through authenticated admin
+   APIs, the `unicas` CLI, or MCP tools.
 
-```jsonc
-{
-  "event": "http_call",
-  "dir": "in" | "out",        // in = 我们对外提供的接口;out = 我们调用别人的
-  "target": "gateway" | "cas" | "doc:psd",
-  "op": "createDocument",     // 逻辑操作名,按接口聚合用
-  "method": "POST",
-  "status": 200,              // 0 = 根本没拿到响应(超时/连接断/抛异常)
-  "durationMs": 137,
-  "ok": true,
-  "tenantId": "u1",
-  "docType": "psd",
+Do not log bearer capabilities, session cookies, CSRF tokens, private keys, or
+OAuth authorization codes.
 
-  // 以下仅在非 2xx 时出现
-  "url": "…",
-  "requestHeaders": { "content-type": "…" },
+## Server-Timing
 
-  // 仅出站非 2xx:上游给的错误信息,512 字节封顶
-  "responseBody": "{\"error\":\"… the same object. (10058)\"}",
-  "truncated": true,
+Tenant routes return a `Server-Timing` header and `Timing-Allow-Origin: *`.
+Repeated operations are aggregated and include a call count. Depending on the
+request path, entries can include:
 
-  // 仅 status 0:异常与完整栈(含 cause)
-  "error": "TypeError: fetch failed (cause: Error: connect ECONNREFUSED …)",
-  "stack": "TypeError: fetch failed\n    at … \ncaused by: Error: connect ECONNREFUSED\n    at …"
-}
+| Metric | Work measured |
+| --- | --- |
+| `cas_edge` | Total edge service time |
+| `cas_schema` | Lazy D1 schema initialization |
+| `cas_auth` | Tenant capability verification |
+| `cas_do` | Durable Object dispatch |
+| `cas_d1_*` | D1 lease, node, Root Ref, and commit operations |
+| `cas_r2_get`, `cas_r2_put`, `cas_r2_head`, `cas_r2_prefix` | R2 operations |
+
+Inspect headers from a tenant request with `curl -i` or the browser network
+panel. A representative header is:
+
+```text
+Server-Timing: cas_schema;dur=2.1, cas_auth;dur=4.5, cas_do;dur=11.8, cas_edge;dur=20.3
+Timing-Allow-Origin: *
 ```
 
-**详略分级 —— 有栈的地方打栈,没栈的地方留关键信息:**
+Use the metric breakdown to identify the controlling layer before changing
+timeouts: auth latency points at issuer/JWKS work, `cas_do` includes actor
+serialization, and an individual D1 or R2 metric points at storage.
 
-| 情况 | 有没有异常 | 记什么 |
-|---|---|---|
-| 2xx | 无 | 只记简报 |
-| 出站 4xx/5xx | **无**(fetch 成功了,只是对方回了错误码) | 上游的错误信息(512 字节封顶)+ url + 请求头 |
-| 入站 4xx/5xx | 无 | 只记 url + 请求头。响应体是我们自己合成的,成因已由对应的出站事件记下,不重复 |
-| `status: 0` | **有** | 完整异常栈(4096 字符封顶),并展开 `cause` |
+The public `GET /health` endpoint intentionally returns only service health and
+does not initialize storage or emit timing metrics.
 
-`cause` 必须展开:undici 把真正的 `ECONNRESET` / `ETIMEDOUT` 藏在
-`TypeError: fetch failed` 的 cause 里,只看外层那句话什么都看不出来。
+## Runtime logs
 
-`status: 0` 是排查的关键——浏览器侧的 `Failed to fetch` 在服务端就长这样。它和
-"拿到一个 502" 是两件事:网关在上游连不上时会**合成**一个 502 交给调用方,只看
-响应码会把真正的连接失败误记成一次正常的 502 响应。
+Production Worker logs are available with Wrangler:
 
-**安全**:请求头走白名单(content-type / content-length / accept /
-accept-encoding / user-agent),`Authorization`、`X-UniDocs-CAS-Capability`、
-`X-Internal-Token`、Cookie 永远不记。响应体只在出站且 ≥400 时从
-`response.clone()` 读,成功响应(可能是几十 MB 的文档)一个字节都不碰。
-
-## Agent 事件
-
-`http_call` 只看得见出站请求。一次 agent 故障里那远远不够 —— 实测过一次:
-agent 跑了 64 秒,两次图像调用都成功,然后整个请求以
-`internal error; reference = …` 收场,日志里只有那两条出站 HTTP。它调了哪些
-工具、跑了几轮、在第几步崩的、崩在什么上,一个字都没有。
-
-于是有了 `agent_` 这一族,两个事件名,`jq 'select(.event | startswith("agent_"))'`
-一条就能把一次 run 完整拉出来:
-
-| 事件 | 何时 | 关键字段 |
-|---|---|---|
-| `agent_run` `phase:"start"` | run 开始 | `docType` |
-| `agent_step` `kind:"llm"` | 每次模型调用 | `iteration` `durationMs` `toolCalls[]` `stopReason` |
-| `agent_step` `kind:"tool"` | 每次工具调用 | `iteration` `name` `durationMs` `ok` `error` |
-| `agent_run` `phase:"end"` | run 结束(**含崩溃**) | `ok` `iterations` `durationMs` `tools` `error` `stack` |
-| `llm_call` `phase:"start"` | 模型调用**发出之前** | `endpoint` `model` `requestChars` `messages` `images` `tools` |
-| `llm_call` `phase:"wait"` | 等待期间每 15 秒 | `elapsedMs` |
-
-`tools` 是整条调用序列,连续重复压成 `xN`(`getLayers, getPreview x8, editPixels`)
-——「一直在找图层」和「一直在重画」靠它一眼分开。
-
-两条与 `http_call` 一致的约定:成功只记简报,失败才带 `error` 与栈;`ObserveFn`
-由适配器注入,内核只产事件不决定往哪写。
-
-`llm_call` 这一族补的是另一个洞:`http_call` 只在调用**有结果之后**才产出,
-于是"发出去"到"失败"之间是一段全黑的区间。一次真实故障就卡在这里 —— 第一
-轮模型调用挂了 300.3 秒,栈精确停在 `await fetch(…)` 那一行(响应头始终没到),
-而那五分钟里日志上一个字都没有,分不出三件事:请求根本没发出去、发出去了对面
-不回、还是整个 isolate 已经不动了。
-
-- `start` 在 fetch 之前落盘,带上**实际发出去的形状**。`requestChars` 是第一
-  个要看的数:图片以 base64 整个内联进请求体,历史一长它能翻几个数量级。
-- `wait` 证明 worker 还活着、只是在等。它不出现就说明卡的不是对面。
-
-同一条 `http_call` 上另有 `ttfbMs`(响应**头**到达)与 `durationMs`(读完响应
-体)之分。两者差得远是"对方回得慢",两者一样是"对方想了很久才开口" —— 修法
-完全不同,只有一个总耗时的时候分不出来。
-
-工具那一步的 `ok` 是从**结果**里读的,不是靠 try/catch:`AgentSession#dispatch`
-从不抛异常——它把错误折成 `{error}` 交给模型好让循环继续——所以靠 catch 判断
-会把每一次工具失败都显示成成功。
-
-```bash
-# 一次 run 的完整过程
-jq 'select(.event | startswith("agent_"))' .dev-cloudflare.log
-# 只看失败的步骤
-jq 'select(.event == "agent_step" and .ok == false)' .dev-cloudflare.log
-# 一次模型调用发出去的形状,以及它等了多久还没回
-jq 'select(.event == "llm_call")' .dev-cloudflare.log
-# 每次 run 花了多久、跑了几轮、调了什么
-jq 'select(.event == "agent_run" and .phase == "end") | {ok, iterations, durationMs, tools}' .dev-cloudflare.log
+```powershell
+pnpm --filter @unicas/service-cloudflare exec wrangler tail
 ```
 
-## 埋点位置
+The current structured events are:
 
-| 位置 | 覆盖 |
-|---|---|
-| `gateway-common/src/gateway-handler.ts` 的 `handle()` | 所有对外接口(网关是唯一外部入口) |
-| 同文件的 CAS 转发分支 | 网关 → CAS |
-| 同文件的 `forwardToWorker()` | 网关 → doc worker |
-| `azure-sdk/src/doc-type-service.ts` 的 `httpCasFetcher` | doc service → CAS |
-| `doctype-server-common/src/agent/session.ts` 的 `run()` | agent 的每一轮与每一次工具调用 |
-| `doctype-psd/src/image/qwen-editor.ts` | doc worker → DashScope |
+- `cas_stack_authorization`: stack capability authorization decisions. The
+  payload comes from the authority verifier and includes its decision kind.
+- `admin_oidc_callback_failed`: administrator OIDC callback failures with a
+  bounded reason such as `state_mismatch` or `id_token_invalid`.
 
-sink 由适配器注入(`observe: consoleObserver`),`gateway-common` 本身保持
-cloud-neutral、可测——测试注入一个收集器即可断言事件序列,见
-`packages/gateway-common/tests/observe.test.ts`。
+Unexpected tenant authorization, service actor, Durable Object, administrator
+BFF, and R2 upload failures are written to stderr with an exception. These are
+incident signals; expected protocol rejections remain structured HTTP
+responses and are not logged as exceptions.
 
-## KQL
+`pnpm dev` writes Miniflare and Worker logs to the terminal. It does not create a
+repository JSONL log file. Redirect terminal output only into a gitignored path
+when a reproducible local investigation needs a retained transcript, and review
+it for credentials before sharing.
 
-工作区 `unidocs-logs`(`az monitor log-analytics workspace show -g Unidocs -n unidocs-logs --query customerId -o tsv`)。
-先把 JSON 解出来:
+## Control-plane audit
 
-```kusto
-let calls =
-  ContainerAppConsoleLogs_CL
-  | where Log_s startswith '{"event":"http_call"'
-  | extend e = parse_json(Log_s)
-  | extend dir = tostring(e.dir), target = tostring(e.target), op = tostring(e.op),
-           status = toint(e.status), durationMs = toint(e.durationMs),
-           ok = tobool(e.ok), tenantId = tostring(e.tenantId), docType = tostring(e.docType),
-           err = tostring(e.error), body = tostring(e.responseBody), url = tostring(e.url);
+Control mutations append audit records containing the stack, actor, action,
+target, request identity, trace identity, caller channel, and timestamp. Read
+those records through authenticated control-plane surfaces:
+
+```powershell
+unicas audit control <stackId> --limit 50
+unicas ref-domains list <stackId>
+unicas audit root-domain-refs <stackId> <refDomain> --limit 50
+unicas audit root-domain-events <stackId> <refDomain> --limit 50
 ```
 
-**对外接口的耗时分布(P50/P95/P99)**
+Use the returned cursor unchanged for the next control or balance page. Root
+Ref event pagination uses `--after`. A stale balance cursor means the snapshot
+changed; restart from the first page instead of combining revisions.
 
-```kusto
-calls
-| where dir == "in" and TimeGenerated > ago(24h)
-| summarize count(), p50=percentile(durationMs,50), p95=percentile(durationMs,95),
-            p99=percentile(durationMs,99), errors=countif(not(ok))
-  by op
-| order by p95 desc
-```
+The Worker's `/_internal/audit/*` routes are private adapter RPCs protected by
+`CAS_AUDIT_READER_KEY`. They fail closed as 404 without the exact key and are
+not operator-facing public APIs. Prefer the CLI, WebUI, or MCP surface.
 
-**第三方调用的耗时(CAS 按操作分)**
+## Operational checks
 
-```kusto
-calls
-| where dir == "out" and TimeGenerated > ago(24h)
-| summarize count(), p50=percentile(durationMs,50), p95=percentile(durationMs,95),
-            failures=countif(not(ok)), noResponse=countif(status == 0)
-  by target, op
-| order by p95 desc
-```
+For a basic local or production triage:
 
-**错误率时间线(画图用)**
+1. Check `GET /health` for edge reachability.
+2. Reproduce one authenticated tenant request and inspect `Server-Timing`.
+3. Correlate unexpected failures in `wrangler tail` or the local terminal.
+4. Read the stack's control and Root Ref audit records for the business action.
+5. Verify active issuer state with `unicas oauth-issuer get <stackId>` when
+   authorization fails.
 
-```kusto
-calls
-| where TimeGenerated > ago(24h)
-| summarize total=count(), failed=countif(not(ok)) by bin(TimeGenerated, 5m), target
-| extend errorRate = todouble(failed) / total
-| render timechart
-```
-
-**耗时时间线**
-
-```kusto
-calls
-| where TimeGenerated > ago(24h)
-| summarize p95=percentile(durationMs,95) by bin(TimeGenerated, 5m), target
-| render timechart
-```
-
-**最近的失败详情(排错入口)**
-
-```kusto
-calls
-| where not(ok) and TimeGenerated > ago(2h)
-| project TimeGenerated, dir, target, op, status, durationMs, tenantId, url, err, body
-| order by TimeGenerated desc
-| take 50
-```
-
-**只看拿不到响应的(超时/连接断)**
-
-```kusto
-calls
-| where status == 0 and TimeGenerated > ago(24h)
-| summarize count() by target, op, err
-| order by count_ desc
-```
-
-**看某次失败的完整栈**
-
-```kusto
-calls
-| where status == 0 and TimeGenerated > ago(2h)
-| project TimeGenerated, target, op, durationMs, err, stack = tostring(e.stack)
-| order by TimeGenerated desc
-| take 10
-```
-
-## 本地日志文件
-
-`pnpm dev`(Cloudflare 栈)默认把 Miniflare 运行时的输出再写一份到仓库根的
-`.dev-cloudflare.log`,终端里看到的一个字节都不少。目的是让 agent 能直接查,
-不必先请人手动 tee 一份。
-
-覆盖的是 **Miniflare 这一路**:网关和各 doc type worker 的全部输出。`pnpm dev`
-另外拉起的 Vite 子进程(各 web 前端、CAS admin 控制台)是 `stdio: "inherit"`,
-只进终端,不进这个文件。
-
-格式是 **JSONL**,一行一条记录 —— 不是终端那份的原样拷贝:
-
-```jsonc
-{"t":"2026-09-02T08:43:03.637Z","src":"worker","level":"log",
- "event":"http_call","dir":"in","target":"gateway","op":"listDocuments","status":200,"durationMs":1,"ok":true}
-{"t":"2026-09-02T08:43:03.640Z","src":"miniflare",
- "msg":"[mf:info] GET /tenants/u1/docs/markdown/ 200 OK (5ms)"}
-```
-
-- `src` 分两路:`"worker"` 是 Worker 自己 `console.*` 打的(`http_call`、
-  `doc_authentication`、`gateway_capability_issued` 都在这里),`"miniflare"`
-  是 Miniflare 运行时那几行(请求行、启动就绪、内部告警)。
-- 本身就是 JSON 的行**摊平**进信封,所以一条 `jq` 就能筛,不用先切前缀。
-  载荷万一自带 `t`/`src`/`level`/`msg`/`json` 中任一个键,就嵌到 `.json` 下
-  而不是摊平——摊平会用载荷的值顶掉信封的时间戳。
-- 多行的异常栈被转义成一行,**行与记录始终一一对应**,grep 不会把一条栈
-  切成几十条互不相干的"日志"。
-- 每次 `pnpm dev` 从头写,文件里永远只有本次这一趟。写是同步的,所以跑着的
-  时候另开一个终端 grep 就能看到最新的行。
-
-```bash
-jq 'select(.event == "http_call" and .ok == false)' .dev-cloudflare.log
-jq -s 'map(select(.op == "lease").durationMs) | sort' .dev-cloudflare.log
-jq 'select(.src == "worker" and .event == null)' .dev-cloudflare.log   # 非结构化的 worker 输出
-```
-
-`UNIDOCS_DEV_LOG=off` 关掉;给别的值就当路径用(相对仓库根,也接受绝对路径)。
-默认文件名命中 `.gitignore` 的 `.dev-*.log` —— 本地日志带着网关签发的凭据元
-数据,**永远不要提交**,换名字时必须让它继续落在那条规则里。
-
-`pnpm dev unidocs-azure` 目前不落盘(它的服务是独立子进程,走的是另一条转发
-路径),需要的话自己 `2>&1 | tee`。
-
-## 成本
-
-每次请求至少产出 3 条事件(入站 1 + 出站 N)。在此之前工作区一天只有几百行,
-量级会跳一个数量级。30 天保留 + 按量计费,流量起来之后需要考虑对成功事件采样,
-失败事件全量保留。
+The detailed SLOs, alerts, backup procedure, and incident runbooks live in
+[CAS middleware operations](cas-operations.md).

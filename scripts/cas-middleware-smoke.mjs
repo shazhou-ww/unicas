@@ -15,8 +15,16 @@
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { concatenateNodeBytes, computeNodeDigest, encodeHeader, hashToHex, hexToHash } from "../unicas-packages/codec/dist/index.js";
-import { casManagePermission, casReadPermission, casWritePermission, createPkcs8CapabilityIssuer } from "../packages/service-auth/dist/index.js";
+import { importPKCS8, SignJWT } from "jose";
+import { concatenateNodeBytes, computeNodeDigest, encodeHeader, hashToHex, hexToHash } from "../packages/codec/dist/index.js";
+import {
+  CapabilityAlgorithm,
+  CapabilityTokenType,
+  CapabilityVersion,
+  casManagePermission,
+  casReadPermission,
+  casWritePermission,
+} from "../packages/tenant-protocol/dist/index.js";
 
 const BASE = process.argv[2] ?? "https://unicas.shazhou.work";
 // Unique per run so the smoke is repeatable: a fixed tenant/requestId would
@@ -54,6 +62,30 @@ const stacks = configuredStackId ? [{
 
 /** Canonical node wire content type (see @unicas/codec). */
 const NODE_CONTENT_TYPE = "application/vnd.unidocs.cas-node.v1";
+
+async function createPkcs8CapabilityIssuer({ issuer, kid, privateKeyPkcs8 }) {
+  const privateKey = await importPKCS8(privateKeyPkcs8, CapabilityAlgorithm);
+  return {
+    issue({ subject, audience, tenantId, permissions, refDomain }) {
+      const issuedAt = Math.floor(Date.now() / 1000);
+      return new SignJWT({
+        ver: CapabilityVersion,
+        tenantId,
+        permissions,
+        ...(refDomain === undefined ? {} : { refDomain }),
+      })
+        .setProtectedHeader({ alg: CapabilityAlgorithm, kid, typ: CapabilityTokenType })
+        .setIssuer(issuer)
+        .setSubject(subject)
+        .setAudience(audience)
+        .setIssuedAt(issuedAt)
+        .setNotBefore(issuedAt)
+        .setExpirationTime(issuedAt + 300)
+        .setJti(crypto.randomUUID())
+        .sign(privateKey);
+    },
+  };
+}
 
 function assert(condition, message) {
   if (!condition) throw new Error(`ASSERT FAILED: ${message}`);

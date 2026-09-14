@@ -1,7 +1,7 @@
 # CAS Middleware Operations
 
 Runbooks, SLOs, and alerting for the independently deployed CAS middleware
-(the `@unicas` packages in `unicas-packages/`). Production topology:
+(the `@unicas` packages in `packages/`). Production topology:
 
 | Component | Worker / resource | Notes |
 |---|---|---|
@@ -9,7 +9,7 @@ Runbooks, SLOs, and alerting for the independently deployed CAS middleware
 | OAuth KV | dedicated `OAUTH_KV` namespace | OAuth clients, grants, token hashes, and encrypted authorization transactions |
 | Control D1 | `unidocs-cas-control` (`dc8090eb-…`) | issuers, stacks, members, control audit |
 | Tenant D1 | `unidocs-cas-db` (`66f8738b-…`) | stack-scoped nodes/edges/root-refs |
-| R2 | `unidocs-cas`, `unidocs-cas-preview` | node content |
+| R2 | `unidocs-cas-apac`, `unidocs-cas-preview` | node content |
 
 Secrets live only as Worker secrets (Google OIDC client secret,
 `SESSION_ENCRYPTION_KEYS`, `OAUTH_STATE_ENCRYPTION_KEY`,
@@ -40,11 +40,12 @@ Existing structured logs (JSON to the worker's stdout, queryable via the
 Cloudflare dashboard / logpush):
 
 - `cas_stack_authorization` — every authorization decision; `kind` ∈
-  `authorized`, `denied`, `fail_closed`, `registry_stale`, `unknown_issuer`,
-  `issuer_disabled`, `unsupported_algorithm`. **`fail_closed` is an incident
-  signal** (registry unreachable past the hard bound, or a cold outage).
-- `gateway_capability_issued` — gateway-signed capabilities.
-- `doc_authentication` — doc-service session auth decisions.
+   `authorized`, `rejected`, `fail_closed`, `registry_stale`. **`fail_closed`
+   is an incident signal** (registry unreachable past the hard bound, or a cold
+   outage). Rejected requests carry stable capability error codes such as
+   `unknown_issuer` and `registry_unavailable` in their HTTP responses.
+- `admin_oidc_callback_failed` — administrator login callback failures with a
+   bounded reason and no token material.
 
 Roll-up per 5-min window (via CF Analytics API or a logpush consumer):
 service request count + 5xx rate, tenant 401/403 rate by error code
@@ -86,7 +87,7 @@ hard-stale fix).
 deployed middleware (admin drill 2026-08-26):
 
 ```text
-cd unicas-packages/service-cloudflare
+cd packages/service-cloudflare
 wrangler deployments list
 wrangler rollback            # move traffic to the retained prior version
 # verify the public service, then redeploy the current version if needed

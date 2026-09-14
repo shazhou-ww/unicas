@@ -7,7 +7,7 @@ export function runLocalCompose(composeFile, args = []) {
     ["compose", "-f", composeFile, "up", "--build", "--remove-orphans"],
     {
       cwd: dirname(composeFile),
-      env: { ...process.env, UNIDOCS_LOCAL_ARGS_JSON: JSON.stringify(args) },
+      env: { ...process.env, UNICAS_LOCAL_ARGS_JSON: JSON.stringify(args) },
       stdio: "inherit",
       shell: process.platform === "win32",
     },

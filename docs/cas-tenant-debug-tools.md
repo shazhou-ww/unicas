@@ -1,4 +1,4 @@
-# Unicas Tenant Debug Tools — Requirements
+# UniCAS Tenant Debug Tools — Requirements
 
 Status: requirements baseline v0.1 (design discussion session, 2026-08).
 
@@ -140,7 +140,7 @@ stdout by default: it prints a JSON summary, `--out <file>` writes content,
 
 ## Platform deliverables and scope
 
-- `unicas-tenant` CLI (new package under `unicas-packages/`, e.g.
+- `unicas-tenant` CLI (new package under `packages/`, e.g.
   `@unicas/tenant-cli`).
 - Public stack discovery endpoint on the edge (contract above).
 - **Provider contract documentation**: discovery-document shape,

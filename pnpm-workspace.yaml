@@ -1,6 +1,5 @@
 packages:
   - 'packages/*'
-  - 'unicas-packages/*'
 # The company npm proxy's manifests lag upstream, so pnpm cannot read a publish
 # date for these exact versions and fails the release-age policy outright. The
 # message is "version not present in registry manifest", not "published too
@@ -21,10 +20,8 @@ packages:
 minimumReleaseAgeExclude:
   - oauth4webapi
   - '@zip.js/zip.js'
-  # packages/docs-webui bundles the Scalar API reference; the proxy carries none
-  # of that tree. The three below are Scalar's own transitive dependencies, not
-  # anything this repository declares — they are listed separately only because
-  # they do not share its scope.
+  # admin-webui bundles the Scalar API reference. These are Scalar's own
+  # transitive dependencies and do not share its scope.
   - '@scalar/*'
   - '@codemirror/state'
   - '@tanstack/virtual-core'
@@ -32,11 +29,7 @@ minimumReleaseAgeExclude:
 overrides:
   '@jridgewell/sourcemap-codec': 1.5.5
 allowBuilds:
-  cpu-features: true
   esbuild: true
-  protobufjs: true
-  ssh2: true
   workerd: true
-  sharp: true
   vue-demi: true
   core-js-pure: false

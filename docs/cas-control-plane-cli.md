@@ -1,4 +1,4 @@
-# Unicas Control-Plane CLI
+# UniCAS Control-Plane CLI
 
 `@unicas/admin-cli` (bin `unicas`) is the operator-facing command line for UniCAS
 control plane. It exists because DeepSeek Harness's MCP client only supports
@@ -14,7 +14,7 @@ needs no client id or secret of its own. Every command calls the typed
 is a local stdio MCP server backed by the same HTTP client (no MCP-to-MCP
 forwarding).
 
-See `unicas-packages/admin-cli/README.md` for the full command reference.
+See `packages/admin-cli/README.md` for the full command reference.
 
 ## Quick start
 
@@ -44,9 +44,9 @@ Configure DeepSeek Harness's mcp-client with a stdio server:
 plane and forwards calls over the authenticated connection, so DSH can read and
 operate the control plane without any OAuth implementation of its own. To put
 `unicas` on PATH from the checkout, run `pnpm --filter @unicas/admin-cli build` and
-then `pnpm install --global ./unicas-packages/admin-cli` (pnpm 10+ removed
+then `pnpm install --global ./packages/admin-cli` (pnpm 10+ removed
 `pnpm link --global`), or configure the client with `command: "node"` and
-`args: ["<checkout>/unicas-packages/admin-cli/dist/cli.js", "mcp"]`.
+`args: ["<checkout>/packages/admin-cli/dist/cli.js", "mcp"]`.
 
 On Windows the global bin is a `.CMD` shim; a Node-based MCP client must spawn
 it with `shell: true`, reference the shim path directly, or use the `node` +
@@ -103,10 +103,10 @@ lease or retention; usage, GC and other mutable node state are never cached here
 ```powershell
 pnpm --filter @unicas/admin-cli test
 pnpm --filter @unicas/admin-cli typecheck
-pnpm exec vitest run tests/unit/workspace/package-deps.test.mjs
+pnpm check:workspace
 ```
 
 Unit tests mock the BFF `/admin` API (login/exchange, control-plane operations)
 and a stateless stdio MCP server; they never touch production. A real
 `unicas login` + `unicas whoami` against `https://unicas.shazhou.work/admin` is a
-manual verification step (browser Google sign-in + Unicas consent required).
+manual verification step (browser Google sign-in + UniCAS consent required).

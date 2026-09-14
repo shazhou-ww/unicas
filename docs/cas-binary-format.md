@@ -1,4 +1,4 @@
-# UniDocs CAS Binary Format
+# UniCAS Binary Format
 
 Status: version 1 design specification
 
@@ -6,7 +6,10 @@ Date: 2026-08-19
 
 Signature/version: `UD\x01\x00`
 
-This specification defines the canonical byte representation used to identify UniDocs CAS nodes. It is derived from the design principles in [CASFA Binary Format v2.2](https://github.com/shazhou-ww/casfa/blob/main/docs/tech-details/cas-binary-format.md), with these intentional changes:
+This specification defines the canonical byte representation used to identify
+UniCAS nodes. It is derived from the design principles in
+[CASFA Binary Format v2.2](https://github.com/shazhou-ww/casfa/blob/main/docs/tech-details/cas-binary-format.md),
+with these intentional changes:
 
 - full 256-bit SHA-256 digests instead of a truncated 128-bit digest;
 - 32-byte child references;

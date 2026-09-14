@@ -5,12 +5,16 @@ const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const SERVICE_PACKAGE = "@unicas/service-cloudflare";
 
 export function parseArgs(argv) {
-  const options = { dryRun: false, skipSmoke: false, env: undefined };
+  const options = { dryRun: false, production: false, skipSmoke: false, env: undefined };
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
     if (arg === "--dry-run") options.dryRun = true;
+    else if (arg === "--production") options.production = true;
     else if (arg === "--skip-smoke") options.skipSmoke = true;
-    else if (arg === "--env") options.env = argv[++index];
+    else if (arg === "--env") {
+      options.env = argv[++index];
+      if (options.env === undefined) throw new Error("--env requires a lowercase environment name");
+    }
     else throw new Error(`Unknown argument: ${arg}`);
   }
   if (options.env !== undefined && !/^[a-z][a-z0-9-]*$/.test(options.env ?? "")) {
@@ -19,7 +23,16 @@ export function parseArgs(argv) {
   return options;
 }
 
-export function deploymentPlan({ env, skipSmoke } = {}) {
+export function deploymentPlan({ dryRun = false, env, production = false, skipSmoke } = {}) {
+  if (env && production) {
+    throw new Error("--production and --env cannot be used together");
+  }
+  if (!dryRun && !env && !production) {
+    throw new Error("refusing implicit production deployment; run pnpm deploy:production");
+  }
+  if (env && !skipSmoke) {
+    throw new Error("--env requires --skip-smoke; run smoke separately with an explicit base URL");
+  }
   const envArgs = env ? ["--env", env] : [];
   const commands = [
     ["pnpm", "--filter", SERVICE_PACKAGE, "build"],
@@ -27,7 +40,7 @@ export function deploymentPlan({ env, skipSmoke } = {}) {
   ];
   if (!skipSmoke) {
     commands.push(["pnpm", "--filter", "@unicas/codec", "build"]);
-    commands.push(["pnpm", "--filter", "@unidocs/service-auth", "build"]);
+    commands.push(["pnpm", "--filter", "@unicas/tenant-protocol", "build"]);
     commands.push(["node", "stacks/unicas/deploy/smoke.mjs"]);
   }
   return commands;

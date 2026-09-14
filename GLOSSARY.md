@@ -1,8 +1,9 @@
-# UniDocs Glossary
+# UniCAS and Integration Glossary
 
-This file is the repository-wide naming and boundary index. It standardizes how
-terms are written and used; linked design documents and protocol packages remain
-the authority for behavior and wire contracts.
+This file is the repository-wide naming and boundary index. It includes the
+downstream vocabulary needed to explain UniCAS integration boundaries; linked
+design documents and protocol packages remain the authority for behavior and
+wire contracts.
 
 ## Maintenance rules
 
@@ -23,7 +24,7 @@ the authority for behavior and wire contracts.
 | Term | 中文定义 | Usage and boundary |
 |---|---|---|
 | **UniDocs** | 面向 AI Agent 的通用文档编辑平台。 | Product name. Do not write “Unidocs” or “Uni Docs”. |
-| **UniCAS** | 可独立部署的内容寻址存储中间件，包含 tenant 数据面和 stack 管理控制面。 | Product name. Source lives under [`unicas-packages/`](unicas-packages/README.md). Do not use this name for every generic CAS implementation. |
+| **UniCAS** | 可独立部署的内容寻址存储中间件，包含 tenant 数据面和 stack 管理控制面。 | Product name. Source lives under [`packages/`](packages/README.md). Do not use this name for every generic CAS implementation. |
 | **Platform** | 持久化文档、版本、thread、current pointer 与 submission 的平台服务。 | The persistence authority in the Platform v0 model; a View or Operator is not a second persistence authority. |
 | **Gateway** | 面向最终用户的服务入口，负责认证、租户成员关系、文档目录与路由。 | Owns public `docId` to private `sessionId` routing. It does not own document-format behavior. |
 | **Doc service** | 承载某一种文档类型会话和格式逻辑的服务。 | One independently deployable service per document type. It receives an opaque `sessionId`, not end-user identity. |
@@ -80,7 +81,7 @@ contracts.
 
 See [CAS Architecture](docs/cas-architecture.md),
 [CAS Binary Format](docs/cas-binary-format.md), and
-[UniCAS package boundaries](unicas-packages/README.md) for normative storage
+[UniCAS package boundaries](packages/README.md) for normative storage
 semantics.
 
 ## Identity and access

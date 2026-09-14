@@ -4,13 +4,10 @@ Status: architecture model
 
 Date: 2026-08-26
 
-This document explains the state and lifecycle model behind the UniDocs
-content-addressed store (CAS). It complements
+This document explains the state and lifecycle model behind UniCAS. It complements
 [CAS Architecture](./cas-architecture.md), which specifies the concrete node,
-storage, lease, and garbage-collection behavior, and the
-[CAS Middleware plan](./superpowers/plans/2026-08-26-cas-middleware.md), which
-specifies the multi-stack service boundary, Root Refs audit API, and their
-implementation.
+storage, lease, and garbage-collection behavior, together with the multi-stack
+service boundary and Root Refs audit API.
 
 The purpose of this document is to establish one conceptual model and a set of
 invariants for reasoning about:

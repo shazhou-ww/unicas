@@ -1,10 +1,12 @@
-# CAS Architecture
+# UniCAS Architecture
 
-Status: SValue/SBlob core implemented; legacy migration and retention tooling pending
+Status: implemented service architecture; compatibility and retention tooling continue to evolve
 
 Date: 2026-08-21
 
-This document defines the target content-addressed storage (CAS) architecture for UniDocs. The current snapshot-only R2/D1 implementation predates this design and will be migrated incrementally.
+This document defines the content-addressed storage architecture implemented by
+UniCAS. Downstream applications may store their own opaque document and asset
+formats without making those formats part of the service contract.
 
 The node encoding referenced below is defined in [CAS Binary Format](./cas-binary-format.md).
 

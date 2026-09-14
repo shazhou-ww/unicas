@@ -10,5 +10,5 @@ RUN PNPM_VERSION=$(node -e "process.stdout.write(require('/tmp/package.json').pa
 COPY . .
 RUN pnpm install --frozen-lockfile --registry=https://packagefeedproxy.microsoft.io/npm/
 
-ENV UNIDOCS_LOCAL_HOST=0.0.0.0
-CMD ["node", "stacks/unicas/local/dev.mjs"]
+ENV UNICAS_LOCAL_HOST=0.0.0.0
+CMD ["pnpm", "dev"]

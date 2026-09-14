@@ -28,8 +28,8 @@ No API key or OAuth client secret belongs in MCP configuration:
 }
 ```
 
-On first use, the client discovers Unicas OAuth, opens Google sign-in, and shows
-the Unicas consent page. The resulting access and refresh tokens are Unicas
+On first use, the client discovers UniCAS OAuth, opens Google sign-in, and shows
+the UniCAS consent page. The resulting access and refresh tokens are UniCAS
 tokens. Google tokens are discarded after identity verification and are never
 accepted by `/mcp`.
 
@@ -98,7 +98,7 @@ Ref audit data, not a separately managed stack resource.
 Required bindings:
 
 ```text
-CAS_CONTROL_DB             shared Unicas control D1
+CAS_CONTROL_DB             shared UniCAS control D1
 OAUTH_KV                   dedicated OAuth clients/grants/token hashes
 ```
 
@@ -128,7 +128,7 @@ after read-only telemetry and cross-stack
 isolation checks pass.
 
 Configure the `OAUTH_KV` ID in
-`unicas-packages/service-cloudflare/wrangler.toml` before deployment. OAuth KV is
+`packages/service-cloudflare/wrangler.toml` before deployment. OAuth KV is
 not a control-data backup: business state remains in `CAS_CONTROL_DB`. KV stores
 client registrations, grants, and token hashes; deleting a client or revoking a
 grant invalidates its tokens.

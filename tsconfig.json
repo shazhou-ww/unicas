@@ -6,133 +6,43 @@
   "files": [],
   "references": [
     {
-      "path": "unicas-packages/tenant-browser-cache"
+      "path": "packages/tenant-browser-cache"
     },
     {
-      "path": "packages/protocol"
+      "path": "packages/codec"
     },
     {
-      "path": "unicas-packages/codec"
+      "path": "packages/tenant-protocol"
     },
     {
-      "path": "unicas-packages/tenant-protocol"
+      "path": "packages/admin-protocol"
     },
     {
-      "path": "unicas-packages/admin-protocol"
+      "path": "packages/control-auth"
     },
     {
-      "path": "unicas-packages/control-auth"
+      "path": "packages/admin-client"
     },
     {
-      "path": "unicas-packages/admin-client"
+      "path": "packages/admin-cli"
     },
     {
-      "path": "unicas-packages/admin-cli"
+      "path": "packages/admin-webui"
     },
     {
-      "path": "unicas-packages/admin-webui"
+      "path": "packages/service"
     },
     {
-      "path": "unicas-packages/service"
+      "path": "packages/service-cloudflare"
     },
     {
-      "path": "unicas-packages/service-cloudflare"
+      "path": "packages/tenant-blob-client"
     },
     {
-      "path": "packages/protocol-doc"
+      "path": "packages/tenant-file-client"
     },
     {
-      "path": "packages/protocol-doctype"
-    },
-    {
-      "path": "packages/protocol-gateway"
-    },
-    {
-      "path": "packages/protocol-platform"
-    },
-    {
-      "path": "packages/protocol-admin-portal"
-    },
-    {
-      "path": "packages/protocol-tenant-portal"
-    },
-    {
-      "path": "packages/portal-service"
-    },
-    {
-      "path": "packages/cloudflare-portal"
-    },
-    {
-      "path": "packages/service-auth"
-    },
-    {
-      "path": "packages/svalue-codec"
-    },
-    {
-      "path": "packages/gateway-common"
-    },
-    {
-      "path": "packages/gateway-oauth"
-    },
-    {
-      "path": "unicas-packages/tenant-blob-client"
-    },
-    {
-      "path": "unicas-packages/tenant-file-client"
-    },
-    {
-      "path": "unicas-packages/tenant-client"
-    },
-    {
-      "path": "packages/doctype-server-common"
-    },
-    {
-      "path": "packages/fonts-builtin"
-    },
-    {
-      "path": "packages/azure-sdk"
-    },
-    {
-      "path": "packages/azure-gateway"
-    },
-    {
-      "path": "packages/azure-markdown"
-    },
-    {
-      "path": "packages/azure-docx"
-    },
-    {
-      "path": "packages/azure-psd"
-    },
-    {
-      "path": "packages/doctype-markdown"
-    },
-    {
-      "path": "packages/doctype-docx"
-    },
-    {
-      "path": "packages/doctype-psd"
-    },
-    {
-      "path": "packages/psd-client"
-    },
-    {
-      "path": "packages/cloudflare-sdk"
-    },
-    {
-      "path": "packages/cloudflare-markdown"
-    },
-    {
-      "path": "packages/cloudflare-docx"
-    },
-    {
-      "path": "packages/cloudflare-psd"
-    },
-    {
-      "path": "packages/cloudflare-gateway"
-    },
-    {
-      "path": "packages/tenant-portal-client"
+      "path": "packages/tenant-client"
     }
   ]
 }

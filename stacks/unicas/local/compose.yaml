@@ -5,14 +5,16 @@ services:
       dockerfile: stacks/unicas/local/Dockerfile
     init: true
     environment:
-      UNIDOCS_LOCAL_ARGS_JSON: ${UNIDOCS_LOCAL_ARGS_JSON:-[]}
-      UNIDOCS_CAS_ADMIN_ORIGIN: ${UNIDOCS_CAS_ADMIN_ORIGIN:-http://localhost:4070}
+      UNICAS_LOCAL_ARGS_JSON: ${UNICAS_LOCAL_ARGS_JSON:-[]}
+      UNICAS_LOCAL_PUBLIC_HOST: localhost
+      UNICAS_ADMIN_ORIGIN: ${UNICAS_ADMIN_ORIGIN:-http://localhost:4070}
       GOOGLE_OIDC_CLIENT_ID: ${GOOGLE_OIDC_CLIENT_ID:-}
       GOOGLE_OIDC_CLIENT_SECRET: ${GOOGLE_OIDC_CLIENT_SECRET:-}
       GOOGLE_OIDC_ISSUER: ${GOOGLE_OIDC_ISSUER:-}
+      MANAGED_ISSUER_PRIVATE_KEY_PKCS8: ${MANAGED_ISSUER_PRIVATE_KEY_PKCS8:-}
+      MANAGED_ISSUER_KEY_ID: ${MANAGED_ISSUER_KEY_ID:-}
     ports:
       - "4070:4070"
-      - "8792:8792"
       - "8793:8793"
       - "8794:8794"
     volumes:

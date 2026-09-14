@@ -18,8 +18,8 @@ if (dockerIndex !== -1) {
 }
 
 const root = join(fileURLToPath(new URL(".", import.meta.url)), "../../..");
-const host = process.env.UNIDOCS_LOCAL_HOST ?? "127.0.0.1";
-const adminOrigin = process.env.UNIDOCS_CAS_ADMIN_ORIGIN ?? "http://localhost:4070";
+const host = process.env.UNICAS_LOCAL_HOST ?? "127.0.0.1";
+const adminOrigin = process.env.UNICAS_ADMIN_ORIGIN ?? "http://localhost:4070";
 const runtime = await startLocalUnicasRuntime({
   host,
   persistPath: join(root, ".wrangler", "miniflare"),
@@ -33,7 +33,7 @@ for (const [name, url] of Object.entries(runtime.urls)) {
 
 const web = spawn(
   "pnpm",
-  ["--filter", "@unicas/admin-webui", "dev:ui", "--", "--host", host],
+  ["--filter", "@unicas/admin-webui", "dev:ui", "--host", host],
   { cwd: root, stdio: "inherit", shell: process.platform === "win32" },
 );
 web.on("error", (error) => console.error("[unicas admin] failed to start:", error.message));
