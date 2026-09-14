@@ -165,6 +165,7 @@ describe("standalone deployment plan", () => {
   test("assigns product and service origins to separate Workers", () => {
     const serviceConfig = readFileSync(join(ROOT, "packages/service-cloudflare/wrangler.toml"), "utf8");
     const siteConfig = JSON.parse(readFileSync(join(ROOT, "stacks/unicas/site/wrangler.jsonc"), "utf8"));
+    const siteHtml = readFileSync(join(ROOT, "stacks/unicas/site/public/index.html"), "utf8");
     const docsConfig = JSON.parse(readFileSync(join(ROOT, "stacks/unicas/docs-site/wrangler.jsonc"), "utf8"));
     expect(serviceConfig).toContain('pattern = "api.unicas.work"');
     expect(serviceConfig).toContain('pattern = "console.unicas.work"');
@@ -173,6 +174,7 @@ describe("standalone deployment plan", () => {
     expect(siteConfig.routes).toEqual([{ pattern: "unicas.work", custom_domain: true }]);
     expect(siteConfig.assets.directory).toBe("./public");
     expect(JSON.stringify(siteConfig)).not.toContain("docs.unicas.work");
+    expect(siteHtml).toContain('href="https://docs.unicas.work"');
     expect(docsConfig.routes).toEqual([{ pattern: "docs.unicas.work", custom_domain: true }]);
     expect(docsConfig.assets.directory).toBe("./dist");
     expect(docsConfig).not.toHaveProperty("main");
