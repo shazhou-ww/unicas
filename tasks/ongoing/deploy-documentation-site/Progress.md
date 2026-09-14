@@ -14,7 +14,7 @@ Updated: 2026-09-14
 - [x] Validate local routing and responsive browser rendering.
 - [x] Deploy `docs.unicas.work` and verify HTTPS behavior.
 - [x] Update product-site and console documentation links.
-- [ ] Run build, link, Wrangler, browser, gitleaks, and CI gates.
+- [ ] Run final repository, Wrangler, gitleaks, and CI gates.
 - [ ] Archive the completed task.
 
 ## Current state
@@ -36,11 +36,13 @@ and JavaScript requests return 200; unknown documentation paths return 404;
 the same deep link on the API origin returns 404. Cloudflare assigns only
 `docs.unicas.work` to this Worker.
 
-The console already linked to the docs origin. Product-site links now target
-the validated production origin and are ready for the apex site redeploy.
+The console already linked to the docs origin. Product-site version
+`afdb03fe-bf4f-421d-859a-becb063d5fc4` now links to the validated production
+documentation origin. The current docs Worker version is
+`72473835-0f1d-4723-ac75-ee0224542e5f`.
 
-Next concrete action: commit and deploy the product-link update, run final
-production and repository validation, push, verify CI, and archive the task.
+Next concrete action: commit the final deployment documentation update, push
+all documentation-site commits, verify CI, and archive the task.
 
 ## Decisions
 
@@ -78,6 +80,11 @@ production and repository validation, push, verify CI, and archive the task.
   were verified. Integrated Chromium production navigation remained affected
   by a local `ERR_CONNECTION_CLOSED`; responsive rendering was validated
   against the identical local Worker build instead.
+- Product HTML contains two `docs.unicas.work` links. The console's stable
+  production JavaScript asset contains the same docs origin, and its focused UI
+  test passed.
+- The production deployment guide page contains the current `unicas-docs`
+  ownership and deploy commands.
 
 ## Blockers
 
