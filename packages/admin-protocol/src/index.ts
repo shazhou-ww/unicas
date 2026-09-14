@@ -1,5 +1,7 @@
 export type {
   App,
+  AppMemberInvitation,
+  AppMemberInvitationStatus,
   AppMembership,
   AppStatus,
   CasControlAuditEvent,
@@ -39,6 +41,7 @@ export {
 export type { CasAdminApiContract } from "./contract.js";
 
 export {
+  AppMemberInvitationSchema,
   AppMembershipSchema,
   AppSchema,
   CasAdminErrorResponseSchema,
@@ -61,6 +64,13 @@ export {
   PrincipalSchema,
   ProfileSchema,
 } from "./schemas.js";
+
+export {
+  AppAdminApiBasePath,
+  AppAdminApiErrorMap,
+  appAdminApiContract,
+} from "./app-v2-contract.js";
+export type { AppAdminApiContract } from "./app-v2-contract.js";
 
 export {
   CasAdminErrorCodes,
@@ -147,5 +157,10 @@ export type {
   CasManagedCapability,
 } from "./http.js";
 
-export { casAdminRoutes, matchCasAdminRoute } from "./routes.js";
-export type { CasAdminRoute } from "./routes.js";
+export {
+  appAdminRoutes,
+  casAdminRoutes,
+  matchAppAdminRoute,
+  matchCasAdminRoute,
+} from "./routes.js";
+export type { AppAdminRoute, CasAdminRoute } from "./routes.js";

@@ -5,6 +5,7 @@ import type { CasAdminErrorResponse } from "./errors.js";
 import { CasAdminErrorCodes } from "./errors.js";
 import type {
   App,
+  AppMemberInvitation,
   AppMembership,
   CasControlAuditEvent,
   CasHash,
@@ -78,6 +79,18 @@ export const AppMembershipSchema: z.ZodType<AppMembership> = z.object({
   principal: PrincipalSchema.describe("Immutable authenticated identity granted membership."),
   profile: ProfileSchema.describe("Non-authoritative display metadata for the Principal."),
 }).readonly().meta({ id: "AppMembership" });
+
+export const AppMemberInvitationSchema: z.ZodType<AppMemberInvitation> = z.object({
+  invitationId: NonEmptyStringSchema.describe("Opaque persistent invitation identity."),
+  appId: AppIdSchema.describe("App the accepted invitation joins."),
+  status: z.enum(["pending", "accepted", "expired", "revoked"])
+    .describe("Current single-use invitation lifecycle state."),
+  emailConstraint: z.string().nullable()
+    .describe("Email the authenticated Principal must match, or null when unrestricted."),
+  expiresAt: TimestampSchema.describe("Deadline after which acceptance is rejected."),
+  createdAt: TimestampSchema.describe("Time at which the invitation was issued."),
+  revision: RevisionSchema.describe("Current invitation revision."),
+}).readonly().meta({ id: "AppMemberInvitation" });
 
 export const CasStackSchema: z.ZodType<CasStack> = z.object({
   stackId: NonEmptyStringSchema.describe("Opaque UniCAS-generated stack identifier. Callers cannot choose or rename it."),

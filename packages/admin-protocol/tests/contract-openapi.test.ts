@@ -1,12 +1,21 @@
 import type { ContractRouterClient } from "@orpc/contract";
 import { describe, expect, expectTypeOf, test } from "vitest";
-import type { App, AppMembership, CasStack, Principal, Profile } from "../src/index.js";
+import type {
+  App,
+  AppMemberInvitation,
+  AppMembership,
+  CasStack,
+  Principal,
+  Profile,
+} from "../src/index.js";
 import {
+  AppMemberInvitationSchema,
   AppMembershipSchema,
   AppSchema,
   CasStackSchema,
   PrincipalSchema,
   ProfileSchema,
+  appAdminApiContract,
   casAdminApiContract,
 } from "../src/index.js";
 import { generateAdminOpenApiDocument } from "../scripts/openapi.js";
@@ -62,6 +71,35 @@ describe("CAS admin schemas", () => {
       subject: principal.subject,
     }).success).toBe(false);
     expect(AppSchema.safeParse({ ...app, appId: undefined, stackId: "stack-1" }).success).toBe(false);
+  });
+
+  test("defines App-scoped invitations and core administrator operations", () => {
+    const invitation: AppMemberInvitation = {
+      invitationId: "invitation-1",
+      appId: "app-1",
+      status: "pending",
+      emailConstraint: null,
+      expiresAt: 2,
+      createdAt: 1,
+      revision: 1,
+    };
+    expect(AppMemberInvitationSchema.safeParse(invitation).success).toBe(true);
+    expect(AppMemberInvitationSchema.safeParse({
+      ...invitation,
+      appId: undefined,
+      stackId: "stack-1",
+    }).success).toBe(false);
+
+    type Client = ContractRouterClient<typeof appAdminApiContract>;
+    type AppResult = Awaited<ReturnType<Client["apps"]["get"]>>;
+    type MeResult = Awaited<ReturnType<Client["identity"]["me"]>>;
+    expectTypeOf<AppResult>().toEqualTypeOf<App>();
+    expectTypeOf<MeResult["principal"]>().toEqualTypeOf<Principal>();
+    expectTypeOf<MeResult["profile"]>().toEqualTypeOf<Profile>();
+
+    expect(Object.keys(appAdminApiContract)).toEqual(["identity", "apps", "members"]);
+    expect(Object.keys(appAdminApiContract.apps)).toHaveLength(4);
+    expect(Object.keys(appAdminApiContract.members)).toHaveLength(4);
   });
 });
 

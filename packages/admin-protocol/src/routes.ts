@@ -23,6 +23,31 @@ export type CasAdminRoute =
   | { operation: "listRootDomainRefs"; stackId: string; refDomain: string }
   | { operation: "listRootDomainEvents"; stackId: string; refDomain: string };
 
+export type AppAdminRoute =
+  | { operation: "me" }
+  | { operation: "listApps" }
+  | { operation: "createApp" }
+  | { operation: "getApp"; appId: string }
+  | { operation: "patchApp"; appId: string }
+  | { operation: "listMembers"; appId: string }
+  | { operation: "listPlaygroundFileRoots"; appId: string }
+  | { operation: "createPlaygroundFileRoot"; appId: string }
+  | { operation: "patchPlaygroundFileRoot"; appId: string; rootId: string }
+  | { operation: "deletePlaygroundFileRoot"; appId: string; rootId: string }
+  | { operation: "deleteMember"; appId: string }
+  | { operation: "createMemberInvitation"; appId: string }
+  | { operation: "acceptMemberInvitation"; token: string }
+  | { operation: "getOAuthIssuer"; appId: string }
+  | { operation: "getManagedIssuer"; appId: string }
+  | { operation: "patchManagedIssuer"; appId: string }
+  | { operation: "mintManagedCapability"; appId: string }
+  | { operation: "inspectOAuthIssuer"; appId: string }
+  | { operation: "activateOAuthIssuer"; appId: string }
+  | { operation: "listRefDomains"; appId: string }
+  | { operation: "listControlAuditEvents"; appId: string }
+  | { operation: "listRootDomainRefs"; appId: string; refDomain: string }
+  | { operation: "listRootDomainEvents"; appId: string; refDomain: string };
+
 function segment(value: string): string {
   return encodeURIComponent(value);
 }
@@ -66,6 +91,39 @@ export const casAdminRoutes = {
     `/admin/stacks/${segment(stackId)}/root-ref-domains/${segment(refDomain)}/refs`,
   rootDomainEvents: ({ stackId, refDomain }: { stackId: string; refDomain: string }) =>
     `/admin/stacks/${segment(stackId)}/root-ref-domains/${segment(refDomain)}/events`,
+} as const;
+
+export const appAdminRoutes = {
+  me: () => "/admin/me",
+  apps: () => "/admin/apps",
+  app: ({ appId }: { appId: string }) =>
+    `/admin/apps/${segment(appId)}`,
+  members: ({ appId }: { appId: string }) =>
+    `/admin/apps/${segment(appId)}/members`,
+  memberInvitations: ({ appId }: { appId: string }) =>
+    `/admin/apps/${segment(appId)}/member-invitations`,
+  playgroundFileRoots: ({ appId }: { appId: string }) =>
+    `/admin/apps/${segment(appId)}/playground/file-roots`,
+  playgroundFileRoot: ({ appId, rootId }: { appId: string; rootId: string }) =>
+    `/admin/apps/${segment(appId)}/playground/file-roots/${segment(rootId)}`,
+  acceptMemberInvitation: ({ token }: { token: string }) =>
+    `/admin/member-invitations/${segment(token)}/accept`,
+  oauthIssuer: ({ appId }: { appId: string }) =>
+    `/admin/apps/${segment(appId)}/oauth-issuer`,
+  managedCapability: ({ appId }: { appId: string }) =>
+    `/admin/apps/${segment(appId)}/managed-capabilities`,
+  managedIssuer: ({ appId }: { appId: string }) =>
+    `/admin/apps/${segment(appId)}/managed-issuer`,
+  oauthIssuerInspections: ({ appId }: { appId: string }) =>
+    `/admin/apps/${segment(appId)}/oauth-issuer/inspections`,
+  refDomains: ({ appId }: { appId: string }) =>
+    `/admin/apps/${segment(appId)}/ref-domains`,
+  controlAuditEvents: ({ appId }: { appId: string }) =>
+    `/admin/apps/${segment(appId)}/audit-events`,
+  rootDomainRefs: ({ appId, refDomain }: { appId: string; refDomain: string }) =>
+    `/admin/apps/${segment(appId)}/root-ref-domains/${segment(refDomain)}/refs`,
+  rootDomainEvents: ({ appId, refDomain }: { appId: string; refDomain: string }) =>
+    `/admin/apps/${segment(appId)}/root-ref-domains/${segment(refDomain)}/events`,
 } as const;
 
 /**
@@ -179,6 +237,118 @@ export function matchCasAdminRoute(
       return { operation: "listRootDomainRefs", stackId, refDomain };
     }
     return { operation: "listRootDomainEvents", stackId, refDomain };
+  }
+
+  return null;
+}
+
+export function matchAppAdminRoute(
+  method: string,
+  pathname: string,
+): AppAdminRoute | null {
+  const parts = pathname.split("/").filter(Boolean);
+  if (parts[0] !== "admin") return null;
+
+  if (parts.length === 2 && parts[1] === "me" && method === "GET") {
+    return { operation: "me" };
+  }
+
+  if (parts.length === 2 && parts[1] === "apps") {
+    if (method === "GET") return { operation: "listApps" };
+    if (method === "POST") return { operation: "createApp" };
+    return null;
+  }
+
+  if (
+    parts.length === 4
+    && parts[1] === "member-invitations"
+    && parts[3] === "accept"
+    && method === "POST"
+  ) {
+    const token = decodeSegment(parts[2]!);
+    return token === null ? null : { operation: "acceptMemberInvitation", token };
+  }
+
+  if (parts[1] !== "apps" || !parts[2]) return null;
+  const appId = decodeSegment(parts[2]);
+  if (appId === null) return null;
+
+  if (parts.length === 3) {
+    if (method === "GET") return { operation: "getApp", appId };
+    if (method === "PATCH") return { operation: "patchApp", appId };
+    return null;
+  }
+
+  if (parts.length === 4 && parts[3] === "members") {
+    if (method === "GET") return { operation: "listMembers", appId };
+    if (method === "DELETE") return { operation: "deleteMember", appId };
+    return null;
+  }
+
+  if (parts.length === 4 && parts[3] === "member-invitations" && method === "POST") {
+    return { operation: "createMemberInvitation", appId };
+  }
+
+  if (parts.length === 5 && parts[3] === "playground" && parts[4] === "file-roots") {
+    if (method === "GET") return { operation: "listPlaygroundFileRoots", appId };
+    if (method === "POST") return { operation: "createPlaygroundFileRoot", appId };
+    return null;
+  }
+
+  if (parts.length === 6 && parts[3] === "playground" && parts[4] === "file-roots") {
+    const rootId = decodeSegment(parts[5]!);
+    if (rootId === null) return null;
+    if (method === "PATCH") return { operation: "patchPlaygroundFileRoot", appId, rootId };
+    if (method === "DELETE") return { operation: "deletePlaygroundFileRoot", appId, rootId };
+    return null;
+  }
+
+  if (parts.length === 4 && parts[3] === "oauth-issuer") {
+    if (method === "GET") return { operation: "getOAuthIssuer", appId };
+    if (method === "PUT") return { operation: "activateOAuthIssuer", appId };
+    return null;
+  }
+
+  if (parts.length === 4 && parts[3] === "managed-capabilities" && method === "POST") {
+    return { operation: "mintManagedCapability", appId };
+  }
+
+  if (parts.length === 4 && parts[3] === "managed-issuer") {
+    if (method === "GET") return { operation: "getManagedIssuer", appId };
+    if (method === "PATCH") return { operation: "patchManagedIssuer", appId };
+    return null;
+  }
+
+  if (
+    parts.length === 5
+    && parts[3] === "oauth-issuer"
+    && parts[4] === "inspections"
+    && method === "POST"
+  ) {
+    return { operation: "inspectOAuthIssuer", appId };
+  }
+
+  if (parts.length === 4 && parts[3] === "ref-domains") {
+    return method === "GET" ? { operation: "listRefDomains", appId } : null;
+  }
+
+  if (parts.length === 4 && parts[3] === "audit-events" && method === "GET") {
+    return { operation: "listControlAuditEvents", appId };
+  }
+
+  if (
+    parts.length === 6
+    && parts[3] === "root-ref-domains"
+    && parts[4]
+    && (parts[5] === "refs" || parts[5] === "events")
+    && method === "GET"
+  ) {
+    const refDomain = decodeSegment(parts[4]);
+    if (refDomain === null) return null;
+    if (parts[5] === "refs") {
+      return { operation: "listRootDomainRefs", appId, refDomain };
+    }
+    return { operation: "listRootDomainEvents", appId, refDomain };
   }
 
   return null;

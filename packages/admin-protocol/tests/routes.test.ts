@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
+  appAdminRoutes,
   casAdminRoutes,
+  matchAppAdminRoute,
   matchCasAdminRoute,
 } from "../src/index.js";
 
@@ -55,5 +57,58 @@ describe("CAS admin routes", () => {
     );
     expect(route?.operation).toBe("listRootDomainRefs");
     expect(JSON.stringify(route)).not.toMatch(/updateRootRefs|readContent|rootRefs/);
+  });
+});
+
+describe("App admin routes", () => {
+  test.each([
+    ["GET", appAdminRoutes.me(), "me"],
+    ["GET", appAdminRoutes.apps(), "listApps"],
+    ["POST", appAdminRoutes.apps(), "createApp"],
+    ["GET", appAdminRoutes.app({ appId: "app/a" }), "getApp"],
+    ["PATCH", appAdminRoutes.app({ appId: "app/a" }), "patchApp"],
+    ["GET", appAdminRoutes.members({ appId: "app/a" }), "listMembers"],
+    ["DELETE", appAdminRoutes.members({ appId: "app/a" }), "deleteMember"],
+    ["POST", appAdminRoutes.memberInvitations({ appId: "app/a" }), "createMemberInvitation"],
+    ["POST", appAdminRoutes.acceptMemberInvitation({ token: "tok/1" }), "acceptMemberInvitation"],
+    ["GET", appAdminRoutes.playgroundFileRoots({ appId: "app/a" }), "listPlaygroundFileRoots"],
+    ["POST", appAdminRoutes.playgroundFileRoots({ appId: "app/a" }), "createPlaygroundFileRoot"],
+    ["PATCH", appAdminRoutes.playgroundFileRoot({ appId: "app/a", rootId: "root/1" }), "patchPlaygroundFileRoot"],
+    ["DELETE", appAdminRoutes.playgroundFileRoot({ appId: "app/a", rootId: "root/1" }), "deletePlaygroundFileRoot"],
+    ["GET", appAdminRoutes.oauthIssuer({ appId: "app/a" }), "getOAuthIssuer"],
+    ["PUT", appAdminRoutes.oauthIssuer({ appId: "app/a" }), "activateOAuthIssuer"],
+    ["POST", appAdminRoutes.oauthIssuerInspections({ appId: "app/a" }), "inspectOAuthIssuer"],
+    ["GET", appAdminRoutes.managedIssuer({ appId: "app/a" }), "getManagedIssuer"],
+    ["PATCH", appAdminRoutes.managedIssuer({ appId: "app/a" }), "patchManagedIssuer"],
+    ["POST", appAdminRoutes.managedCapability({ appId: "app/a" }), "mintManagedCapability"],
+    ["GET", appAdminRoutes.refDomains({ appId: "app/a" }), "listRefDomains"],
+    ["GET", appAdminRoutes.controlAuditEvents({ appId: "app/a" }), "listControlAuditEvents"],
+    ["GET", appAdminRoutes.rootDomainRefs({ appId: "app/a", refDomain: "doc" }), "listRootDomainRefs"],
+    ["GET", appAdminRoutes.rootDomainEvents({ appId: "app/a", refDomain: "doc" }), "listRootDomainEvents"],
+  ] as const)("matches %s %s -> %s", (method, pathname, operation) => {
+    expect(matchAppAdminRoute(method, pathname)).toMatchObject({ operation });
+  });
+
+  test("encodes App path segments and returns appId", () => {
+    const path = appAdminRoutes.rootDomainRefs({ appId: "app/a", refDomain: "doc:md" });
+    expect(path).toBe("/admin/apps/app%2Fa/root-ref-domains/doc%3Amd/refs");
+    expect(matchAppAdminRoute("GET", path)).toMatchObject({
+      appId: "app/a",
+      refDomain: "doc:md",
+    });
+  });
+
+  test("keeps Stack and App scoped matchers disjoint", () => {
+    const stackPath = casAdminRoutes.stack({ stackId: "scope-a" });
+    const appPath = appAdminRoutes.app({ appId: "scope-a" });
+    expect(matchAppAdminRoute("GET", stackPath)).toBeNull();
+    expect(matchCasAdminRoute("GET", appPath)).toBeNull();
+  });
+
+  test("rejects data paths, malformed escapes, and wrong methods", () => {
+    expect(matchAppAdminRoute("GET", "/v2/apps/a/spaces/s/cas/usage")).toBeNull();
+    expect(matchAppAdminRoute("GET", "/admin/apps/%ZZ")).toBeNull();
+    expect(matchAppAdminRoute("POST", appAdminRoutes.me())).toBeNull();
+    expect(matchAppAdminRoute("GET", appAdminRoutes.managedCapability({ appId: "a" }))).toBeNull();
   });
 });

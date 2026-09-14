@@ -51,6 +51,18 @@ export interface AppMembership {
   readonly profile: Profile;
 }
 
+export type AppMemberInvitationStatus = "pending" | "accepted" | "expired" | "revoked";
+
+export interface AppMemberInvitation {
+  readonly invitationId: string;
+  readonly appId: AppId;
+  readonly status: AppMemberInvitationStatus;
+  readonly emailConstraint: string | null;
+  readonly expiresAt: number;
+  readonly createdAt: number;
+  readonly revision: number;
+}
+
 export type CasStackStatus = "active" | "suspended";
 
 export interface CasStack {

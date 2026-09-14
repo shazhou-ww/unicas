@@ -12,7 +12,10 @@ Updated: 2026-09-14
 - [x] Add the App/Space verifier with bidirectional token/route denial tests.
 - [x] Define exported App, Space, Principal, and Profile schemas.
 - [x] Generate a separately named Space v2 OpenAPI artifact without changing tenant v1.
-- [ ] Define the App admin v2 contract and separate OpenAPI artifact.
+- [x] Add the complete App-scoped administrator route family.
+- [x] Define the core App, membership, and invitation administrator contract.
+- [ ] Extend the App contract with issuer, Playground, and audit operations.
+- [ ] Generate the separate App admin v2 OpenAPI artifact.
 
 ## Current state
 
@@ -29,7 +32,12 @@ Principal, Profile, App, and AppMembership schemas through the permitted
 one-way protocol dependency. The Space data plane now has an independent
 contract, generator, package export, and drift artifact. Its generator is a
 separate command and does not write tenant v1. The next concrete action is the
-corresponding App administrator contract and artifact.
+corresponding App administrator contract and artifact. Milestone commit
+`c94a818` records that foundation. Since the commit, the protocol has gained
+the complete 23-operation App route matcher and a typed 9-operation core
+contract for identity, App CRUD, membership, and invitations. The next
+concrete action is to add issuer, managed capability, Playground, and audit
+contracts before generating the App admin v2 artifact.
 
 ## Decisions
 
@@ -40,6 +48,8 @@ corresponding App administrator contract and artifact.
   as one authorization boundary; no implicit v1/v2 translation is allowed.
 - Keep v1 and v2 OpenAPI generation commands separate so iterating on the new
   contract cannot rewrite a frozen legacy artifact.
+- Build the App administrator contract in typed slices, but do not publish an
+  incomplete admin v2 OpenAPI artifact.
 
 ## Validation
 
@@ -72,6 +82,13 @@ corresponding App administrator contract and artifact.
   the tenant v1 artifact has no staged or working content diff.
 - `pnpm test` passed all repository checks and all workspace package tests.
 - `pnpm typecheck` passed all 13 workspace package TypeScript projects.
+- Milestone commit `c94a818` (`feat: add App and Space v2 contract foundation`)
+  was created with a clean post-commit worktree.
+- Focused App administrator route tests passed all 50 v1 and v2 cases.
+- `pnpm --filter @unicas/admin-protocol test` passed after the core App
+  contract: 4 files and 70 tests.
+- `pnpm --filter @unicas/admin-protocol typecheck` passed; editor diagnostics
+  for the touched admin protocol files are clear.
 
 ## Blockers
 
