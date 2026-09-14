@@ -32,13 +32,12 @@ The split-origin Worker is deployed as version
 audience use `api.unicas.work`. The API production smoke, console login, CLI
 login, and two complete MCP OAuth flows pass.
 
-The apex remains attached to the API Worker only as a rollback route, but API
-and administrator paths fail closed there. An independent assets-only product
-site is implemented and locally verified.
+The apex now serves the independent `unicas-site` static Worker. The API Worker
+owns only `api.unicas.work` and `console.unicas.work`; `docs.unicas.work`
+remains unconfigured and independent.
 
-Next concrete action: deploy `unicas-site` to transfer the apex custom domain,
-redeploy the API Worker without the apex route, then run final repository,
-domain, smoke, and legacy invariance checks.
+Next concrete action: commit the final deployment-boundary test update, push
+the completed cutover commits, and verify GitHub CI before archiving the task.
 
 ## Decisions
 
@@ -98,6 +97,18 @@ domain, smoke, and legacy invariance checks.
 - The independent product site passed Wrangler dry-run and desktop/mobile
   browser validation; the mobile hero ends at 762 px in a 844 px viewport with
   no horizontal overflow.
+- Product site version `1ffd3f9a-6f58-4237-ba44-709128ba09f8` owns the apex;
+  final API Worker version `02275f3c-82ec-4e90-8cfd-103d43135f2c` owns only
+  the API and console domains.
+- Final public checks passed: apex product title and root 200, apex API/admin
+  and unknown paths 404, API health 200, console root 302, and wrong-host
+  routes 404.
+- Full workspace build and typecheck passed. Full repository/package tests
+  passed, including 101 repository checks and 185 service-cloudflare tests.
+- Final API Worker and product-site Wrangler dry-runs passed.
+- Gitleaks 8.30.1 scanned 315 commits and reported no leaks.
+- Final production smoke passed after the apex transfer; the frozen legacy
+  deployment and route baselines remained unchanged.
 - The guarded live reset plan passed its remote inventory checks and targets
   exactly two R2 objects, one OAuth KV key, and the isolated tenant/control D1
   tables.

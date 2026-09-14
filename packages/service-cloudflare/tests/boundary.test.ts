@@ -32,7 +32,9 @@ describe("service-cloudflare package boundary", () => {
       expect(operations).toContain(`${operation}: admin.${operation}.bind(admin)`);
     }
     expect(wrangler).toContain('name = "unicas"');
-    expect(wrangler).toContain('pattern = "unicas.work"');
+    expect(wrangler).toContain('pattern = "api.unicas.work"');
+    expect(wrangler).toContain('pattern = "console.unicas.work"');
+    expect(wrangler).not.toContain('pattern = "unicas.work"');
     expect(wrangler).toContain("custom_domain = true");
     expect(wrangler).not.toContain("docs.unicas.work");
     expect(wrangler).not.toContain("unicas.shazhou.work");
