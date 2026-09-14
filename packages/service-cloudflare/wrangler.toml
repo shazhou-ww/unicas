@@ -6,10 +6,6 @@ workers_dev = false
 preview_urls = false
 
 [[routes]]
-pattern = "unicas.work"
-custom_domain = true
-
-[[routes]]
 pattern = "api.unicas.work"
 custom_domain = true
 

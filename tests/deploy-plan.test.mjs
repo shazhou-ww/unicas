@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
@@ -159,5 +160,16 @@ describe("standalone deployment plan", () => {
     expect(rendered).toContain("--binding OAUTH_KV --remote");
     expect(rendered).not.toContain("unicas.shazhou.work");
     expect(rendered).not.toContain("unidocs-cas");
+  });
+
+  test("assigns product and service origins to separate Workers", () => {
+    const serviceConfig = readFileSync(join(ROOT, "packages/service-cloudflare/wrangler.toml"), "utf8");
+    const siteConfig = JSON.parse(readFileSync(join(ROOT, "stacks/unicas/site/wrangler.jsonc"), "utf8"));
+    expect(serviceConfig).toContain('pattern = "api.unicas.work"');
+    expect(serviceConfig).toContain('pattern = "console.unicas.work"');
+    expect(serviceConfig).not.toContain('pattern = "unicas.work"');
+    expect(serviceConfig).not.toContain("docs.unicas.work");
+    expect(siteConfig.routes).toEqual([{ pattern: "unicas.work", custom_domain: true }]);
+    expect(siteConfig.assets.directory).toBe("./public");
   });
 });

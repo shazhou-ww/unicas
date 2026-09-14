@@ -9,6 +9,8 @@ pnpm dev
 pnpm dev --docker
 pnpm deploy:plan
 pnpm deploy:production
+pnpm deploy:site:plan
+pnpm deploy:site
 pnpm smoke -- [baseUrl]
 ```
 
@@ -16,6 +18,10 @@ Production deploys one `@unicas/service-cloudflare` Worker containing the
 tenant and admin HTTP service, admin BFF/UI, MCP ingress, and public routing.
 The smoke entry exercises that public Worker and expects provisioned stack
 credentials under the gitignored `.wrangler/cas-deploy/` directory.
+
+The product apex is a separate assets-only Worker under `site/`. Its deployment
+has no service bindings or secrets and must never claim the API, console, or
+documentation origins.
 
 ## Managed issuer
 

@@ -143,12 +143,17 @@ pnpm --filter @unicas/service-cloudflare test
 pnpm --filter @unicas/service-cloudflare build
 pnpm --filter @unicas/service-cloudflare exec wrangler deploy --dry-run
 pnpm --filter @unicas/admin-webui test
+node stacks/unicas/deploy/mcp-oauth-smoke.mjs
 ```
 
 The release gate additionally requires a real GitHub Copilot flow through the
 custom domain: discovery, Google login, consent, `whoami`, a paginated read,
 refresh, revoke, and reauthorization. A manually injected bearer token does not
 replace that test.
+
+The interactive production smoke prints a loopback OAuth authorization URL and
+never logs access or refresh tokens. Complete Google account selection and the
+UniCAS consent page in a browser while its callback listener is running.
 
 ## Rollout and incident response
 

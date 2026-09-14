@@ -7,8 +7,8 @@ Updated: 2026-09-14
 - [x] Split CAS, MCP, and administrator public-origin configuration.
 - [x] Enforce and test the public host/path routing matrix.
 - [x] Update Worker domain configuration, OAuth callbacks, and CLI defaults.
-- [ ] Cut over and recreate the smoke-only environment.
-- [ ] Validate the API and console before moving the apex website.
+- [x] Cut over and recreate the smoke-only environment.
+- [x] Validate the API and console before moving the apex website.
 - [ ] Complete repository and production acceptance validation.
 
 ## Current state
@@ -26,11 +26,19 @@ to a non-empty gitignored cutover backup. Read-only inventory confirmed that
 the environment still contains only `Production Smoke`, its `deploy-smoke`
 tenant, two indexed R2 objects, and one OAuth client key.
 
-No Worker deployment, DNS removal, or destructive reset has been performed.
+The split-origin Worker is deployed as version
+`f9a9b1c8-775e-41ce-9799-264403626636`. `Production Smoke` was recreated as
+`cas_hHO73aWq3q__` through `console.unicas.work`; its active managed issuer and
+audience use `api.unicas.work`. The API production smoke, console login, CLI
+login, and two complete MCP OAuth flows pass.
 
-Next concrete action: commit the guarded smoke reset tool, execute its reviewed
-plan for the verified smoke stack, then deploy the split-origin Worker before
-recreating `Production Smoke` on the new origins.
+The apex remains attached to the API Worker only as a rollback route, but API
+and administrator paths fail closed there. An independent assets-only product
+site is implemented and locally verified.
+
+Next concrete action: deploy `unicas-site` to transfer the apex custom domain,
+redeploy the API Worker without the apex route, then run final repository,
+domain, smoke, and legacy invariance checks.
 
 ## Decisions
 
@@ -67,6 +75,29 @@ recreating `Production Smoke` on the new origins.
 - Focused deployment/reset guardrail tests passed (10 tests).
 - Production smoke now defaults to `https://api.unicas.work`; the default
   allowlist rejects the apex, legacy, and documentation origins.
+- Guarded reset completed and post-reset D1/KV counts were zero; Wrangler
+  confirmed both indexed R2 objects were deleted.
+- Split-origin Worker version `f9a9b1c8-775e-41ce-9799-264403626636` deployed
+  with apex retained for rollback, plus API and console exact domains.
+- API health returned 200; API/admin and console/machine wrong-host requests
+  returned 404. Console root redirects to `/admin/` on the console origin.
+- Console Google login and stack recreation succeeded. CLI login defaulted to
+  and persisted `https://console.unicas.work`; `whoami` and `stacks list`
+  succeeded.
+- API production smoke passed lease, read, metadata, Root Ref idempotency and
+  cleanup, usage, and GC against the recreated stack.
+- MCP OAuth passed metadata, dynamic registration, Google login, consent,
+  authorization-code exchange, `whoami`, refresh rotation, RFC 7009 revocation,
+  revoked-token rejection, and a second complete reauthorization flow. Test
+  clients were removed afterward and OAuth KV returned to zero keys.
+- Post-cutover data contains only `Production Smoke` and its `deploy-smoke`
+  tenant. The managed issuer and audience use `https://api.unicas.work`.
+- `docs.unicas.work` remains absent from Worker custom domains and DNS.
+- Legacy Worker version and all three `unicas.shazhou.work` route assignments
+  matched their pre-cutover baselines after deployment.
+- The independent product site passed Wrangler dry-run and desktop/mobile
+  browser validation; the mobile hero ends at 762 px in a 844 px viewport with
+  no horizontal overflow.
 - The guarded live reset plan passed its remote inventory checks and targets
   exactly two R2 objects, one OAuth KV key, and the isolated tenant/control D1
   tables.
@@ -75,8 +106,7 @@ recreating `Production Smoke` on the new origins.
 
 ## Blockers
 
-The destructive reset and Worker deployment remain intentionally blocked until
-the guarded reset plan is committed.
+None.
 
 ## Outcome
 

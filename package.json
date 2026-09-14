@@ -6,6 +6,8 @@
     "deploy": "node stacks/unicas/deploy/deploy.mjs",
     "deploy:production": "node stacks/unicas/deploy/deploy.mjs --production",
     "deploy:plan": "node stacks/unicas/deploy/deploy.mjs --dry-run",
+    "deploy:site": "pnpm --filter @unicas/service-cloudflare exec wrangler deploy --config ../../stacks/unicas/site/wrangler.jsonc",
+    "deploy:site:plan": "pnpm --filter @unicas/service-cloudflare exec wrangler deploy --dry-run --config ../../stacks/unicas/site/wrangler.jsonc",
     "smoke": "node stacks/unicas/deploy/smoke.mjs",
     "build": "pnpm -r build",
     "test": "pnpm check:repo && pnpm -r test",
