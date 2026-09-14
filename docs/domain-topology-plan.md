@@ -4,6 +4,11 @@ Status: planned, not yet executed
 
 Date: 2026-09-14
 
+The companion [App and Space terminology plan](app-space-terminology-plan.md)
+defines the public resource model that should be introduced with the new API
+and console origins. Implement the two plans in separate reviewable phases,
+then combine them at the smoke-only environment cutover.
+
 ## Decision
 
 Use the product apex for the developer-facing website and separate the human
@@ -12,13 +17,13 @@ administrator surface from machine-facing protocols:
 | Origin | Audience | Surface |
 | --- | --- | --- |
 | `https://unicas.work` | Developers and evaluators | Product overview, quick start, and links to the console, documentation, and source |
-| `https://api.unicas.work` | Services, SDKs, CLIs, and agents | Tenant API, managed issuers, OAuth/MCP, discovery, and health |
-| `https://console.unicas.work` | Stack administrators | Administrator WebUI, BFF, invitations, and CLI login |
+| `https://api.unicas.work` | Services, SDKs, CLIs, and agents | App/Space data API, managed issuers, OAuth/MCP, discovery, and health |
+| `https://console.unicas.work` | App administrators | Administrator WebUI, BFF, invitations, and CLI login |
 | `https://docs.unicas.work` | Developers and operators | Product, protocol, deployment, and operations documentation |
 
 UniCAS has no end-user application surface. Downstream products own end-user
-identity, tenant selection, and product workflows. The console is only for
-people who administer a UniCAS stack.
+identity, Space mapping, and product workflows. The console is only for people
+who administer a UniCAS App.
 
 Prefer `console.unicas.work` over `admin.unicas.work`: "console" describes the
 stack-operator product without implying a separate platform-superuser plane.

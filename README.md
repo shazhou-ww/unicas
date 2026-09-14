@@ -59,6 +59,10 @@ console, and documentation origins is recorded in
 [`docs/domain-topology-plan.md`](docs/domain-topology-plan.md). It is a plan,
 not the current deployed topology.
 
+The planned public terminology migration from Stack/Tenant to App/Space is
+recorded in
+[`docs/app-space-terminology-plan.md`](docs/app-space-terminology-plan.md).
+
 Report suspected vulnerabilities privately as described in
 [`SECURITY.md`](SECURITY.md).
 
