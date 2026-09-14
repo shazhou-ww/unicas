@@ -112,6 +112,28 @@ Store the SQL off-box (the gitignored `.wrangler/` copy is a working backup,
 not a durable one). R2 content is referenced by node hashes in the tenant D1
 backup; a restore re-verifies blobs through the canonical read path.
 
+For the split-origin smoke-only cutover, review the live reset plan after both
+exports complete:
+
+```powershell
+node stacks/unicas/deploy/reset-smoke.mjs --expected-stack-id <current-smoke-stack-id>
+```
+
+The command refuses inventories containing another stack, tenant, object-key
+shape, or a managed issuer not bound to the old apex. After reviewing the
+printed R2, OAuth KV, and D1 commands, execute only with the same explicit
+stack ID and the directory containing both non-empty exports:
+
+```powershell
+node stacks/unicas/deploy/reset-smoke.mjs --execute `
+   --expected-stack-id <current-smoke-stack-id> `
+   --backup-dir .wrangler/cas-deploy/backups/<cutover>
+```
+
+This tool targets only the isolated `unicas-*` resources committed in this
+repository. It has no legacy Worker, route, database, bucket, or namespace
+parameter.
+
 Restore (disaster drill; destructive — clears target tables first):
 
 ```text

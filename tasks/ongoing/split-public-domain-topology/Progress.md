@@ -6,7 +6,7 @@ Updated: 2026-09-14
 
 - [x] Split CAS, MCP, and administrator public-origin configuration.
 - [x] Enforce and test the public host/path routing matrix.
-- [ ] Update Worker domains, OAuth callbacks, and CLI defaults.
+- [x] Update Worker domain configuration, OAuth callbacks, and CLI defaults.
 - [ ] Cut over and recreate the smoke-only environment.
 - [ ] Validate the API and console before moving the apex website.
 - [ ] Complete repository and production acceptance validation.
@@ -20,12 +20,17 @@ retaining the apex route for rollback; local development explicitly maps all
 three origins to its existing single localhost origin. The administrator CLI
 defaults to `https://console.unicas.work`.
 
-No Cloudflare deployment, DNS change, Google OAuth callback change, production
-data export, or destructive reset has been performed.
+Google OAuth now includes the split console and API callbacks while retaining
+legacy, localhost, and apex callbacks. Both isolated D1 databases were exported
+to a non-empty gitignored cutover backup. Read-only inventory confirmed that
+the environment still contains only `Production Smoke`, its `deploy-smoke`
+tenant, two indexed R2 objects, and one OAuth client key.
 
-Next concrete action: add both split Google OAuth callbacks without removing
-the apex callbacks, then run the pre-cutover Cloudflare and smoke-state checks
-before deploying the new Worker domains.
+No Worker deployment, DNS removal, or destructive reset has been performed.
+
+Next concrete action: commit the guarded smoke reset tool, execute its reviewed
+plan for the verified smoke stack, then deploy the split-origin Worker before
+recreating `Production Smoke` on the new origins.
 
 ## Decisions
 
@@ -49,12 +54,27 @@ before deploying the new Worker domains.
 - Service-cloudflare and admin-cli TypeScript project builds passed.
 - Direct Wrangler deployment dry-run passed and reported all three public
   origin variables; no production request was made.
+- Stage commit `b6afee8` records the split-origin code and configuration.
+- Google OAuth callback save was reloaded and verified with all prior callbacks
+  retained.
+- Remote D1 inventory showed one `Production Smoke` stack and one
+  `deploy-smoke` tenant with two nodes.
+- Remote D1 exports succeeded: control 11,030 bytes and tenant 6,391 bytes in
+  the gitignored cutover backup directory.
+- Current `unicas` deployment version is `eb2732bc-7103-40d8-ae16-d3d1fdacec32`;
+  current legacy `unidocs-cas` version is
+  `17f07f91-0771-413d-8b48-ff93c3cbf703`.
+- Focused deployment/reset guardrail tests passed (10 tests).
+- The guarded live reset plan passed its remote inventory checks and targets
+  exactly two R2 objects, one OAuth KV key, and the isolated tenant/control D1
+  tables.
+- Legacy route baseline: two exact OAuth routes remain on `unidocs-gateway` and
+  `unicas.shazhou.work/*` remains on `unidocs-cas`.
 
 ## Blockers
 
-Production cutover requires Cloudflare and Google OAuth control-plane changes,
-plus verified backups and confirmation that the isolated environment remains
-smoke-only. These have intentionally not started during the code phase.
+The destructive reset and Worker deployment remain intentionally blocked until
+the guarded reset plan is committed.
 
 ## Outcome
 
