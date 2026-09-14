@@ -14,8 +14,8 @@ Updated: 2026-09-14
 - [x] Validate local routing and responsive browser rendering.
 - [x] Deploy `docs.unicas.work` and verify HTTPS behavior.
 - [x] Update product-site and console documentation links.
-- [ ] Run final repository, Wrangler, gitleaks, and CI gates.
-- [ ] Archive the completed task.
+- [x] Run final repository, Wrangler, gitleaks, and CI gates.
+- [x] Archive the completed task.
 
 ## Current state
 
@@ -41,8 +41,8 @@ The console already linked to the docs origin. Product-site version
 documentation origin. The current docs Worker version is
 `8eb75abb-1d64-4d93-a7b0-16d2ea1ad416`.
 
-Next concrete action: commit the final deployment documentation update, push
-all documentation-site commits, verify CI, and archive the task.
+All documentation-site commits are pushed. Next concrete action: archive this
+completed task after the task-ledger validation passes.
 
 ## Decisions
 
@@ -90,6 +90,8 @@ all documentation-site commits, verify CI, and archive the task.
   package tests, and both Worker dry-runs.
 - Production overview navigation links all four package reference pages; each
   reference route returns 200.
+- Final GitHub CI run `34848395731` passed for head
+  `d04eedc435c4ca80e0e1d9d0c428acee61f98b48`.
 
 ## Blockers
 
@@ -97,4 +99,7 @@ None.
 
 ## Outcome
 
-In progress.
+Completed. `docs.unicas.work` serves the generated, independently deployable
+UniCAS documentation site; source and generated links, responsive navigation,
+deployment isolation, production routes, product/console integration, local
+validation, gitleaks, and CI all pass.

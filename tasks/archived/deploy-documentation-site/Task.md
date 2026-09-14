@@ -34,14 +34,14 @@ and console documentation links continue to target the repository sources.
 
 ## Acceptance criteria
 
-- [ ] `docs.unicas.work` serves the accepted UniCAS documentation over HTTPS.
-- [ ] The documentation site is deployed independently from API, console, and
+- [x] `docs.unicas.work` serves the accepted UniCAS documentation over HTTPS.
+- [x] The documentation site is deployed independently from API, console, and
       product-site releases.
-- [ ] The API Worker has no route, binding, or redirect for the docs origin.
-- [ ] Repository documentation links resolve in the generated site.
-- [ ] Navigation and code content are usable on desktop and mobile viewports.
-- [ ] Product and console links target the deployed documentation origin.
-- [ ] Build, link checks, responsive browser checks, Wrangler dry-run, and CI
+- [x] The API Worker has no route, binding, or redirect for the docs origin.
+- [x] Repository documentation links resolve in the generated site.
+- [x] Navigation and code content are usable on desktop and mobile viewports.
+- [x] Product and console links target the deployed documentation origin.
+- [x] Build, link checks, responsive browser checks, Wrangler dry-run, and CI
       pass.
 
 ## Constraints
