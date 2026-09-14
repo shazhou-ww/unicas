@@ -1,4 +1,4 @@
-name = "unidocs-cas"
+name = "unicas"
 main = "dist/worker.js"
 compatibility_date = "2025-08-17"
 compatibility_flags = ["global_fetch_strictly_public", "nodejs_compat"]
@@ -6,27 +6,27 @@ workers_dev = false
 preview_urls = false
 
 [[routes]]
-pattern = "unicas.shazhou.work/*"
-zone_name = "shazhou.work"
+pattern = "unicas.work"
+custom_domain = true
 
 [[d1_databases]]
 binding = "CAS_CONTROL_DB"
-database_name = "unidocs-cas-control"
-database_id = "dc8090eb-46bc-43e2-9524-f1554fb71c74"
+database_name = "unicas-control"
+database_id = "3a64d58d-692c-4340-af22-c4b4f3e923f1"
 
 [[d1_databases]]
 binding = "CAS_DB"
-database_name = "unidocs-cas-db"
-database_id = "66f8738b-b1a9-4727-b468-0c2c73287d2c"
+database_name = "unicas-tenant"
+database_id = "c3924c96-0a9c-479c-b82d-4eb840642bfd"
 
 [[r2_buckets]]
 binding = "CAS_R2"
-bucket_name = "unidocs-cas-apac"
-preview_bucket_name = "unidocs-cas-preview"
+bucket_name = "unicas-content"
+preview_bucket_name = "unicas-content-preview"
 
 [[kv_namespaces]]
 binding = "OAUTH_KV"
-id = "abb77c24fd0c4487a91c261d0cb58d6d"
+id = "105946859be94ca8b0563dd7b45099d0"
 
 [durable_objects]
 bindings = [
@@ -44,12 +44,12 @@ storage = "sqlite"
 
 [vars]
 CAS_ADMIN_MOUNT = "/admin"
-CAS_PUBLIC_ORIGIN = "https://unicas.shazhou.work"
-PUBLIC_ORIGIN = "https://unicas.shazhou.work"
+CAS_PUBLIC_ORIGIN = "https://unicas.work"
+PUBLIC_ORIGIN = "https://unicas.work"
 GOOGLE_OIDC_CLIENT_ID = "152437813368-hrv07qv06756pg68c4p9f84i8cf4uk00.apps.googleusercontent.com"
 MCP_ALLOWED_ORIGIN_HOSTNAMES = ""
 MCP_MUTATIONS_ENABLED = "true"
 CAS_R2_ACCOUNT_ID = "92c3c4fdcc84a1590555bccf4f111de2"
-CAS_R2_BUCKET_NAME = "unidocs-cas-apac"
+CAS_R2_BUCKET_NAME = "unicas-content"
 CAS_UPLOAD_URL_EXPIRY_SECONDS = "300"
-MANAGED_ISSUER_KEY_ID = "managed-2026-01"
+MANAGED_ISSUER_KEY_ID = "managed-2026-09"

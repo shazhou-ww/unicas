@@ -3,6 +3,13 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const SERVICE_PACKAGE = "@unicas/service-cloudflare";
+const SMOKE_ENVIRONMENT_KEYS = [
+  "UNICAS_SMOKE_STACK_ID",
+  "UNICAS_SMOKE_ISSUER",
+  "UNICAS_SMOKE_AUDIENCE",
+  "UNICAS_SMOKE_KID",
+  "UNICAS_SMOKE_KEY_FILE",
+];
 
 export function parseArgs(argv) {
   const options = { dryRun: false, production: false, skipSmoke: false, env: undefined };
@@ -27,6 +34,9 @@ export function deploymentPlan({ dryRun = false, env, production = false, skipSm
   if (env && production) {
     throw new Error("--production and --env cannot be used together");
   }
+  if (production && skipSmoke) {
+    throw new Error("production deployment cannot skip smoke validation");
+  }
   if (!dryRun && !env && !production) {
     throw new Error("refusing implicit production deployment; run pnpm deploy:production");
   }
@@ -46,6 +56,14 @@ export function deploymentPlan({ dryRun = false, env, production = false, skipSm
   return commands;
 }
 
+export function validateDeploymentEnvironment(options, environment = process.env) {
+  if (options.dryRun || options.skipSmoke) return;
+  const missing = SMOKE_ENVIRONMENT_KEYS.filter((key) => !environment[key]);
+  if (missing.length > 0) {
+    throw new Error(`production smoke configuration is missing: ${missing.join(", ")}`);
+  }
+}
+
 function run(command) {
   console.log(`> ${command.join(" ")}`);
   const result = spawnSync(command[0], command.slice(1), {
@@ -62,6 +80,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     const options = parseArgs(process.argv.slice(2));
     const plan = deploymentPlan(options);
+    validateDeploymentEnvironment(options);
     if (options.dryRun) {
       plan.forEach((command) => console.log(command.join(" ")));
     } else {

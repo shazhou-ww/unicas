@@ -12,7 +12,7 @@ Commands call the typed `@unicas/admin-client` over the `/admin` HTTP API;
 clients whose MCP support cannot do OAuth, for example DeepSeek Harness).
 
 ```
-https://unicas.shazhou.work/admin  <- /admin control-plane API (BFF session)
+https://unicas.work/admin  <- /admin control-plane API (BFF session)
         ^
         | session cookie + CSRF (via @unicas/admin-client)
 unicas CLI  <- /admin/auth/cli/authorize (BFF does Google OIDC) -> cli/exchange
@@ -138,7 +138,7 @@ Alternatively run any command in-process:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `UNICAS_ADMIN_URL` | `https://unicas.shazhou.work` | `/admin` API origin |
+| `UNICAS_ADMIN_URL` | `https://unicas.work` | `/admin` API origin |
 | `UNICAS_CONFIG_DIR` | `~/.unicas` | Directory holding `session.json` |
 
 ## Network / proxy

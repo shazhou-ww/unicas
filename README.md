@@ -5,6 +5,9 @@ tenant and administrator access planes. This repository contains its portable
 service core, Cloudflare deployment adapter, protocol packages, clients, CLI,
 and administrator console.
 
+- Product service: <https://unicas.work>
+- Documentation: <https://docs.unicas.work>
+
 ## Requirements
 
 - Node.js 24 or newer

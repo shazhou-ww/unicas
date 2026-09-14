@@ -96,9 +96,11 @@ permissions needed for deployment.
 The committed [Wrangler configuration](../packages/service-cloudflare/wrangler.toml)
 contains production resource IDs, route names, and the Google OAuth client ID.
 Those identifiers are public configuration, not credentials, but changing them
-must be intentional. Existing `unidocs-*` Worker, D1, R2, stack, audience, and
-media-type identifiers are compatibility contracts and are deliberately not
-renamed during repository extraction.
+must be intentional. The previous `unidocs-cas` deployment and its
+`unicas.shazhou.work` route remain online as a legacy environment. This
+repository deploys isolated `unicas-*` storage resources and the `unicas`
+Worker at `https://unicas.work`. Existing wire media types and downstream
+issuer identifiers remain compatibility contracts and are not renamed.
 
 ## Worker secrets
 
@@ -140,6 +142,17 @@ HTTPS issuer discovery; a comma-separated value restricts discovery to those
 origins. The Worker intentionally keeps the `global_fetch_strictly_public`
 compatibility flag so metadata and JWKS discovery cannot reach private network
 targets.
+
+The Google OAuth web client must register both production redirect URIs:
+
+```text
+https://unicas.work/admin/auth/callback
+https://unicas.work/oauth/google/callback
+```
+
+The first serves administrator WebUI and CLI login; the second serves remote
+MCP OAuth. `docs.unicas.work` is reserved for the product documentation site
+and is intentionally not a Worker route or DNS record in this deployment.
 
 ## Read-only deployment validation
 

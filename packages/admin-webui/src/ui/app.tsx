@@ -96,7 +96,7 @@ export function App() {
             <>
               <a
                 className="docs-header-link"
-                href="https://docs.shazhou.work/unicas"
+                href="https://docs.unicas.work"
                 target="_blank"
                 rel="noreferrer"
                 aria-label="Open UniCAS documentation"

@@ -5,11 +5,11 @@ Runbooks, SLOs, and alerting for the independently deployed CAS middleware
 
 | Component | Worker / resource | Notes |
 |---|---|---|
-| UniCAS service (public) | `unidocs-cas` | Single `@unicas/service-cloudflare` Worker for `/stacks`, `/admin`, MCP/OAuth, and admin UI |
+| UniCAS service (public) | `unicas` | Single `@unicas/service-cloudflare` Worker for `/stacks`, `/admin`, MCP/OAuth, and admin UI |
 | OAuth KV | dedicated `OAUTH_KV` namespace | OAuth clients, grants, token hashes, and encrypted authorization transactions |
-| Control D1 | `unidocs-cas-control` (`dc8090eb-…`) | issuers, stacks, members, control audit |
-| Tenant D1 | `unidocs-cas-db` (`66f8738b-…`) | stack-scoped nodes/edges/root-refs |
-| R2 | `unidocs-cas-apac`, `unidocs-cas-preview` | node content |
+| Control D1 | `unicas-control` (`3a64d58d-…`) | issuers, stacks, members, control audit |
+| Tenant D1 | `unicas-tenant` (`c3924c96-…`) | stack-scoped nodes/edges/root-refs |
+| R2 | `unicas-content`, `unicas-content-preview` | node content |
 
 Secrets live only as Worker secrets (Google OIDC client secret,
 `SESSION_ENCRYPTION_KEYS`, `OAUTH_STATE_ENCRYPTION_KEY`,
@@ -56,7 +56,7 @@ service request count + 5xx rate, tenant 401/403 rate by error code
 
 | Alert | Condition | Severity | Response |
 |---|---|---|---|
-| Service 5xx rate | > 1% of requests over 5 min | P1 | Check `wrangler deployments list` for `unidocs-cas`; rollback if a recent deploy regressed |
+| Service 5xx rate | > 1% of requests over 5 min | P1 | Check `wrangler deployments list` for `unicas`; rollback if a recent deploy regressed |
 | `fail_closed` burst | `cas_stack_authorization` kind=`fail_closed` ≥ 3 in 5 min | P1 | D1 reachability from the tenant worker; registry row integrity |
 | `registry_unavailable` 401/403 rate | > 0.5% of tenant requests over 5 min | P1 | Same as above |
 | Unknown-issuer spike | `unknown_issuer` > threshold after a rotation | P2 | Issuer active? discovery still resolves to the expected `jwks_uri`? |
@@ -77,9 +77,10 @@ pnpm --filter @unicas/service-cloudflare exec wrangler deploy
 node scripts/cas-middleware-smoke.mjs           # needs .wrangler/cas-deploy/*.pkcs8.pem stack keys; run twice 70s apart
 ```
 
-The smoke script is repeatable (per-run tenant/requestId). Running it twice
-with a 70s gap also proves the authority-cache refresh path (see the
-hard-stale fix).
+The smoke script uses one dedicated `deploy-smoke` tenant, stable node hashes,
+and per-run request IDs. It releases the parent Root Ref after assertions, so
+subsequent runs reuse the same nodes instead of accumulating tenant/R2 data.
+Running it twice with a 70s gap also proves the authority-cache refresh path.
 
 ### Rollback
 
@@ -99,8 +100,8 @@ wrangler deploy
 Backup (manual or scheduled; daily target):
 
 ```text
-wrangler d1 export unidocs-cas-control --remote --no-schema --output backup-cas-control.sql
-wrangler d1 export unidocs-cas-db --remote --no-schema --output backup-cas-db.sql
+wrangler d1 export unicas-control --remote --no-schema --output backup-cas-control.sql
+wrangler d1 export unicas-tenant --remote --no-schema --output backup-cas-tenant.sql
 ```
 
 `--remote` is mandatory (without it wrangler exports an empty local DB).
@@ -111,10 +112,10 @@ backup; a restore re-verifies blobs through the canonical read path.
 Restore (disaster drill; destructive — clears target tables first):
 
 ```text
-wrangler d1 execute unidocs-cas-control --remote --command "<clear tables>"
-wrangler d1 execute unidocs-cas-control --remote --file=backup-cas-control.sql
-wrangler d1 execute unidocs-cas-db --remote --command "<clear tables>"
-wrangler d1 execute unidocs-cas-db --remote --file=backup-cas-db.sql
+wrangler d1 execute unicas-control --remote --command "<clear tables>"
+wrangler d1 execute unicas-control --remote --file=backup-cas-control.sql
+wrangler d1 execute unicas-tenant --remote --command "<clear tables>"
+wrangler d1 execute unicas-tenant --remote --file=backup-cas-tenant.sql
 ```
 
 Backups were verified 2026-08-26 (control 4.1 KB, tenant 2.0 KB, content
@@ -159,12 +160,12 @@ Operational checks:
 ### Incident checklist
 
 1. Confirm service `/health`; confirm `/stacks` + `/admin` probes.
-2. `wrangler deployments list` for `unidocs-cas` — recent deploy?
+2. `wrangler deployments list` for `unicas` — recent deploy?
    Rollback first, diagnose later.
 3. Grep `cas_stack_authorization` for `fail_closed` / `unknown_issuer` —
    registry reachability vs key/issuer config.
 4. Check the service Worker's D1 bindings (`CAS_CONTROL_DB`,
-   `unidocs-cas-control`) and `wrangler d1 execute ... SELECT` reachability.
+   `unicas-control`) and `wrangler d1 execute ... SELECT` reachability.
 5. After resolution, run the smoke twice (70 s apart) to confirm both the
    happy path and the cache-refresh path.
 

@@ -1,7 +1,12 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { deploymentPlan, parseArgs } from "../stacks/unicas/deploy/deploy.mjs";
+import {
+  deploymentPlan,
+  parseArgs,
+  validateDeploymentEnvironment,
+} from "../stacks/unicas/deploy/deploy.mjs";
+import { normalizeSmokeBaseUrl } from "../scripts/smoke-target.mjs";
 
 const ROOT = join(import.meta.dirname, "..");
 
@@ -20,6 +25,22 @@ describe("standalone deployment plan", () => {
     ]);
   });
 
+  test("does not allow production deployment to skip smoke", () => {
+    expect(() => deploymentPlan({ production: true, skipSmoke: true }))
+      .toThrow("production deployment cannot skip smoke validation");
+  });
+
+  test("limits smoke mutations to the product origin and local development", () => {
+    expect(normalizeSmokeBaseUrl("https://unicas.work")).toBe("https://unicas.work");
+    expect(normalizeSmokeBaseUrl("http://127.0.0.1:8794")).toBe("http://127.0.0.1:8794");
+    expect(() => normalizeSmokeBaseUrl("https://unicas.shazhou.work"))
+      .toThrow("is not allowed");
+    expect(() => normalizeSmokeBaseUrl("https://docs.unicas.work"))
+      .toThrow("is not allowed");
+    expect(normalizeSmokeBaseUrl("https://staging.unicas.work", true))
+      .toBe("https://staging.unicas.work");
+  });
+
   test("refuses an implicit production deployment before running commands", () => {
     const result = spawnSync(
       process.execPath,
@@ -33,6 +54,25 @@ describe("standalone deployment plan", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("refusing implicit production deployment");
+    expect(result.stdout).not.toContain("> ");
+  });
+
+  test("requires explicit smoke configuration before production commands", () => {
+    expect(() => validateDeploymentEnvironment({ production: true }, {}))
+      .toThrow("production smoke configuration is missing");
+
+    const result = spawnSync(
+      process.execPath,
+      ["stacks/unicas/deploy/deploy.mjs", "--production"],
+      {
+        cwd: ROOT,
+        encoding: "utf8",
+        env: { PATH: "" },
+      },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("production smoke configuration is missing");
     expect(result.stdout).not.toContain("> ");
   });
 

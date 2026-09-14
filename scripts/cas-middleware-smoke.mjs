@@ -2,20 +2,21 @@
  * Smoke-test the deployed CAS middleware through a base URL.
  *
  * Usage: node scripts/cas-middleware-smoke.mjs [baseUrl]
- *   baseUrl defaults to https://unicas.shazhou.work (the live edge);
+ *   baseUrl defaults to https://unicas.work (the live edge);
  *   pass http://127.0.0.1:<port> to test `wrangler dev --remote` tunnels.
- *   Set UNICAS_SMOKE_STACK_ID/ISSUER/AUDIENCE/KID/KEY_FILE to target one
- *   control-plane-managed smoke stack; cross-stack assertions are then skipped.
+ *   UNICAS_SMOKE_STACK_ID/ISSUER/AUDIENCE/KID/KEY_FILE must identify one
+ *   explicitly provisioned control-plane smoke stack.
  *
  * Loads the provisioned stack issuer keys from .wrangler/cas-deploy,
  * issues stack capabilities, and runs the canonical tenant flow (lease ->
- * read -> metadata -> updateRootRefs -> usage -> gc) plus cross-stack
- * isolation and edge-isolation assertions against the deployed workers.
+ * read -> metadata -> updateRootRefs -> usage -> gc) against the deployed
+ * Worker.
  */
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { importPKCS8, SignJWT } from "jose";
+import { normalizeSmokeBaseUrl } from "./smoke-target.mjs";
 import { concatenateNodeBytes, computeNodeDigest, encodeHeader, hashToHex, hexToHash } from "../packages/codec/dist/index.js";
 import {
   CapabilityAlgorithm,
@@ -26,39 +27,24 @@ import {
   casWritePermission,
 } from "../packages/tenant-protocol/dist/index.js";
 
-const BASE = process.argv[2] ?? "https://unicas.shazhou.work";
+const BASE = normalizeSmokeBaseUrl(
+  process.argv[2] ?? "https://unicas.work",
+  process.env.UNICAS_SMOKE_ALLOW_OTHER_ORIGIN === "true",
+);
 // Unique per run so the smoke is repeatable: a fixed tenant/requestId would
 // make the second run hit the root-refs idempotency record and fail the
 // `revision === 1` assertion.
 const RUN = `${process.pid}-${Date.now()}`;
-const TENANT = `deploy-smoke-${RUN}`;
+const TENANT = process.env.UNICAS_SMOKE_TENANT_ID ?? "deploy-smoke";
 const KEY_DIR = join(import.meta.dirname, "..", ".wrangler", "cas-deploy");
 
-const defaultStacks = [
-  {
-    stackId: "unidocs-cloudflare",
-    issuer: "https://unicas.shazhou.work/cas/issuer/cloudflare",
-    audience: "unidocs-cas-cloudflare",
-    keyFile: "unidocs-cloudflare.pkcs8.pem",
-    kid: "cf-rotate-1",
-  },
-  {
-    stackId: "unidocs-azure",
-    issuer: "https://unicas.shazhou.work/cas/issuer/azure",
-    audience: "unidocs-cas-azure",
-    keyFile: "unidocs-azure.pkcs8.pem",
-    kid: "az-rotate-1",
-  },
-];
-
-const configuredStackId = process.env.UNICAS_SMOKE_STACK_ID;
-const stacks = configuredStackId ? [{
-  stackId: configuredStackId,
+const stacks = [{
+  stackId: requiredEnv("UNICAS_SMOKE_STACK_ID"),
   issuer: requiredEnv("UNICAS_SMOKE_ISSUER"),
   audience: requiredEnv("UNICAS_SMOKE_AUDIENCE"),
   kid: requiredEnv("UNICAS_SMOKE_KID"),
   keyFile: requiredEnv("UNICAS_SMOKE_KEY_FILE"),
-}] : defaultStacks;
+}];
 
 /** Canonical node wire content type (see @unicas/codec). */
 const NODE_CONTENT_TYPE = "application/vnd.unidocs.cas-node.v1";
@@ -94,7 +80,7 @@ function assert(condition, message) {
 
 function requiredEnv(name) {
   const value = process.env[name];
-  if (!value) throw new Error(`${name} is required when UNICAS_SMOKE_STACK_ID is set`);
+  if (!value) throw new Error(`${name} is required for the production smoke test`);
   return value;
 }
 
@@ -315,6 +301,14 @@ async function main() {
   });
   const gcBody = await res.json();
   assert(res.status === 200 && gcBody.deleted === 0, "gc keeps leased nodes");
+
+  res = await fetch(`${BASE}${prefix}/root-refs`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${writer}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ requestId: `${RUN}:roots:cleanup`, changes: { [parent.hash]: -1 } }),
+  });
+  const cleanupBody = await res.json();
+  assert(res.status === 200 && cleanupBody.success === true, "root-refs cleanup releases parent");
 
   if (isolation !== undefined && isolationReader !== undefined) {
     // Cross-stack isolation: another stack's token cannot read the primary node.

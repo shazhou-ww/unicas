@@ -31,8 +31,12 @@ describe("service-cloudflare package boundary", () => {
     ]) {
       expect(operations).toContain(`${operation}: admin.${operation}.bind(admin)`);
     }
-    expect(wrangler).toContain('name = "unidocs-cas"');
-    expect(wrangler).toContain('pattern = "unicas.shazhou.work/*"');
+    expect(wrangler).toContain('name = "unicas"');
+    expect(wrangler).toContain('pattern = "unicas.work"');
+    expect(wrangler).toContain("custom_domain = true");
+    expect(wrangler).not.toContain("docs.unicas.work");
+    expect(wrangler).not.toContain("unicas.shazhou.work");
+    expect(wrangler).not.toContain('name = "unidocs-cas"');
     expect(wrangler).not.toContain("[[services]]");
     expect(wrangler).toContain('"global_fetch_strictly_public"');
     expect(wrangler).not.toContain("global_fetch_private_origin");
