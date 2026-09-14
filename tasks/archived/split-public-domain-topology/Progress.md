@@ -6,10 +6,19 @@ Updated: 2026-09-14
 
 - [x] Split CAS, MCP, and administrator public-origin configuration.
 - [x] Enforce and test the public host/path routing matrix.
-- [x] Update Worker domain configuration, OAuth callbacks, and CLI defaults.
-- [x] Cut over and recreate the smoke-only environment.
-- [x] Validate the API and console before moving the apex website.
-- [ ] Complete repository and production acceptance validation.
+- [x] Add exact API and console Worker custom domains.
+- [x] Update Google OAuth callbacks without removing migration callbacks.
+- [x] Change the administrator CLI default to the console origin.
+- [x] Back up and reset only the isolated smoke environment.
+- [x] Recreate `Production Smoke` with an API-origin managed issuer.
+- [x] Validate API data-plane and MCP/OAuth production flows.
+- [x] Validate console WebUI/BFF and CLI login flows.
+- [x] Deploy the apex as an independent product-site Worker.
+- [x] Keep `docs.unicas.work` independent and hand its deployment to the
+  `deploy-documentation-site` backlog task.
+- [x] Verify wrong-host failures and frozen legacy invariance.
+- [x] Complete local build, typecheck, tests, dry-runs, smoke, and gitleaks.
+- [x] Verify GitHub CI and archive this task.
 
 ## Current state
 
@@ -36,8 +45,12 @@ The apex now serves the independent `unicas-site` static Worker. The API Worker
 owns only `api.unicas.work` and `console.unicas.work`; `docs.unicas.work`
 remains unconfigured and independent.
 
-Next concrete action: commit the final deployment-boundary test update, push
-the completed cutover commits, and verify GitHub CI before archiving the task.
+The completed cutover commits are pushed to `main`, and GitHub CI passed for
+the final cutover head. Full documentation-site construction remains
+intentionally separate in `tasks/backlog/deploy-documentation-site`.
+
+Next concrete action: archive this completed task. The next independent product
+work is the documentation-site backlog task.
 
 ## Decisions
 
@@ -46,6 +59,8 @@ the completed cutover commits, and verify GitHub CI before archiving the task.
 - Keep `unicas.shazhou.work` and every legacy Cloudflare resource untouched.
 - Keep the terminology migration separately reviewable until the planned
   smoke-only cutover gate.
+- Treat deployment of the complete documentation site as separate work; this
+  task owns only its independent origin boundary and handoff.
 - Treat a missing or malformed owner origin as a fail-closed route mismatch;
   local and test environments must configure their intentional single origin.
 
@@ -109,6 +124,8 @@ the completed cutover commits, and verify GitHub CI before archiving the task.
 - Gitleaks 8.30.1 scanned 315 commits and reported no leaks.
 - Final production smoke passed after the apex transfer; the frozen legacy
   deployment and route baselines remained unchanged.
+- GitHub CI run `34839544172` passed for pushed head
+  `d94e4837bc53e48e26a12064569b1a4cda08eb01`.
 - The guarded live reset plan passed its remote inventory checks and targets
   exactly two R2 objects, one OAuth KV key, and the isolated tenant/control D1
   tables.
@@ -121,4 +138,6 @@ None.
 
 ## Outcome
 
-In progress.
+Completed. The product, API, console, and documentation boundaries now match
+the accepted topology; the complete documentation site remains a separate
+backlog task.

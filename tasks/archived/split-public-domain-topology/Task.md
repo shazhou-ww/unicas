@@ -34,16 +34,16 @@ API and console need distinct security and ownership boundaries.
 
 ## Acceptance criteria
 
-- [ ] `unicas.work` serves only the product website.
-- [ ] `api.unicas.work` serves machine APIs, OAuth/MCP, managed issuers, and
+- [x] `unicas.work` serves only the product website.
+- [x] `api.unicas.work` serves machine APIs, OAuth/MCP, managed issuers, and
       health.
-- [ ] `console.unicas.work` serves the administrator UI/BFF and CLI login.
-- [ ] `docs.unicas.work` is not routed to the API Worker.
-- [ ] Console cookies and CSRF authority do not cross onto the API origin.
-- [ ] Production smoke passes against the API origin.
-- [ ] Wrong-host routes fail closed.
-- [ ] The legacy Worker deployment and route remain unchanged.
-- [ ] Build, typecheck, tests, Wrangler dry-run, gitleaks, and CI pass.
+- [x] `console.unicas.work` serves the administrator UI/BFF and CLI login.
+- [x] `docs.unicas.work` is not routed to the API Worker.
+- [x] Console cookies and CSRF authority do not cross onto the API origin.
+- [x] Production smoke passes against the API origin.
+- [x] Wrong-host routes fail closed.
+- [x] The legacy Worker deployment and route remain unchanged.
+- [x] Build, typecheck, tests, Wrangler dry-run, gitleaks, and CI pass.
 
 ## Constraints
 
