@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import type { D1Database, D1PreparedStatement } from "@cloudflare/workers-types";
-import { AuthorityRepository } from "../src/control-authority.js";
+import { AppAuthorityRepository, AuthorityRepository } from "../src/control-authority.js";
 import { migrateControlSchema } from "../src/control-schema.js";
 
 let miniflare: Miniflare | undefined;
@@ -83,5 +83,30 @@ describe("AuthorityRepository (read-only)", () => {
       "INSERT INTO cas_stack_oauth_issuers (stack_id, issuer, audience, metadata_url, metadata_type, authorization_endpoint, token_endpoint, jwks_uri, status, jwks_digest, capability_max_lifetime_seconds) VALUES ('cas_pending', 'https://pending.example', 'cas', 'https://pending.example/.well-known/oauth-authorization-server', 'oauth', 'https://pending.example/authorize', 'https://pending.example/token', 'https://pending.example/jwks', 'pending', 'digest', 600)",
     ).run();
     expect(await repository.resolveIssuer("https://pending.example")).toBeNull();
+  });
+});
+
+describe("AppAuthorityRepository (physical compatibility adapter)", () => {
+  test("maps one active physical Stack issuer to its logical App authority", async () => {
+    await createRepository();
+    await db!.batch(oauthIssuerInserts([{ stackId: "cas_app", issuer: "https://app-issuer.example" }]));
+    const repository = new AppAuthorityRepository(db!);
+    await expect(repository.resolveIssuer("https://app-issuer.example")).resolves.toMatchObject({
+      appId: "cas_app",
+      issuer: "https://app-issuer.example",
+      audience: "https://cas.example/stacks/cas_app",
+      jwksUri: "https://oauth.example/jwks",
+      capabilityMaxLifetimeSeconds: 600,
+    });
+  });
+
+  test("fails closed for unknown and inactive App issuers", async () => {
+    await createRepository();
+    const repository = new AppAuthorityRepository(db!);
+    await expect(repository.resolveIssuer("https://unknown.example")).resolves.toBeNull();
+    await db!.prepare(
+      "INSERT INTO cas_stack_oauth_issuers (stack_id, issuer, audience, metadata_url, metadata_type, authorization_endpoint, token_endpoint, jwks_uri, status, jwks_digest, capability_max_lifetime_seconds) VALUES ('cas_pending', 'https://pending-app.example', 'cas', 'https://pending-app.example/.well-known/oauth-authorization-server', 'oauth', 'https://pending-app.example/authorize', 'https://pending-app.example/token', 'https://pending-app.example/jwks', 'pending', 'digest', 600)",
+    ).run();
+    await expect(repository.resolveIssuer("https://pending-app.example")).resolves.toBeNull();
   });
 });

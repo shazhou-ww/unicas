@@ -17,7 +17,8 @@ Updated: 2026-09-14
 - [x] Extend the App contract with issuer, Playground, and audit operations.
 - [x] Generate the separate App admin v2 OpenAPI artifact.
 - [x] Introduce App/Space operations in the cloud-neutral service core.
-- [ ] Wire App/Space authority and administrator handlers in the platform adapter.
+- [x] Wire Space authority and scoped App administrator handlers in the platform adapter.
+- [ ] Implement v2 managed capability issuance and shared admin route cutover.
 
 ## Current state
 
@@ -44,8 +45,15 @@ Space and App administrator routes independently, accepts optional v2
 authorization and handler ports, and dispatches authorized Space operations
 with App/Space actor keys and trusted headers. Existing platform adapters that
 do not provide those ports return 501 instead of falling through to v1. The
-next concrete action is to wire App authority and administrator handlers in the
-Cloudflare adapter after its storage migration boundary is selected.
+Cloudflare adapter now resolves App authority through an explicit adapter over
+the current physical Stack issuer tables, accepts exactly one trusted v1 or v2
+scope-header family, and maps scoped `/admin/apps/*` requests and responses
+without changing physical schema names. Space requests now pass through the v2
+verifier and reach the existing physical data repositories through that
+explicit adapter. Managed Space capability issuance still returns 501 rather
+than exposing a v1 token as v2. The next concrete action is to implement true
+`ver: 2` managed issuance and choose the cutover behavior for shared
+`/admin/me` and invitation-accept routes.
 
 ## Decisions
 
@@ -60,6 +68,11 @@ Cloudflare adapter after its storage migration boundary is selected.
   incomplete admin v2 OpenAPI artifact.
 - Keep platform v2 hooks optional until the adapter has explicit App authority
   and persistence implementations; recognized unconfigured routes fail 501.
+- Until a backed-up physical rebuild is approved, map App/Space to the existing
+  Stack/Tenant storage dimensions only inside an explicit versioned adapter and
+  reject requests that mix the two trusted header families.
+- Never translate a v1 managed capability response into v2; fail 501 until the
+  signer emits `ver: 2`, `spaceId`, and `spaces:` permissions itself.
 
 ## Validation
 
@@ -122,6 +135,16 @@ Cloudflare adapter after its storage migration boundary is selected.
   package suites start concurrently.
 - `pnpm typecheck` passed all 13 workspace package TypeScript projects after
   the cloud-neutral core change.
+- Space authority, DO scope normalization, Worker routing, and App admin adapter
+  tests passed in a serialized focused run: 4 files and 50 tests.
+- `pnpm --filter @unicas/service-cloudflare typecheck` passed after platform
+  wiring; `pnpm check:repo` passed 106 tests.
+- App authority repository, trusted DO scope normalization, Worker Space
+  routing, and scoped App admin compatibility tests passed: 4 files and 50
+  tests.
+- The complete Cloudflare test command remains intermittently affected by
+  Miniflare ephemeral-port `EADDRINUSE`; all directly affected tests pass when
+  run as a serialized focused batch.
 
 ## Blockers
 

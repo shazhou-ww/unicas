@@ -20,6 +20,14 @@ const handlers = vi.hoisted(() => ({
     kid: "key-1",
     permissions: [],
   })),
+  verifySpace: vi.fn(async (_request: Request, route: { appId: string; spaceId: string }) => ({
+    appId: route.appId,
+    spaceId: route.spaceId,
+    subject: "caller",
+    jti: "request-v2",
+    kid: "key-v2",
+    permissions: [],
+  })),
 }));
 
 vi.mock("../src/schema.js", () => ({
@@ -38,10 +46,14 @@ vi.mock("@unicas/service", async (importOriginal) => {
     StackCapabilityVerifier: class {
       verify = handlers.verify;
     },
+    AppSpaceCapabilityVerifier: class {
+      verify = handlers.verifySpace;
+    },
   };
 });
 vi.mock("../src/control-authority.js", () => ({
   AuthorityRepository: class { },
+  AppAuthorityRepository: class { },
 }));
 vi.mock("../src/admin-bff/index.js", () => ({
   configFromEnv: vi.fn(() => ({})),
@@ -221,23 +233,33 @@ describe("service-cloudflare public routing", () => {
     expect(handlers.migrate).toHaveBeenCalledTimes(1);
   });
 
-  test("fails closed for recognized v2 routes until platform handlers are configured", async () => {
+  test("authorizes Space routes through the v2 verifier and trusted scope", async () => {
+    const spaceEnv = { ...env, CAS_DB: {} } as Env;
     const space = await worker.fetch(new Request(
       "https://cas.example/v2/apps/app-1/spaces/space-1/cas/usage",
       { headers: { Authorization: "Bearer v2-capability" } },
-    ), env, ctx);
+    ), spaceEnv, ctx);
     const app = await worker.fetch(new Request(
       "https://cas.example/admin/apps/app-1",
       { headers: { Cookie: "cas_admin_session=secret" } },
-    ), env, ctx);
+    ), spaceEnv, ctx);
 
-    expect(space.status).toBe(501);
-    expect(app.status).toBe(501);
+    expect(space.status).toBe(200);
+    expect(app.status).toBe(200);
+    expect(handlers.verifySpace).toHaveBeenCalledWith(
+      expect.any(Request),
+      { operation: "usage", appId: "app-1", spaceId: "space-1" },
+    );
     expect(handlers.verify).not.toHaveBeenCalled();
-    expect(handlers.tenant).not.toHaveBeenCalled();
-    expect(handlers.admin).not.toHaveBeenCalled();
-    expect(handlers.migrate).not.toHaveBeenCalled();
-    expect(handlers.migrateControl).not.toHaveBeenCalled();
+    expect(handlers.tenantIdFromName).toHaveBeenCalledWith("app-1|space-1");
+    const spaceRequest = handlers.tenant.mock.calls[0]![0] as Request;
+    expect(spaceRequest.headers.get("X-CAS-App-Id")).toBe("app-1");
+    expect(spaceRequest.headers.get("X-CAS-Space-Id")).toBe("space-1");
+    expect(handlers.admin).toHaveBeenCalledWith(expect.objectContaining({
+      url: "https://cas.example/admin/stacks/app-1",
+    }));
+    expect(handlers.migrate).toHaveBeenCalledTimes(1);
+    expect(handlers.migrateControl).toHaveBeenCalledTimes(1);
   });
 
   test("dispatches tenant operations to the canonical Durable Object with trusted headers", async () => {

@@ -1,0 +1,169 @@
+import type { AppAdminRoute } from "@unicas/admin-protocol";
+
+type AdminHandler = (request: Request) => Promise<Response>;
+type JsonRecord = Record<string, unknown>;
+
+export async function handleAppAdminCompatibilityRequest(
+  request: Request,
+  route: AppAdminRoute,
+  legacyHandler: AdminHandler,
+): Promise<Response> {
+  if (route.operation === "mintManagedCapability") {
+    return Response.json(
+      { error: "SERVICE_UNAVAILABLE", message: "managed Space capability issuance is not configured" },
+      { status: 501 },
+    );
+  }
+
+  const legacyResponse = await legacyHandler(rewriteRequest(request, route));
+  if (!legacyResponse.headers.get("Content-Type")?.includes("application/json")) {
+    return legacyResponse;
+  }
+  const body = await legacyResponse.json();
+  if (isRecord(body) && typeof body.error === "string") return copyJsonResponse(legacyResponse, body);
+  return copyJsonResponse(legacyResponse, transformResponse(route, body));
+}
+
+function rewriteRequest(request: Request, route: AppAdminRoute): Request {
+  const url = new URL(request.url);
+  if (url.pathname.startsWith("/admin/apps")) {
+    url.pathname = url.pathname.replace(/^\/admin\/apps/, "/admin/stacks");
+  }
+  if (route.operation === "deleteMember") {
+    const issuer = url.searchParams.get("issuer");
+    if (issuer !== null) {
+      url.searchParams.delete("issuer");
+      url.searchParams.set("identityIssuer", issuer);
+    }
+  }
+  if (route.operation === "listRootDomainRefs" || route.operation === "listRootDomainEvents") {
+    const spaceId = url.searchParams.get("spaceId");
+    if (spaceId !== null) {
+      url.searchParams.delete("spaceId");
+      url.searchParams.set("tenantId", spaceId);
+    }
+  }
+  return new Request(url, request);
+}
+
+function transformResponse(route: AppAdminRoute, body: unknown): unknown {
+  switch (route.operation) {
+    case "me":
+      return mapMe(body);
+    case "listApps":
+      return mapPage(body, mapApp);
+    case "createApp":
+    case "getApp":
+    case "patchApp":
+      return mapApp(body);
+    case "listMembers":
+      return mapPage(body, mapMembership);
+    case "createMemberInvitation":
+      return mapInvitationResponse(body);
+    case "acceptMemberInvitation":
+      return mapMembership(body);
+    case "getOAuthIssuer":
+    case "getManagedIssuer":
+    case "patchManagedIssuer":
+    case "inspectOAuthIssuer":
+    case "activateOAuthIssuer":
+      return body === null ? null : renameField(body, "stackId", "appId");
+    case "listRefDomains":
+      return mapArrayProperty(body, "domains", value => renameField(value, "stackId", "appId"));
+    case "listControlAuditEvents":
+      return mapPage(body, mapAuditEvent);
+    case "listRootDomainRefs":
+      return mapArrayProperty(body, "refs", value => renameField(value, "tenantId", "spaceId"));
+    case "listRootDomainEvents":
+      return mapArrayProperty(body, "events", value => renameField(value, "tenantId", "spaceId"));
+    case "listPlaygroundFileRoots":
+    case "createPlaygroundFileRoot":
+    case "patchPlaygroundFileRoot":
+    case "deletePlaygroundFileRoot":
+    case "deleteMember":
+      return body;
+    case "mintManagedCapability":
+      return body;
+  }
+}
+
+function mapMe(value: unknown): unknown {
+  if (!isRecord(value) || !isRecord(value.identity) || !Array.isArray(value.memberships)) return value;
+  return {
+    principal: {
+      issuer: value.identity.identityIssuer,
+      subject: value.identity.subject,
+    },
+    profile: {
+      displayName: value.identity.displayName,
+      emailForDisplay: value.identity.emailForDisplay,
+    },
+    memberships: value.memberships.map(mapMembership),
+  };
+}
+
+function mapApp(value: unknown): unknown {
+  return renameField(value, "stackId", "appId");
+}
+
+function mapMembership(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+  return {
+    appId: value.stackId,
+    principal: { issuer: value.identityIssuer, subject: value.subject },
+    profile: { displayName: value.displayName, emailForDisplay: value.emailForDisplay },
+  };
+}
+
+function mapInvitationResponse(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+  return {
+    ...value,
+    invitation: renameField(value.invitation, "stackId", "appId"),
+  };
+}
+
+function mapAuditEvent(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+  const { stackId, ...event } = value;
+  return {
+    ...event,
+    appId: stackId,
+    actor: isRecord(value.actor)
+      ? { issuer: value.actor.identityIssuer, subject: value.actor.subject }
+      : value.actor,
+  };
+}
+
+function mapPage(value: unknown, mapper: (item: unknown) => unknown): unknown {
+  return mapArrayProperty(value, "items", mapper);
+}
+
+function mapArrayProperty(
+  value: unknown,
+  property: string,
+  mapper: (item: unknown) => unknown,
+): unknown {
+  if (!isRecord(value) || !Array.isArray(value[property])) return value;
+  return { ...value, [property]: value[property].map(mapper) };
+}
+
+function renameField(value: unknown, from: string, to: string): unknown {
+  if (!isRecord(value)) return value;
+  const { [from]: renamed, ...rest } = value;
+  return { ...rest, [to]: renamed };
+}
+
+function copyJsonResponse(source: Response, body: unknown): Response {
+  const headers = new Headers(source.headers);
+  headers.delete("Content-Length");
+  return new Response(JSON.stringify(body), {
+    status: source.status,
+    statusText: source.statusText,
+    headers,
+  });
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

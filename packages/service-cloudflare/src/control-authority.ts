@@ -8,6 +8,8 @@
 
 import type { D1Database } from "@cloudflare/workers-types";
 import type {
+  AppAuthorityResolver,
+  ResolvedAppAuthority,
   ResolvedStackAuthority,
   StackAuthorityResolver,
 } from "@unicas/service";
@@ -22,19 +24,29 @@ export class AuthorityRepository implements StackAuthorityResolver {
   /** Resolve a globally unique issuer to its stack authority; null when
    *  unknown. The issuer value is unique across stacks (registry invariant). */
   async resolveIssuer(issuer: string): Promise<ResolvedStackAuthority | null> {
-    const oauthRow = await this.#db
-      .prepare(
-        `SELECT stack_id, issuer, audience, jwks_uri, capability_max_lifetime_seconds
-         FROM cas_stack_oauth_issuers WHERE issuer = ? AND status = 'active' AND mode = 'external'
-         UNION ALL
-         SELECT stack_id, issuer, audience, jwks_uri, capability_max_lifetime_seconds
-         FROM cas_stack_managed_issuers WHERE issuer = ? AND status = 'active'
-         LIMIT 1`,
-      )
-      .bind(issuer, issuer)
-      .first<IssuerRow>();
+    const oauthRow = await readIssuer(this.#db, issuer);
     if (!oauthRow) return null;
     return toAuthority(oauthRow);
+  }
+}
+
+export class AppAuthorityRepository implements AppAuthorityResolver {
+  readonly #db: D1Database;
+
+  constructor(db: D1Database) {
+    this.#db = db;
+  }
+
+  async resolveIssuer(issuer: string): Promise<ResolvedAppAuthority | null> {
+    const row = await readIssuer(this.#db, issuer);
+    if (!row) return null;
+    return {
+      appId: row.stack_id,
+      issuer: row.issuer,
+      audience: row.audience,
+      jwksUri: row.jwks_uri,
+      capabilityMaxLifetimeSeconds: row.capability_max_lifetime_seconds,
+    };
   }
 }
 
@@ -46,6 +58,20 @@ function toAuthority(row: IssuerRow): ResolvedStackAuthority {
     jwksUri: row.jwks_uri,
     capabilityMaxLifetimeSeconds: row.capability_max_lifetime_seconds,
   };
+}
+
+function readIssuer(db: D1Database, issuer: string): Promise<IssuerRow | null> {
+  return db
+    .prepare(
+      `SELECT stack_id, issuer, audience, jwks_uri, capability_max_lifetime_seconds
+       FROM cas_stack_oauth_issuers WHERE issuer = ? AND status = 'active' AND mode = 'external'
+       UNION ALL
+       SELECT stack_id, issuer, audience, jwks_uri, capability_max_lifetime_seconds
+       FROM cas_stack_managed_issuers WHERE issuer = ? AND status = 'active'
+       LIMIT 1`,
+    )
+    .bind(issuer, issuer)
+    .first<IssuerRow>();
 }
 
 interface IssuerRow {

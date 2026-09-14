@@ -150,6 +150,29 @@ describe("RootRefDomainDurableObject", () => {
 });
 
 describe("CasDurableObject (tenant DO)", () => {
+  test("accepts one complete App/Space header family and rejects mixed scopes", async () => {
+    await createStore();
+    const doInstance = new CasDurableObject(
+      {} as DurableObjectState,
+      { CAS_DB: db!, CAS_R2: bucket!, CAS_DOMAIN_DO: {} as TenantCasDoEnv["CAS_DOMAIN_DO"] },
+    );
+    const v2 = await doInstance.fetch(new Request("https://tenant.internal/usage", {
+      headers: { "X-CAS-App-Id": STACK, "X-CAS-Space-Id": TENANT },
+    }));
+    expect(v2.status).toBe(200);
+
+    const mixed = await doInstance.fetch(new Request("https://tenant.internal/usage", {
+      headers: {
+        "X-CAS-Stack-Id": STACK,
+        "X-CAS-Tenant-Id": TENANT,
+        "X-CAS-App-Id": STACK,
+        "X-CAS-Space-Id": TENANT,
+      },
+    }));
+    expect(mixed.status).toBe(400);
+    await expect(mixed.json()).resolves.toMatchObject({ error: "INVALID_SCOPE_HEADERS" });
+  });
+
   test("forwards ONE canonical command to the domain DO and passes the response through", async () => {
     await createStore();
     let forwarded: { name: string; headers: Headers; body: string } | undefined;

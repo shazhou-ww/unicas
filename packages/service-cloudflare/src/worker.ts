@@ -4,12 +4,14 @@ import {
   uiAssets,
   type AdminBffEnv,
 } from "./admin-bff/index.js";
+import { handleAppAdminCompatibilityRequest } from "./app-admin-adapter.js";
 import {
   createControlPlaneMcpWorker,
   mcpConfigFromEnv,
   type Env as McpEnv,
 } from "./mcp/worker.js";
 import {
+  AppSpaceCapabilityVerifier,
   createUniCasService,
   matchUniCasServiceRoute,
   StackCapabilityVerifier,
@@ -25,7 +27,7 @@ import {
   listRootDomainRefs,
   listRootDomains,
 } from "./audit-reads.js";
-import { AuthorityRepository } from "./control-authority.js";
+import { AppAuthorityRepository, AuthorityRepository } from "./control-authority.js";
 import { migrateControlSchema } from "./control-schema.js";
 import { createControlPlaneOperations } from "./control-operations.js";
 import { ControlSessionStore } from "./control-sessions.js";
@@ -124,6 +126,7 @@ export default {
     const platform = platformFromEnv(env, timing);
     const auditReader = localAuditReader(env);
     const verifier = verifierFor(env);
+    const spaceVerifier = spaceVerifierFor(env);
     const actor = createUniCasService({
       platform,
       authorizeTenantRequest: async ({ request: tenantRequest, route }) => {
@@ -140,11 +143,29 @@ export default {
       },
       handleAdminRequest: async ({ request: adminRequest }) =>
         (await adminHandlerFor(env))(stripAdminHeaders(adminRequest)),
+      handleAppAdminRequest: async ({ request: adminRequest, route }) =>
+        handleAppAdminCompatibilityRequest(
+          stripAdminHeaders(adminRequest),
+          route,
+          await adminHandlerFor(env),
+        ),
+      authorizeSpaceRequest: async ({ request: spaceRequest, route }) => {
+        try {
+          return await timing.time("cas_auth", () => spaceVerifier.verify(
+            tenantAuthorizationRequest(spaceRequest), route,
+          ));
+        } catch (error) {
+          if (!(error instanceof Error) || error.name === "Error") {
+            console.error("Unexpected Space authorization failure", error);
+          }
+          throw error;
+        }
+      },
     });
 
     const serviceRoute = matchUniCasServiceRoute(request);
     if (serviceRoute) {
-      if (serviceRoute.plane === "tenant") {
+      if (serviceRoute.plane === "tenant" || serviceRoute.plane === "space") {
         await timing.time("cas_schema", () => ensureTenantSchema(env));
       }
       try {
@@ -300,6 +321,7 @@ async function managedIssuerDocument(env: Env, route: ManagedIssuerDocumentRoute
 }
 
 const verifiers = new WeakMap<object, StackCapabilityVerifier>();
+const spaceVerifiers = new WeakMap<object, AppSpaceCapabilityVerifier>();
 const controlSchemaInitializations = new WeakMap<object, Promise<void>>();
 const tenantSchemaInitializations = new WeakMap<object, Promise<void>>();
 const adminHandlers = new WeakMap<object, Promise<(request: Request) => Promise<Response>>>();
@@ -403,6 +425,31 @@ function verifierFor(env: Env): StackCapabilityVerifier {
       },
     });
     verifiers.set(key, verifier);
+  }
+  return verifier;
+}
+
+function spaceVerifierFor(env: Env): AppSpaceCapabilityVerifier {
+  const key = env as object;
+  let verifier = spaceVerifiers.get(key);
+  if (!verifier) {
+    const managedIssuer = managedIssuerFor(env);
+    const jwksPort = new CloudflareOAuthDiscoveryPort({
+      allowedOrigins: parseOriginAllowlist(env.CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS),
+    });
+    verifier = new AppSpaceCapabilityVerifier({
+      repository: new AppAuthorityRepository(env.CAS_CONTROL_DB),
+      jwksFetcher: async (url, options) => {
+        if (managedIssuer?.ownsJwksUri(url)) return Response.json(await managedIssuer.jwks());
+        return new URL(url).protocol === "data:"
+          ? fetch(url, options)
+          : jwksPort.fetchJwks(url, options);
+      },
+      onEvent: (event) => {
+        console.log(JSON.stringify({ event: "cas_app_authorization", ...event }));
+      },
+    });
+    spaceVerifiers.set(key, verifier);
   }
   return verifier;
 }

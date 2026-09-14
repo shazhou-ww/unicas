@@ -6,6 +6,7 @@ import { canonicalizeRootRefsUpdate, executeDomainUpdate } from "../src/root-ref
 
 vi.mock("../src/control-authority.js", () => ({
   AuthorityRepository: class { },
+  AppAuthorityRepository: class { },
 }));
 vi.mock("../src/control-schema.js", () => ({
   migrateControlSchema: async () => undefined,

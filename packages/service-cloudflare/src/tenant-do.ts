@@ -80,8 +80,9 @@ export class CasDurableObject {
     const started = performance.now();
     const timing = new ServerTiming();
     const url = new URL(request.url);
-    const stackId = requireHeader(request, "X-CAS-Stack-Id");
-    const tenantId = requireHeader(request, "X-CAS-Tenant-Id");
+    const scope = physicalScope(request);
+    if (scope instanceof Response) return timing.decorate(scope);
+    const { stackId, tenantId } = scope;
     const store = {
       db: this.#env.CAS_DB,
       bucket: this.#env.CAS_R2,
@@ -585,4 +586,26 @@ function requireHeader(request: Request, name: string): string {
     throw new NodeOpError(400, NodeOpErrorCodes.INVALID_REQUEST, `missing ${name}`);
   }
   return value;
+}
+
+function physicalScope(request: Request): { stackId: string; tenantId: string } | Response {
+  const stackId = request.headers.get("X-CAS-Stack-Id");
+  const tenantId = request.headers.get("X-CAS-Tenant-Id");
+  const appId = request.headers.get("X-CAS-App-Id");
+  const spaceId = request.headers.get("X-CAS-Space-Id");
+  const hasV1 = stackId !== null || tenantId !== null;
+  const hasV2 = appId !== null || spaceId !== null;
+
+  if (hasV1 && hasV2) {
+    return Response.json(
+      { error: "INVALID_SCOPE_HEADERS", message: "mixed v1 and v2 scope headers are forbidden" },
+      { status: 400 },
+    );
+  }
+  if (hasV1 && stackId && tenantId) return { stackId, tenantId };
+  if (hasV2 && appId && spaceId) return { stackId: appId, tenantId: spaceId };
+  return Response.json(
+    { error: "INVALID_SCOPE_HEADERS", message: "one complete scope header family is required" },
+    { status: 400 },
+  );
 }
