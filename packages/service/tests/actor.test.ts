@@ -115,4 +115,83 @@ describe("createUniCasService", () => {
     expect(readForwarded.method).toBe("GET");
     expect(readForwarded.headers.get("X-CAS-Ref-Domain")).toBe("doc");
   });
+
+  test("classifies App and Space routes separately from v1", () => {
+    expect(matchUniCasServiceRoute(new Request(
+      "https://api.unicas.work/v2/apps/app-1/spaces/space-1/cas/usage",
+    ))).toEqual({
+      plane: "space",
+      route: { operation: "usage", appId: "app-1", spaceId: "space-1" },
+    });
+    expect(matchUniCasServiceRoute(new Request(
+      "https://console.unicas.work/admin/apps/app-1",
+    ))).toEqual({
+      plane: "app-admin",
+      route: { operation: "getApp", appId: "app-1" },
+    });
+  });
+
+  test("returns not implemented until v2 platform handlers are configured", async () => {
+    const actor = createUniCasService({
+      platform,
+      authorizeTenantRequest: vi.fn(),
+      handleAdminRequest: vi.fn(),
+    });
+    expect((await actor.fetch(new Request(
+      "https://api.unicas.work/v2/apps/app-1/spaces/space-1/cas/usage",
+    ))).status).toBe(501);
+    expect((await actor.fetch(new Request(
+      "https://console.unicas.work/admin/apps/app-1",
+    ))).status).toBe(501);
+  });
+
+  test("dispatches Space requests from the authorized App and Space scope", async () => {
+    const authorizeSpaceRequest = vi.fn(async () => ({
+      appId: "app/a",
+      spaceId: "space/b",
+      subject: "caller",
+      jti: "request-v2",
+      kid: "key-v2",
+      permissions: ["spaces:space%2Fb:cas:manage"],
+    }));
+    const actor = createUniCasService({
+      platform,
+      authorizeTenantRequest: vi.fn(),
+      handleAdminRequest: vi.fn(),
+      authorizeSpaceRequest,
+      handleAppAdminRequest: vi.fn(),
+    });
+    const response = await actor.fetch(new Request(
+      "https://api.unicas.work/v2/apps/app%2Fa/spaces/space%2Fb/cas/usage",
+      { headers: { "X-CAS-App-Id": "attacker", "X-CAS-Space-Id": "attacker" } },
+    ));
+    expect(await response.text()).toBe("tenant");
+    expect(authorizeSpaceRequest).toHaveBeenCalledWith(expect.objectContaining({
+      route: { operation: "usage", appId: "app/a", spaceId: "space/b" },
+    }));
+    const [key, forwarded] = tenantActorFetch.mock.calls.at(-1)!;
+    expect(key).toBe("app%2Fa|space%2Fb");
+    expect(forwarded.headers.get("X-CAS-App-Id")).toBe("app/a");
+    expect(forwarded.headers.get("X-CAS-Space-Id")).toBe("space/b");
+    expect(forwarded.headers.get("X-CAS-Stack-Id")).toBeNull();
+    expect(forwarded.headers.get("X-CAS-Tenant-Id")).toBeNull();
+  });
+
+  test("dispatches App administrator requests through the v2 handler", async () => {
+    const handleAppAdminRequest = vi.fn(async () => new Response("app-admin"));
+    const actor = createUniCasService({
+      platform,
+      authorizeTenantRequest: vi.fn(),
+      handleAdminRequest: vi.fn(),
+      authorizeSpaceRequest: vi.fn(),
+      handleAppAdminRequest,
+    });
+    expect(await (await actor.fetch(new Request(
+      "https://console.unicas.work/admin/apps/app-1",
+    ))).text()).toBe("app-admin");
+    expect(handleAppAdminRequest).toHaveBeenCalledWith(expect.objectContaining({
+      route: { operation: "getApp", appId: "app-1" },
+      platform,
+    }));
+  });
 });

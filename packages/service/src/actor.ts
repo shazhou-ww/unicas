@@ -1,10 +1,14 @@
 import {
+  matchAppAdminRoute,
   matchCasAdminRoute,
+  type AppAdminRoute,
   type CasAdminRoute,
 } from "@unicas/admin-protocol";
 import {
   CapabilityError,
+  matchAppSpaceRoute,
   matchCasRoute,
+  type AppSpaceRoute,
   type CasRoute,
 } from "@unicas/tenant-protocol";
 import {
@@ -34,9 +38,31 @@ export interface AuthorizedTenantCall {
   readonly refDomain?: string;
 }
 
+export interface SpaceRequestContext {
+  readonly request: Request;
+  readonly route: AppSpaceRoute;
+  readonly platform: ServicePlatform;
+}
+
+export interface AuthorizedSpaceCall {
+  readonly appId: string;
+  readonly spaceId: string;
+  readonly subject: string;
+  readonly jti: string;
+  readonly kid: string;
+  readonly permissions: readonly string[];
+  readonly refDomain?: string;
+}
+
 export interface AdminRequestContext {
   readonly request: Request;
   readonly route: CasAdminRoute;
+  readonly platform: ServicePlatform;
+}
+
+export interface AppAdminRequestContext {
+  readonly request: Request;
+  readonly route: AppAdminRoute;
   readonly platform: ServicePlatform;
 }
 
@@ -44,18 +70,26 @@ export interface ServiceContext {
   readonly platform: ServicePlatform;
   authorizeTenantRequest(context: TenantRequestContext): Promise<AuthorizedTenantCall>;
   handleAdminRequest(context: AdminRequestContext): Promise<Response>;
+  authorizeSpaceRequest?(context: SpaceRequestContext): Promise<AuthorizedSpaceCall>;
+  handleAppAdminRequest?(context: AppAdminRequestContext): Promise<Response>;
 }
 
 export type UniCasServiceRoute =
   | { readonly plane: "tenant"; readonly route: CasRoute }
-  | { readonly plane: "admin"; readonly route: CasAdminRoute };
+  | { readonly plane: "space"; readonly route: AppSpaceRoute }
+  | { readonly plane: "admin"; readonly route: CasAdminRoute }
+  | { readonly plane: "app-admin"; readonly route: AppAdminRoute };
 
 export function matchUniCasServiceRoute(request: Request): UniCasServiceRoute | null {
   const pathname = new URL(request.url).pathname;
   const tenantRoute = matchCasRoute(request.method, pathname);
   if (tenantRoute) return { plane: "tenant", route: tenantRoute };
+  const spaceRoute = matchAppSpaceRoute(request.method, pathname);
+  if (spaceRoute) return { plane: "space", route: spaceRoute };
   const adminRoute = matchCasAdminRoute(request.method, pathname);
   if (adminRoute) return { plane: "admin", route: adminRoute };
+  const appAdminRoute = matchAppAdminRoute(request.method, pathname);
+  if (appAdminRoute) return { plane: "app-admin", route: appAdminRoute };
   return null;
 }
 
@@ -81,13 +115,36 @@ export function createUniCasService(context: ServiceContext): HttpActor {
             tenantAuthorizationErrorResponse,
           );
       }
-      return context.handleAdminRequest({
+      if (matched.plane === "space") {
+        if (!context.authorizeSpaceRequest) return Promise.resolve(notImplementedResponse());
+        const spaceContext = {
+          request,
+          route: matched.route,
+          platform: context.platform,
+        };
+        return context.authorizeSpaceRequest(spaceContext)
+          .then(
+            (call) => dispatchSpaceRequest(spaceContext, call),
+            tenantAuthorizationErrorResponse,
+          );
+      }
+      if (matched.plane === "admin") return context.handleAdminRequest({
+        request,
+        route: matched.route,
+        platform: context.platform,
+      });
+      if (!context.handleAppAdminRequest) return Promise.resolve(notImplementedResponse());
+      return context.handleAppAdminRequest({
         request,
         route: matched.route,
         platform: context.platform,
       });
     },
   };
+}
+
+function notImplementedResponse(): Response {
+  return Response.json({ error: "UniCAS v2 endpoint is not configured" }, { status: 501 });
 }
 
 function tenantAuthorizationErrorResponse(error: unknown): Response {
@@ -101,21 +158,47 @@ async function dispatchTenantRequest(
   context: TenantRequestContext,
   call: AuthorizedTenantCall,
 ): Promise<Response> {
-  const { request, route, platform } = context;
-  const actorKey = canonicalActorKey(call.stackId, call.tenantId);
-  const headers: Record<string, string> = {
-    "X-CAS-Stack-Id": call.stackId,
-    "X-CAS-Tenant-Id": call.tenantId,
-  };
+  return dispatchDataRequest(
+    context.request,
+    context.route,
+    context.platform,
+    canonicalActorKey(call.stackId, call.tenantId),
+    { "X-CAS-Stack-Id": call.stackId, "X-CAS-Tenant-Id": call.tenantId },
+    call.refDomain,
+  );
+}
+
+async function dispatchSpaceRequest(
+  context: SpaceRequestContext,
+  call: AuthorizedSpaceCall,
+): Promise<Response> {
+  return dispatchDataRequest(
+    context.request,
+    context.route,
+    context.platform,
+    canonicalActorKey(call.appId, call.spaceId),
+    { "X-CAS-App-Id": call.appId, "X-CAS-Space-Id": call.spaceId },
+    call.refDomain,
+  );
+}
+
+async function dispatchDataRequest(
+  request: Request,
+  route: CasRoute | AppSpaceRoute,
+  platform: ServicePlatform,
+  actorKey: string,
+  headers: Record<string, string>,
+  refDomain: string | undefined,
+): Promise<Response> {
 
   if (route.operation === "listRootRefs" || route.operation === "updateRootRefs") {
-    if (call.refDomain === undefined) {
+    if (refDomain === undefined) {
       return Response.json(
         { error: "ROOT_REF_INVALID", message: "Root Refs access requires a verified refDomain" },
         { status: 403 },
       );
     }
-    headers["X-CAS-Ref-Domain"] = call.refDomain;
+    headers["X-CAS-Ref-Domain"] = refDomain;
     if (route.operation === "listRootRefs") {
       const query = new URL(request.url).search;
       return platform.tenantActors.fetch(actorKey, new Request(

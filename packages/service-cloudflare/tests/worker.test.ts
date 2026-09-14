@@ -221,6 +221,25 @@ describe("service-cloudflare public routing", () => {
     expect(handlers.migrate).toHaveBeenCalledTimes(1);
   });
 
+  test("fails closed for recognized v2 routes until platform handlers are configured", async () => {
+    const space = await worker.fetch(new Request(
+      "https://cas.example/v2/apps/app-1/spaces/space-1/cas/usage",
+      { headers: { Authorization: "Bearer v2-capability" } },
+    ), env, ctx);
+    const app = await worker.fetch(new Request(
+      "https://cas.example/admin/apps/app-1",
+      { headers: { Cookie: "cas_admin_session=secret" } },
+    ), env, ctx);
+
+    expect(space.status).toBe(501);
+    expect(app.status).toBe(501);
+    expect(handlers.verify).not.toHaveBeenCalled();
+    expect(handlers.tenant).not.toHaveBeenCalled();
+    expect(handlers.admin).not.toHaveBeenCalled();
+    expect(handlers.migrate).not.toHaveBeenCalled();
+    expect(handlers.migrateControl).not.toHaveBeenCalled();
+  });
+
   test("dispatches tenant operations to the canonical Durable Object with trusted headers", async () => {
     const hash = "a".repeat(64);
     await worker.fetch(new Request(

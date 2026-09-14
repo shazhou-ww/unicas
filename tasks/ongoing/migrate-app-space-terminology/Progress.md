@@ -16,7 +16,8 @@ Updated: 2026-09-14
 - [x] Define the core App, membership, and invitation administrator contract.
 - [x] Extend the App contract with issuer, Playground, and audit operations.
 - [x] Generate the separate App admin v2 OpenAPI artifact.
-- [ ] Introduce App/Space operations in the cloud-neutral service core.
+- [x] Introduce App/Space operations in the cloud-neutral service core.
+- [ ] Wire App/Space authority and administrator handlers in the platform adapter.
 
 ## Current state
 
@@ -37,9 +38,14 @@ records that foundation.
 Second milestone commit `7818640` records the App routes and core contract. The
 remaining issuer, managed capability, Playground, and audit operations now
 complete the 23-operation typed App contract, and `admin-v2.openapi.json` is
-generated independently from admin v1. The next concrete action is to add
-App/Space operations to the cloud-neutral service core without changing v1
-service behavior.
+generated independently from admin v1. Milestone commit `21549ff` records the
+complete administrator contract. The cloud-neutral actor now classifies v2
+Space and App administrator routes independently, accepts optional v2
+authorization and handler ports, and dispatches authorized Space operations
+with App/Space actor keys and trusted headers. Existing platform adapters that
+do not provide those ports return 501 instead of falling through to v1. The
+next concrete action is to wire App authority and administrator handlers in the
+Cloudflare adapter after its storage migration boundary is selected.
 
 ## Decisions
 
@@ -52,6 +58,8 @@ service behavior.
   contract cannot rewrite a frozen legacy artifact.
 - Build the App administrator contract in typed slices, but do not publish an
   incomplete admin v2 OpenAPI artifact.
+- Keep platform v2 hooks optional until the adapter has explicit App authority
+  and persistence implementations; recognized unconfigured routes fail 501.
 
 ## Validation
 
@@ -100,6 +108,20 @@ service behavior.
   tests.
 - `pnpm check:repo` passed after the complete App admin v2 artifact: 5 files
   and 106 tests.
+- Milestone commit `21549ff` (`feat: complete App administrator v2 contract`)
+  was created and pushed with the preceding migration commits.
+- Focused cloud-neutral actor tests passed: 1 file and 7 tests.
+- `pnpm --filter @unicas/service test` passed: 12 files and 98 tests; its
+  typecheck passed.
+- `pnpm --filter @unicas/service-cloudflare test` passed: 19 files and 185
+  tests; its typecheck passed.
+- Focused Worker routing tests passed: 1 file and 14 tests, including explicit
+  501 behavior for unconfigured v2 routes.
+- `pnpm --workspace-concurrency=1 test` passed all repository and package tests;
+  serialized execution avoids Miniflare ephemeral-port collisions seen when
+  package suites start concurrently.
+- `pnpm typecheck` passed all 13 workspace package TypeScript projects after
+  the cloud-neutral core change.
 
 ## Blockers
 

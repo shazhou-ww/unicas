@@ -3,10 +3,13 @@ export {
   matchUniCasServiceRoute,
 } from "./actor.js";
 export type {
+  AppAdminRequestContext,
   AdminRequestContext,
+  AuthorizedSpaceCall,
   AuthorizedTenantCall,
   HttpActor,
   ServiceContext,
+  SpaceRequestContext,
   TenantRequestContext,
   UniCasServiceRoute,
 } from "./actor.js";
