@@ -11,6 +11,9 @@ pnpm deploy:plan
 pnpm deploy:production
 pnpm deploy:site:plan
 pnpm deploy:site
+pnpm docs:check
+pnpm deploy:docs:plan
+pnpm deploy:docs
 pnpm smoke -- [baseUrl]
 ```
 
@@ -22,6 +25,11 @@ credentials under the gitignored `.wrangler/cas-deploy/` directory.
 The product apex is a separate assets-only Worker under `site/`. Its deployment
 has no service bindings or secrets and must never claim the API, console, or
 documentation origins.
+
+The generated documentation site is a second assets-only Worker under
+`docs-site/`. `pnpm docs:build` renders the accepted repository Markdown into
+gitignored static output and fails on unresolved local links. Its deployment
+owns only `docs.unicas.work` and has no service bindings or secrets.
 
 ## Managed issuer
 
