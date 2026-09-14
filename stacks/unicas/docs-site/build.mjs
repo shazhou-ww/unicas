@@ -106,11 +106,20 @@ function navigation() {
     if (!groups.has(group)) groups.set(group, []);
     groups.get(group).push([slug, title]);
   }
-  return [...groups.entries()].map(([group, entries]) => `
+  const documentGroups = [...groups.entries()].map(([group, entries]) => `
     <section class="nav-group">
       <h2>${group}</h2>
       ${entries.map(([slug, title]) => `<a href="/${slug}/">${title}</a>`).join("\n")}
     </section>`).join("\n");
+  const references = PACKAGE_REFERENCES.map(([slug, title]) => (
+    `<a href="/reference/${slug}/">${title}</a>`
+  )).join("\n");
+  return `${documentGroups}
+    <section class="nav-group reference-links">
+      <h2>Reference</h2>
+      <a href="/glossary/">Glossary</a>
+      ${references}
+    </section>`;
 }
 
 function shell({ title, description, content, currentPath = "" }) {
@@ -142,11 +151,6 @@ function shell({ title, description, content, currentPath = "" }) {
       <aside class="sidebar" aria-label="Documentation navigation">
         <a class="overview-link" href="/">Overview</a>
         ${nav}
-        <section class="nav-group reference-links">
-          <h2>Reference</h2>
-          <a href="/glossary/">Glossary</a>
-          <a href="/reference/packages/">Packages</a>
-        </section>
       </aside>
       <main class="content-shell">
         ${content}

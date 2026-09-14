@@ -26,20 +26,20 @@ and a generated-link report. The independent assets-only Worker has no runtime
 bindings or credentials.
 
 Desktop and 390 x 844 mobile browser checks passed for the overview and the
-long CAS architecture article. Code and tables scroll within the article,
-mobile navigation opens and closes correctly, the page has no horizontal
-overflow, and unknown paths return 404.
+long CAS architecture article on both local and production origins. Code and
+tables scroll within the article, mobile navigation opens and closes correctly,
+the page has no horizontal overflow, and unknown paths return 404.
 
 The assets-only `unicas-docs` Worker is deployed as version
-`451ec409-6a29-4df7-9b1e-4e61c057b5e1`. Production overview, deep-link, CSS,
-and JavaScript requests return 200; unknown documentation paths return 404;
-the same deep link on the API origin returns 404. Cloudflare assigns only
-`docs.unicas.work` to this Worker.
+`8eb75abb-1d64-4d93-a7b0-16d2ea1ad416`. Production overview, deep-link, CSS,
+JavaScript, and all package-reference requests return 200; unknown
+documentation paths return 404; the same deep link on the API origin returns
+404. Cloudflare assigns only `docs.unicas.work` to this Worker.
 
 The console already linked to the docs origin. Product-site version
 `afdb03fe-bf4f-421d-859a-becb063d5fc4` now links to the validated production
 documentation origin. The current docs Worker version is
-`72473835-0f1d-4723-ac75-ee0224542e5f`.
+`8eb75abb-1d64-4d93-a7b0-16d2ea1ad416`.
 
 Next concrete action: commit the final deployment documentation update, push
 all documentation-site commits, verify CI, and archive the task.
@@ -77,14 +77,19 @@ all documentation-site commits, verify CI, and archive the task.
 - Production docs overview, architecture deep link, CSS, JavaScript, 404, and
   API wrong-host behavior returned the expected HTTP statuses.
 - System DNS, Cloudflare certificate provisioning, and CDN response headers
-  were verified. Integrated Chromium production navigation remained affected
-  by a local `ERR_CONNECTION_CLOSED`; responsive rendering was validated
-  against the identical local Worker build instead.
+  were verified. Production Chromium desktop and mobile navigation checks pass.
+- All four generated package reference pages are linked from the sidebar and
+  covered by the generated-site tests.
 - Product HTML contains two `docs.unicas.work` links. The console's stable
   production JavaScript asset contains the same docs origin, and its focused UI
   test passed.
 - The production deployment guide page contains the current `unicas-docs`
   ownership and deploy commands.
+- GitHub CI run `34847571726` passed for pushed head
+  `3120dc9e2be80e1f5f289a51043566065878d836`, including documentation build,
+  package tests, and both Worker dry-runs.
+- Production overview navigation links all four package reference pages; each
+  reference route returns 200.
 
 ## Blockers
 

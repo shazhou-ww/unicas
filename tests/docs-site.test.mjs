@@ -26,7 +26,15 @@ describe("documentation static site", () => {
       await expect(page(slug)).resolves.toContain("Edit source");
     }
     await expect(page("glossary")).resolves.toContain("UniCAS Glossary");
-    await expect(page("reference/packages")).resolves.toContain("Package Boundaries");
+    for (const [route, title] of [
+      ["reference/packages", "Package Boundaries"],
+      ["reference/admin-protocol", "Admin Protocol"],
+      ["reference/tenant-protocol", "Tenant Protocol"],
+      ["reference/admin-cli", "Administrator CLI"],
+    ]) {
+      await expect(page(route)).resolves.toContain(title);
+      expect(index).toContain(`href="/${route}/"`);
+    }
     await expect(readFile(join(outputDir, "assets", "docs.css"), "utf8")).resolves.toContain(".article-layout");
     await expect(readFile(join(outputDir, "assets", "docs.js"), "utf8")).resolves.toContain("nav-open");
     await expect(readFile(join(outputDir, "404.html"), "utf8")).resolves.toContain("No document at this address");
