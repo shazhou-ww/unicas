@@ -14,8 +14,9 @@ Updated: 2026-09-14
 - [x] Generate a separately named Space v2 OpenAPI artifact without changing tenant v1.
 - [x] Add the complete App-scoped administrator route family.
 - [x] Define the core App, membership, and invitation administrator contract.
-- [ ] Extend the App contract with issuer, Playground, and audit operations.
-- [ ] Generate the separate App admin v2 OpenAPI artifact.
+- [x] Extend the App contract with issuer, Playground, and audit operations.
+- [x] Generate the separate App admin v2 OpenAPI artifact.
+- [ ] Introduce App/Space operations in the cloud-neutral service core.
 
 ## Current state
 
@@ -31,13 +32,14 @@ lives in the data protocol, while the management protocol defines nested
 Principal, Profile, App, and AppMembership schemas through the permitted
 one-way protocol dependency. The Space data plane now has an independent
 contract, generator, package export, and drift artifact. Its generator is a
-separate command and does not write tenant v1. The next concrete action is the
-corresponding App administrator contract and artifact. Milestone commit
-`c94a818` records that foundation. Since the commit, the protocol has gained
-the complete 23-operation App route matcher and a typed 9-operation core
-contract for identity, App CRUD, membership, and invitations. The next
-concrete action is to add issuer, managed capability, Playground, and audit
-contracts before generating the App admin v2 artifact.
+separate command and does not write tenant v1. Milestone commit `c94a818`
+records that foundation.
+Second milestone commit `7818640` records the App routes and core contract. The
+remaining issuer, managed capability, Playground, and audit operations now
+complete the 23-operation typed App contract, and `admin-v2.openapi.json` is
+generated independently from admin v1. The next concrete action is to add
+App/Space operations to the cloud-neutral service core without changing v1
+service behavior.
 
 ## Decisions
 
@@ -89,6 +91,15 @@ contracts before generating the App admin v2 artifact.
   contract: 4 files and 70 tests.
 - `pnpm --filter @unicas/admin-protocol typecheck` passed; editor diagnostics
   for the touched admin protocol files are clear.
+- Milestone commit `7818640` (`feat: add App administrator core contract`) was
+  created with a clean post-commit worktree.
+- Complete App administrator contract tests passed: 4 files and 72 tests.
+- `pnpm --filter @unicas/admin-protocol typecheck` passed after all 23
+  operations were added.
+- OpenAPI drift passed for admin v1, App admin v2, tenant v1, and Space v2: 4
+  tests.
+- `pnpm check:repo` passed after the complete App admin v2 artifact: 5 files
+  and 106 tests.
 
 ## Blockers
 

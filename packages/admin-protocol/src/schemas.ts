@@ -5,8 +5,12 @@ import type { CasAdminErrorResponse } from "./errors.js";
 import { CasAdminErrorCodes } from "./errors.js";
 import type {
   App,
+  AppControlAuditEvent,
   AppMemberInvitation,
   AppMembership,
+  AppOAuthIssuer,
+  AppOAuthIssuerInspection,
+  AppRefDomain,
   CasControlAuditEvent,
   CasHash,
   CasMemberInvitation,
@@ -22,8 +26,11 @@ import type {
   CasStack,
   CasStackMember,
   CasStackOAuthIssuer,
+  ManagedSpaceCapability,
   Principal,
   Profile,
+  SpaceRootRefBalance,
+  SpaceRootRefEvent,
 } from "./types.js";
 
 const TimestampSchema = z.number().int().nonnegative()
@@ -91,6 +98,95 @@ export const AppMemberInvitationSchema: z.ZodType<AppMemberInvitation> = z.objec
   createdAt: TimestampSchema.describe("Time at which the invitation was issued."),
   revision: RevisionSchema.describe("Current invitation revision."),
 }).readonly().meta({ id: "AppMemberInvitation" });
+
+const AppOAuthIssuerShape = {
+  appId: AppIdSchema.describe("App whose Space capabilities this issuer authorizes."),
+  issuer: z.url(),
+  audience: NonEmptyStringSchema,
+  metadataUrl: z.url(),
+  metadataType: z.enum(["oauth", "oidc"]),
+  authorizationEndpoint: z.url(),
+  tokenEndpoint: z.url(),
+  jwksUri: z.url(),
+  registrationEndpoint: z.url().nullable(),
+  scopesSupported: z.array(z.string()).readonly(),
+  codeChallengeMethodsSupported: z.array(z.string()).readonly(),
+};
+
+export const AppOAuthIssuerSchema: z.ZodType<AppOAuthIssuer> = z.object({
+  ...AppOAuthIssuerShape,
+  mode: z.enum(["managed", "external"]),
+  status: z.enum(["pending", "active", "stale", "incompatible", "disabled"]),
+  verifiedAt: TimestampSchema.nullable(),
+  lastRefreshAt: TimestampSchema.nullable(),
+  lastRefreshError: z.string().nullable(),
+  jwksDigest: NonEmptyStringSchema,
+  capabilityMaxLifetimeSeconds: z.number().int().positive(),
+  revision: RevisionSchema,
+}).readonly().meta({ id: "AppOAuthIssuer" });
+
+export const AppOAuthIssuerInspectionSchema: z.ZodType<AppOAuthIssuerInspection> = z.object({
+  inspectionId: NonEmptyStringSchema,
+  ...AppOAuthIssuerShape,
+  metadataDigest: NonEmptyStringSchema,
+  jwksDigest: NonEmptyStringSchema,
+  capabilityMaxLifetimeSeconds: z.number().int().positive(),
+  challenge: NonEmptyStringSchema,
+  expiresAt: TimestampSchema,
+  keys: z.array(z.object({
+    kid: NonEmptyStringSchema,
+    algorithm: NonEmptyStringSchema,
+    publicJwk: z.record(z.string(), z.unknown()).readonly(),
+  }).readonly()).readonly(),
+  revision: RevisionSchema,
+}).readonly().meta({ id: "AppOAuthIssuerInspection" });
+
+export const ManagedSpaceCapabilitySchema: z.ZodType<ManagedSpaceCapability> = z.object({
+  accessToken: NonEmptyStringSchema,
+  tokenType: z.literal("Bearer"),
+  expiresIn: z.number().int().positive(),
+  expiresAt: TimestampSchema,
+  issuer: z.url(),
+  audience: NonEmptyStringSchema,
+  spaceId: NonEmptyStringSchema,
+  permissions: z.array(NonEmptyStringSchema).readonly(),
+}).readonly().meta({ id: "ManagedSpaceCapability" });
+
+export const AppRefDomainSchema: z.ZodType<AppRefDomain> = z.object({
+  appId: AppIdSchema,
+  refDomain: NonEmptyStringSchema,
+  revision: RevisionSchema,
+}).readonly().meta({ id: "AppRefDomain" });
+
+export const AppControlAuditEventSchema: z.ZodType<AppControlAuditEvent> = z.object({
+  eventId: NonEmptyStringSchema,
+  appId: AppIdSchema.nullable(),
+  actor: PrincipalSchema,
+  action: NonEmptyStringSchema,
+  target: NonEmptyStringSchema,
+  requestId: z.string().nullable(),
+  traceId: z.string().nullable(),
+  caller: z.object({
+    channel: z.enum(["admin-webui", "mcp"]),
+    oauthClientHandle: z.string().nullable(),
+    toolName: z.string().nullable(),
+  }).readonly().nullable(),
+  createdAt: TimestampSchema,
+}).readonly().meta({ id: "AppControlAuditEvent" });
+
+export const SpaceRootRefBalanceSchema: z.ZodType<SpaceRootRefBalance> = z.object({
+  spaceId: NonEmptyStringSchema,
+  hash: CasHashSchema,
+  count: z.number().int(),
+}).readonly().meta({ id: "SpaceRootRefBalance" });
+
+export const SpaceRootRefEventSchema: z.ZodType<SpaceRootRefEvent> = z.object({
+  revision: RevisionSchema,
+  spaceId: NonEmptyStringSchema,
+  requestId: NonEmptyStringSchema,
+  changes: CasRefChangesSchema,
+  appliedAt: TimestampSchema,
+}).readonly().meta({ id: "SpaceRootRefEvent" });
 
 export const CasStackSchema: z.ZodType<CasStack> = z.object({
   stackId: NonEmptyStringSchema.describe("Opaque UniCAS-generated stack identifier. Callers cannot choose or rename it."),

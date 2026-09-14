@@ -63,6 +63,97 @@ export interface AppMemberInvitation {
   readonly revision: number;
 }
 
+export interface AppOAuthIssuer {
+  readonly appId: AppId;
+  readonly mode: "managed" | "external";
+  readonly issuer: string;
+  readonly audience: string;
+  readonly metadataUrl: string;
+  readonly metadataType: "oauth" | "oidc";
+  readonly authorizationEndpoint: string;
+  readonly tokenEndpoint: string;
+  readonly jwksUri: string;
+  readonly registrationEndpoint: string | null;
+  readonly scopesSupported: readonly string[];
+  readonly codeChallengeMethodsSupported: readonly string[];
+  readonly status: "pending" | "active" | "stale" | "incompatible" | "disabled";
+  readonly verifiedAt: number | null;
+  readonly lastRefreshAt: number | null;
+  readonly lastRefreshError: string | null;
+  readonly jwksDigest: string;
+  readonly capabilityMaxLifetimeSeconds: number;
+  readonly revision: number;
+}
+
+export interface AppOAuthIssuerInspection {
+  readonly inspectionId: string;
+  readonly appId: AppId;
+  readonly issuer: string;
+  readonly audience: string;
+  readonly metadataUrl: string;
+  readonly metadataType: "oauth" | "oidc";
+  readonly authorizationEndpoint: string;
+  readonly tokenEndpoint: string;
+  readonly jwksUri: string;
+  readonly registrationEndpoint: string | null;
+  readonly scopesSupported: readonly string[];
+  readonly codeChallengeMethodsSupported: readonly string[];
+  readonly metadataDigest: string;
+  readonly jwksDigest: string;
+  readonly capabilityMaxLifetimeSeconds: number;
+  readonly challenge: string;
+  readonly expiresAt: number;
+  readonly keys: readonly CasOAuthIssuerInspectionKey[];
+  readonly revision: number;
+}
+
+export interface ManagedSpaceCapability {
+  readonly accessToken: string;
+  readonly tokenType: "Bearer";
+  readonly expiresIn: number;
+  readonly expiresAt: number;
+  readonly issuer: string;
+  readonly audience: string;
+  readonly spaceId: string;
+  readonly permissions: readonly string[];
+}
+
+export interface AppRefDomain {
+  readonly appId: AppId;
+  readonly refDomain: string;
+  readonly revision: number;
+}
+
+export interface AppControlAuditEvent {
+  readonly eventId: string;
+  readonly appId: AppId | null;
+  readonly actor: Principal;
+  readonly action: string;
+  readonly target: string;
+  readonly requestId: string | null;
+  readonly traceId: string | null;
+  readonly caller: {
+    readonly channel: "admin-webui" | "mcp";
+    readonly oauthClientHandle: string | null;
+    readonly toolName: string | null;
+  } | null;
+  readonly createdAt: number;
+}
+
+export interface SpaceRootRefBalance {
+  readonly spaceId: string;
+  readonly hash: CasHash;
+  readonly count: number;
+}
+
+export interface SpaceRootRefEvent {
+  readonly revision: number;
+  readonly spaceId: string;
+  readonly requestId: string;
+  readonly changes: CasRefChanges;
+  readonly appliedAt: number;
+}
+
 export type CasStackStatus = "active" | "suspended";
 
 export interface CasStack {

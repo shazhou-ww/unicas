@@ -2,23 +2,31 @@ import type { ContractRouterClient } from "@orpc/contract";
 import { describe, expect, expectTypeOf, test } from "vitest";
 import type {
   App,
+  AppControlAuditEvent,
   AppMemberInvitation,
   AppMembership,
+  AppOAuthIssuer,
   CasStack,
+  ManagedSpaceCapability,
   Principal,
   Profile,
+  SpaceRootRefBalance,
 } from "../src/index.js";
 import {
+  AppControlAuditEventSchema,
   AppMemberInvitationSchema,
   AppMembershipSchema,
+  AppOAuthIssuerSchema,
   AppSchema,
   CasStackSchema,
   PrincipalSchema,
   ProfileSchema,
+  ManagedSpaceCapabilitySchema,
+  SpaceRootRefBalanceSchema,
   appAdminApiContract,
   casAdminApiContract,
 } from "../src/index.js";
-import { generateAdminOpenApiDocument } from "../scripts/openapi.js";
+import { generateAdminOpenApiDocument, generateAppAdminOpenApiDocument } from "../scripts/openapi.js";
 
 const methods = ["get", "post", "put", "patch", "delete"] as const;
 
@@ -97,9 +105,66 @@ describe("CAS admin schemas", () => {
     expectTypeOf<MeResult["principal"]>().toEqualTypeOf<Principal>();
     expectTypeOf<MeResult["profile"]>().toEqualTypeOf<Profile>();
 
-    expect(Object.keys(appAdminApiContract)).toEqual(["identity", "apps", "members"]);
     expect(Object.keys(appAdminApiContract.apps)).toHaveLength(4);
     expect(Object.keys(appAdminApiContract.members)).toHaveLength(4);
+  });
+
+  test("defines issuer, capability, and audit resources for the complete App contract", () => {
+    const issuer: AppOAuthIssuer = {
+      appId: "app-1",
+      mode: "managed",
+      issuer: "https://issuer.example",
+      audience: "https://api.unicas.work/v2/apps/app-1",
+      metadataUrl: "https://issuer.example/.well-known/oauth-authorization-server",
+      metadataType: "oauth",
+      authorizationEndpoint: "https://issuer.example/authorize",
+      tokenEndpoint: "https://issuer.example/token",
+      jwksUri: "https://issuer.example/jwks",
+      registrationEndpoint: null,
+      scopesSupported: [],
+      codeChallengeMethodsSupported: ["S256"],
+      status: "active",
+      verifiedAt: 1,
+      lastRefreshAt: 1,
+      lastRefreshError: null,
+      jwksDigest: "digest",
+      capabilityMaxLifetimeSeconds: 300,
+      revision: 1,
+    };
+    const capability: ManagedSpaceCapability = {
+      accessToken: "secret",
+      tokenType: "Bearer",
+      expiresIn: 300,
+      expiresAt: 301,
+      issuer: issuer.issuer,
+      audience: issuer.audience,
+      spaceId: "space-1",
+      permissions: ["spaces:space-1:cas:read"],
+    };
+    const auditEvent: AppControlAuditEvent = {
+      eventId: "event-1",
+      appId: "app-1",
+      actor: { issuer: "https://accounts.example", subject: "subject-1" },
+      action: "app.updated",
+      target: "apps/app-1",
+      requestId: null,
+      traceId: null,
+      caller: null,
+      createdAt: 1,
+    };
+    const balance: SpaceRootRefBalance = {
+      spaceId: "space-1",
+      hash: "a".repeat(64),
+      count: 1,
+    };
+
+    expect(AppOAuthIssuerSchema.safeParse(issuer).success).toBe(true);
+    expect(ManagedSpaceCapabilitySchema.safeParse(capability).success).toBe(true);
+    expect(AppControlAuditEventSchema.safeParse(auditEvent).success).toBe(true);
+    expect(SpaceRootRefBalanceSchema.safeParse(balance).success).toBe(true);
+    const operationCount = Object.values(appAdminApiContract)
+      .reduce((count, group) => count + Object.keys(group).length, 0);
+    expect(operationCount).toBe(23);
   });
 });
 
@@ -119,6 +184,16 @@ describe("CAS admin OpenAPI", () => {
       .toContain("activation challenge");
     expect(document.paths?.["/admin/stacks/{stackId}"]?.get)
       .toHaveProperty("responses.200.content.application/json.schema.properties.revision.description");
+  });
+
+  test("generates a separate complete App administrator document", async () => {
+    const document = await generateAppAdminOpenApiDocument();
+    const allOperations = operations(document);
+    const serialized = JSON.stringify(document);
+    expect(Object.keys(document.paths ?? {})).toHaveLength(16);
+    expect(allOperations).toHaveLength(23);
+    expect(document.paths?.["/admin/apps/{appId}"]?.get).toHaveProperty("operationId", "getApp");
+    expect(serialized).not.toMatch(/stackId|tenantId|Stack|Tenant/);
   });
 
   test("documents optimistic concurrency", async () => {

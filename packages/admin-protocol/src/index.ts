@@ -1,8 +1,12 @@
 export type {
   App,
+  AppControlAuditEvent,
   AppMemberInvitation,
   AppMemberInvitationStatus,
   AppMembership,
+  AppOAuthIssuer,
+  AppOAuthIssuerInspection,
+  AppRefDomain,
   AppStatus,
   CasControlAuditEvent,
   CasHash,
@@ -29,6 +33,9 @@ export type {
   CasOAuthIssuerStatus,
   Principal,
   Profile,
+  ManagedSpaceCapability,
+  SpaceRootRefBalance,
+  SpaceRootRefEvent,
 } from "./types.js";
 export type { AppId } from "@unicas/tenant-protocol";
 export { CAS_STACK_MEMBER_AUTHORITY } from "./types.js";
@@ -41,8 +48,12 @@ export {
 export type { CasAdminApiContract } from "./contract.js";
 
 export {
+  AppControlAuditEventSchema,
   AppMemberInvitationSchema,
   AppMembershipSchema,
+  AppOAuthIssuerInspectionSchema,
+  AppOAuthIssuerSchema,
+  AppRefDomainSchema,
   AppSchema,
   CasAdminErrorResponseSchema,
   CasControlAuditEventSchema,
@@ -63,6 +74,9 @@ export {
   CasStackSchema,
   PrincipalSchema,
   ProfileSchema,
+  ManagedSpaceCapabilitySchema,
+  SpaceRootRefBalanceSchema,
+  SpaceRootRefEventSchema,
 } from "./schemas.js";
 
 export {
