@@ -12,8 +12,15 @@ export {
   casTenantApiContract,
 } from "./contract.js";
 export type { CasTenantApiContract } from "./contract.js";
+export {
+  SpaceApiBasePath,
+  SpaceApiErrorMap,
+  spaceApiContract,
+} from "./space-v2-contract.js";
+export type { SpaceApiContract } from "./space-v2-contract.js";
 
 export type {
+  AppId,
   CasGcResult,
   CasHash,
   CasLeaseOperationResult,
@@ -29,9 +36,12 @@ export type {
   CasRootRefUpdate,
   CasUploadRequiredResult,
   CasUsage,
+  Space,
+  SpaceId,
 } from "./types.js";
 
 export {
+  AppIdSchema,
   CasGcResultSchema,
   CasHashSchema,
   CasLeaseOperationResultSchema,
@@ -47,6 +57,8 @@ export {
   CasRootRefUpdateSchema,
   CasUploadRequiredResultSchema,
   CasUsageSchema,
+  SpaceIdSchema,
+  SpaceSchema,
 } from "./schemas.js";
 
 export {
@@ -76,8 +88,8 @@ export type {
   CasUsageResponse,
 } from "./http.js";
 
-export { casRoutes, matchCasRoute } from "./routes.js";
-export type { CasRoute } from "./routes.js";
+export { appSpaceRoutes, casRoutes, matchAppSpaceRoute, matchCasRoute } from "./routes.js";
+export type { AppSpaceRoute, CasRoute } from "./routes.js";
 
 // CAS-neutral tenant capability claim vocabulary
 export {
@@ -87,12 +99,17 @@ export {
   casWritePermission,
   hasCapabilityPermission,
   parseCapabilityPermission,
+  parseSpaceCapabilityPermission,
   sessionCreatePermission,
   sessionReadPermission,
   sessionWritePermission,
+  spaceCasManagePermission,
+  spaceCasReadPermission,
+  spaceCasWritePermission,
   CapabilityAlgorithm,
   CapabilityTokenType,
   CapabilityVersion,
+  SpaceCapabilityVersion,
   DefaultCapabilityLifetimeSeconds,
   isReservedRefDomain,
   MaximumCapabilityClockSkewSeconds,
@@ -112,7 +129,11 @@ export type {
   CapabilityPermissionKind,
   CapabilityProtectedHeader,
   ParsedCapabilityPermission,
+  ParsedSpaceCapabilityPermission,
   SessionCapabilityClaims,
+  SpaceCapabilityClaims,
+  SpaceCapabilityPermission,
   TenantCapabilityClaims,
   VerifiedCapability,
+  VerifiedSpaceCapability,
 } from "./capability.js";

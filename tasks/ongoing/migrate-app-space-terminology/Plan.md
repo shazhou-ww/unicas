@@ -1,6 +1,6 @@
 # UniCAS App and Space terminology plan
 
-Status: planned, not yet executed
+Status: in progress; Phase 0 complete and contract-first implementation started
 
 Date: 2026-09-14
 

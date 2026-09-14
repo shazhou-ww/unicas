@@ -3,10 +3,13 @@ import {
   CasLeaseDurationHeader,
   CasUploadIdHeader,
   CasUploadLengthHeader,
+  appSpaceRoutes,
   casRoutes,
+  matchAppSpaceRoute,
   matchCasRoute,
 } from "../src/index.js";
 import type {
+  AppSpaceRoute,
   CasLeaseResponse,
   CasRoute,
   CasUpdateRootRefsRequest,
@@ -15,6 +18,8 @@ import type {
 
 const STACK = "stack-a";
 const TENANT = "tenant/a";
+const APP = "app-a";
+const SPACE = "space/a";
 
 describe("CAS routes (canonical stack-scoped)", () => {
   test.each([
@@ -88,6 +93,62 @@ describe("CAS routes (canonical stack-scoped)", () => {
     expect(matchCasRoute("GET", "/stacks/s/cas/usage")).toBeNull();
     expect(matchCasRoute("GET", "/stacks/s/tenants/")).toBeNull();
     expect(matchCasRoute("GET", "/stacks//tenants/t/cas/usage")).toBeNull();
+  });
+});
+
+describe("CAS v2 routes (App/Space)", () => {
+  test.each([
+    ["GET", appSpaceRoutes.readContent({ appId: APP, spaceId: SPACE, hash: "abc" }), "readContent"],
+    ["GET", appSpaceRoutes.readMetadata({ appId: APP, spaceId: SPACE, hash: "abc" }), "readMetadata"],
+    ["POST", appSpaceRoutes.lease({ appId: APP, spaceId: SPACE, hash: "abc" }), "lease"],
+    ["GET", appSpaceRoutes.usage({ appId: APP, spaceId: SPACE }), "usage"],
+    ["POST", appSpaceRoutes.gc({ appId: APP, spaceId: SPACE }), "gc"],
+    ["GET", appSpaceRoutes.listRootRefs({ appId: APP, spaceId: SPACE }), "listRootRefs"],
+    ["POST", appSpaceRoutes.updateRootRefs({ appId: APP, spaceId: SPACE }), "updateRootRefs"],
+  ])("matches %s %s", (method, pathname, operation) => {
+    expect(matchAppSpaceRoute(method, pathname)).toMatchObject({
+      operation,
+      appId: APP,
+      spaceId: SPACE,
+    });
+  });
+
+  test("every v2 data route carries appId + spaceId", () => {
+    const routes: readonly AppSpaceRoute[] = [
+      { operation: "readContent", appId: APP, spaceId: SPACE, hash: "a".repeat(64) },
+      { operation: "readMetadata", appId: APP, spaceId: SPACE, hash: "a".repeat(64) },
+      { operation: "lease", appId: APP, spaceId: SPACE, hash: "a".repeat(64) },
+      { operation: "usage", appId: APP, spaceId: SPACE },
+      { operation: "gc", appId: APP, spaceId: SPACE },
+      { operation: "listRootRefs", appId: APP, spaceId: SPACE },
+      { operation: "updateRootRefs", appId: APP, spaceId: SPACE },
+    ];
+    for (const route of routes) {
+      expect(route.appId).toBe(APP);
+      expect(route.spaceId).toBe(SPACE);
+    }
+  });
+
+  test("freezes encoded v2 paths", () => {
+    expect(appSpaceRoutes.readContent({ appId: "app/a", spaceId: "space/a", hash: "hash value" }))
+      .toBe("/v2/apps/app%2Fa/spaces/space%2Fa/cas/nodes/hash%20value/content");
+    expect(appSpaceRoutes.listRootRefs(
+      { appId: APP, spaceId: SPACE },
+      { limit: 10, cursor: "abc" },
+    )).toBe(`/v2/apps/${APP}/spaces/space%2Fa/root-refs?limit=10&cursor=abc`);
+  });
+
+  test("keeps v1 and v2 route matchers disjoint", () => {
+    const v1 = casRoutes.usage({ stackId: STACK, tenantId: TENANT });
+    const v2 = appSpaceRoutes.usage({ appId: APP, spaceId: SPACE });
+    expect(matchAppSpaceRoute("GET", v1)).toBeNull();
+    expect(matchCasRoute("GET", v2)).toBeNull();
+  });
+
+  test("rejects unknown methods, malformed escapes, and incomplete scopes", () => {
+    expect(matchAppSpaceRoute("PUT", appSpaceRoutes.lease({ appId: APP, spaceId: SPACE, hash: "h" }))).toBeNull();
+    expect(matchAppSpaceRoute("GET", "/v2/apps/%ZZ/spaces/s/cas/usage")).toBeNull();
+    expect(matchAppSpaceRoute("GET", "/v2/apps/a/cas/usage")).toBeNull();
   });
 });
 

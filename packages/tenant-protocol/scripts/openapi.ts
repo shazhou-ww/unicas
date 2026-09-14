@@ -1,6 +1,7 @@
 import { OpenAPIGenerator } from "@orpc/openapi";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 import { casTenantApiContract } from "../src/contract.js";
+import { spaceApiContract } from "../src/space-v2-contract.js";
 
 export function generateTenantOpenApiDocument() {
   const generator = new OpenAPIGenerator({
@@ -57,4 +58,48 @@ export function generateTenantOpenApiDocument() {
     }),
   });
 
+}
+
+export function generateSpaceOpenApiDocument() {
+  const generator = new OpenAPIGenerator({
+    schemaConverters: [new ZodToJsonSchemaConverter()],
+  });
+
+  return generator.generate(spaceApiContract, {
+    info: {
+      title: "UniCAS Space API",
+      version: "2.0.0",
+      description: [
+        "App-scoped Space API for immutable content-addressed nodes, leases, usage accounting, garbage collection, and atomic Root Ref commits.",
+        "",
+        "Every request uses a version 2 JWT capability. The registered issuer establishes App authority; the token's `spaceId` and `spaces:` permission must match the route exactly.",
+        "",
+        "Principal identity and Profile metadata are independent of Space ownership and authorization.",
+      ].join("\n"),
+    },
+    tags: [
+      { name: "Nodes", description: "Read immutable nodes and establish temporary protection leases within a Space." },
+      { name: "Root Refs", description: "Read and atomically update business-root balances in the verified capability's refDomain." },
+      { name: "Operations", description: "Inspect Space accounting and run bounded garbage collection." },
+    ],
+    security: [{ spaceCapability: [] }],
+    components: {
+      securitySchemes: {
+        spaceCapability: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
+          description: "Version 2 Space capability. Issuer authority, spaceId, and the exact spaces permission must match the request path.",
+        },
+      },
+    },
+    customErrorResponseBodySchema: (definedErrors) => ({
+      type: "object",
+      properties: {
+        error: { type: "string", enum: definedErrors.map(([code]) => code) },
+        message: { type: "string" },
+      },
+      required: ["error"],
+    }),
+  });
 }

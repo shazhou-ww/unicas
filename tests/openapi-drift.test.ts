@@ -2,7 +2,10 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { generateAdminOpenApiDocument } from "../packages/admin-protocol/scripts/openapi.js";
-import { generateTenantOpenApiDocument } from "../packages/tenant-protocol/scripts/openapi.js";
+import {
+  generateSpaceOpenApiDocument,
+  generateTenantOpenApiDocument,
+} from "../packages/tenant-protocol/scripts/openapi.js";
 
 const ROOT = join(import.meta.dirname, "..");
 
@@ -24,6 +27,12 @@ describe("generated OpenAPI documents", () => {
   test("tenant document is current", async () => {
     expect(jsonValue(await generateTenantOpenApiDocument())).toEqual(
       await readJson("packages/tenant-protocol/openapi/tenant-v1.openapi.json"),
+    );
+  });
+
+  test("Space v2 document is current", async () => {
+    expect(jsonValue(await generateSpaceOpenApiDocument())).toEqual(
+      await readJson("packages/tenant-protocol/openapi/space-v2.openapi.json"),
     );
   });
 });

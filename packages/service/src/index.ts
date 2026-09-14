@@ -33,6 +33,17 @@ export type {
   VerifiedStackCall,
 } from "./tenant-auth.js";
 export {
+  appSpacePermissionFor,
+  AppSpaceCapabilityVerifier,
+} from "./app-space-auth.js";
+export type {
+  AppAuthorityResolver,
+  AppSpaceAuthEvent,
+  AppSpaceVerifierOptions,
+  ResolvedAppAuthority,
+  VerifiedAppSpaceCall,
+} from "./app-space-auth.js";
+export {
   applyRootRefsUpdate,
   canonicalizeRootRefsUpdate,
   CAS_MAX_REQUEST_ID_LENGTH,

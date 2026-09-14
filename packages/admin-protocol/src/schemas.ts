@@ -1,8 +1,11 @@
 import { z } from "zod";
+import { AppIdSchema } from "@unicas/tenant-protocol";
 import type { CasManagedCapability } from "./http.js";
 import type { CasAdminErrorResponse } from "./errors.js";
 import { CasAdminErrorCodes } from "./errors.js";
 import type {
+  App,
+  AppMembership,
   CasControlAuditEvent,
   CasHash,
   CasMemberInvitation,
@@ -18,6 +21,8 @@ import type {
   CasStack,
   CasStackMember,
   CasStackOAuthIssuer,
+  Principal,
+  Profile,
 } from "./types.js";
 
 const TimestampSchema = z.number().int().nonnegative()
@@ -47,6 +52,32 @@ export const CasOperatorIdentitySchema: z.ZodType<CasOperatorIdentity> = z.objec
   displayName: z.string().nullable().describe("Best-effort display name from identity claims; not an authorization key."),
   emailForDisplay: z.string().nullable().describe("Best-effort email for UI display; never used to establish ownership."),
 }).readonly().meta({ id: "CasOperatorIdentity" });
+
+export const PrincipalSchema: z.ZodType<Principal> = z.object({
+  issuer: z.url().describe("Canonical issuer component of the immutable Principal key."),
+  subject: NonEmptyStringSchema.describe("Immutable subject component within the issuer."),
+}).readonly().meta({ id: "Principal" });
+
+export const ProfileSchema: z.ZodType<Profile> = z.object({
+  displayName: z.string().nullable().describe("Display-only name; never an authorization key."),
+  emailForDisplay: z.string().nullable().describe("Display-only email; never an authorization key."),
+}).readonly().meta({ id: "Profile" });
+
+export const AppSchema: z.ZodType<App> = z.object({
+  appId: AppIdSchema.describe("Opaque UniCAS-generated App identifier."),
+  displayName: NonEmptyStringSchema.describe("Administrator-visible App name."),
+  description: z.string().describe("Administrator-visible App description; empty means none."),
+  status: z.enum(["active", "suspended"])
+    .describe("Operational status. A suspended App cannot serve normal Space traffic."),
+  createdAt: TimestampSchema.describe("Time at which UniCAS created the App."),
+  revision: RevisionSchema.describe("Current App revision used for optimistic concurrency."),
+}).readonly().meta({ id: "App" });
+
+export const AppMembershipSchema: z.ZodType<AppMembership> = z.object({
+  appId: AppIdSchema.describe("App whose equal administrator authority this membership grants."),
+  principal: PrincipalSchema.describe("Immutable authenticated identity granted membership."),
+  profile: ProfileSchema.describe("Non-authoritative display metadata for the Principal."),
+}).readonly().meta({ id: "AppMembership" });
 
 export const CasStackSchema: z.ZodType<CasStack> = z.object({
   stackId: NonEmptyStringSchema.describe("Opaque UniCAS-generated stack identifier. Callers cannot choose or rename it."),

@@ -1,6 +1,15 @@
 /** 64 lowercase hexadecimal SHA-256 characters. */
 export type CasHash = string;
 
+export type AppId = string;
+export type SpaceId = string;
+
+/** Addressable v2 data ownership boundary within an App. */
+export interface Space {
+  readonly appId: AppId;
+  readonly spaceId: SpaceId;
+}
+
 export interface CasNodeMetadata {
   readonly hash: CasHash;
   readonly size: number;

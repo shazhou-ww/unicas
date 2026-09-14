@@ -60,6 +60,8 @@ and names the top-level application/trust boundary App.
 ## References
 
 - [Task execution plan](Plan.md)
+- [Migration inventory](Inventory.md)
+- [V1/v2 compatibility matrix](CompatibilityMatrix.md)
 - [Finalized terminology](../../../docs/terminology.md)
 - [Finalized domain topology](../../../docs/domain-topology.md)
 - [UniCAS architecture](../../../docs/cas-architecture.md)

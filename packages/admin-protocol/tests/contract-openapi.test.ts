@@ -1,7 +1,14 @@
 import type { ContractRouterClient } from "@orpc/contract";
 import { describe, expect, expectTypeOf, test } from "vitest";
-import type { CasStack } from "../src/index.js";
-import { CasStackSchema, casAdminApiContract } from "../src/index.js";
+import type { App, AppMembership, CasStack, Principal, Profile } from "../src/index.js";
+import {
+  AppMembershipSchema,
+  AppSchema,
+  CasStackSchema,
+  PrincipalSchema,
+  ProfileSchema,
+  casAdminApiContract,
+} from "../src/index.js";
 import { generateAdminOpenApiDocument } from "../scripts/openapi.js";
 
 const methods = ["get", "post", "put", "patch", "delete"] as const;
@@ -31,6 +38,30 @@ describe("CAS admin schemas", () => {
     type Client = ContractRouterClient<typeof casAdminApiContract>;
     type Stack = Awaited<ReturnType<Client["stacks"]["get"]>>;
     expectTypeOf<Stack>().toEqualTypeOf<CasStack>();
+  });
+
+  test("keeps v2 Principal identity separate from Profile metadata", () => {
+    const principal: Principal = { issuer: "https://issuer.example", subject: "subject-1" };
+    const profile: Profile = { displayName: "Operator", emailForDisplay: "operator@example.com" };
+    const app: App = {
+      appId: "app-1",
+      displayName: "App 1",
+      description: "",
+      status: "active",
+      createdAt: 1,
+      revision: 1,
+    };
+    const membership: AppMembership = { appId: app.appId, principal, profile };
+
+    expect(PrincipalSchema.safeParse(principal).success).toBe(true);
+    expect(ProfileSchema.safeParse(profile).success).toBe(true);
+    expect(AppSchema.safeParse(app).success).toBe(true);
+    expect(AppMembershipSchema.safeParse(membership).success).toBe(true);
+    expect(PrincipalSchema.safeParse({
+      identityIssuer: principal.issuer,
+      subject: principal.subject,
+    }).success).toBe(false);
+    expect(AppSchema.safeParse({ ...app, appId: undefined, stackId: "stack-1" }).success).toBe(false);
   });
 });
 

@@ -1,3 +1,5 @@
+import type { AppId } from "@unicas/tenant-protocol";
+
 /**
  * Content-addressed node digest wire shape.
  * Defined locally so the admin protocol stays independent of the tenant plane.
@@ -20,6 +22,33 @@ export interface CasOperatorIdentityKey {
 export interface CasOperatorIdentity extends CasOperatorIdentityKey {
   readonly displayName: string | null;
   readonly emailForDisplay: string | null;
+}
+
+export interface Principal {
+  readonly issuer: string;
+  readonly subject: string;
+}
+
+export interface Profile {
+  readonly displayName: string | null;
+  readonly emailForDisplay: string | null;
+}
+
+export type AppStatus = "active" | "suspended";
+
+export interface App {
+  readonly appId: AppId;
+  readonly displayName: string;
+  readonly description: string;
+  readonly status: AppStatus;
+  readonly createdAt: number;
+  readonly revision: number;
+}
+
+export interface AppMembership {
+  readonly appId: AppId;
+  readonly principal: Principal;
+  readonly profile: Profile;
 }
 
 export type CasStackStatus = "active" | "suspended";

@@ -19,9 +19,14 @@ import type { JWTHeaderParameters, JWTPayload } from "jose";
 // ---------------------------------------------------------------------------
 
 declare const capabilityPermissionBrand: unique symbol;
+declare const spaceCapabilityPermissionBrand: unique symbol;
 
 export type CapabilityPermission = string & {
   readonly [capabilityPermissionBrand]: true;
+};
+
+export type SpaceCapabilityPermission = string & {
+  readonly [spaceCapabilityPermissionBrand]: true;
 };
 
 export type CapabilityPermissionKind =
@@ -36,6 +41,11 @@ export type ParsedCapabilityPermission = {
   readonly kind: CapabilityPermissionKind;
   readonly tenantId: string;
   readonly sessionId?: string;
+};
+
+export type ParsedSpaceCapabilityPermission = {
+  readonly kind: "cas:read" | "cas:write" | "cas:manage";
+  readonly spaceId: string;
 };
 
 export function canonicalPermissionSegment(value: string): string {
@@ -56,6 +66,18 @@ export function casWritePermission(tenantId: string): CapabilityPermission {
 
 export function casManagePermission(tenantId: string): CapabilityPermission {
   return tenantPermission(tenantId, "cas:manage");
+}
+
+export function spaceCasReadPermission(spaceId: string): SpaceCapabilityPermission {
+  return spaceCasPermission(spaceId, "read");
+}
+
+export function spaceCasWritePermission(spaceId: string): SpaceCapabilityPermission {
+  return spaceCasPermission(spaceId, "write");
+}
+
+export function spaceCasManagePermission(spaceId: string): SpaceCapabilityPermission {
+  return spaceCasPermission(spaceId, "manage");
 }
 
 export function sessionCreatePermission(tenantId: string): CapabilityPermission {
@@ -110,6 +132,21 @@ export function parseCapabilityPermission(
   return null;
 }
 
+export function parseSpaceCapabilityPermission(
+  permission: string,
+): ParsedSpaceCapabilityPermission | null {
+  const parts = permission.split(":");
+  if (parts.length !== 4 || parts[0] !== "spaces" || parts[2] !== "cas") {
+    return null;
+  }
+  const spaceId = decodeCanonicalSegment(parts[1]);
+  const action = parts[3];
+  if (spaceId === null || (action !== "read" && action !== "write" && action !== "manage")) {
+    return null;
+  }
+  return { kind: `cas:${action}`, spaceId };
+}
+
 export function hasCapabilityPermission(
   permissions: readonly string[],
   expected: CapabilityPermission,
@@ -126,6 +163,13 @@ function tenantPermission(
     | "sessions:create",
 ): CapabilityPermission {
   return `tenants:${canonicalPermissionSegment(tenantId)}:${suffix}` as CapabilityPermission;
+}
+
+function spaceCasPermission(
+  spaceId: string,
+  action: "read" | "write" | "manage",
+): SpaceCapabilityPermission {
+  return `spaces:${canonicalPermissionSegment(spaceId)}:cas:${action}` as SpaceCapabilityPermission;
 }
 
 function sessionPermission(
@@ -153,6 +197,7 @@ function decodeCanonicalSegment(value: string | undefined): string | null {
 // ---------------------------------------------------------------------------
 
 export const CapabilityVersion = 1 as const;
+export const SpaceCapabilityVersion = 2 as const;
 export const CapabilityAlgorithm = "ES256" as const;
 export const CapabilityTokenType = "unidocs-cap+jwt" as const;
 export const DefaultCapabilityLifetimeSeconds = 120;
@@ -209,6 +254,25 @@ export type CapabilityClaims = TenantCapabilityClaims | SessionCapabilityClaims;
 export interface VerifiedCapability {
   readonly protectedHeader: CapabilityProtectedHeader;
   readonly claims: CapabilityClaims;
+}
+
+export interface SpaceCapabilityClaims extends JWTPayload {
+  readonly ver: typeof SpaceCapabilityVersion;
+  readonly iss: string;
+  readonly sub: string;
+  readonly aud: string;
+  readonly iat: number;
+  readonly nbf: number;
+  readonly exp: number;
+  readonly jti: string;
+  readonly spaceId: string;
+  readonly permissions: readonly SpaceCapabilityPermission[];
+  readonly refDomain?: string;
+}
+
+export interface VerifiedSpaceCapability {
+  readonly protectedHeader: CapabilityProtectedHeader;
+  readonly claims: SpaceCapabilityClaims;
 }
 
 /**

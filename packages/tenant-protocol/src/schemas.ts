@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type {
+  AppId,
   CasGcResult,
   CasHash,
   CasLeaseOperationResult,
@@ -15,7 +16,22 @@ import type {
   CasRootRefUpdate,
   CasUploadRequiredResult,
   CasUsage,
+  Space,
+  SpaceId,
 } from "./types.js";
+
+export const AppIdSchema: z.ZodType<AppId> = z.string().min(1)
+  .describe("Opaque UniCAS-generated App identifier.")
+  .meta({ id: "AppId" });
+
+export const SpaceIdSchema: z.ZodType<SpaceId> = z.string().min(1)
+  .describe("App-scoped logical data ownership and authorization identifier.")
+  .meta({ id: "SpaceId" });
+
+export const SpaceSchema: z.ZodType<Space> = z.object({
+  appId: AppIdSchema.describe("App that owns this Space."),
+  spaceId: SpaceIdSchema.describe("Logical data boundary within the App."),
+}).readonly().meta({ id: "Space" });
 
 export const CasHashSchema: z.ZodType<CasHash> = z.string()
   .regex(/^[0-9a-f]{64}$/, "Expected a lowercase SHA-256 digest")

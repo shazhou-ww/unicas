@@ -43,6 +43,7 @@
     }
   },
   "dependencies": {
+    "@unicas/tenant-protocol": "workspace:*",
     "@orpc/contract": "1.15.0",
     "@orpc/openapi": "1.15.0",
     "@orpc/zod": "1.15.0",
