@@ -10,6 +10,16 @@ describe("control-plane MCP config", () => {
     });
   });
 
+  test("prefers the MCP origin over the compatibility fallback", () => {
+    expect(mcpConfigFromEnv({
+      MCP_PUBLIC_ORIGIN: "https://api.example",
+      PUBLIC_ORIGIN: "https://legacy.example",
+    })).toMatchObject({
+      publicOrigin: "https://api.example",
+      resource: "https://api.example/mcp",
+    });
+  });
+
   test("rejects non-origin paths and non-HTTPS public deployments", () => {
     expect(() => mcpConfigFromEnv({ PUBLIC_ORIGIN: "https://cas.example/admin" })).toThrow("only scheme");
     expect(() => mcpConfigFromEnv({ PUBLIC_ORIGIN: "http://cas.example" })).toThrow("must use https");

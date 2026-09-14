@@ -13,6 +13,7 @@ export interface ControlPlaneMcpConfig {
 }
 
 export interface ControlPlaneMcpEnvConfig {
+  MCP_PUBLIC_ORIGIN?: string;
   PUBLIC_ORIGIN?: string;
   MCP_ALLOWED_ORIGIN_HOSTNAMES?: string;
   GOOGLE_OIDC_CLIENT_ID?: string;
@@ -26,7 +27,7 @@ export interface ControlPlaneMcpEnvConfig {
 }
 
 export function mcpConfigFromEnv(env: ControlPlaneMcpEnvConfig): ControlPlaneMcpConfig {
-  const publicOrigin = normalizeOrigin(env.PUBLIC_ORIGIN ?? "");
+  const publicOrigin = normalizeOrigin(env.MCP_PUBLIC_ORIGIN ?? env.PUBLIC_ORIGIN ?? "");
   const configuredOrigins = (env.MCP_ALLOWED_ORIGIN_HOSTNAMES ?? "")
     .split(",")
     .map((value) => value.trim().toLowerCase())
@@ -49,13 +50,13 @@ export function emailAllowed(email: string | null, configuredAllowlist: string |
 }
 
 function normalizeOrigin(value: string): string {
-  if (value.length === 0) throw new Error("PUBLIC_ORIGIN must be configured");
+  if (value.length === 0) throw new Error("MCP_PUBLIC_ORIGIN or PUBLIC_ORIGIN must be configured");
   const url = new URL(value);
   if (url.protocol !== "https:" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1") {
-    throw new Error("PUBLIC_ORIGIN must use https outside local development");
+    throw new Error("MCP_PUBLIC_ORIGIN must use https outside local development");
   }
   if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
-    throw new Error("PUBLIC_ORIGIN must contain only scheme, host, and optional port");
+    throw new Error("MCP_PUBLIC_ORIGIN must contain only scheme, host, and optional port");
   }
   return url.origin;
 }

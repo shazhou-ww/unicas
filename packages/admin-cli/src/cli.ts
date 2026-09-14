@@ -53,7 +53,7 @@ Usage:
   unicas help                                                 Show this help
 
 Environment:
-  UNICAS_ADMIN_URL          /admin API origin (default https://unicas.work)
+  UNICAS_ADMIN_URL          /admin API origin (default https://console.unicas.work)
   UNICAS_CONFIG_DIR         session directory (default ~/.unicas)
 
 Where a mutation needs a current ETag and none is passed, the CLI reads it

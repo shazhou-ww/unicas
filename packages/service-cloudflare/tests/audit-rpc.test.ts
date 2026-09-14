@@ -98,6 +98,9 @@ async function createEnv(): Promise<Env> {
     CAS_DO: {},
     CAS_DOMAIN_DO: {},
     CAS_AUDIT_READER_KEY: READER_KEY,
+    CAS_PUBLIC_ORIGIN: "https://cas.example",
+    MCP_PUBLIC_ORIGIN: "https://cas.example",
+    ADMIN_PUBLIC_ORIGIN: "https://cas.example",
   } as unknown as Env;
 }
 

@@ -76,6 +76,8 @@ const env = {
     get: () => ({ fetch: vi.fn() }),
   },
   CAS_PUBLIC_ORIGIN: "https://cas.example",
+  MCP_PUBLIC_ORIGIN: "https://cas.example",
+  ADMIN_PUBLIC_ORIGIN: "https://cas.example",
   PUBLIC_ORIGIN: "https://cas.example",
 } as unknown as Env;
 
@@ -87,6 +89,33 @@ beforeEach(() => {
 });
 
 describe("service-cloudflare public routing", () => {
+  test("enforces the configured host/path matrix", async () => {
+    const splitEnv = {
+      ...env,
+      CAS_PUBLIC_ORIGIN: "https://api.example",
+      MCP_PUBLIC_ORIGIN: "https://api.example",
+      ADMIN_PUBLIC_ORIGIN: "https://console.example",
+      PUBLIC_ORIGIN: "https://legacy.example",
+    } as Env;
+
+    expect((await worker.fetch(new Request("https://api.example/health"), splitEnv, ctx)).status).toBe(200);
+    expect((await worker.fetch(new Request("https://console.example/admin/me"), splitEnv, ctx)).status).toBe(200);
+    const consoleRoot = await worker.fetch(new Request("https://console.example/"), splitEnv, ctx);
+    expect(consoleRoot.status).toBe(302);
+    expect(consoleRoot.headers.get("Location")).toBe("https://console.example/admin/");
+
+    for (const url of [
+      "https://console.example/health",
+      "https://console.example/mcp",
+      "https://api.example/admin/me",
+      "https://api.example/",
+      "https://legacy.example/health",
+      "https://legacy.example/admin/me",
+    ]) {
+      expect((await worker.fetch(new Request(url), splitEnv, ctx)).status).toBe(404);
+    }
+  });
+
   test.each([undefined, "", "   "])("enables discovery without a domain restriction (%s)", async (restriction) => {
     const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response('{"keys":[]}'));
     try {
@@ -114,7 +143,7 @@ describe("service-cloudflare public routing", () => {
     const health = await worker.fetch(new Request("https://cas.example/health"), env, ctx);
     await expect(health.json()).resolves.toEqual({ ok: true, service: "unicas" });
 
-    for (const path of ["/", "/other", "/_internal/audit/refs", "/mcp/other"]) {
+    for (const path of ["/other", "/_internal/audit/refs", "/mcp/other"]) {
       expect((await worker.fetch(new Request(`https://cas.example${path}`), env, ctx)).status)
         .toBe(404);
     }

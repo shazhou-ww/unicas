@@ -18,10 +18,7 @@ export interface AdminBffConfig {
   readonly oidcIssuer?: string;
   /** Discovery document URL override (tests / local mock provider). */
   readonly oidcDiscoveryUrl?: string;
-  /**
-   * Public origin of the CAS service (e.g. https://cas.example).
-   * Used for absolute accept URLs and CSRF origin checks.
-   */
+  /** Public origin of the administrator console. */
   readonly publicOrigin: string;
   /** Session TTL; default 8 hours, sliding. */
   readonly sessionTtlMs?: number;
@@ -58,6 +55,7 @@ export interface AdminBffEnv {
   SESSION_ENCRYPTION_KEYS?: string;
   OIDC_ISSUER?: string;
   OIDC_DISCOVERY_URL?: string;
+  ADMIN_PUBLIC_ORIGIN?: string;
   PUBLIC_ORIGIN?: string;
   SESSION_TTL_MS?: string;
   SESSION_COOKIE_NAME?: string;
@@ -96,9 +94,9 @@ export function configFromEnv(env: AdminBffEnv): AdminBffConfig {
   if (Object.keys(sessionEncryptionKeys).length === 0) {
     throw new Error("SESSION_ENCRYPTION_KEYS must contain at least one key");
   }
-  const publicOrigin = env.PUBLIC_ORIGIN ?? "";
+  const publicOrigin = env.ADMIN_PUBLIC_ORIGIN ?? env.PUBLIC_ORIGIN ?? "";
   if (publicOrigin.length === 0) {
-    throw new Error("PUBLIC_ORIGIN must be configured");
+    throw new Error("ADMIN_PUBLIC_ORIGIN or PUBLIC_ORIGIN must be configured");
   }
   new URL(publicOrigin); // throws on malformed origin
   const testAccountEmail = env.ADMIN_TEST_ACCOUNT_EMAIL?.trim().toLowerCase() ?? "";

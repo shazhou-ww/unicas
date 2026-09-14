@@ -99,7 +99,9 @@ Those identifiers are public configuration, not credentials, but changing them
 must be intentional. The previous `unidocs-cas` deployment and its
 `unicas.shazhou.work` route remain online as a legacy environment. This
 repository deploys isolated `unicas-*` storage resources and the `unicas`
-Worker at `https://unicas.work`. Existing wire media types and downstream
+Worker at `https://api.unicas.work` and `https://console.unicas.work`. The apex
+route remains attached temporarily as a rollback boundary until split-origin
+validation completes. Existing wire media types and downstream
 issuer identifiers remain compatibility contracts and are not renamed.
 
 ## Worker secrets
@@ -143,11 +145,12 @@ origins. The Worker intentionally keeps the `global_fetch_strictly_public`
 compatibility flag so metadata and JWKS discovery cannot reach private network
 targets.
 
-The Google OAuth web client must register both production redirect URIs:
+Before split-origin deployment, add both production redirect URIs without
+removing the existing apex callbacks:
 
 ```text
-https://unicas.work/admin/auth/callback
-https://unicas.work/oauth/google/callback
+https://console.unicas.work/admin/auth/callback
+https://api.unicas.work/oauth/google/callback
 ```
 
 The first serves administrator WebUI and CLI login; the second serves remote

@@ -9,7 +9,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-export const DEFAULT_ADMIN_ORIGIN = "https://unicas.work";
+export const DEFAULT_ADMIN_ORIGIN = "https://console.unicas.work";
 
 export interface CliConfig {
   /** Origin of the control-plane `/admin` API. */

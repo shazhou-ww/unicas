@@ -11,8 +11,8 @@ Commands call the typed `@unicas/admin-client` over the `/admin` HTTP API;
 `@unicas/service-cloudflare` as a stdio MCP server backed by that client (for
 clients whose MCP support cannot do OAuth, for example DeepSeek Harness).
 
-```
-https://unicas.work/admin  <- /admin control-plane API (BFF session)
+```text
+https://console.unicas.work/admin  <- /admin control-plane API (BFF session)
         ^
         | session cookie + CSRF (via @unicas/admin-client)
 unicas CLI  <- /admin/auth/cli/authorize (BFF does Google OIDC) -> cli/exchange
@@ -20,7 +20,7 @@ unicas CLI  <- /admin/auth/cli/authorize (BFF does Google OIDC) -> cli/exchange
         |
         +-- plain commands:   unicas whoami / unicas stacks list ...
         `-- stdio MCP server: unicas mcp   (DSH: command "unicas", args ["mcp"])
-``````
+```
 
 ## Requirements
 
@@ -138,7 +138,7 @@ Alternatively run any command in-process:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `UNICAS_ADMIN_URL` | `https://unicas.work` | `/admin` API origin |
+| `UNICAS_ADMIN_URL` | `https://console.unicas.work` | `/admin` API origin |
 | `UNICAS_CONFIG_DIR` | `~/.unicas` | Directory holding `session.json` |
 
 ## Network / proxy

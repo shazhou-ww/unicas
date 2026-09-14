@@ -19,6 +19,7 @@ const TRANSACTION_TTL_SECONDS = 10 * 60;
 export interface OAuthAuthorizationEnv {
   OAUTH_KV: KVNamespace;
   OAUTH_PROVIDER?: OAuthHelpers;
+  MCP_PUBLIC_ORIGIN?: string;
   PUBLIC_ORIGIN?: string;
   GOOGLE_OIDC_CLIENT_ID?: string;
   GOOGLE_OIDC_CLIENT_SECRET?: string;
@@ -148,7 +149,7 @@ async function finishGoogleAuthentication(
       csrfToken,
     };
     await writeTransaction(env, consentId, pending);
-    const publicOrigin = normalizePublicOrigin(requireEnv(env.PUBLIC_ORIGIN, "PUBLIC_ORIGIN"));
+    const publicOrigin = normalizePublicOrigin(mcpPublicOrigin(env));
     const clientRedirectOrigin = new URL(pending.oauthRequest.redirectUri).origin;
     return htmlWithCookie(
       renderConsent(pending, consentId, publicOrigin),
@@ -163,7 +164,7 @@ async function finishGoogleAuthentication(
 }
 
 async function finishConsent(request: Request, env: OAuthAuthorizationEnv): Promise<Response> {
-  const publicOrigin = requireEnv(env.PUBLIC_ORIGIN, "PUBLIC_ORIGIN");
+  const publicOrigin = mcpPublicOrigin(env);
   if (!isSameOriginConsent(request, publicOrigin)) {
     return authFailure("Consent must be submitted from the authorization server origin", 403);
   }
@@ -235,7 +236,7 @@ function oidcClient(env: OAuthAuthorizationEnv, options: OAuthAuthorizationHandl
   if (options.oidcFactory) return options.oidcFactory(env);
   const clientId = requireEnv(env.GOOGLE_OIDC_CLIENT_ID, "GOOGLE_OIDC_CLIENT_ID");
   const clientSecret = requireEnv(env.GOOGLE_OIDC_CLIENT_SECRET, "GOOGLE_OIDC_CLIENT_SECRET");
-  const publicOrigin = requireEnv(env.PUBLIC_ORIGIN, "PUBLIC_ORIGIN");
+  const publicOrigin = mcpPublicOrigin(env);
   return new OidcClient({
     issuer: env.OIDC_ISSUER ?? "https://accounts.google.com",
     discoveryUrl: env.OIDC_DISCOVERY_URL,
@@ -243,6 +244,10 @@ function oidcClient(env: OAuthAuthorizationEnv, options: OAuthAuthorizationHandl
     clientSecret,
     redirectUri: `${publicOrigin}/oauth/google/callback`,
   });
+}
+
+function mcpPublicOrigin(env: OAuthAuthorizationEnv): string {
+  return requireEnv(env.MCP_PUBLIC_ORIGIN ?? env.PUBLIC_ORIGIN, "MCP_PUBLIC_ORIGIN");
 }
 
 async function writeTransaction(
@@ -526,7 +531,7 @@ function requireEnv(value: string | undefined, name: string): string {
 function normalizePublicOrigin(value: string): string {
   const url = new URL(value);
   if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
-    throw new Error("PUBLIC_ORIGIN must contain only scheme, host, and optional port");
+    throw new Error("MCP_PUBLIC_ORIGIN must contain only scheme, host, and optional port");
   }
   return url.origin;
 }

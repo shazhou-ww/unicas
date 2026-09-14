@@ -95,7 +95,15 @@ const MCP_BROWSER_COOKIE_NAMES = new Set([
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const requestStarted = performance.now();
-    const pathname = new URL(request.url).pathname;
+    const url = new URL(request.url);
+    const pathname = url.pathname;
+    const routeOwner = publicRouteOwner(pathname);
+    if (routeOwner && !isOwnedPublicOrigin(url, publicOriginFor(routeOwner, env))) {
+      return new Response("Not Found", { status: 404 });
+    }
+    if (request.method === "GET" && pathname === "/") {
+      return Response.redirect(new URL("/admin/", url), 302);
+    }
     if (request.method === "GET" && pathname === "/health") {
       return Response.json({ ok: true, service: "unicas" });
     }
@@ -155,7 +163,7 @@ export default {
 
     if (pathname === "/mcp") {
       const origin = request.headers.get("Origin");
-      const publicOrigin = env.CAS_PUBLIC_ORIGIN ?? env.PUBLIC_ORIGIN;
+      const publicOrigin = env.MCP_PUBLIC_ORIGIN ?? env.PUBLIC_ORIGIN;
       if (origin && origin !== publicOrigin) {
         return Response.json({ error: "MCP_ORIGIN_NOT_ALLOWED" }, { status: 403 });
       }
@@ -173,6 +181,39 @@ export default {
     return new Response("Not Found", { status: 404 });
   },
 } satisfies ExportedHandler<Env>;
+
+type PublicRouteOwner = "cas" | "mcp" | "admin";
+
+function publicRouteOwner(pathname: string): PublicRouteOwner | null {
+  if (pathname === "/" || isPrefixed(pathname, "/admin")) return "admin";
+  if (
+    pathname === "/mcp"
+    || pathname.startsWith("/oauth/")
+    || MCP_METADATA_PATHS.has(pathname)
+  ) return "mcp";
+  if (
+    pathname === "/health"
+    || pathname.startsWith("/stacks/")
+    || pathname.startsWith("/managed-issuers/")
+    || pathname.startsWith("/.well-known/")
+  ) return "cas";
+  return null;
+}
+
+function publicOriginFor(owner: PublicRouteOwner, env: Env): string | undefined {
+  if (owner === "admin") return env.ADMIN_PUBLIC_ORIGIN ?? env.PUBLIC_ORIGIN;
+  if (owner === "mcp") return env.MCP_PUBLIC_ORIGIN ?? env.PUBLIC_ORIGIN;
+  return env.CAS_PUBLIC_ORIGIN ?? env.PUBLIC_ORIGIN;
+}
+
+function isOwnedPublicOrigin(requestUrl: URL, configuredOrigin: string | undefined): boolean {
+  if (!configuredOrigin) return false;
+  try {
+    return requestUrl.origin === new URL(configuredOrigin).origin;
+  } catch {
+    return false;
+  }
+}
 
 function matchStackProtectedResourcePath(pathname: string): string | null {
   const match = /^\/\.well-known\/oauth-protected-resource\/stacks\/([^/]+)$/.exec(pathname);

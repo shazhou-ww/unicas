@@ -1,7 +1,12 @@
 import { describe, expect, test, vi } from "vitest";
 import { main } from "../src/cli.js";
+import { loadConfig } from "../src/config.js";
 
 describe("cli dispatch", () => {
+  test("defaults administrator requests to the console origin", () => {
+    expect(loadConfig({}).adminOrigin).toBe("https://console.unicas.work");
+  });
+
   test("prints help for `unicas help`", async () => {
     const writes: string[] = [];
     const spy = vi.spyOn(process.stdout, "write").mockImplementation(((chunk: unknown) => {

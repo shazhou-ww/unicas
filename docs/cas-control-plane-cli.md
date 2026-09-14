@@ -3,7 +3,7 @@
 `@unicas/admin-cli` (bin `unicas`) is the operator-facing command line for UniCAS
 control plane. It exists because DeepSeek Harness's MCP client only supports
 static headers and therefore cannot complete the OAuth authorization-code flow
-that protects `https://unicas.work/mcp`. The CLI authenticates through
+that protects `https://api.unicas.work/mcp`. The CLI authenticates through
 the control-plane BFF instead: it opens the BFF's `/admin/auth/cli/authorize`,
 the BFF runs Google OIDC (client secret held server-side) and the email
 allowlist, then redirects the browser back to the CLI's loopback with a one-time
@@ -108,5 +108,5 @@ pnpm check:workspace
 
 Unit tests mock the BFF `/admin` API (login/exchange, control-plane operations)
 and a stateless stdio MCP server; they never touch production. A real
-`unicas login` + `unicas whoami` against `https://unicas.work/admin` is a
+`unicas login` + `unicas whoami` against `https://console.unicas.work/admin` is a
 manual verification step (browser Google sign-in + UniCAS consent required).

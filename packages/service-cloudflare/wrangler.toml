@@ -9,6 +9,14 @@ preview_urls = false
 pattern = "unicas.work"
 custom_domain = true
 
+[[routes]]
+pattern = "api.unicas.work"
+custom_domain = true
+
+[[routes]]
+pattern = "console.unicas.work"
+custom_domain = true
+
 [[d1_databases]]
 binding = "CAS_CONTROL_DB"
 database_name = "unicas-control"
@@ -44,7 +52,9 @@ storage = "sqlite"
 
 [vars]
 CAS_ADMIN_MOUNT = "/admin"
-CAS_PUBLIC_ORIGIN = "https://unicas.work"
+CAS_PUBLIC_ORIGIN = "https://api.unicas.work"
+MCP_PUBLIC_ORIGIN = "https://api.unicas.work"
+ADMIN_PUBLIC_ORIGIN = "https://console.unicas.work"
 PUBLIC_ORIGIN = "https://unicas.work"
 GOOGLE_OIDC_CLIENT_ID = "152437813368-hrv07qv06756pg68c4p9f84i8cf4uk00.apps.googleusercontent.com"
 MCP_ALLOWED_ORIGIN_HOSTNAMES = ""

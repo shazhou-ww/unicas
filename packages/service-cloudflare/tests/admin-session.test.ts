@@ -93,6 +93,15 @@ describe("configFromEnv", () => {
     expect(config.oidcIssuer).toBe("https://accounts.google.com");
   });
 
+  test("prefers the administrator origin over the compatibility fallback", () => {
+    const config = configFromEnv({
+      SESSION_ENCRYPTION_KEYS: JSON.stringify({ v1: randomKey() }),
+      ADMIN_PUBLIC_ORIGIN: "https://console.example",
+      PUBLIC_ORIGIN: "https://legacy.example",
+    });
+    expect(config.publicOrigin).toBe("https://console.example");
+  });
+
   test("parses and cross-validates test account and email allowlist", () => {
     const baseEnv = {
       SESSION_ENCRYPTION_KEYS: JSON.stringify({ v1: randomKey() }),

@@ -4,13 +4,13 @@ The `@unicas/service-cloudflare` Worker exposes the UniCAS control plane to
 GitHub Copilot and other remote MCP clients at:
 
 ```text
-https://unicas.work/mcp
+https://api.unicas.work/mcp
 ```
 
 The unified Worker accepts an exact allowlist of `/mcp`, OAuth discovery,
 authorization, token, and registration paths. It does not expose an arbitrary
 `/oauth/*` prefix. A present browser
-`Origin` on `/mcp` must exactly match the configured `CAS_PUBLIC_ORIGIN`; requests
+`Origin` on `/mcp` must exactly match the configured `MCP_PUBLIC_ORIGIN`; requests
 without `Origin` remain valid for non-browser MCP clients.
 
 ## GitHub Copilot configuration
@@ -22,7 +22,7 @@ No API key or OAuth client secret belongs in MCP configuration:
   "servers": {
     "unicas-control-plane": {
       "type": "http",
-      "url": "https://unicas.work/mcp"
+      "url": "https://api.unicas.work/mcp"
     }
   }
 }
@@ -114,7 +114,7 @@ CAS_AUDIT_READER_KEY        shared key for the private audit-reader RPC
 Variables (non-secret; `GOOGLE_OIDC_CLIENT_ID` is a var, not a secret):
 
 ```text
-PUBLIC_ORIGIN=https://unicas.work
+MCP_PUBLIC_ORIGIN=https://api.unicas.work
 MCP_MUTATIONS_ENABLED=true
 MCP_ALLOWED_ORIGIN_HOSTNAMES=
 OIDC_ISSUER=...                 optional, defaults to Google
@@ -153,9 +153,10 @@ replace that test.
 ## Rollout and incident response
 
 1. Create the dedicated production OAuth KV namespace and replace its binding ID.
-2. Register both `https://unicas.work/admin/auth/callback` and
-  `https://unicas.work/oauth/google/callback` with Google before enabling
-  administrator or MCP login.
+2. Register `https://console.unicas.work/admin/auth/callback` and
+  `https://api.unicas.work/oauth/google/callback` with Google before enabling
+  split-origin administrator or MCP login. Keep the existing apex callbacks
+  during the migration window.
 3. Set Worker secrets and deploy `@unicas/service-cloudflare` with mutations disabled.
 4. Validate OAuth discovery and read tools from GitHub Copilot.
 5. Observe authorization failures, scope/member denials, D1/KV errors, and audit

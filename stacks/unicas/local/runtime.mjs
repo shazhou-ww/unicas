@@ -89,6 +89,7 @@ export async function startLocalUnicasRuntime({
     GOOGLE_OIDC_CLIENT_ID: process.env.GOOGLE_OIDC_CLIENT_ID ?? "unicas-local-admin",
     GOOGLE_OIDC_CLIENT_SECRET: process.env.GOOGLE_OIDC_CLIENT_SECRET ?? "unicas-local-admin-secret",
     SESSION_ENCRYPTION_KEYS: JSON.stringify({ local: SESSION_KEY }),
+    ADMIN_PUBLIC_ORIGIN: adminOrigin,
     PUBLIC_ORIGIN: adminOrigin,
     SESSION_COOKIE_SECURE: "false",
     OIDC_ISSUER: useGoogle
@@ -115,6 +116,7 @@ export async function startLocalUnicasRuntime({
           ...adminBindings,
           CAS_AUDIT_READER_KEY: "unicas-local-audit-reader-key",
           CAS_PUBLIC_ORIGIN: adminOrigin,
+          MCP_PUBLIC_ORIGIN: adminOrigin,
           MCP_ALLOWED_ORIGIN_HOSTNAMES: "",
           MCP_MUTATIONS_ENABLED: "true",
           OAUTH_STATE_ENCRYPTION_KEY: SESSION_KEY,
