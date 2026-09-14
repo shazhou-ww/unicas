@@ -2,6 +2,8 @@
 
 This directory is the repository-owned task ledger. Task state travels with the
 code and does not depend on a particular issue tracker or hosting platform.
+Repository agents are required by [`AGENTS.md`](../AGENTS.md) to follow this
+workflow for planned or multi-step work.
 
 ## Documentation boundary
 

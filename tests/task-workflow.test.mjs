@@ -5,6 +5,7 @@ import { describe, expect, test } from "vitest";
 const ROOT = join(import.meta.dirname, "..");
 const TASKS = join(ROOT, "tasks");
 const DOCS = join(ROOT, "docs");
+const AGENT_INSTRUCTIONS = join(ROOT, "AGENTS.md");
 const STATES = ["backlog", "ongoing", "archived"];
 const REQUIRED_TASK_HEADINGS = [
   "## Goal",
@@ -33,6 +34,23 @@ function markdownFiles(directory, files = []) {
 }
 
 describe("repository task workflow", () => {
+  test("uses one platform-neutral global agent instruction file", () => {
+    expect(existsSync(AGENT_INSTRUCTIONS)).toBe(true);
+    expect(existsSync(join(ROOT, ".github", "copilot-instructions.md"))).toBe(false);
+    const instructions = readFileSync(AGENT_INSTRUCTIONS, "utf8");
+    for (const required of [
+      "tasks/README.md",
+      "tasks/backlog/",
+      "tasks/ongoing/",
+      "Progress.md",
+      "tasks/archived/",
+      "Reserve `docs/`",
+      "pnpm check:tasks",
+    ]) {
+      expect(instructions).toContain(required);
+    }
+  });
+
   test("uses the three canonical status directories", () => {
     expect(existsSync(join(TASKS, "archieved"))).toBe(false);
     expect(STATES.filter((state) => !existsSync(join(TASKS, state)))).toEqual([]);
