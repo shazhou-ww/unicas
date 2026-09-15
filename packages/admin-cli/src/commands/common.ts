@@ -77,10 +77,26 @@ export async function resolveStackEtag(admin: AdminClient, stackId: string): Pro
   return etag;
 }
 
+export async function resolveAppEtag(admin: AdminClient, appId: string): Promise<string> {
+  const { etag } = await admin.getApp({ appId });
+  if (etag.length === 0) {
+    throw new CliError(`could not resolve the current ETag for App '${appId}'`, 1);
+  }
+  return etag;
+}
+
 export async function resolveOAuthIssuerEtag(admin: AdminClient, stackId: string): Promise<string> {
   const { etag } = await admin.getOAuthIssuer({ stackId });
   if (etag.length === 0) {
     throw new CliError(`could not resolve the current ETag for OAuth issuer of stack '${stackId}'`, 1);
+  }
+  return etag;
+}
+
+export async function resolveAppOAuthIssuerEtag(admin: AdminClient, appId: string): Promise<string> {
+  const { value, etag } = await admin.getAppOAuthIssuer({ appId });
+  if (value === null || etag.length === 0) {
+    throw new CliError(`could not resolve the current ETag for OAuth issuer of App '${appId}'`, 1);
   }
   return etag;
 }

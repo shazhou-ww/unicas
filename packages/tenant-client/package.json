@@ -1,7 +1,7 @@
 {
   "name": "@unicas/tenant-client",
   "version": "0.1.0",
-  "description": "Cloud-neutral HTTP client for the UniCAS tenant data plane",
+  "description": "Cloud-neutral HTTP client for UniCAS App/Space v2 and frozen Stack/Tenant v1 data planes",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

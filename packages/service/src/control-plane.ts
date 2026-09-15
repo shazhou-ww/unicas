@@ -40,6 +40,7 @@ import type {
   CasAdminPatchManagedIssuerRequest,
   CasAdminPatchManagedIssuerResponse,
   CasOperatorIdentityKey,
+  ManagedSpaceCapability,
 } from "@unicas/admin-protocol";
 import type { ControlAuditAction } from "./control-audit.js";
 
@@ -127,6 +128,10 @@ export interface ControlPlaneOperations {
     ctx: ControlPlaneCallContext,
     request: CasAdminMintManagedCapabilityRequest,
   ): Promise<CasAdminMintManagedCapabilityResponse>;
+  mintManagedSpaceCapability(
+    ctx: ControlPlaneCallContext,
+    appId: string,
+  ): Promise<ManagedSpaceCapability | CasAdminErrorResponse>;
   inspectOAuthIssuer(
     ctx: ControlPlaneCallContext,
     request: CasAdminInspectOAuthIssuerRequest,

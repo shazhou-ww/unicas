@@ -20,7 +20,7 @@ export const DOCUMENTS = [
   ["cas-operations", "Operations", "Operate"],
   ["deployment-and-local-configuration", "Deployment and Local Configuration", "Operate"],
   ["observability", "Observability", "Operate"],
-  ["cas-tenant-debug-tools", "Tenant Debug Tools", "Operate"],
+  ["cas-tenant-debug-tools", "Legacy Tenant Debug Tools", "Operate"],
 ];
 
 const PACKAGE_REFERENCES = [

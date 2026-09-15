@@ -10,6 +10,7 @@
  */
 
 import {
+  appAdminRoutes,
   casAdminRoutes,
   CasAdminETagHeader,
   CasAdminIdempotencyKeyHeader,
@@ -23,6 +24,15 @@ import type {
   CasAdminPageQuery,
 } from "@unicas/admin-protocol";
 import type {
+  App,
+  AppAdminMeResponse,
+  AppControlAuditEvent,
+  AppId,
+  AppMemberInvitation,
+  AppMembership,
+  AppOAuthIssuer,
+  AppOAuthIssuerInspection,
+  AppRefDomain,
   CasControlAuditEvent,
   CasMemberInvitation,
   CasOperatorIdentity,
@@ -37,6 +47,10 @@ import type {
   CasStackMember,
   CasStackOAuthIssuer,
   CasManagedCapability,
+  ManagedSpaceCapability,
+  Principal,
+  SpaceRootRefBalance,
+  SpaceRootRefEvent,
 } from "@unicas/admin-protocol";
 import { AdminClientError } from "./errors.js";
 import type {
@@ -48,6 +62,80 @@ import type {
 
 export interface AdminClient {
   me(): Promise<{ readonly identity: CasOperatorIdentity; readonly memberships: readonly CasStackMember[] }>;
+  getCurrentPrincipal(): Promise<AppAdminMeResponse>;
+  listApps(query?: CasAdminPageQuery): Promise<CasAdminPage<App>>;
+  createApp(
+    body: { readonly displayName: string },
+    headers?: CasAdminCreateHeaders,
+  ): Promise<AdminClientRead<App>>;
+  getApp(path: { readonly appId: AppId }): Promise<AdminClientRead<App>>;
+  patchApp(
+    path: { readonly appId: AppId },
+    body: { readonly displayName?: string; readonly description?: string },
+    ifMatch: string,
+  ): Promise<AdminClientRead<App>>;
+  listAppMembers(
+    path: { readonly appId: AppId },
+    query?: CasAdminPageQuery,
+  ): Promise<CasAdminPage<AppMembership>>;
+  deleteAppMember(
+    path: { readonly appId: AppId },
+    principal: Principal,
+    ifMatch: string,
+  ): Promise<{ readonly ok: true }>;
+  createAppMemberInvitation(
+    path: { readonly appId: AppId },
+    body?: { readonly emailConstraint?: string },
+    headers?: CasAdminCreateHeaders,
+  ): Promise<{ readonly invitation: AppMemberInvitation; readonly acceptUrl: string }>;
+  acceptAppMemberInvitation(path: { readonly token: string }): Promise<AppMembership>;
+  listAppPlaygroundFileRoots(path: { readonly appId: AppId }): Promise<{ readonly items: readonly CasPlaygroundFileRoot[] }>;
+  createAppPlaygroundFileRoot(
+    path: { readonly appId: AppId },
+    body: { readonly rootId: string; readonly name: string; readonly manifestHash: string },
+  ): Promise<AdminClientRead<CasPlaygroundFileRoot>>;
+  patchAppPlaygroundFileRoot(
+    path: { readonly appId: AppId; readonly rootId: string },
+    body: { readonly name: string; readonly manifestHash: string },
+    ifMatch: string,
+  ): Promise<AdminClientRead<CasPlaygroundFileRoot>>;
+  deleteAppPlaygroundFileRoot(
+    path: { readonly appId: AppId; readonly rootId: string },
+    ifMatch: string,
+  ): Promise<{ readonly ok: true }>;
+  getAppOAuthIssuer(
+    path: { readonly appId: AppId },
+    query?: { readonly optional?: boolean },
+  ): Promise<AdminClientRead<AppOAuthIssuer | null>>;
+  getAppManagedIssuer(path: { readonly appId: AppId }): Promise<AdminClientRead<AppOAuthIssuer>>;
+  patchAppManagedIssuer(
+    path: { readonly appId: AppId },
+    body: { readonly enabled: boolean },
+    ifMatch: string,
+  ): Promise<AdminClientRead<AppOAuthIssuer>>;
+  mintManagedSpaceCapability(path: { readonly appId: string }): Promise<ManagedSpaceCapability>;
+  inspectAppOAuthIssuer(
+    path: { readonly appId: AppId },
+    body: { readonly issuer: string },
+  ): Promise<AdminClientRead<AppOAuthIssuerInspection>>;
+  activateAppOAuthIssuer(
+    path: { readonly appId: AppId },
+    body: { readonly inspectionId: string; readonly activationProof: string },
+    ifMatch: string,
+  ): Promise<AdminClientRead<AppOAuthIssuer>>;
+  listAppRefDomains(path: { readonly appId: AppId }): Promise<{ readonly domains: readonly AppRefDomain[] }>;
+  listAppControlAuditEvents(
+    path: { readonly appId: AppId },
+    query?: CasAdminPageQuery & { readonly after?: string },
+  ): Promise<CasAdminPage<AppControlAuditEvent>>;
+  listSpaceRootDomainRefs(
+    path: { readonly appId: AppId; readonly refDomain: string },
+    query?: { readonly spaceId?: string; readonly limit?: number; readonly cursor?: string },
+  ): Promise<{ readonly revision: number; readonly refs: readonly SpaceRootRefBalance[]; readonly nextCursor: string | null }>;
+  listSpaceRootDomainEvents(
+    path: { readonly appId: AppId; readonly refDomain: string },
+    query?: { readonly spaceId?: string; readonly after?: number; readonly limit?: number },
+  ): Promise<{ readonly events: readonly SpaceRootRefEvent[]; readonly latestRevision: number; readonly nextAfter: number }>;
   listStacks(query?: CasAdminPageQuery): Promise<CasAdminPage<CasStack>>;
   createStack(
     body: { readonly displayName: string },
@@ -187,6 +275,239 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
   return {
     async me() {
       const response = await requireOk(await request(casAdminRoutes.me()), "me");
+      const body: unknown = await response.json();
+      if (!isRecord(body) || !isRecord(body.identity) || !Array.isArray(body.memberships)) {
+        throw new AdminClientError(502, "ADMIN_CONTRACT_MISMATCH", "legacy administrator identity response was not returned");
+      }
+      return body as { readonly identity: CasOperatorIdentity; readonly memberships: readonly CasStackMember[] };
+    },
+
+    async getCurrentPrincipal() {
+      const response = await requireOk(
+        await request(appAdminRoutes.me()),
+        "getCurrentPrincipal",
+      );
+      const body: unknown = await response.json();
+      if (!isRecord(body) || !isRecord(body.principal) || !isRecord(body.profile) || !Array.isArray(body.memberships)) {
+        throw new AdminClientError(502, "ADMIN_CONTRACT_MISMATCH", "App administrator identity response was not returned");
+      }
+      return body as unknown as AppAdminMeResponse;
+    },
+
+    async listApps(query) {
+      const response = await requireOk(
+        await request(`${appAdminRoutes.apps()}${queryString(pageQuery(query))}`),
+        "listApps",
+      );
+      return response.json();
+    },
+
+    async createApp(body, headers) {
+      const response = await requireOk(
+        await request(appAdminRoutes.apps(), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...mutationHeaders(headers),
+          },
+          body: JSON.stringify(body),
+        }),
+        "createApp",
+      );
+      return { value: await response.json(), etag: readEtag(response) };
+    },
+
+    async getApp(path) {
+      const response = await requireOk(await request(appAdminRoutes.app(path)), "getApp");
+      return { value: await response.json(), etag: readEtag(response) };
+    },
+
+    async patchApp(path, body, ifMatch) {
+      const response = await requireOk(
+        await request(appAdminRoutes.app(path), {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", ...ifMatchHeader(ifMatch) },
+          body: JSON.stringify(body),
+        }),
+        "patchApp",
+      );
+      return { value: await response.json(), etag: readEtag(response) };
+    },
+
+    async listAppMembers(path, query) {
+      const response = await requireOk(
+        await request(`${appAdminRoutes.members(path)}${queryString(pageQuery(query))}`),
+        "listAppMembers",
+      );
+      return response.json();
+    },
+
+    async deleteAppMember(path, principal, ifMatch) {
+      const response = await requireOk(
+        await request(`${appAdminRoutes.members(path)}${queryString(principal)}`, {
+          method: "DELETE",
+          headers: ifMatchHeader(ifMatch),
+        }),
+        "deleteAppMember",
+      );
+      return response.json();
+    },
+
+    async createAppMemberInvitation(path, body, headers) {
+      const response = await requireOk(
+        await request(appAdminRoutes.memberInvitations(path), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...mutationHeaders(headers),
+          },
+          body: JSON.stringify(body ?? {}),
+        }),
+        "createAppMemberInvitation",
+      );
+      return response.json();
+    },
+
+    async acceptAppMemberInvitation(path) {
+      const response = await requireOk(
+        await request(appAdminRoutes.acceptMemberInvitation(path), { method: "POST" }),
+        "acceptAppMemberInvitation",
+      );
+      return response.json();
+    },
+
+    async listAppPlaygroundFileRoots(path) {
+      const response = await requireOk(
+        await request(appAdminRoutes.playgroundFileRoots(path)),
+        "listAppPlaygroundFileRoots",
+      );
+      return response.json();
+    },
+
+    async createAppPlaygroundFileRoot(path, body) {
+      const response = await requireOk(
+        await request(appAdminRoutes.playgroundFileRoots(path), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+        "createAppPlaygroundFileRoot",
+      );
+      return { value: await response.json(), etag: readEtag(response) };
+    },
+
+    async patchAppPlaygroundFileRoot(path, body, ifMatch) {
+      const response = await requireOk(
+        await request(appAdminRoutes.playgroundFileRoot(path), {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", ...ifMatchHeader(ifMatch) },
+          body: JSON.stringify(body),
+        }),
+        "patchAppPlaygroundFileRoot",
+      );
+      return { value: await response.json(), etag: readEtag(response) };
+    },
+
+    async deleteAppPlaygroundFileRoot(path, ifMatch) {
+      const response = await requireOk(
+        await request(appAdminRoutes.playgroundFileRoot(path), {
+          method: "DELETE",
+          headers: ifMatchHeader(ifMatch),
+        }),
+        "deleteAppPlaygroundFileRoot",
+      );
+      return response.json();
+    },
+
+    async getAppOAuthIssuer(path, query) {
+      const response = await requireOk(
+        await request(`${appAdminRoutes.oauthIssuer(path)}${queryString(query)}`),
+        "getAppOAuthIssuer",
+      );
+      return { value: await response.json(), etag: readEtag(response) };
+    },
+
+    async getAppManagedIssuer(path) {
+      const response = await requireOk(
+        await request(appAdminRoutes.managedIssuer(path)),
+        "getAppManagedIssuer",
+      );
+      return { value: await response.json(), etag: readEtag(response) };
+    },
+
+    async patchAppManagedIssuer(path, body, ifMatch) {
+      const response = await requireOk(
+        await request(appAdminRoutes.managedIssuer(path), {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", ...ifMatchHeader(ifMatch) },
+          body: JSON.stringify(body),
+        }),
+        "patchAppManagedIssuer",
+      );
+      return { value: await response.json(), etag: readEtag(response) };
+    },
+
+    async mintManagedSpaceCapability(path) {
+      const response = await requireOk(
+        await request(appAdminRoutes.managedCapability(path), { method: "POST" }),
+        "mintManagedSpaceCapability",
+      );
+      return response.json();
+    },
+
+    async inspectAppOAuthIssuer(path, body) {
+      const response = await requireOk(
+        await request(appAdminRoutes.oauthIssuerInspections(path), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+        "inspectAppOAuthIssuer",
+      );
+      return { value: await response.json(), etag: readEtag(response) };
+    },
+
+    async activateAppOAuthIssuer(path, body, ifMatch) {
+      const response = await requireOk(
+        await request(appAdminRoutes.oauthIssuer(path), {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", ...ifMatchHeader(ifMatch) },
+          body: JSON.stringify(body),
+        }),
+        "activateAppOAuthIssuer",
+      );
+      return { value: await response.json(), etag: readEtag(response) };
+    },
+
+    async listAppRefDomains(path) {
+      const response = await requireOk(
+        await request(appAdminRoutes.refDomains(path)),
+        "listAppRefDomains",
+      );
+      return response.json();
+    },
+
+    async listAppControlAuditEvents(path, query) {
+      const response = await requireOk(
+        await request(`${appAdminRoutes.controlAuditEvents(path)}${queryString(query)}`),
+        "listAppControlAuditEvents",
+      );
+      return response.json();
+    },
+
+    async listSpaceRootDomainRefs(path, query) {
+      const response = await requireOk(
+        await request(`${appAdminRoutes.rootDomainRefs(path)}${queryString(query)}`),
+        "listSpaceRootDomainRefs",
+      );
+      return response.json();
+    },
+
+    async listSpaceRootDomainEvents(path, query) {
+      const response = await requireOk(
+        await request(`${appAdminRoutes.rootDomainEvents(path)}${queryString(query)}`),
+        "listSpaceRootDomainEvents",
+      );
       return response.json();
     },
 
@@ -396,5 +717,9 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
       return response.json();
     },
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 

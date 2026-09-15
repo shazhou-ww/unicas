@@ -1,9 +1,12 @@
+import { APP_ADMIN_MCP_TOOL_LIST } from "@unicas/admin-protocol";
 import { describe, expect, test } from "vitest";
+import { z } from "zod";
 import { getToolDefinition, TOOL_CATALOG } from "../src/mcp/catalog.js";
 
 /** The exact tool contract of the remote control-plane MCP server. */
 const REMOTE_TOOL_NAMES = [
   "whoami",
+  ...APP_ADMIN_MCP_TOOL_LIST.map((tool) => tool.name),
   "list_stacks",
   "get_stack",
   "list_members",
@@ -34,11 +37,22 @@ describe("tool catalog", () => {
     }
   });
 
+  test("App tool inputs contain no legacy Stack or Tenant fields", () => {
+    for (const tool of APP_ADMIN_MCP_TOOL_LIST) {
+      const schema = JSON.stringify(z.toJSONSchema(tool.registration.inputSchema));
+      expect(schema, tool.name).not.toMatch(/stackId|tenantId/);
+    }
+  });
+
   test("creation tools are idempotent; destructive mutations are annotated", () => {
     expect(getToolDefinition("create_stack")?.annotations.idempotentHint).toBe(true);
     expect(getToolDefinition("invite_member")?.annotations.idempotentHint).toBe(true);
     expect(getToolDefinition("remove_member")?.annotations.destructiveHint).toBe(true);
     expect(getToolDefinition("inspect_oauth_issuer")?.annotations.readOnlyHint).toBeUndefined();
+    expect(getToolDefinition("create_app")?.annotations.idempotentHint).toBe(true);
+    expect(getToolDefinition("invite_app_member")?.annotations.idempotentHint).toBe(true);
+    expect(getToolDefinition("remove_app_member")?.annotations.destructiveHint).toBe(true);
+    expect(getToolDefinition("delete_app_playground_file_root")?.annotations.destructiveHint).toBe(true);
   });
 
   test("input schemas validate and reject bad arguments", () => {
@@ -66,5 +80,18 @@ describe("tool catalog", () => {
     const inspect = getToolDefinition("inspect_oauth_issuer");
     expect(inspect?.inputSchema.safeParse({ stackId: "s", issuer: "https://issuer.example" }).success).toBe(true);
     expect(inspect?.inputSchema.safeParse({ stackId: "s", issuer: "https://issuer.example", extra: true }).success).toBe(false);
+
+    const spaceRefs = getToolDefinition("list_space_root_domain_refs");
+    expect(spaceRefs?.inputSchema.safeParse({ appId: "a", refDomain: "doc", spaceId: "s" }).success).toBe(true);
+    expect(spaceRefs?.inputSchema.safeParse({ stackId: "a", refDomain: "doc", tenantId: "s" }).success).toBe(false);
+
+    const removeAppMember = getToolDefinition("remove_app_member");
+    expect(removeAppMember?.inputSchema.safeParse({
+      appId: "a",
+      issuer: "https://issuer.example",
+      subject: "sub",
+      etag: "\"1\"",
+      confirmSubject: "sub",
+    }).success).toBe(true);
   });
 });

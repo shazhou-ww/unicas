@@ -1,5 +1,6 @@
 export type {
   App,
+  AppAdminMeResponse,
   AppControlAuditEvent,
   AppMemberInvitation,
   AppMemberInvitationStatus,
@@ -85,6 +86,9 @@ export {
   appAdminApiContract,
 } from "./app-v2-contract.js";
 export type { AppAdminApiContract } from "./app-v2-contract.js";
+
+export { APP_ADMIN_MCP_TOOLS, APP_ADMIN_MCP_TOOL_LIST } from "./app-mcp-catalog.js";
+export type { AppAdminMcpToolDefinition, AppAdminMcpToolName, AppAdminMcpToolScope } from "./app-mcp-catalog.js";
 
 export {
   CasAdminErrorCodes,

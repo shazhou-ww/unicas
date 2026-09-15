@@ -2,7 +2,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { MyStacksView } from "../src/ui/index.js";
+import { MyAppsView } from "../src/ui/index.js";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -22,40 +22,45 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("MyStacksView", () => {
-  test("shows loading then the stack list", async () => {
-    fetchMock.mockResolvedValueOnce(json({ items: [
-      { stackId: "cas_one", displayName: "Cloudflare", status: "active", createdAt: 1, revision: 1 },
-    ] }));
-    render(<MyStacksView />);
+describe("MyAppsView", () => {
+  test("shows loading then the App list", async () => {
+    fetchMock.mockResolvedValueOnce(json({
+      items: [
+        { appId: "cas_one", displayName: "Cloudflare", description: "", status: "active", createdAt: 1, revision: 1 },
+      ]
+    }));
+    render(<MyAppsView />);
     expect(screen.getByRole("status")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "CAS stacks" })).toBeInTheDocument();
-    expect(screen.getByText(/top-level UniCAS trust and storage boundary/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "UniCAS Apps" })).toBeInTheDocument();
+    expect(screen.getByText(/top-level UniCAS trust/)).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("Cloudflare")).toBeInTheDocument());
     expect(screen.getByText("cas_one")).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith("/admin/stacks", expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith("/admin/apps", expect.any(Object));
+    expect(screen.getByRole("link", { name: /Cloudflare/ })).toHaveAttribute("href", "#/apps/cas_one");
   });
 
-  test("shows the empty state when there are no stacks", async () => {
+  test("shows the empty state when there are no Apps", async () => {
     fetchMock.mockResolvedValueOnce(json({ items: [] }));
-    render(<MyStacksView />);
-    await waitFor(() => expect(screen.getByText(/not a member of any stack/)).toBeInTheDocument());
+    render(<MyAppsView />);
+    await waitFor(() => expect(screen.getByText(/not a member of any App/)).toBeInTheDocument());
   });
 
-  test("creates a stack and refreshes the list", async () => {
+  test("creates an App and refreshes the list", async () => {
     fetchMock
       .mockResolvedValueOnce(json({ items: [] }))
-      .mockResolvedValueOnce(json({ stackId: "cas_new", displayName: "New", status: "active", createdAt: 1, revision: 1 }))
-      .mockResolvedValueOnce(json({ items: [
-        { stackId: "cas_new", displayName: "New", status: "active", createdAt: 1, revision: 1 },
-      ] }));
+      .mockResolvedValueOnce(json({ appId: "cas_new", displayName: "New", description: "", status: "active", createdAt: 1, revision: 1 }))
+      .mockResolvedValueOnce(json({
+        items: [
+          { appId: "cas_new", displayName: "New", description: "", status: "active", createdAt: 1, revision: 1 },
+        ]
+      }));
     const user = userEvent.setup();
-    render(<MyStacksView />);
+    render(<MyAppsView />);
     await waitFor(() => expect(screen.getByText(/not a member/)).toBeInTheDocument());
-    await user.type(screen.getByLabelText("Stack display name"), "New");
-    await user.click(screen.getByRole("button", { name: "Create stack" }));
+    await user.type(screen.getByLabelText("App display name"), "New");
+    await user.click(screen.getByRole("button", { name: "Create App" }));
     await waitFor(() => expect(screen.getByText("cas_new")).toBeInTheDocument());
-    const createCall = fetchMock.mock.calls.find((call) => call[0] === "/admin/stacks" && call[1]?.method === "POST");
+    const createCall = fetchMock.mock.calls.find((call) => call[0] === "/admin/apps" && call[1]?.method === "POST");
     expect(createCall).toBeDefined();
     expect(JSON.parse(createCall![1]!.body as string)).toEqual({ displayName: "New" });
   });
@@ -65,10 +70,10 @@ describe("MyStacksView", () => {
       .mockResolvedValueOnce(json({ items: [] }))
       .mockResolvedValueOnce(json({ error: "INVALID_REQUEST", message: "displayName must not be empty" }, 400));
     const user = userEvent.setup();
-    render(<MyStacksView />);
+    render(<MyAppsView />);
     await waitFor(() => expect(screen.getByText(/not a member/)).toBeInTheDocument());
-    await user.type(screen.getByLabelText("Stack display name"), "X");
-    await user.click(screen.getByRole("button", { name: "Create stack" }));
+    await user.type(screen.getByLabelText("App display name"), "X");
+    await user.click(screen.getByRole("button", { name: "Create App" }));
     await waitFor(() => expect(screen.getByText("displayName must not be empty")).toBeInTheDocument());
   });
 });

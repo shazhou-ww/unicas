@@ -37,11 +37,11 @@ accepted by `/mcp`.
 
 | Scope | Operations |
 | --- | --- |
-| `control:read` | Identity, stacks, membership, Stack OAuth issuer configuration, observed refDomains, and audit reads |
-| `control:write` | Stack creation and stack metadata updates |
-| `control:security` | Member invitation/removal and Stack OAuth issuer activation |
+| `control:read` | Principal/Profile, Apps, membership, App issuers, Playground roots, observed refDomains, and App/Space audit reads |
+| `control:write` | App creation/metadata and Principal-owned Playground root mutations |
+| `control:security` | App member invitation/removal, issuer lifecycle, and managed Space capability issuance |
 
-Scopes do not imply each other. Current stack membership is checked during each
+Scopes do not imply each other. Current App membership is checked during each
 tool call, so removing a member takes effect without waiting for token expiry.
 `ADMIN_EMAIL_ALLOWLIST`, when configured, is also checked during every MCP call.
 
@@ -51,35 +51,46 @@ resource. The token endpoint also implements RFC 7009 revocation.
 
 ## Tools
 
-Read tools:
+The remote and stdio servers import one shared App tool catalog from
+`@unicas/admin-protocol`; names, descriptions, schemas, annotations, and scope
+requirements are therefore identical.
 
-- `whoami`
-- `list_stacks`
-- `get_stack`
-- `list_members`
-- `get_oauth_issuer`
-- `list_ref_domains`
-- `list_control_audit_events`
-- `list_root_domain_refs`
-- `list_root_domain_events`
+App read tools:
 
-Ordinary write tools:
+- `get_current_principal`
+- `list_apps`, `get_app`, `list_app_members`
+- `get_app_oauth_issuer`, `get_app_managed_issuer`
+- `list_app_playground_file_roots`
+- `list_app_ref_domains`, `list_app_control_audit_events`
+- `list_space_root_domain_refs`, `list_space_root_domain_events`
 
-- `create_stack`
-- `update_stack`
+App write tools:
 
-Security tools:
+- `create_app`, `update_app`
+- `create_app_playground_file_root`
+- `update_app_playground_file_root`
+- `delete_app_playground_file_root`
 
-- `invite_member`
-- `remove_member`
-- `inspect_oauth_issuer`
-- `activate_oauth_issuer`
+App security tools:
 
-A stack's signing authority is exclusively a discovered OAuth issuer:
-`inspect_oauth_issuer` validates and persists the issuer's metadata and JWKS
+- `invite_app_member`, `accept_app_member_invitation`, `remove_app_member`
+- `inspect_app_oauth_issuer`, `activate_app_oauth_issuer`
+- `update_app_managed_issuer`, `mint_managed_space_capability`
+
+App-scoped tools use `appId` and, where applicable, `spaceId`. Membership and
+audit operations use Principal `issuer`/`subject` fields. Physical Stack/Tenant
+dimensions are translated only inside the platform adapter and never appear in
+v2 MCP input or output.
+
+The catalog contains 23 App tools and 15 v1 tools. The v1 tools, including `whoami`, `list_stacks`, and
+`list_root_domain_refs`, remain structurally unchanged for explicit compatibility.
+They are not aliases for the App tools.
+
+An App's signing authority is exclusively a discovered OAuth issuer:
+`inspect_app_oauth_issuer` validates and persists the issuer's metadata and JWKS
 snapshot and returns a control challenge, which the operator signs with a key
 the issuer currently advertises and submits as a compact-JWS activation proof
-to `activate_oauth_issuer`. There is no manual issuer or JWK upload path, and
+to `activate_app_oauth_issuer`. There is no manual issuer or JWK upload path, and
 private key material is never a valid MCP input.
 
 Creation tools require an idempotency key. Existing-resource mutations require a
@@ -88,10 +99,10 @@ Member removal requires explicit target confirmation.
 Destructive annotations are advisory metadata; the server always
 enforces scopes, membership, ETags, confirmations, and service invariants.
 
-`list_ref_domains` is an audit discovery tool. It lists domains observed in
+`list_app_ref_domains` is an audit discovery tool. It lists domains observed in
 successful Root Ref writes; domains are not pre-registered or lifecycle-managed
 through MCP. A ref domain is an event field used to filter and aggregate Root
-Ref audit data, not a separately managed stack resource.
+Ref audit data, not a separately managed App resource.
 
 ## Worker configuration
 
@@ -124,7 +135,7 @@ OIDC_DISCOVERY_URL=...          optional test/local override
 `MCP_MUTATIONS_ENABLED` is the emergency and rollout kill switch. An absent or
 non-`true` value fails closed; read tools remain available while all
 write/security handlers reject mutations. Production enables it explicitly
-after read-only telemetry and cross-stack
+after read-only telemetry and cross-App
 isolation checks pass.
 
 Configure the `OAUTH_KV` ID in
@@ -147,7 +158,7 @@ node stacks/unicas/deploy/mcp-oauth-smoke.mjs
 ```
 
 The release gate additionally requires a real GitHub Copilot flow through the
-custom domain: discovery, Google login, consent, `whoami`, a paginated read,
+custom domain: discovery, Google login, consent, `get_current_principal`, a paginated App read,
 refresh, revoke, and reauthorization. A manually injected bearer token does not
 replace that test.
 

@@ -1,31 +1,31 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Copy, Power, Search, ShieldCheck } from "lucide-react";
 import type {
-  CasOAuthIssuerInspection,
-  CasStackOAuthIssuer,
+  AppOAuthIssuer,
+  AppOAuthIssuerInspection,
 } from "@unicas/admin-client";
 import { api, ifMatch } from "../api.js";
 import { Button, Card, ErrorState } from "../components.js";
 import { formatErrorSafe } from "./view-helpers.js";
 
 /**
- * Stack OAuth issuer connection. UniCAS discovers the issuer's metadata and
+ * App OAuth issuer connection. UniCAS discovers the issuer's metadata and
  * JWKS itself (RFC 8414 / OpenID discovery), so administrators never upload
  * keys: activation proves control of a key the issuer currently advertises,
- * and tenant verification reads the issuer's discovered jwks_uri.
+ * and Space verification reads the issuer's discovered jwks_uri.
  */
-export function IssuerView({ stackId, focusManagedIssuer = false }: { stackId: string; focusManagedIssuer?: boolean }) {
+export function IssuerView({ appId, focusManagedIssuer = false }: { appId: string; focusManagedIssuer?: boolean }) {
   const managedSettingsRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (!focusManagedIssuer) return;
     managedSettingsRef.current?.focus();
     managedSettingsRef.current?.scrollIntoView?.({ block: "start" });
-  }, [focusManagedIssuer, stackId]);
+  }, [appId, focusManagedIssuer]);
 
-  const [oauthIssuer, setOAuthIssuer] = useState<CasStackOAuthIssuer | null>(null);
-  const [managedIssuer, setManagedIssuer] = useState<CasStackOAuthIssuer | null>(null);
-  const [inspection, setInspection] = useState<CasOAuthIssuerInspection | null>(null);
+  const [oauthIssuer, setOAuthIssuer] = useState<AppOAuthIssuer | null>(null);
+  const [managedIssuer, setManagedIssuer] = useState<AppOAuthIssuer | null>(null);
+  const [inspection, setInspection] = useState<AppOAuthIssuerInspection | null>(null);
   const [oauthIssuerUrl, setOAuthIssuerUrl] = useState("");
   const [activationProof, setActivationProof] = useState("");
   const [inspecting, setInspecting] = useState(false);
@@ -36,7 +36,7 @@ export function IssuerView({ stackId, focusManagedIssuer = false }: { stackId: s
 
   useEffect(() => {
     setCopyStatus(null);
-  }, [stackId, managedIssuer?.issuer]);
+  }, [appId, managedIssuer?.issuer]);
 
   useEffect(() => {
     if (copyStatus !== "copied") return;
@@ -58,8 +58,8 @@ export function IssuerView({ stackId, focusManagedIssuer = false }: { stackId: s
     setError(null);
     try {
       const [oauthResult, managedResult] = await Promise.all([
-        api<CasStackOAuthIssuer | null>(`/admin/stacks/${encodeURIComponent(stackId)}/oauth-issuer?optional=true`),
-        api<CasStackOAuthIssuer>(`/admin/stacks/${encodeURIComponent(stackId)}/managed-issuer`),
+        api<AppOAuthIssuer | null>(`/admin/apps/${encodeURIComponent(appId)}/oauth-issuer?optional=true`),
+        api<AppOAuthIssuer>(`/admin/apps/${encodeURIComponent(appId)}/managed-issuer`),
       ]);
       setOAuthIssuer(oauthResult);
       setManagedIssuer(managedResult);
@@ -69,7 +69,7 @@ export function IssuerView({ stackId, focusManagedIssuer = false }: { stackId: s
     } catch (caught) {
       setError(formatErrorSafe(caught));
     }
-  }, [stackId]);
+  }, [appId]);
 
   useEffect(() => {
     void load();
@@ -79,7 +79,7 @@ export function IssuerView({ stackId, focusManagedIssuer = false }: { stackId: s
     setInspecting(true);
     setError(null);
     try {
-      const result = await api<CasOAuthIssuerInspection>(`/admin/stacks/${encodeURIComponent(stackId)}/oauth-issuer/inspections`, {
+      const result = await api<AppOAuthIssuerInspection>(`/admin/apps/${encodeURIComponent(appId)}/oauth-issuer/inspections`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ issuer: oauthIssuerUrl.trim() }),
@@ -98,7 +98,7 @@ export function IssuerView({ stackId, focusManagedIssuer = false }: { stackId: s
     setActivating(true);
     setError(null);
     try {
-      await api<CasStackOAuthIssuer>(`/admin/stacks/${encodeURIComponent(stackId)}/oauth-issuer`, {
+      await api<AppOAuthIssuer>(`/admin/apps/${encodeURIComponent(appId)}/oauth-issuer`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", ...ifMatch(oauthIssuer.revision) },
         body: JSON.stringify({ inspectionId: inspection.inspectionId, activationProof: activationProof.trim() }),
@@ -119,7 +119,7 @@ export function IssuerView({ stackId, focusManagedIssuer = false }: { stackId: s
     setError(null);
     try {
       const enabled = managedIssuer.status !== "active";
-      setManagedIssuer(await api<CasStackOAuthIssuer>(`/admin/stacks/${encodeURIComponent(stackId)}/managed-issuer`, {
+      setManagedIssuer(await api<AppOAuthIssuer>(`/admin/apps/${encodeURIComponent(appId)}/managed-issuer`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", ...ifMatch(managedIssuer.revision) },
         body: JSON.stringify({ enabled }),
@@ -143,9 +143,9 @@ export function IssuerView({ stackId, focusManagedIssuer = false }: { stackId: s
       >
         <Card title="Managed issuer">
           <p className="hint">
-            Admin sign-in grants stack management access, not access to tenant data.
+            Admin sign-in grants App management access, not access to Space data.
             The managed issuer is UniCAS's built-in authorization server: it issues short-lived
-            tenant capabilities for Playground and gives each stack member an isolated sandbox tenant.
+            Space capabilities for Playground and gives each App member an isolated personal Space.
             Enable it to use Playground without running your own authorization server.
             Applications using a custom OAuth issuer do not need to enable it.
           </p>

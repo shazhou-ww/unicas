@@ -10,16 +10,22 @@ formats without making those formats part of the service contract.
 
 The node encoding referenced below is defined in [CAS Binary Format](./cas-binary-format.md).
 
+Public v2 contracts use App and Space. The current Cloudflare adapter still
+maps those logical dimensions to physical `stack_id`/`tenant_id` columns and
+`stacks/.../tenants/...` object keys until the reviewed storage cutover. Those
+physical names are compatibility details, not public aliases. Frozen v1 routes
+remain documented separately where compatibility behavior matters.
+
 ## 1. Goals
 
-The CAS stores a stack-and-tenant-scoped Merkle DAG for persistent SValue
+The CAS stores an App-and-Space-scoped Merkle DAG for persistent SValue
 document roots and binary assets.
 
 The design must provide:
 
 - immutable, content-addressed nodes;
-- stack-and-tenant isolation and authenticated service access;
-- deduplication within one stack-and-tenant partition;
+- App-and-Space isolation and authenticated service access;
+- deduplication within one App-and-Space partition;
 - child references between nodes;
 - leases that protect uncommitted nodes from garbage collection;
 - separate child and business-root reference counts;
@@ -30,21 +36,26 @@ The design must provide:
 
 The CAS does not attempt to provide a distributed transaction spanning a document Durable Object, D1, and R2. Cross-system failures are handled with ordering, rollback, retry, and business-level compensation.
 
-## 2. Stack and tenant isolation
+## 2. App and Space isolation
 
-`stackId` is the top-level trust and data namespace. Within a stack,
-`tenantId` identifies data ownership; `refDomain` is an orthogonal Root Ref
+`appId` is the top-level trust and storage namespace. Within an App,
+`spaceId` identifies data ownership; `refDomain` is an orthogonal Root Ref
 audit dimension.
+
+- Every public data-plane route carries both `appId` and `spaceId`.
+- Identical content in different App-and-Space partitions is stored independently.
+- Storage usage and GC are calculated per App-and-Space partition.
+- A configured trusted JWT issuer maps to one stable App; verified Space claims,
+  permissions, and path Space must agree before storage access.
+
+The current Cloudflare physical compatibility mapping is:
 
 - D1 keys include `(stack_id, tenant_id, digest)`.
 - R2 objects use `stacks/{stackId}/tenants/{tenantId}/nodes/{digest}`.
-- Identical content in different stack-and-tenant partitions is stored independently.
-- Storage usage and GC are calculated per stack-and-tenant partition.
-- A configured trusted JWT issuer maps to one stable `stackId`; verified tenant
-  claims and path tenant must agree before storage access.
 
-A CAS Durable Object named from a canonical `(stackId, tenantId)` composite
-coordinates mutable tenant operations through a short explicit mutation gate:
+A CAS Durable Object named from the physical composite corresponding to
+`(appId, spaceId)` coordinates mutable Space operations through a short
+explicit mutation gate:
 
 - lease claims and extensions;
 - upload completion;
@@ -56,7 +67,8 @@ D1 and R2 remain the durable stores. Canonical request bodies stream to R2
 outside the mutation gate; only lease begin/finalize, Root Ref updates, and GC
 mutations queue. Active upload reservations fence GC during that unlocked
 interval. Content, metadata, and usage reads do not enter the mutation gate.
-The Durable Object does not replace stack-aware keys in the shared D1 and R2
+The Durable Object does not replace App/Space-aware logical keys or their
+current physical compatibility keys in the shared D1 and R2
 bindings.
 
 ## 3. Node model
@@ -71,7 +83,8 @@ The node's own content bytes are immutable and stored in R2.
 stacks/{stackId}/tenants/{tenantId}/nodes/{sha256Digest}
 ```
 
-R2 stores only the content bytes, not mutable lifecycle state.
+This is the current physical compatibility key, not the v2 public route. R2
+stores only the content bytes, not mutable lifecycle state.
 
 ### 3.2 Immutable metadata
 
@@ -203,7 +216,7 @@ export interface CasNodeDescriptor {
 }
 ```
 
-Creation uses two short tenant mutation sections around an unlocked upload:
+Creation uses two short Space mutation sections around an unlocked upload:
 
 1. Validate descriptor syntax and canonical constraints from URL and headers. Do not read the body yet.
 2. If the D1 row exists and R2 content is present, require immutable metadata to match, cancel the body, extend the lease, and return ready.
@@ -231,11 +244,11 @@ AND rootRefCount == 0
 AND leaseExpiresAt <= now
 ```
 
-GC runs through the same tenant CAS queue as lease and reference operations.
+GC runs through the same Space CAS queue as lease and reference operations.
 
 For each eligible node:
 
-1. Exclude nodes with an unexpired upload reservation and re-check eligibility while holding the per-tenant mutation gate.
+1. Exclude nodes with an unexpired upload reservation and re-check eligibility while holding the per-Space mutation gate.
 2. Delete the R2 object. R2 deletion is idempotent; missing content is allowed.
 3. In one D1 transaction:
    - re-check both reference counts and lease expiry;
@@ -247,7 +260,7 @@ For each eligible node:
 
 If R2 deletion succeeds but the D1 transaction fails, the row remains as a not-ready node. A future lease can require re-upload, or a later GC pass can retry deletion and metadata cleanup.
 
-The stack-and-tenant queue closes the lease/GC race: a lease cannot be granted
+The App-and-Space queue closes the lease/GC race: a lease cannot be granted
 between GC's eligibility decision and R2 deletion.
 
 ## 9. Reference-count updates
@@ -278,12 +291,12 @@ export interface CasRootRefUpdate {
 The canonical service operation is:
 
 ```http
-POST /stacks/{stackId}/tenants/{tenantId}/root-refs
+POST /v2/apps/{appId}/spaces/{spaceId}/root-refs
 Authorization: Bearer <capability carrying refDomain>
 ```
 
-The request body does not carry stack, tenant, or domain identity. CAS maps the
-verified issuer to `stackId`, requires path stack and token tenant equality,
+The request body does not carry App, Space, or domain identity. CAS maps the
+verified issuer to App authority, requires path App and token Space equality,
 and derives `refDomain` from the signed capability.
 
 The update operation:
@@ -295,8 +308,8 @@ The update operation:
 5. if the same request ID has a different payload, returns conflict;
 6. verifies every positively referenced target is ready;
 7. verifies every resulting `rootRefCount` is non-negative;
-8. allocates the next `(stackId, refDomain)` audit revision;
-9. applies aggregate changes, appends one tenant-bearing audit event, updates
+8. allocates the next `(appId, refDomain)` audit revision;
+9. applies aggregate changes, appends one Space-bearing audit event, updates
   the domain projection, and records idempotency in one D1 transaction.
 
 Every hash in `changes` must identify an existing D1 node, including hashes with negative deltas. Each delta must be a non-zero safe integer within configured per-request bounds. The service checks addition overflow before applying it. Empty change sets, unknown hashes, non-integer values, overflow, and results below zero reject the entire batch.
@@ -312,9 +325,9 @@ doc:{documentId}:truncate:{firstVersion}-{lastVersion}:remove-refs
 snapshot:{documentId}:{version}:add-refs
 ```
 
-Idempotency is scoped to `(stackId, tenantId, refDomain, requestId)` and is
+Idempotency is scoped to `(appId, spaceId, refDomain, requestId)` and is
 required for timeout and retry safety. It does not introduce owner entities;
-aggregate root counts remain scoped only by stack, tenant, and hash. Business
+aggregate root counts remain scoped only by App, Space, and hash. Business
 domains own logical-reference lifecycle; CAS stores counts and audit facts.
 
 ### 9.3 Reconciliation
@@ -322,10 +335,10 @@ domains own logical-reference lifecycle; CAS stores counts and audit facts.
 Reconciliation is an operator-assisted comparison, not an automatic repair:
 
 1. The business system exports its intended balances for one stable
-  `(stackId, refDomain)` and records the source watermark.
+  `(appId, refDomain)` and records the source watermark.
 2. An administrator reads the CAS domain balance and ordered events through a
-  consistent audit revision, optionally filtering one tenant at a time.
-3. The operator compares intended and CAS-recorded counts by tenant and hash,
+  consistent audit revision, optionally filtering one Space at a time.
+3. The operator compares intended and CAS-recorded counts by Space and hash,
   then uses event request IDs and business records to explain differences.
 4. A confirmed business bookkeeping error is repaired through a new normal
   signed-delta operation with its own deterministic request ID.
@@ -336,11 +349,15 @@ domain balances, or silently force the aggregate to match business claims. A
 legacy migration may seed the reserved `_legacy` audit domain, but normal
 capabilities cannot write that domain.
 
-## 10. Tenant client TypeScript API
+## 10. Space client TypeScript API
 
 ```ts
-export interface TenantCasClient {
-  node(hash: CasHash): CasNodeReader;
+export interface SpaceCasClient {
+  readMetadata(hash: CasHash): Promise<CasNodeMetadata>;
+  readContent(
+    hash: CasHash,
+    range?: { offset: number; length?: number },
+  ): Promise<ReadableStream<Uint8Array>>;
   leaseNode(
     hash: CasHash,
     source?: CasNodeSource,
@@ -349,11 +366,6 @@ export interface TenantCasClient {
   updateRootRefs(update: CasRootRefUpdate): Promise<CasRootRefsResult>;
   usage(): Promise<CasUsage>;
   gc(options?: CasGcOptions): Promise<CasGcResult>;
-}
-
-export interface CasNodeReader {
-  metadata(): Promise<CasNodeMetadata>;
-  read(range?: { offset: number; length?: number }): Promise<ReadableStream<Uint8Array>>;
 }
 
 export interface CasUsage {
@@ -370,9 +382,10 @@ export interface CasGcResult {
 }
 ```
 
-A `TenantCasClient` is created with one `(stackId, tenantId)`, an asynchronous
+A `SpaceCasClient` is created with one `(appId, spaceId)`, an asynchronous
 token provider, and an optional immutable-node cache strategy. Individual
-methods cannot select another stack or tenant.
+methods cannot select another App or Space. `createTenantCasClient` remains a
+separate frozen v1 factory; neither factory translates credentials.
 
 `leaseNode()` is the only lease operation. With a canonical node source it
 ensures the node is ready and leases it; without a source it leases an already
@@ -385,39 +398,40 @@ limits.
 
 ## 11. Authenticated HTTP API
 
-CAS owns its native tenant and admin route contracts. `@unicas/service`
+CAS owns its native Space and App administrator route contracts. `@unicas/service`
 provides one cloud-neutral HTTP actor that matches both protocols and receives
 storage/concurrency strategies through explicit platform ports.
 `@unicas/service-cloudflare` wraps that actor as the only production Worker and
-public endpoint. The same Worker serves `/stacks`, `/admin`, MCP/OAuth, and the
+public endpoint. The same Worker serves `/v2/apps`, `/admin`, MCP/OAuth, and the
 admin UI while preserving credential isolation between route classes. D1, R2,
 KV, and Durable Object bindings are Cloudflare adapter concerns; keyed actor
-ports preserve the single-writer semantics required by tenant and ref-domain
+ports preserve the single-writer semantics required by Space and ref-domain
 operations. Node, usage, and GC routes retain the canonical `/cas`
-resource-family segment; Root Refs is a sibling tenant operation. A Gateway or
-other shared ingress may map selected tenant operations to another path, but
+resource-family segment; Root Refs is a sibling Space operation. A Gateway or
+other shared ingress may map selected Space operations to another path, but
 that mapping and allowlist are not part of the CAS protocol.
 
-Tenant service routes accept JWT capabilities from configured stack issuers.
-Each stack registers one stable issuer with multiple rotation keys selected by
-`kid`; the issuer maps uniquely to `stackId`. The tenant verifier checks issuer,
+Space service routes accept JWT capabilities from configured App issuers.
+Each App registers one stable issuer with multiple rotation keys selected by
+`kid`; the issuer maps uniquely to App authority. The Space verifier checks issuer,
 key, signature, algorithm, CAS data-plane audience, time bounds, permissions,
 and operation-specific claims before any DO, D1, or R2 access. The
-issuer-derived stack must match the path, and token tenant must equal path
-tenant. The controlled authority registry is cached for 30 seconds; records
+issuer-derived App must match the path, and token Space must equal path Space.
+The controlled authority registry is cached for 30 seconds; records
 older than the 60-second hard stale/revocation bound fail closed when they
 cannot be refreshed.
 
 Root Refs writers carry signed `refDomain`; callers cannot provide or override
 it through path, query, header, or body.
 
-Top-level `/admin` routes use a Google OIDC-backed BFF session and stack
-membership. MVP members have equal administrator authority. Tenant JWTs are
+Top-level `/admin` routes use a Google OIDC-backed BFF session and App
+membership. MVP members have equal administrator authority. Space JWTs are
 never accepted by admin routes even if they contain admin-looking scopes, and
-OIDC admin sessions are never accepted by tenant routes. The
+OIDC admin sessions are never accepted by Space routes. The
 `@unicas/service-cloudflare` worker owns the admin BFF (src/admin-bff): OIDC
 callback, secure session, CSRF boundary, and admin BFF routes; the
-`@unicas/admin-webui` package is the browser UI only. Browser code never receives tenant JWTs,
+`@unicas/admin-webui` package is the browser UI only. Browser code receives
+only short-lived managed Space capabilities for Playground; it never receives
 OIDC client secrets, or storage bindings.
 
 HTTP upload is a lease that carries content. The same /lease route without a body extends a ready node (bodyless lease).
@@ -425,7 +439,7 @@ HTTP upload is a lease that carries content. The same /lease route without a bod
 ### 11.1 Read content
 
 ```http
-GET /stacks/{stackId}/tenants/{tenantId}/cas/nodes/{sha256}/content
+GET /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{sha256}/content
 Authorization: Bearer <CAS capability>
 ```
 
@@ -437,7 +451,7 @@ Responses:
 ### 11.2 Read metadata
 
 ```http
-GET /stacks/{stackId}/tenants/{tenantId}/cas/nodes/{sha256}/metadata
+GET /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{sha256}/metadata
 Authorization: Bearer <CAS capability>
 ```
 
@@ -446,7 +460,7 @@ Returns immutable metadata and mutable state. Unknown nodes return `404`.
 ### 11.3 Lease with content
 
 ```http
-POST /stacks/{stackId}/tenants/{tenantId}/cas/nodes/{sha256}/lease
+POST /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{sha256}/lease
 Authorization: Bearer <CAS capability>
 Content-Type: application/vnd.unidocs.cas-node.v1
 Content-Length: <canonical node length>
@@ -477,7 +491,7 @@ If the node is already ready and immutable metadata matches, the service cancels
 ### 11.4 Extend an existing lease
 
 ```http
-POST /stacks/{stackId}/tenants/{tenantId}/cas/nodes/{sha256}/lease
+POST /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{sha256}/lease
 Authorization: Bearer <CAS capability>
 X-CAS-Lease-Duration: 900000
 ```
@@ -486,11 +500,11 @@ No body. Missing nodes return `404`. A not-ready node returns `409`; the caller 
 
 A successful response is the same lease result as 11.3.
 
-### 11.5 Tenant usage and GC
+### 11.5 Space usage and GC
 
 ```http
-GET  /stacks/{stackId}/tenants/{tenantId}/cas/usage
-POST /stacks/{stackId}/tenants/{tenantId}/cas/gc
+GET  /v2/apps/{appId}/spaces/{spaceId}/cas/usage
+POST /v2/apps/{appId}/spaces/{spaceId}/cas/gc
 Authorization: Bearer <CAS capability>
 ```
 
@@ -502,7 +516,7 @@ guarantee that every eligible node is removed in one call.
 Business services apply signed non-zero count deltas:
 
 ```http
-POST /stacks/{stackId}/tenants/{tenantId}/root-refs
+POST /v2/apps/{appId}/spaces/{spaceId}/root-refs
 Authorization: Bearer <CAS capability carrying refDomain>
 Content-Type: application/json
 
@@ -517,8 +531,8 @@ Content-Type: application/json
 
 CAS does not store logical owner identities. `cas_nodes.root_ref_count` is the
 authoritative aggregate. Every newly accepted update atomically changes the
-aggregate, allocates a stack-domain revision, appends one event containing the
-affected tenant, updates the domain balance projection, and stores the
+aggregate, allocates an App-domain revision, appends one event containing the
+affected Space, updates the domain balance projection, and stores the
 idempotency result. Aggregate counts cannot become negative; audit domain
 balances may.
 
@@ -531,22 +545,22 @@ only; it is bound to trusted server-configured legacy stack/domain identity and
 is then disabled.
 <!-- cas-contract-docs: migration-end -->
 
-### 11.7 Stack admin audit API
+### 11.7 App admin audit API
 
-Root Ref audit reads are formal stack-level admin contracts:
+Root Ref audit reads are formal App-level admin contracts:
 
 ```http
-GET /admin/stacks/{stackId}/root-ref-domains/{refDomain}/refs
-GET /admin/stacks/{stackId}/root-ref-domains/{refDomain}/events
+GET /admin/apps/{appId}/root-ref-domains/{refDomain}/refs
+GET /admin/apps/{appId}/root-ref-domains/{refDomain}/events
 Cookie: cas_admin_session=<HttpOnly OIDC-backed session>
 ```
 
-Both reads support an optional exact `tenantId` filter and include `tenantId` in
-every row/event. Revisions are monotonic per `(stackId, refDomain)`. All stack
+Both reads support an optional exact `spaceId` filter and include `spaceId` in
+every row/event. Revisions are monotonic per `(appId, refDomain)`. All App
 members can use the MVP admin surface; finer-grained control-plane roles are
 deferred.
 
-The admin BFF and UI are served by `@unicas/service-cloudflare` (src/admin-bff + admin-webui assets). The ordinary tenant `CasClient`
+The admin BFF and UI are served by `@unicas/service-cloudflare` (src/admin-bff + admin-webui assets). The ordinary Space client
 cannot accept OIDC sessions or call admin routes.
 
 ### 11.8 Canonical binary codec
@@ -613,7 +627,7 @@ leases distinct children, verifies the complete logical digest, and uploads.
 
 `readSBlob` verifies metadata, content length, SValue refs, and digest. Reads and
 in-flight promises use a bounded context-scoped cache; returned bytes are copies.
-The doctype sees no user or tenant identity, HTTP, lease, root-count, or CAS metadata API.
+The doctype sees no Principal or Space identity, HTTP, lease, root-count, or CAS metadata API.
 
 Core defines only `Context -> DocumentType`. A doctype that needs options owns
 an outer `Options -> Factory` function.
@@ -690,8 +704,8 @@ the snapshot endpoint may retain the current version opportunistically.
   intentional.
 - A restore is a retained delta containing `{kind: "restore", doc: SBlob}`;
   replay jumps to that standalone state instead of recording an empty operation.
-- A clone within the same `(stackId, tenantId)` partition retains the source
-  snapshot DAG. Cross-tenant or cross-stack clone requires an authorized
+- A clone within the same `(appId, spaceId)` partition retains the source
+  snapshot DAG. Cross-Space or cross-App clone requires an authorized
   recursive DAG copy into the destination partition.
 - Before future history truncation, the surviving boundary receives a standalone
   snapshot; removed delta/snapshot roots are aggregated into one idempotent

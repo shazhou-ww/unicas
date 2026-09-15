@@ -1,16 +1,16 @@
 import { useState } from "react";
 import { Save } from "lucide-react";
-import type { CasStack } from "@unicas/admin-client";
+import type { App } from "@unicas/admin-client";
 import { api, ifMatch } from "../api.js";
 import { Button, Card, ErrorState } from "../components.js";
 import { formatErrorSafe } from "./view-helpers.js";
 
-export function StackOverviewView({ stack, onChanged }: {
-  stack: CasStack;
+export function AppOverviewView({ app, onChanged }: {
+  app: App;
   onChanged: () => void;
 }) {
-  const [name, setName] = useState(stack.displayName);
-  const [description, setDescription] = useState(stack.description);
+  const [name, setName] = useState(app.displayName);
+  const [description, setDescription] = useState(app.description);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
@@ -20,9 +20,9 @@ export function StackOverviewView({ stack, onChanged }: {
     setError(null);
     setConflict(false);
     try {
-      await api<CasStack>(`/admin/stacks/${encodeURIComponent(stack.stackId)}`, {
+      await api<App>(`/admin/apps/${encodeURIComponent(app.appId)}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", ...ifMatch(stack.revision) },
+        headers: { "Content-Type": "application/json", ...ifMatch(app.revision) },
         body: JSON.stringify({
           displayName: name.trim(),
           description: description.trim(),
@@ -39,23 +39,23 @@ export function StackOverviewView({ stack, onChanged }: {
   }
 
   return (
-    <Card title="Stack metadata">
+    <Card title="App metadata">
       <dl className="stack-details">
         <div>
-          <dt>Stack ID</dt>
-          <dd><code>{stack.stackId}</code></dd>
+          <dt>App ID</dt>
+          <dd><code>{app.appId}</code></dd>
         </div>
         <div>
           <dt>Status</dt>
-          <dd><span className="status-badge">{stack.status}</span></dd>
+          <dd><span className="status-badge">{app.status}</span></dd>
         </div>
         <div>
           <dt>Revision</dt>
-          <dd>{stack.revision}</dd>
+          <dd>{app.revision}</dd>
         </div>
         <div>
           <dt>Created</dt>
-          <dd>{new Date(stack.createdAt).toLocaleString()}</dd>
+          <dd>{new Date(app.createdAt).toLocaleString()}</dd>
         </div>
       </dl>
       <div className="field-row">
@@ -82,7 +82,7 @@ export function StackOverviewView({ stack, onChanged }: {
           disabled={
             saving
             || name.trim().length === 0
-            || (name.trim() === stack.displayName && description.trim() === stack.description)
+            || (name.trim() === app.displayName && description.trim() === app.description)
           }
         >
           {saving ? "Saving…" : "Save"}
@@ -91,7 +91,7 @@ export function StackOverviewView({ stack, onChanged }: {
       {error ? <ErrorState message={error} /> : null}
       {conflict ? (
         <p className="hint">
-          The stack changed on the server (revision {stack.revision}). Reload the page and retry.
+          The App changed on the server (revision {app.revision}). Reload the page and retry.
         </p>
       ) : null}
     </Card>

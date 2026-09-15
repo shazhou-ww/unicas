@@ -7,7 +7,7 @@ const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const SERVICE_PACKAGE = "@unicas/service-cloudflare";
 const EXPECTED_STACK_NAME = "Production Smoke";
 const EXPECTED_TENANT_ID = "deploy-smoke";
-const EXPECTED_OLD_ORIGIN = "https://unicas.work";
+const EXPECTED_API_ORIGIN = "https://api.unicas.work";
 const CONTROL_DATABASE = "unicas-control";
 const TENANT_DATABASE = "unicas-tenant";
 const CONTENT_BUCKET = "unicas-content";
@@ -59,7 +59,7 @@ export function parseResetArgs(argv) {
 }
 
 export function validateResetInventory(inventory, expectedStackId) {
-  if (!/^cas_[A-Za-z0-9]+$/.test(expectedStackId)) {
+  if (!/^cas_[A-Za-z0-9_-]+$/.test(expectedStackId)) {
     throw new Error("expected stack id is not a canonical UniCAS stack id");
   }
   if (inventory.stacks.length !== 1) {
@@ -89,10 +89,10 @@ export function validateResetInventory(inventory, expectedStackId) {
   const issuer = inventory.managedIssuers[0];
   if (
     issuer.stack_id !== expectedStackId
-    || issuer.issuer !== `${EXPECTED_OLD_ORIGIN}/managed-issuers/${expectedStackId}`
-    || issuer.audience !== `${EXPECTED_OLD_ORIGIN}/stacks/${expectedStackId}`
+    || issuer.issuer !== `${EXPECTED_API_ORIGIN}/managed-issuers/${expectedStackId}`
+    || issuer.audience !== `${EXPECTED_API_ORIGIN}/stacks/${expectedStackId}`
   ) {
-    throw new Error("managed smoke issuer is not bound to the expected apex origin");
+    throw new Error("managed smoke issuer is not bound to the expected API origin");
   }
 }
 

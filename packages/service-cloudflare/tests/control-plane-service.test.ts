@@ -1,18 +1,22 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import type { D1Database } from "@cloudflare/workers-types";
-import { CompactSign, exportJWK, generateKeyPair } from "jose";
+import { CompactSign, exportJWK, exportPKCS8, generateKeyPair } from "jose";
 import { CasAdminErrorCodes } from "@unicas/admin-protocol";
 import type { CasAdminErrorResponse, CasOperatorIdentityKey } from "@unicas/admin-protocol";
 import {
+  AppSpaceCapabilityVerifier,
   ControlAuditActions,
   type ControlPlaneCallContext,
   type ControlPlaneOperations,
+  type ManagedCapabilityIssuer,
   type OAuthDiscoveryPort,
 } from "@unicas/service";
+import { AppAuthorityRepository } from "../src/control-authority.js";
 import { migrateControlSchema } from "../src/control-schema.js";
 import { createControlPlaneOperations } from "../src/control-operations.js";
 import { ControlSessionStore } from "../src/control-sessions.js";
+import { CloudflareManagedIssuer } from "../src/managed-issuer.js";
 
 let miniflare: Miniflare | undefined;
 afterEach(async () => {
@@ -23,6 +27,7 @@ afterEach(async () => {
 async function createService(
   now?: () => number,
   oauthDiscovery?: OAuthDiscoveryPort,
+  managedOAuthIssuer?: ManagedCapabilityIssuer,
 ): Promise<{ db: D1Database; service: ControlPlaneOperations }> {
   miniflare = new Miniflare(convertV4MiniflareOptions({
     workers: [{
@@ -42,6 +47,7 @@ async function createService(
       now,
       oauthDiscovery,
       oauthResourcePublicOrigin: "https://cas.example",
+      managedOAuthIssuer,
     }),
   };
 }
@@ -97,6 +103,46 @@ describe("D1-backed control-plane service", () => {
     expectError(await service.patchPlaygroundFileRoot(ctx(alice), patch, { ifMatch: '"1"' }), CasAdminErrorCodes.REVISION_MISMATCH);
     expect(await service.listPlaygroundFileRoots(ctx(bob), { path: { stackId } })).toMatchObject({ items: [{ name: "Files", revision: 1 }] });
   });
+
+  test("mints a managed Space capability accepted by the App authority adapter", async () => {
+    const now = () => 1_700_000_000_000;
+    const { privateKey } = await generateKeyPair("ES256", { extractable: true });
+    const managedIssuer = new CloudflareManagedIssuer({
+      publicOrigin: "https://cas.example",
+      privateKeyPkcs8: await exportPKCS8(privateKey),
+      keyId: "managed-integration",
+      now,
+    });
+    const { db, service } = await createService(now, undefined, managedIssuer);
+    const appId = await createStack(service, alice, "Managed App");
+    const capability = await service.mintManagedSpaceCapability(ctx(alice), appId);
+    if ("error" in capability) throw new Error(capability.error);
+
+    expect(capability).not.toHaveProperty("tenantId");
+    expect(capability.permissions).toEqual([
+      `spaces:${capability.spaceId}:cas:read`,
+      `spaces:${capability.spaceId}:cas:write`,
+      `spaces:${capability.spaceId}:cas:manage`,
+    ]);
+
+    const verifier = new AppSpaceCapabilityVerifier({
+      repository: new AppAuthorityRepository(db),
+      now,
+      jwksFetcher: async () => Response.json(await managedIssuer.jwks()),
+    });
+    await expect(verifier.verify(new Request(
+      `https://cas.example/v2/apps/${appId}/spaces/${capability.spaceId}/cas/usage`,
+      { headers: { Authorization: `Bearer ${capability.accessToken}` } },
+    ), {
+      operation: "usage",
+      appId,
+      spaceId: capability.spaceId,
+    })).resolves.toMatchObject({
+      appId,
+      spaceId: capability.spaceId,
+      permissions: capability.permissions,
+    });
+  }, 10_000);
 
   test("enforces invitation constraints, expiry, one-time use, and last-member transfer", async () => {
     let clock = 1_000_000;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-/** Parse the location hash into a route path, e.g. "#/stacks/cas_x" -> "/stacks/cas_x". */
+/** Parse the location hash into a route path, e.g. "#/apps/cas_x" -> "/apps/cas_x". */
 export function currentHashRoute(): string {
   const hash = window.location.hash.replace(/^#/, "");
   return hash.length === 0 ? "/" : hash;

@@ -3,9 +3,13 @@ import {
   CapabilityAlgorithm,
   CapabilityTokenType,
   CapabilityVersion,
+  SpaceCapabilityVersion,
   casManagePermission,
   casReadPermission,
   casWritePermission,
+  spaceCasManagePermission,
+  spaceCasReadPermission,
+  spaceCasWritePermission,
 } from "@unicas/tenant-protocol";
 import type {
   ControlOAuthIssuerRecord,
@@ -103,6 +107,49 @@ export class CloudflareManagedIssuer implements ManagedCapabilityIssuer {
       issuer: expectedIssuer,
       audience: input.issuer.audience,
       tenantId,
+      permissions,
+    };
+  }
+
+  async issueSpace(input: Parameters<ManagedCapabilityIssuer["issue"]>[0]) {
+    const expectedIssuer = this.issuer(input.stack.stackId);
+    if (input.issuer.issuer !== expectedIssuer || input.issuer.mode !== "managed") {
+      throw new TypeError("managed issuer binding does not match the app");
+    }
+    const material = await this.#material();
+    const identityDigest = await managedPlaygroundOwnerKey(input.stack.stackId, input.identity);
+    const spaceId = `member_${identityDigest.slice(0, 24)}`;
+    const subject = `member:${identityDigest}`;
+    const permissions = [
+      spaceCasReadPermission(spaceId),
+      spaceCasWritePermission(spaceId),
+      spaceCasManagePermission(spaceId),
+    ];
+    const issuedAt = Math.floor(this.#now() / 1000);
+    const expiresAt = issuedAt + CAPABILITY_LIFETIME_SECONDS;
+    const accessToken = await new SignJWT({
+      ver: SpaceCapabilityVersion,
+      spaceId,
+      permissions,
+      refDomain: `playground:${identityDigest.slice(0, 16)}`,
+    })
+      .setProtectedHeader({ alg: CapabilityAlgorithm, kid: this.#keyId, typ: CapabilityTokenType })
+      .setIssuer(expectedIssuer)
+      .setSubject(subject)
+      .setAudience(input.issuer.audience)
+      .setIssuedAt(issuedAt)
+      .setNotBefore(issuedAt - 5)
+      .setExpirationTime(expiresAt)
+      .setJti(crypto.randomUUID())
+      .sign(material.privateKey);
+    return {
+      accessToken,
+      tokenType: "Bearer" as const,
+      expiresIn: CAPABILITY_LIFETIME_SECONDS,
+      expiresAt: expiresAt * 1000,
+      issuer: expectedIssuer,
+      audience: input.issuer.audience,
+      spaceId,
       permissions,
     };
   }

@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Do not open a public issue for a suspected vulnerability or include secrets,
-tokens, private keys, tenant data, or exploit details in public discussions.
+tokens, private keys, App/Space data, or exploit details in public discussions.
 
 Report vulnerabilities privately through the repository's GitHub security
 advisory form:
@@ -12,7 +12,7 @@ advisory form:
 
 Include the affected component and version or commit, reproduction steps,
 security impact, and any suggested mitigation. Use disposable credentials and
-non-production stacks when a reproduction needs authenticated requests.
+non-production environments when a reproduction needs authenticated requests.
 
 The maintainers will acknowledge the report through the private advisory,
 coordinate validation and remediation there, and publish details only after a

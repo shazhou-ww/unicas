@@ -4,9 +4,15 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createContext } from "../src/commands/common.js";
 import type { CliContext } from "../src/commands/common.js";
+import { appAuditCommand } from "../src/commands/app-audit.js";
+import { appMembersCommand } from "../src/commands/app-members.js";
+import { appOAuthIssuerCommand } from "../src/commands/app-oauth-issuer.js";
+import { appRefDomainsCommand } from "../src/commands/app-refdomains.js";
+import { appsCommand } from "../src/commands/apps.js";
 import { logoutCommand } from "../src/commands/logout.js";
 import { membersCommand } from "../src/commands/members.js";
 import { oauthIssuerCommand } from "../src/commands/oauth-issuer.js";
+import { principalCommand } from "../src/commands/principal.js";
 import { stacksCommand } from "../src/commands/stacks.js";
 import { statusCommand } from "../src/commands/status.js";
 import { whoamiCommand } from "../src/commands/whoami.js";
@@ -68,6 +74,17 @@ describe("command layer", () => {
     });
   });
 
+  test("principal prints the App administrator identity as JSON", async () => {
+    await seedLoggedIn(ctx.store);
+    const server = new FakeAdminApi({ adminVocabulary: "app" });
+    ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
+    const { writes } = captureStdout();
+    await principalCommand(ctx);
+    const parsed = JSON.parse(writes.join("")) as { principal: { subject: string }; memberships: Array<{ appId: string }> };
+    expect(parsed.principal.subject).toBe("sub-1");
+    expect(parsed.memberships).toEqual([expect.objectContaining({ appId: "cas_stack_a" })]);
+  });
+
   test("status reports the local session without network traffic", async () => {
     await seedLoggedIn(ctx.store);
     const { writes } = captureStdout();
@@ -76,6 +93,134 @@ describe("command layer", () => {
     expect(status.loggedIn).toBe(true);
     expect(status.identity?.subject).toBe("sub-1");
     expect(ctx.store.path).toContain(dir);
+  });
+
+  test("apps list and get print App-shaped JSON", async () => {
+    await seedLoggedIn(ctx.store);
+    const server = new FakeAdminApi({ adminVocabulary: "app" });
+    ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
+    const { writes } = captureStdout();
+    await appsCommand(ctx, "list", ["--limit", "10"]);
+    expect(JSON.parse(writes.join(""))).toMatchObject({ items: [{ appId: "cas_app_a", displayName: "App Ops" }] });
+    writes.length = 0;
+    await appsCommand(ctx, "get", ["cas_app_a"]);
+    expect(JSON.parse(writes.join(""))).toMatchObject({ appId: "cas_app_a", revision: 3 });
+    expect(server.requests.map((request) => request.pathname)).toEqual([
+      "/admin/apps",
+      "/admin/apps/cas_app_a",
+    ]);
+  });
+
+  test("apps create sends an idempotency key", async () => {
+    await seedLoggedIn(ctx.store);
+    const server = new FakeAdminApi({ adminVocabulary: "app" });
+    ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
+    const { writes } = captureStdout();
+    await appsCommand(ctx, "create", ["Documents"]);
+    expect(JSON.parse(writes.join(""))).toMatchObject({ appId: "cas_app_new", displayName: "Documents" });
+    expect(server.requests[0]).toMatchObject({
+      pathname: "/admin/apps",
+      method: "POST",
+      csrf: "cli-csrf-1",
+      idempotencyKey: expect.stringMatching(/^unicas-cli:/),
+    });
+  });
+
+  test("apps update resolves the current App ETag", async () => {
+    await seedLoggedIn(ctx.store);
+    const server = new FakeAdminApi({ adminVocabulary: "app" });
+    ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
+    const { writes } = captureStdout();
+    await appsCommand(ctx, "update", ["cas_app_a", "Renamed", "--description", "Production"]);
+    expect(JSON.parse(writes.join(""))).toMatchObject({
+      appId: "cas_app_a",
+      displayName: "Renamed",
+      description: "Production",
+      revision: 4,
+    });
+    expect(server.requests).toEqual([
+      expect.objectContaining({ pathname: "/admin/apps/cas_app_a", method: "GET" }),
+      expect.objectContaining({ pathname: "/admin/apps/cas_app_a", method: "PATCH", ifMatch: '"rev-3"' }),
+    ]);
+  });
+
+  test("app-members list returns separate Principal and Profile data", async () => {
+    await seedLoggedIn(ctx.store);
+    const server = new FakeAdminApi({ adminVocabulary: "app" });
+    ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
+    const { writes } = captureStdout();
+    await appMembersCommand(ctx, "list", ["cas_app_a", "--limit", "10"]);
+    expect(JSON.parse(writes.join(""))).toMatchObject({
+      items: [{
+        appId: "cas_app_a",
+        principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
+        profile: { displayName: "Alice" },
+      }],
+    });
+    expect(server.requests[0]).toMatchObject({
+      pathname: "/admin/apps/cas_app_a/members",
+      search: "?limit=10",
+    });
+  });
+
+  test("app-members invite uses the App endpoint and idempotency", async () => {
+    await seedLoggedIn(ctx.store);
+    const server = new FakeAdminApi({ adminVocabulary: "app" });
+    ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
+    const { writes } = captureStdout();
+    await appMembersCommand(ctx, "invite", [
+      "cas_app_a",
+      "alice@example.com",
+      "--idempotency-key",
+      "invite-app-1",
+    ]);
+    expect(JSON.parse(writes.join(""))).toMatchObject({ invitation: { appId: "cas_app_a" } });
+    expect(server.requests[0]).toMatchObject({
+      pathname: "/admin/apps/cas_app_a/member-invitations",
+      method: "POST",
+      csrf: "cli-csrf-1",
+      idempotencyKey: "invite-app-1",
+      body: { emailConstraint: "alice@example.com" },
+    });
+  });
+
+  test("app-members remove confirms the Principal and resolves the App ETag", async () => {
+    await seedLoggedIn(ctx.store);
+    const server = new FakeAdminApi({ adminVocabulary: "app" });
+    ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
+    const { writes } = captureStdout();
+    await appMembersCommand(ctx, "remove", [
+      "cas_app_a",
+      "--issuer",
+      "https://accounts.google.com",
+      "--subject",
+      "sub-1",
+      "--confirm-subject",
+      "sub-1",
+    ]);
+    expect(JSON.parse(writes.join(""))).toEqual({ ok: true });
+    expect(server.requests).toEqual([
+      expect.objectContaining({ pathname: "/admin/apps/cas_app_a", method: "GET" }),
+      expect.objectContaining({
+        pathname: "/admin/apps/cas_app_a/members",
+        search: "?issuer=https%3A%2F%2Faccounts.google.com&subject=sub-1",
+        method: "DELETE",
+        ifMatch: '"rev-3"',
+      }),
+    ]);
+  });
+
+  test("app-members remove requires an explicit non-TTY confirmation", async () => {
+    await seedLoggedIn(ctx.store);
+    await expect(appMembersCommand(ctx, "remove", [
+      "cas_app_a",
+      "--issuer",
+      "https://accounts.google.com",
+      "--subject",
+      "sub-1",
+      "--etag",
+      '"3"',
+    ])).rejects.toThrow(/confirm-subject/);
   });
 
   test("stacks create auto-generates an idempotency key", async () => {
@@ -156,5 +301,45 @@ describe("command layer", () => {
     expect(JSON.parse(writes.join(""))).toMatchObject({ status: "active", revision: 2 });
     expect(server.requests.some((request) => request.pathname.endsWith("/oauth-issuer") && request.method === "GET")).toBe(true);
     expect(server.requests.some((request) => request.pathname.endsWith("/oauth-issuer") && request.method === "PUT")).toBe(true);
+  });
+
+  test("App OAuth issuer inspect and activate use App routes and ETags", async () => {
+    await seedLoggedIn(ctx.store);
+    const server = new FakeAdminApi({ adminVocabulary: "app" });
+    ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
+    const { writes } = captureStdout();
+    await appOAuthIssuerCommand(ctx, "inspect", ["cas_app_a", "https://issuer.example"]);
+    expect(JSON.parse(writes.join(""))).toMatchObject({ appId: "cas_app_a", inspectionId: "oinsp_app", status: "pending" });
+    writes.length = 0;
+    await appOAuthIssuerCommand(ctx, "activate", ["cas_app_a", "oinsp_app", "--activation-proof", "proof"]);
+    expect(JSON.parse(writes.join(""))).toMatchObject({ appId: "cas_app_a", status: "active", revision: 2 });
+    expect(server.requests).toEqual(expect.arrayContaining([
+      expect.objectContaining({ pathname: "/admin/apps/cas_app_a/oauth-issuer/inspections", method: "POST" }),
+      expect.objectContaining({ pathname: "/admin/apps/cas_app_a/oauth-issuer", method: "GET" }),
+      expect.objectContaining({ pathname: "/admin/apps/cas_app_a/oauth-issuer", method: "PUT", ifMatch: '"rev-1"' }),
+    ]));
+  });
+
+  test("App ref-domain and audit commands use App/Space vocabulary", async () => {
+    await seedLoggedIn(ctx.store);
+    const server = new FakeAdminApi({ adminVocabulary: "app" });
+    ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
+    const { writes } = captureStdout();
+    await appRefDomainsCommand(ctx, "list", ["cas_app_a"]);
+    expect(JSON.parse(writes.join(""))).toMatchObject({ domains: [{ appId: "cas_app_a", refDomain: "doc" }] });
+    writes.length = 0;
+    await appAuditCommand(ctx, "control", ["cas_app_a", "--after", "event-0"]);
+    expect(JSON.parse(writes.join(""))).toMatchObject({ items: [{ appId: "cas_app_a", actor: { subject: "sub-1" } }] });
+    writes.length = 0;
+    await appAuditCommand(ctx, "root-domain-refs", ["cas_app_a", "doc", "--space-id", "space-1"]);
+    expect(JSON.parse(writes.join(""))).toMatchObject({ refs: [{ spaceId: "space-1" }] });
+    writes.length = 0;
+    await appAuditCommand(ctx, "root-domain-events", ["cas_app_a", "doc", "--space-id", "space-1", "--after", "0"]);
+    expect(JSON.parse(writes.join(""))).toMatchObject({ events: [{ spaceId: "space-1" }] });
+    expect(server.requests).toEqual(expect.arrayContaining([
+      expect.objectContaining({ pathname: "/admin/apps/cas_app_a/audit-events", search: "?after=event-0" }),
+      expect.objectContaining({ pathname: "/admin/apps/cas_app_a/root-ref-domains/doc/refs", search: "?spaceId=space-1" }),
+      expect.objectContaining({ pathname: "/admin/apps/cas_app_a/root-ref-domains/doc/events", search: "?spaceId=space-1&after=0" }),
+    ]));
   });
 });

@@ -2,8 +2,9 @@ import { describe, expect, test, vi } from "vitest";
 import type { AppAdminRoute } from "@unicas/admin-protocol";
 import { handleAppAdminCompatibilityRequest } from "../src/app-admin-adapter.js";
 
-function request(path: string): Request {
+function request(path: string, init: RequestInit = {}): Request {
   return new Request(`https://console.unicas.work${path}`, {
+    ...init,
     headers: { Cookie: "cas_admin_session=secret" },
   });
 }
@@ -21,6 +22,74 @@ async function invoke(
 }
 
 describe("App admin physical compatibility adapter", () => {
+  test("maps the shared current-administrator response to Principal and Profile", async () => {
+    const { response, legacyHandler } = await invoke(
+      { operation: "me" },
+      "/admin/me",
+      {
+        identity: {
+          identityIssuer: "https://accounts.example",
+          subject: "alice",
+          displayName: "Alice",
+          emailForDisplay: "alice@example.com",
+        },
+        memberships: [{
+          stackId: "app-1",
+          identityIssuer: "https://accounts.example",
+          subject: "alice",
+          displayName: "Alice",
+          emailForDisplay: "alice@example.com",
+        }],
+      },
+    );
+    expect(legacyHandler).toHaveBeenCalledWith(expect.objectContaining({
+      url: "https://console.unicas.work/admin/me",
+    }));
+    await expect(response.json()).resolves.toEqual({
+      principal: { issuer: "https://accounts.example", subject: "alice" },
+      profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+      memberships: [{
+        appId: "app-1",
+        principal: { issuer: "https://accounts.example", subject: "alice" },
+        profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+      }],
+    });
+  });
+
+  test("maps shared invitation acceptance to an App membership", async () => {
+    const { response, legacyHandler } = await invoke(
+      { operation: "acceptMemberInvitation", token: "invite-1" },
+      "/admin/member-invitations/invite-1/accept",
+      {
+        stackId: "app-1",
+        identityIssuer: "https://accounts.example",
+        subject: "alice",
+        displayName: "Alice",
+        emailForDisplay: "alice@example.com",
+      },
+    );
+    expect(legacyHandler).toHaveBeenCalledWith(expect.objectContaining({
+      url: "https://console.unicas.work/admin/member-invitations/invite-1/accept",
+    }));
+    await expect(response.json()).resolves.toEqual({
+      appId: "app-1",
+      principal: { issuer: "https://accounts.example", subject: "alice" },
+      profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+    });
+  });
+
+  test("maps legacy membership errors to the App contract", async () => {
+    const { response } = await invoke(
+      { operation: "getApp", appId: "app-1" },
+      "/admin/apps/app-1",
+      { error: "STACK_MEMBERSHIP_REQUIRED", message: "stack membership required" },
+    );
+    await expect(response.json()).resolves.toEqual({
+      error: "APP_MEMBERSHIP_REQUIRED",
+      message: "App membership required",
+    });
+  });
+
   test("rewrites App list requests and responses explicitly", async () => {
     const { response, legacyHandler } = await invoke(
       { operation: "listApps" },
@@ -79,14 +148,31 @@ describe("App admin physical compatibility adapter", () => {
     });
   });
 
-  test("does not mint a v1 capability through the v2 endpoint", async () => {
-    const legacyHandler = vi.fn();
+  test("forwards managed Space issuance to the dedicated v2 BFF path", async () => {
+    const legacyHandler = vi.fn(async () => Response.json({
+      accessToken: "space-token",
+      tokenType: "Bearer",
+      expiresIn: 3600,
+      expiresAt: 3_600_000,
+      issuer: "https://api.unicas.work/managed-issuers/app-1",
+      audience: "https://api.unicas.work/stacks/app-1",
+      spaceId: "member-1",
+      permissions: ["spaces:member-1:cas:manage"],
+    }, { status: 201, headers: { "Cache-Control": "no-store" } }));
     const response = await handleAppAdminCompatibilityRequest(
-      request("/admin/apps/app-1/managed-capabilities"),
+      request("/admin/apps/app-1/managed-capabilities", { method: "POST" }),
       { operation: "mintManagedCapability", appId: "app-1" },
       legacyHandler,
     );
-    expect(response.status).toBe(501);
-    expect(legacyHandler).not.toHaveBeenCalled();
+    expect(response.status).toBe(201);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(legacyHandler).toHaveBeenCalledWith(expect.objectContaining({
+      method: "POST",
+      url: "https://console.unicas.work/admin/apps/app-1/managed-capabilities",
+    }));
+    await expect(response.json()).resolves.toMatchObject({
+      spaceId: "member-1",
+      permissions: ["spaces:member-1:cas:manage"],
+    });
   });
 });

@@ -54,6 +54,7 @@ import type {
   CasStackMember,
   CasStackOAuthIssuer,
   CasManagedCapability,
+  ManagedSpaceCapability,
 } from "@unicas/admin-protocol";
 import { ControlAuditActions, type ControlAuditAction } from "./control-audit.js";
 import { decodeControlListCursor, encodeControlListCursor } from "./control-cursor.js";
@@ -254,6 +255,11 @@ export interface ManagedCapabilityIssuer extends ManagedOAuthIssuerProvisioner {
     readonly issuer: ControlOAuthIssuerRecord;
     readonly identity: CasOperatorIdentityKey;
   }): Promise<CasManagedCapability>;
+  issueSpace?(input: {
+    readonly stack: ControlStackRecord;
+    readonly issuer: ControlOAuthIssuerRecord;
+    readonly identity: CasOperatorIdentityKey;
+  }): Promise<ManagedSpaceCapability>;
 }
 
 export interface ControlOAuthIssuerInspectionRecord {
@@ -810,6 +816,27 @@ export class ControlPlaneAdminService {
         throw new ControlPlaneError(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "managed issuer is not configured");
       }
       return this.#managedOAuthIssuer.issue({ stack, issuer, identity: ctx.identity });
+    });
+  }
+
+  mintManagedSpaceCapability(
+    ctx: ControlPlaneCallContext,
+    appId: string,
+  ): Promise<ManagedSpaceCapability | CasAdminErrorResponse> {
+    return this.#guard(async () => {
+      await this.#requireMember(ctx.identity, appId);
+      const app = await this.#requireStack(appId);
+      if (app.status !== "active") {
+        throw new ControlPlaneError(CasAdminErrorCodes.INVALID_REQUEST, "app is suspended");
+      }
+      const issuer = await this.#repository.getManagedOAuthIssuer(app.stackId);
+      if (!issuer || issuer.mode !== "managed" || issuer.status !== "active") {
+        throw new ControlPlaneError(CasAdminErrorCodes.INVALID_REQUEST, "managed issuer is not active for this app");
+      }
+      if (!this.#managedOAuthIssuer?.issueSpace) {
+        throw new ControlPlaneError(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "managed Space issuer is not configured");
+      }
+      return this.#managedOAuthIssuer.issueSpace({ stack: app, issuer, identity: ctx.identity });
     });
   }
 

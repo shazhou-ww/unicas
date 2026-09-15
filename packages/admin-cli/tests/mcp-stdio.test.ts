@@ -5,6 +5,7 @@ import { PassThrough } from "node:stream";
 import type { Readable, Writable } from "node:stream";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { TOOL_CATALOG } from "../src/mcp/catalog.js";
 import { runMcpStdioServer } from "../src/mcp/stdio-server.js";
 import { TokenStore } from "../src/store.js";
 import { FAKE_ORIGIN, FakeAdminApi } from "./helpers/fake-server.js";
@@ -95,8 +96,8 @@ describe("unicas mcp (stdio server)", () => {
     const toolsList = await reader.next();
     expect(toolsList.id).toBe(2);
     const tools = (toolsList.result as { tools: Array<{ name: string }> }).tools;
-    expect(tools).toHaveLength(15);
-    expect(tools[0]?.name).toBe("whoami");
+    expect(tools.map((tool) => tool.name)).toEqual(TOOL_CATALOG.map((tool) => tool.name));
+    expect(tools.map((tool) => tool.name)).toContain("mint_managed_space_capability");
     expect(tools.map((tool) => tool.name)).toContain("get_oauth_issuer");
     expect(tools.map((tool) => tool.name)).not.toContain("add_issuer_key");
 
@@ -147,6 +148,68 @@ describe("unicas mcp (stdio server)", () => {
     const me = server.requests.find((request) => request.pathname === "/admin/me");
     expect(me).toBeDefined();
     expect(me?.cookie).toContain("cas_admin_session=");
+  });
+
+  test("serves the App identity through the version-distinct principal tool", async () => {
+    await seedSession();
+    const server = new FakeAdminApi({ adminVocabulary: "app" });
+    const { stdin, reader, done } = await startStdioServer(server.fetch);
+
+    stdin.write(`${JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2026-07-28",
+        capabilities: {},
+        clientInfo: { name: "test-client", version: "1.0.0" },
+      },
+    })}\n`);
+    await reader.next();
+    stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized", params: {} })}\n`);
+    stdin.write(`${JSON.stringify({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/call",
+      params: { name: "get_current_principal", arguments: {} },
+    })}\n`);
+
+    const call = await reader.next();
+    expect(call.result).toMatchObject({
+      isError: false,
+      structuredContent: {
+        principal: { subject: "sub-1" },
+        memberships: [{ appId: "cas_stack_a" }],
+      },
+    });
+
+    stdin.write(`${JSON.stringify({
+      jsonrpc: "2.0",
+      id: 3,
+      method: "tools/call",
+      params: { name: "list_apps", arguments: { limit: 10 } },
+    })}\n`);
+    expect((await reader.next()).result).toMatchObject({
+      isError: false,
+      structuredContent: { items: [{ appId: "cas_app_a", displayName: "App Ops" }] },
+    });
+
+    stdin.write(`${JSON.stringify({
+      jsonrpc: "2.0",
+      id: 4,
+      method: "tools/call",
+      params: {
+        name: "list_space_root_domain_refs",
+        arguments: { appId: "cas_app_a", refDomain: "doc", spaceId: "space-1" },
+      },
+    })}\n`);
+    expect((await reader.next()).result).toMatchObject({
+      isError: false,
+      structuredContent: { refs: [{ spaceId: "space-1", count: 1 }] },
+    });
+
+    stdin.end();
+    await done;
   });
 
   test("returns a tool error result when not logged in", async () => {

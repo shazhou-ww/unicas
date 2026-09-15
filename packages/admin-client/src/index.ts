@@ -23,6 +23,20 @@ export type {
 // consumers (CLI and WebUI) depend on @unicas/admin-client, never on
 // @unicas/admin-protocol directly.
 export type {
+  App,
+  AppAdminMeResponse,
+  AppControlAuditEvent,
+  AppId,
+  AppMemberInvitation,
+  AppMembership,
+  AppOAuthIssuer,
+  AppOAuthIssuerInspection,
+  AppRefDomain,
+  ManagedSpaceCapability,
+  Principal,
+  Profile,
+  SpaceRootRefBalance,
+  SpaceRootRefEvent,
   CasControlAuditEvent,
   CasOAuthIssuerInspection,
   CasPlaygroundFileRoot,

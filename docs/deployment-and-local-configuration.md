@@ -1,6 +1,6 @@
 # Deployment and local configuration
 
-This repository deploys one UniCAS Cloudflare Worker containing the tenant and
+This repository deploys one UniCAS Cloudflare Worker containing the Space and
 administrator HTTP planes, the administrator BFF and UI, and MCP/OAuth ingress.
 Keep these configuration classes separate:
 
@@ -24,14 +24,14 @@ It starts:
 | Surface | Default URL |
 | --- | --- |
 | Administrator console | `http://localhost:4070/admin/` |
-| Browser-facing UniCAS edge | `http://localhost:4070/stacks/...` |
+| Browser-facing UniCAS edge | `http://localhost:4070/v2/apps/.../spaces/...` |
 | Direct Miniflare edge | `http://127.0.0.1:8794` |
 | Mock OIDC discovery | `http://127.0.0.1:8793/.well-known/openid-configuration` |
 
-Host-mode Miniflare state persists under `.wrangler/miniflare`. Stop the stack
+Host-mode Miniflare state persists under `.wrangler/miniflare`. Stop the environment
 with Ctrl+C; restarting `pnpm dev` reuses that state.
 
-Vite proxies tenant, managed-issuer, and discovery routes to the direct edge so
+Vite proxies Space, managed-issuer, and discovery routes to the direct edge so
 the local browser topology matches production's single public origin.
 
 The local runtime uses its mock OIDC provider by default. To use Google OIDC,
@@ -54,7 +54,7 @@ managed issuer unavailable.
 
 ### Docker
 
-Run the same stack in Docker when host Node.js is unavailable:
+Run the same environment in Docker when host Node.js is unavailable:
 
 ```powershell
 pnpm dev --docker
@@ -68,7 +68,7 @@ that volume, so the next start reuses state.
 
 ### Disposable capability fixture
 
-Generate a local ES256 issuer fixture only when a test or non-production stack
+Generate a local ES256 issuer fixture only when a test or non-production App
 needs one:
 
 ```powershell
@@ -100,8 +100,7 @@ must be intentional. The previous `unidocs-cas` deployment and its
 `unicas.shazhou.work` route remain online as a legacy environment. This
 repository deploys isolated `unicas-*` storage resources and the `unicas`
 Worker at `https://api.unicas.work` and `https://console.unicas.work`. The apex
-route remains attached temporarily as a rollback boundary until split-origin
-validation completes. Existing wire media types and downstream
+is the separate product-site Worker. Existing wire media types and downstream
 issuer identifiers remain compatibility contracts and are not renamed.
 
 ## Worker secrets
@@ -126,8 +125,8 @@ Additional features require these secrets:
 | --- | --- |
 | `CAS_R2_ACCESS_KEY_ID` | Presigned direct R2 uploads |
 | `CAS_R2_SECRET_ACCESS_KEY` | Presigned direct R2 uploads |
-| `MANAGED_ISSUER_PRIVATE_KEY_PKCS8` | UniCAS-managed stack issuers |
-| `CAS_AUDIT_READER_KEY` | Protected tenant audit reads |
+| `MANAGED_ISSUER_PRIVATE_KEY_PKCS8` | UniCAS-managed App issuers |
+| `CAS_AUDIT_READER_KEY` | Protected physical audit-reader RPC |
 
 `MANAGED_ISSUER_KEY_ID` is the corresponding non-secret key ID in
 `wrangler.toml`. The current implementation exposes one managed signing key;
@@ -208,8 +207,10 @@ No named environments are currently declared in `wrangler.toml`, so the example
 above is valid only after adding isolated bindings and routes.
 
 The smoke signer reads provisioned private keys from the gitignored
-`.wrangler/cas-deploy/` directory. To target one control-plane-managed stack,
-set `UNICAS_SMOKE_STACK_ID`, `UNICAS_SMOKE_ISSUER`, `UNICAS_SMOKE_AUDIENCE`,
-`UNICAS_SMOKE_KID`, and `UNICAS_SMOKE_KEY_FILE`. The smoke flow covers lease,
-read, metadata, Root Ref update, usage, and garbage collection. Never commit
-the key files or print their contents.
+`.wrangler/cas-deploy/` directory. To target one control-plane-managed App,
+set `UNICAS_SMOKE_APP_ID`, `UNICAS_SMOKE_ISSUER`, `UNICAS_SMOKE_AUDIENCE`,
+`UNICAS_SMOKE_KID`, and `UNICAS_SMOKE_KEY_FILE`; optional
+`UNICAS_SMOKE_SPACE_ID` defaults to `deploy-smoke`. The default smoke covers
+lease, read, metadata, Root Ref idempotency, usage, GC, cross-Space isolation,
+and bidirectional v1/v2 denial. `pnpm smoke:v1` retains the separate frozen v1
+flow. Never commit the key files or print their contents.

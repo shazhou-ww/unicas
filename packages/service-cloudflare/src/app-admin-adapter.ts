@@ -9,10 +9,7 @@ export async function handleAppAdminCompatibilityRequest(
   legacyHandler: AdminHandler,
 ): Promise<Response> {
   if (route.operation === "mintManagedCapability") {
-    return Response.json(
-      { error: "SERVICE_UNAVAILABLE", message: "managed Space capability issuance is not configured" },
-      { status: 501 },
-    );
+    return legacyHandler(request);
   }
 
   const legacyResponse = await legacyHandler(rewriteRequest(request, route));
@@ -20,8 +17,20 @@ export async function handleAppAdminCompatibilityRequest(
     return legacyResponse;
   }
   const body = await legacyResponse.json();
-  if (isRecord(body) && typeof body.error === "string") return copyJsonResponse(legacyResponse, body);
-  return copyJsonResponse(legacyResponse, transformResponse(route, body));
+  if (isRecord(body) && typeof body.error === "string") {
+    return copyJsonResponse(legacyResponse, transformAppAdminError(body));
+  }
+  return copyJsonResponse(legacyResponse, transformAppAdminResponse(route, body));
+}
+
+export function transformAppAdminError(value: JsonRecord): JsonRecord {
+  return {
+    ...value,
+    error: value.error === "STACK_MEMBERSHIP_REQUIRED" ? "APP_MEMBERSHIP_REQUIRED" : value.error,
+    ...(typeof value.message === "string"
+      ? { message: value.message.replace(/\bstack\b/gi, "App") }
+      : {}),
+  };
 }
 
 function rewriteRequest(request: Request, route: AppAdminRoute): Request {
@@ -46,7 +55,7 @@ function rewriteRequest(request: Request, route: AppAdminRoute): Request {
   return new Request(url, request);
 }
 
-function transformResponse(route: AppAdminRoute, body: unknown): unknown {
+export function transformAppAdminResponse(route: AppAdminRoute, body: unknown): unknown {
   switch (route.operation) {
     case "me":
       return mapMe(body);
@@ -129,6 +138,11 @@ function mapAuditEvent(value: unknown): unknown {
   return {
     ...event,
     appId: stackId,
+    action: value.action === "stack.created"
+      ? "app.created"
+      : value.action === "stack.patched"
+        ? "app.patched"
+        : value.action,
     actor: isRecord(value.actor)
       ? { issuer: value.actor.identityIssuer, subject: value.actor.subject }
       : value.actor,

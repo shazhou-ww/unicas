@@ -157,6 +157,16 @@ describe("ControlPlaneAdminService", () => {
         tenantId: `member-${identity.subject}`,
         permissions: [`tenants:member-${identity.subject}:cas:manage`],
       }),
+      issueSpace: async ({ issuer, identity }) => ({
+        accessToken: `space-token-for-${identity.subject}`,
+        tokenType: "Bearer",
+        expiresIn: 120,
+        expiresAt: 121_000,
+        issuer: issuer.issuer,
+        audience: issuer.audience,
+        spaceId: `member-${identity.subject}`,
+        permissions: [`spaces:member-${identity.subject}:cas:manage`],
+      }),
     };
     const { repository, service } = fixture({ managedOAuthIssuer });
     const stack = await service.createStack(context(), { body: { displayName: "Managed" } });
@@ -174,8 +184,14 @@ describe("ControlPlaneAdminService", () => {
 
     expect(await service.mintManagedCapability(context(), { path: { stackId: stack.stackId } }))
       .toMatchObject({ accessToken: "token-for-alice", tenantId: "member-alice" });
+    expect(await service.mintManagedSpaceCapability(context(), stack.stackId))
+      .toMatchObject({ accessToken: "space-token-for-alice", spaceId: "member-alice" });
     expectError(
       await service.mintManagedCapability(context(bob, "Bob"), { path: { stackId: stack.stackId } }),
+      CasAdminErrorCodes.STACK_MEMBERSHIP_REQUIRED,
+    );
+    expectError(
+      await service.mintManagedSpaceCapability(context(bob, "Bob"), stack.stackId),
       CasAdminErrorCodes.STACK_MEMBERSHIP_REQUIRED,
     );
 
@@ -185,6 +201,10 @@ describe("ControlPlaneAdminService", () => {
     });
     expectError(
       await service.mintManagedCapability(context(), { path: { stackId: stack.stackId } }),
+      CasAdminErrorCodes.INVALID_REQUEST,
+    );
+    expectError(
+      await service.mintManagedSpaceCapability(context(), stack.stackId),
       CasAdminErrorCodes.INVALID_REQUEST,
     );
   });

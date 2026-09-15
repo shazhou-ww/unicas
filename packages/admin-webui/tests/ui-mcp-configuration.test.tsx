@@ -19,11 +19,12 @@ describe("AI tool connection", () => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
       if (path === "/admin/me") {
         return json({
-          identity: { displayName: "Admin User", emailForDisplay: "admin@example.com" },
+          principal: { issuer: "https://accounts.example", subject: "admin" },
+          profile: { displayName: "Admin User", emailForDisplay: "admin@example.com" },
           memberships: [],
         });
       }
-      if (path === "/admin/stacks") return json({ items: [] });
+      if (path === "/admin/apps") return json({ items: [] });
       return new Response(null, { status: 404 });
     }));
 
@@ -66,6 +67,9 @@ describe("AI tool connection", () => {
     const cliPrompt = await navigator.clipboard.readText();
     expect(cliPrompt).toContain("pnpm install --global ./packages/admin-cli");
     expect(cliPrompt).toContain("unicas login");
+    expect(cliPrompt).toContain("unicas principal");
+    expect(cliPrompt).toContain("unicas apps list");
+    expect(cliPrompt).not.toContain("unicas stacks list");
     expect(cliPrompt).toContain(`${window.location.origin}/admin/assets/skills/unicas-cli/SKILL.md`);
     expect(cliPrompt).toContain("standard agent-skills location");
     expect(cliPrompt).not.toContain("DeepSeek Harness");

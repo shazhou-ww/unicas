@@ -100,6 +100,21 @@ describe("standalone deployment plan", () => {
     expect(result.stdout).toContain("stacks/unicas/deploy/smoke.mjs");
   });
 
+  test("uses App/Space smoke by default and retains an explicit v1 smoke", () => {
+    const wrapper = readFileSync(join(ROOT, "stacks/unicas/deploy/smoke.mjs"), "utf8");
+    const appSpaceSmoke = readFileSync(join(ROOT, "scripts/cas-app-space-smoke.mjs"), "utf8");
+    const legacySmoke = readFileSync(join(ROOT, "scripts/cas-middleware-smoke.mjs"), "utf8");
+    const packageJson = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+    expect(wrapper).toContain("cas-app-space-smoke.mjs");
+    expect(appSpaceSmoke).toContain("SpaceCapabilityVersion");
+    expect(appSpaceSmoke).toContain("createSpaceCasClient");
+    expect(appSpaceSmoke).toContain("cross-Space read");
+    expect(appSpaceSmoke).toContain("v1 token on v2 route");
+    expect(appSpaceSmoke).toContain("v2 token on v1 route");
+    expect(legacySmoke).toContain("CapabilityVersion");
+    expect(packageJson.scripts["smoke:v1"]).toContain("cas-middleware-smoke.mjs");
+  });
+
   test("the smoke reset requires an explicit target and backup directory", () => {
     expect(parseResetArgs([])).toEqual({
       execute: false,
@@ -120,8 +135,8 @@ describe("standalone deployment plan", () => {
     expect(result.stdout).toContain("No-op");
   });
 
-  test("the smoke reset accepts only the apex-bound smoke inventory", () => {
-    const stackId = "cas_smoke";
+  test("the smoke reset accepts only the API-bound smoke inventory", () => {
+    const stackId = "cas_smoke-id_1";
     const inventory = {
       stacks: [{ stack_id: stackId, display_name: "Production Smoke" }],
       tenants: [{ stack_id: stackId, tenant_id: "deploy-smoke" }],
@@ -129,8 +144,8 @@ describe("standalone deployment plan", () => {
       oauthKeys: ["client:example_1"],
       managedIssuers: [{
         stack_id: stackId,
-        issuer: `https://unicas.work/managed-issuers/${stackId}`,
-        audience: `https://unicas.work/stacks/${stackId}`,
+        issuer: `https://api.unicas.work/managed-issuers/${stackId}`,
+        audience: `https://api.unicas.work/stacks/${stackId}`,
       }],
     };
     expect(() => validateResetInventory(inventory, stackId)).not.toThrow();
@@ -146,6 +161,8 @@ describe("standalone deployment plan", () => {
       ...inventory,
       oauthKeys: ["client:ok;remove-legacy"],
     }, stackId)).toThrow("unsafe key name");
+    expect(() => validateResetInventory(inventory, "cas_bad/id"))
+      .toThrow("not a canonical UniCAS stack id");
   });
 
   test("the smoke reset plan targets only isolated resources", () => {

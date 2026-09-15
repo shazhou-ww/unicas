@@ -1,5 +1,5 @@
 /**
- * Stack administration UI entry. Browser code may hold only the explicit
+ * App administration UI entry. Browser code may hold only the explicit
  * short-lived Playground capability; it never holds Google client secrets,
  * refresh tokens, private keys, or session signing material.
  */
@@ -7,8 +7,8 @@ export const CAS_ADMIN_UI_PACKAGE = "@unicas/admin-webui/ui" as const;
 
 export { App } from "./app.js";
 export { UserMenu } from "./user-menu.js";
-export { MyStacksView } from "./views/my-stacks.js";
-export { StackView } from "./views/stack.js";
+export { MyAppsView } from "./views/my-stacks.js";
+export { AppView } from "./views/stack.js";
 export { InvitationView } from "./views/invitations.js";
 export { LoginErrorView } from "./views/login-error.js";
 export { MembersView } from "./views/members.js";

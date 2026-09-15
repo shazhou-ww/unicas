@@ -1,6 +1,6 @@
 ---
 name: unicas-cli
-description: Use whenever a task involves operating the UniCAS control plane - listing or creating stacks, managing administrators, configuring a Stack OAuth issuer, or reading audit data - through the `unicas` CLI or stdio MCP mode.
+description: "Use whenever a task involves operating the UniCAS control plane: listing or creating Apps, managing App administrators, configuring an App OAuth issuer, reading App/Space audit data, or using the `unicas` CLI or stdio MCP mode."
 ---
 
 # Using the `unicas` CLI
@@ -13,12 +13,12 @@ operations as shell commands and a stdio MCP server.
 
 Use it for:
 
-- Stack administration: list, inspect, create, and update stacks.
-- Member management: list administrators, invite a member, and remove a member.
-- Stack OAuth issuer configuration: inspect and activate an issuer.
-- Audit and observability: control events, Root Ref balances, and Root Ref events.
+- App administration: list, inspect, create, and update Apps.
+- Member management: list App administrators, invite a member, and remove a Principal.
+- App OAuth issuer configuration: inspect and activate an issuer.
+- Audit and observability: App control events and Space Root Ref balances/events.
 
-Do not use it for tenant data-plane operations, invitation acceptance in a
+Do not use it for Space data-plane operations, invitation acceptance in a
 browser, or changes to the control-plane deployment itself.
 
 ## How login works
@@ -50,69 +50,75 @@ and stores the session. Check local state without a network request with
 Read operations (`control:read`):
 
 ```text
-unicas whoami
-unicas stacks list [--limit N] [--cursor C]
-unicas stacks get <stackId>
-unicas members list <stackId> [--limit N] [--cursor C]
-unicas oauth-issuer get <stackId>
-unicas ref-domains list <stackId>
-unicas audit control <stackId> [--limit N] [--cursor C] [--after ID]
-unicas audit root-domain-refs <stackId> <refDomain> [--tenant-id T] [--limit N] [--cursor C]
-unicas audit root-domain-events <stackId> <refDomain> [--tenant-id T] [--after N] [--limit N]
+unicas principal
+unicas apps list [--limit N] [--cursor C]
+unicas apps get <appId>
+unicas app-members list <appId> [--limit N] [--cursor C]
+unicas app-oauth-issuer get <appId>
+unicas app-ref-domains list <appId>
+unicas app-audit control <appId> [--limit N] [--cursor C] [--after ID]
+unicas app-audit root-domain-refs <appId> <refDomain> [--space-id S] [--limit N] [--cursor C]
+unicas app-audit root-domain-events <appId> <refDomain> [--space-id S] [--after N] [--limit N]
 ```
 
 Write operations (`control:write`):
 
 ```text
-unicas stacks create <displayName> [--idempotency-key K]
-unicas stacks update <stackId> [displayName] [--description D] [--etag E]
+unicas apps create <displayName> [--idempotency-key K]
+unicas apps update <appId> [displayName] [--description D] [--etag E]
 ```
 
 Security operations (`control:security`):
 
 ```text
-unicas members invite <stackId> <email> [--idempotency-key K]
-unicas members remove <stackId> --identity-issuer <url> --subject <sub> [--etag E] --confirm-subject <sub>
-unicas oauth-issuer inspect <stackId> <issuer>
-unicas oauth-issuer activate <stackId> <inspectionId> --activation-proof <jws> [--etag E]
+unicas app-members invite <appId> <email> [--idempotency-key K]
+unicas app-members remove <appId> --issuer <url> --subject <sub> [--etag E] --confirm-subject <sub>
+unicas app-oauth-issuer inspect <appId> <issuer>
+unicas app-oauth-issuer activate <appId> <inspectionId> --activation-proof <jws> [--etag E]
 ```
 
 Session commands are `unicas login`, `unicas logout`, and `unicas status`.
-Run `unicas mcp` to expose the catalog over stdio.
+Run `unicas mcp` to expose the complete App catalog over stdio, including
+Playground and managed Space capability operations that have no plain command.
+
+The old `whoami`, `stacks`, `members`, `oauth-issuer`, `ref-domains`, and
+`audit` commands are frozen v1 compatibility surfaces. Use them only when the
+task explicitly targets the Stack/Tenant contract; never treat their fields as
+aliases for App/Space.
 
 ## Guardrails
 
 - If `--etag` is omitted for a mutation, the CLI reads the current resource
-	first. After `REVISION_MISMATCH`, re-read and retry with the fresh ETag.
+  first. After `REVISION_MISMATCH`, re-read and retry with the fresh ETag.
 - Destructive commands require an exact `--confirm-*` value when noninteractive.
-	Never guess it.
+  Never guess it.
 - Creation commands generate an idempotency key automatically. Pass a stable
-	`--idempotency-key` when a retry must resolve to the original operation.
+  `--idempotency-key` when a retry must resolve to the original operation.
 - OAuth activation accepts only a compact JWS signed outside the CLI by a key
-	advertised by the issuer. Never pass private keys or upload JWKs to the CLI.
-- No stack deletion operation exists.
+  advertised by the issuer. Never pass private keys or upload JWKs to the CLI.
+- No App deletion operation exists.
 
 ## Common workflows
 
-Create a stack:
+Create an App:
 
 ```powershell
-unicas stacks create "Operations" --idempotency-key create-ops-1
+unicas apps create "Operations" --idempotency-key create-ops-1
 ```
 
 Invite an administrator:
 
 ```powershell
-unicas members invite <stackId> ops@example.com --idempotency-key invite-ops-1
+unicas app-members invite <appId> ops@example.com --idempotency-key invite-ops-1
 ```
 
-Connect a Stack OAuth issuer:
+Connect an App OAuth issuer:
 
 ```powershell
-unicas oauth-issuer get <stackId>
-unicas oauth-issuer inspect <stackId> https://issuer.example/oauth
+unicas app-oauth-issuer get <appId>
+unicas app-oauth-issuer inspect <appId> https://issuer.example/oauth
 # Sign the returned challenge off-band with an advertised issuer key.
-unicas oauth-issuer activate <stackId> <inspectionId> --activation-proof '<jws>' [--etag E]
+unicas app-oauth-issuer activate <appId> <inspectionId> --activation-proof '<jws>' [--etag E]
 ```
 
 ## stdio MCP mode
@@ -132,11 +138,12 @@ must use `shell: true`, invoke `%LOCALAPPDATA%\pnpm\bin\unicas.CMD`, or run
 
 - `Not logged in` or an expired/revoked session: run `unicas login` again.
 - `AUTHORIZATION_FAILED client_id is required`: the printed authorize URL was
-	truncated; rerun login and use the complete URL.
+  truncated; rerun login and use the complete URL.
 - `REVISION_MISMATCH`: re-read the resource and retry with its current ETag.
 
 ## Sources of truth
 
 - `docs/cas-control-plane-cli.md`: CLI overview and integration guidance.
 - `packages/admin-cli/README.md`: complete command reference and guardrails.
-- `packages/admin-cli/src/mcp/catalog.ts`: exact stdio MCP tool catalog.
+- `packages/admin-protocol/src/app-mcp-catalog.ts`: shared App MCP catalog.
+- `packages/admin-cli/src/mcp/catalog.ts`: combined App and v1 stdio catalog.

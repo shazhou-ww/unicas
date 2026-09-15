@@ -1,6 +1,6 @@
 # Progress
 
-Updated: 2026-09-14
+Updated: 2026-09-15
 
 ## Checklist
 
@@ -18,42 +18,59 @@ Updated: 2026-09-14
 - [x] Generate the separate App admin v2 OpenAPI artifact.
 - [x] Introduce App/Space operations in the cloud-neutral service core.
 - [x] Wire Space authority and scoped App administrator handlers in the platform adapter.
-- [ ] Implement v2 managed capability issuance and shared admin route cutover.
+- [x] Implement v2 managed capability issuance.
+- [x] Cut over shared administrator routes with the App client and WebUI.
+- [x] Break down the remaining implementation and documentation work.
+- [x] Complete the App administrator client transport.
+- [x] Complete App CLI operations.
+- [x] Complete remote/stdio App MCP operations and catalog parity.
+- [x] Complete the WebUI and Playground App/Space migration.
+- [x] Complete the App/Space browser-cache migration.
+- [x] Add App/Space smoke coverage while retaining frozen v1 smoke.
+- [x] Complete the documentation tracker.
+- [x] Clear the physical inventory and strategy gate.
+- [ ] Implement the clean physical App/Space schema and key source changes.
+- [ ] Execute the approved production reset, deploy, smoke, and rollback validation.
 
 ## Current state
 
-Phase 0 source classification and the compatibility matrix are complete. A
-read-only query against the current control-plane origin returned exactly one
-active resource named `Production Smoke`. The protocol package now exports an
-isolated v2 App/Space route family plus `ver: 2`, `spaceId`, and `spaces:` CAS
-capability vocabulary without changing v1 exports. The cloud-neutral service
-now provides an independent App/Space verifier that retains issuer-derived App
-authority and rejects both cross-version directions. It is not wired into the
-Worker, so v2 remains unreachable at ingress. Shared App/Space identity now
-lives in the data protocol, while the management protocol defines nested
-Principal, Profile, App, and AppMembership schemas through the permitted
-one-way protocol dependency. The Space data plane now has an independent
-contract, generator, package export, and drift artifact. Its generator is a
-separate command and does not write tenant v1. Milestone commit `c94a818`
-records that foundation.
-Second milestone commit `7818640` records the App routes and core contract. The
-remaining issuer, managed capability, Playground, and audit operations now
-complete the 23-operation typed App contract, and `admin-v2.openapi.json` is
-generated independently from admin v1. Milestone commit `21549ff` records the
-complete administrator contract. The cloud-neutral actor now classifies v2
-Space and App administrator routes independently, accepts optional v2
-authorization and handler ports, and dispatches authorized Space operations
-with App/Space actor keys and trusted headers. Existing platform adapters that
-do not provide those ports return 501 instead of falling through to v1. The
-Cloudflare adapter now resolves App authority through an explicit adapter over
-the current physical Stack issuer tables, accepts exactly one trusted v1 or v2
-scope-header family, and maps scoped `/admin/apps/*` requests and responses
-without changing physical schema names. Space requests now pass through the v2
-verifier and reach the existing physical data repositories through that
-explicit adapter. Managed Space capability issuance still returns 501 rather
-than exposing a v1 token as v2. The next concrete action is to implement true
-`ver: 2` managed issuance and choose the cutover behavior for shared
-`/admin/me` and invitation-accept routes.
+The compatibility matrix, v2 contracts, generated OpenAPI artifacts, verifier,
+Worker ingress, physical compatibility adapter, and managed Space capability
+issuance are implemented. V2 requests are authorized by issuer-derived App
+authority and exact Space scope, while v1 remains a separate frozen contract.
+Milestone commits `c94a818`, `7818640`, and `21549ff` record the contract
+foundation completed before the current uncommitted implementation slice.
+
+The new environment returns App-shaped responses for the shared `/admin/me` and
+invitation-accept paths. Admin client, CLI, remote/stdio MCP, and WebUI control
+surfaces now expose App operations while retained v1 names and schemas remain
+explicit compatibility contracts. The Playground keeps file roots as
+Principal-owned control records but uses managed Space capabilities, v2 data
+routes, and a versioned App/Space browser cache.
+
+`RemainingWork.md` now owns the dependency-ordered implementation breakdown,
+and `Documentation.md` owns documentation classification and completion. The
+complete App administrator transport covers CRUD, membership, Playground,
+issuer, managed capability, and App/Space audit operations while retaining all
+v1 methods unchanged. The App CLI exposes version-distinct App CRUD,
+membership, issuer, ref-domain, and audit commands, with `--space-id` on v2
+audit operations and an explicit legacy v1 help section. A shared protocol
+catalog now defines all 23 App MCP tools; remote and stdio use the same input
+schemas, descriptions, annotations, and names while legacy tools remain
+unchanged. The WebUI control surface now uses `#/apps/{appId}`, `/admin/apps`,
+App membership with separate Principal/Profile, App issuer operations, and
+App-shaped control audit. The Playground now retains Principal-owned file roots
+while using managed Space capabilities, `/v2/apps/{appId}/spaces/{spaceId}`
+data routes, and a non-colliding v2 browser cache keyed by Principal, App, and
+Space. App/Space smoke is the deployment default, frozen v1 smoke remains
+explicit, and the documentation tracker is complete with all retained old
+terminology classified. The next concrete action is the section 7 physical
+source slice in `RemainingWork.md`: replace the new environment's physical
+control/data schema, Durable Object naming, and R2 keys with App/Space names,
+then update the reset plan and tests. `CutoverInventory.md` proves the current
+environment is smoke-only and selects a clean rebuild. Production reset/deploy
+was not executed and still requires fresh off-machine backups, repeated
+inventory, rendered plan review, and explicit approval.
 
 ## Decisions
 
@@ -73,6 +90,14 @@ than exposing a v1 token as v2. The next concrete action is to implement true
   reject requests that mix the two trusted header families.
 - Never translate a v1 managed capability response into v2; fail 501 until the
   signer emits `ver: 2`, `spaceId`, and `spaces:` permissions itself.
+- Do not negotiate two schemas on the shared `/admin/me` or invitation-accept
+  URLs through extra fields or an undocumented version header. Keep v1 active
+  during staging, then switch the new environment's BFF, client, and WebUI to
+  the App response shapes in one change; the frozen legacy deployment remains
+  untouched.
+- Track implementation dependencies in `RemainingWork.md` and documentation in
+  `Documentation.md`; keep stable docs for accepted consensus and task-specific
+  inventories and execution state inside this task folder.
 
 ## Validation
 
@@ -145,12 +170,82 @@ than exposing a v1 token as v2. The next concrete action is to implement true
 - The complete Cloudflare test command remains intermittently affected by
   Miniflare ephemeral-port `EADDRINUSE`; all directly affected tests pass when
   run as a serialized focused batch.
+- Managed issuer tests passed: 1 file and 3 tests, including independent v1 and
+  v2 JWT signature and claim verification.
+- Cloud-neutral control administrator tests passed: 1 file and 14 tests,
+  including membership and active-issuer enforcement for both issuance paths.
+- App adapter and administrator BFF tests passed: 2 files and 34 tests; v2 mint
+  requires session CSRF, returns 201, and is never cacheable.
+- D1-backed control-plane integration passed: 1 file and 12 tests; the managed
+  Space token was authorized by `AppAuthorityRepository` and
+  `AppSpaceCapabilityVerifier`.
+- `@unicas/service` and `@unicas/service-cloudflare` typechecks passed; editor
+  diagnostics for the touched implementation files are clear.
+- Admin client tests passed: 1 file and 10 tests, including explicit v1/v2
+  identity contract mismatch rejection.
+- Focused WebUI tests passed: 2 files and 20 tests for App identity consumption
+  and invitation acceptance; its production build and typecheck passed.
+- Admin CLI tests passed: 6 files and 31 tests; remote MCP tests passed: 1 file
+  and 5 tests. Both catalogs expose `get_current_principal` while preserving
+  the legacy `whoami` schema.
+- Shared-route actor, App adapter, and Worker tests passed: 3 files and 28
+  tests, covering App precedence plus exact Principal, Profile, and membership
+  response mapping.
+- `pnpm typecheck` passed all 13 workspace package projects.
+- `pnpm check:repo` passed 5 files and 106 tests, including all four OpenAPI
+  drift checks and repository dependency boundaries.
+- `pnpm --workspace-concurrency=1 test` passed every repository and package
+  suite, including 198 Cloudflare adapter tests and 49 WebUI tests.
+- `pnpm build` passed all 13 workspace packages, including the production
+  WebUI bundle and generated Cloudflare Worker assets.
+- App administrator client completion passed 1 file and 14 tests, covering App
+  paths, response vocabulary, CSRF, ETags, idempotency, pagination, and
+  `spaceId` audit filters; its typecheck and editor diagnostics passed.
+- App CLI CRUD passed 2 focused files and 18 tests, covering `/admin/apps`
+  dispatch, App-shaped JSON, ETag resolution, CSRF, idempotency, and explicit
+  legacy help separation; the CLI typecheck and editor diagnostics passed.
+- The completed App CLI package passed 6 files and 41 tests plus typecheck,
+  covering App membership confirmation, issuer activation, ref domains,
+  Principal audit actors, and `spaceId` Root Ref filters while preserving v1.
+- Shared App MCP catalog validation passed 72 admin-protocol tests, 42
+  admin-cli/stdio tests, and 15 focused remote/adapter tests. Remote D1 tests
+  cover App CRUD, Principal/Profile membership, Playground records, App audit,
+  physical `tenantId` to public `spaceId` mapping, and mutation gates; the
+  Cloudflare package typecheck passed.
+- The App WebUI control surface passed all 9 files and 49 tests plus typecheck;
+  the production bundle and Worker inlined assets were regenerated. Routes,
+  list/detail, members, issuer, control audit, and Playground now use App/Space
+  vocabulary and routes while file roots remain Principal-owned records.
+- Space transport and cache validation passed 10 tenant-client tests, 12
+  browser-cache tests, and 30 focused Playground tests. V2 keys isolate App and
+  Space and cannot collide with v1; existing verifier tests cover cross-App,
+  cross-Space, and bidirectional cross-version denial.
+- App/Space smoke is now the deployment default and covers the canonical CAS
+  flow, Root Ref idempotency, cross-Space isolation, and bidirectional
+  cross-version denial. The original v1 script remains available as
+  `pnpm smoke:v1`; 12 deployment tests, script syntax checks, and
+  `pnpm deploy:plan` passed. Live smoke remains a deployment-gate action.
+- The first documentation slice updated the stable CLI/MCP guides, admin-cli
+  README, agent skill, and WebUI connection examples. The 18-page docs build,
+  docs tests, and task-link checks passed; retained Stack/Tenant terms in this
+  slice are explicitly legacy, physical mapping, or package identifiers.
+- Documentation completion updated the normative baseline, architecture,
+  binary/state/GC, OAuth migration record, operations, deployment,
+  observability, package guides, product site, and agent skill. Final classified
+  scan found only allowed legacy/physical/package/downstream/unrelated matches;
+  docs build, 3 docs tests, 4 OpenAPI drift tests, and 7 task tests passed.
+- Physical gate evidence is recorded in `CutoverInventory.md`: both remote D1
+  exports are non-empty and hashed; one Production Smoke App and one
+  `deploy-smoke` data scope remain; production R2's exact two-object set matches
+  D1, preview R2 and OAuth KV are empty, and the DO classes have no persistent
+  local storage. The non-executing reset validator passed; no destructive or
+  deployment operation ran.
 
 ## Blockers
 
-- The CLI result covers the control-plane list only. Fresh D1 exports and
-  direct D1, R2, KV, and relevant Durable Object inventories are still required
-  before any destructive schema or resource cutover.
+- Production reset/deploy requires fresh off-machine backups, a repeated
+  aggregate inventory, rendered reset-plan review, and explicit approval for
+  the destructive maintenance window.
 
 ## Outcome
 

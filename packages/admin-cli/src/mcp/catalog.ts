@@ -8,9 +8,11 @@
  * re-issue scope decisions.
  */
 
+import { APP_ADMIN_MCP_TOOL_LIST } from "@unicas/admin-protocol";
+import type { AppAdminMcpToolScope } from "@unicas/admin-protocol";
 import { z } from "zod";
 
-export type ControlPlaneToolScope = "control:read" | "control:write" | "control:security";
+export type ControlPlaneToolScope = AppAdminMcpToolScope;
 
 export interface ToolDefinition {
   readonly name: string;
@@ -36,11 +38,11 @@ const email = z.string().email();
 const url = z.string().url();
 const refDomain = z.string().min(1).max(64);
 
-export const TOOL_CATALOG: readonly ToolDefinition[] = [
+const LEGACY_TOOL_CATALOG: readonly ToolDefinition[] = [
   {
     name: "whoami",
-    title: "Current UniCAS operator",
-    description: "Return the authenticated operator identity and current stack memberships.",
+    title: "Legacy UniCAS operator",
+    description: "Return the authenticated operator identity and current Stack memberships from the v1 contract.",
     inputSchema: z.object({}),
     annotations: { readOnlyHint: true, destructiveHint: false },
     requiredScope: "control:read",
@@ -187,6 +189,18 @@ export const TOOL_CATALOG: readonly ToolDefinition[] = [
     annotations: { destructiveHint: false, idempotentHint: false },
     requiredScope: "control:security",
   },
+];
+
+const APP_TOOL_CATALOG: readonly ToolDefinition[] = APP_ADMIN_MCP_TOOL_LIST.map((toolDefinition) => ({
+  name: toolDefinition.name,
+  requiredScope: toolDefinition.requiredScope,
+  ...toolDefinition.registration,
+}));
+
+export const TOOL_CATALOG: readonly ToolDefinition[] = [
+  LEGACY_TOOL_CATALOG[0]!,
+  ...APP_TOOL_CATALOG,
+  ...LEGACY_TOOL_CATALOG.slice(1),
 ];
 
 const CATALOG_BY_NAME = new Map(TOOL_CATALOG.map((tool) => [tool.name, tool]));

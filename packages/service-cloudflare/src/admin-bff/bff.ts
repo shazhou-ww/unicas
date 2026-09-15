@@ -11,6 +11,7 @@ import {
   CasAdminErrorCodes,
   casAdminErrorHttpStatus,
   formatCasAdminETag,
+  matchAppAdminRoute,
   matchCasAdminRoute,
 } from "@unicas/admin-protocol";
 import type {
@@ -166,6 +167,10 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     const route = matchCasAdminRoute(method, pathname);
     if (route) {
       return handleAdminApi(request, url, route);
+    }
+    const appRoute = matchAppAdminRoute(method, pathname);
+    if (appRoute?.operation === "mintManagedCapability") {
+      return handleManagedSpaceCapability(request, appRoute.appId);
     }
     return json({ error: "Not Found" }, 404);
   };
@@ -817,6 +822,19 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         return handleAuditRead(request, route, ctx, query);
       }
     }
+  }
+
+  async function handleManagedSpaceCapability(request: Request, appId: string): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!(await passCsrf(request, auth.payload))) return csrfRejected();
+    const result = await controlPlane.mintManagedSpaceCapability(
+      serviceContext(auth.payload, request),
+      appId,
+    );
+    const response = json(result, "error" in result ? casAdminErrorHttpStatus[result.error] : 201);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
   }
 
   /** Root Ref audit reads: membership first, then the private reader RPC. */

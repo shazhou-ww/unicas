@@ -51,6 +51,12 @@ export interface AppMembership {
   readonly profile: Profile;
 }
 
+export interface AppAdminMeResponse {
+  readonly principal: Principal;
+  readonly profile: Profile;
+  readonly memberships: readonly AppMembership[];
+}
+
 export type AppMemberInvitationStatus = "pending" | "accepted" | "expired" | "revoked";
 
 export interface AppMemberInvitation {

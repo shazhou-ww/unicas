@@ -10,6 +10,9 @@ export type {
   CasListRootRefsOptions,
   CasNodeCache,
   CasNodeCacheKey,
+  SpaceCasClient,
+  SpaceCasClientConfig,
+  SpaceCasNodeCacheKey,
   CasNodeRange,
   CasNodeSource,
   CasNodeMetadata,
@@ -20,7 +23,8 @@ export type {
   HttpFetcher,
   TenantCasClient,
   TenantCasClientConfig,
+  TenantCasNodeCacheKey,
 } from "./types.js";
 
-export { createTenantCasClient } from "./client.js";
+export { createSpaceCasClient, createTenantCasClient } from "./client.js";
 export { CasClientError } from "./errors.js";

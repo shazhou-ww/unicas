@@ -18,14 +18,14 @@ export function createPlaygroundCacheSession(identity: { identityIssuer: string;
       if (closed || !identity.identityIssuer || !identity.subject) return undefined;
       let cache = caches.get(endpoint);
       if (!cache) {
-        cache = createBrowserCasNodeCache({ namespace: { endpoint, principal } });
+        cache = createBrowserCasNodeCache({ namespace: { endpoint, principal }, version: 2 });
         caches.set(endpoint, cache);
       }
       return cache;
     },
     async clear() {
       closed = true;
-      try { await clearBrowserCasNodeCaches({ principal }); }
+      try { await clearBrowserCasNodeCaches({ principal, version: 2 }); }
       finally {
         for (const cache of caches.values()) cache.close();
         caches.clear();

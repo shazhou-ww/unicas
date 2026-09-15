@@ -1,7 +1,7 @@
 {
   "name": "@unicas/admin-client",
   "version": "0.1.0",
-  "description": "Typed HTTP client for the CAS stack control plane (/admin API), one function per operation over the @unicas/admin-protocol contract",
+  "description": "Typed HTTP client for the UniCAS App control plane with explicit frozen Stack v1 operations",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

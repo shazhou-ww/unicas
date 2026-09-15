@@ -1,6 +1,13 @@
-# UniCAS Tenant Debug Tools — Requirements
+# Legacy UniCAS Tenant Debug Tools - Frozen v1 Requirements
 
-Status: requirements baseline v0.1 (design discussion session, 2026-08).
+Status: frozen historical v1 requirements; not implemented and not the current
+`unicas.work` contract.
+
+This document is retained to preserve the August 2026 design record. Its
+Stack/Tenant routes, claims, session layout, command names, and provider
+assumptions must not be reinterpreted as App/Space. Any future data-plane debug
+tool requires a new reviewed v2 design based on `appId`, `spaceId`, `ver: 2`,
+and `spaces:` permissions.
 
 `unicas-tenant` is the tenant-facing debug tooling for the CAS data plane
 (`/stacks/{stackId}/tenants/{tenantId}/cas/...`). It lets a tenant user query

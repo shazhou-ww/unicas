@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChevronsDown } from "lucide-react";
-import type { CasControlAuditEvent } from "@unicas/admin-client";
+import type { AppControlAuditEvent } from "@unicas/admin-client";
 import { api } from "../api.js";
 import { Button, Card, EmptyState, ErrorState, LoadingState, Table } from "../components.js";
 import { formatErrorSafe } from "./view-helpers.js";
 
 interface AuditPage {
-  readonly items: readonly CasControlAuditEvent[];
+  readonly items: readonly AppControlAuditEvent[];
   readonly nextCursor: string | null;
 }
 
@@ -14,7 +14,7 @@ function isLegacyIssuerAction(action: string): boolean {
   return action.startsWith("issuer.");
 }
 
-export function ControlAuditView({ stackId }: { stackId: string }) {
+export function ControlAuditView({ appId }: { appId: string }) {
   const [page, setPage] = useState<AuditPage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -25,7 +25,7 @@ export function ControlAuditView({ stackId }: { stackId: string }) {
     setError(null);
     try {
       const query = nextCursor ? `?limit=50&cursor=${encodeURIComponent(nextCursor)}` : "?limit=50";
-      const result = await api<AuditPage>(`/admin/stacks/${encodeURIComponent(stackId)}/audit-events${query}`);
+      const result = await api<AuditPage>(`/admin/apps/${encodeURIComponent(appId)}/audit-events${query}`);
       setPage((previous) => {
         if (!replace && previous) {
           return { items: [...previous.items, ...result.items], nextCursor: result.nextCursor };
@@ -38,7 +38,7 @@ export function ControlAuditView({ stackId }: { stackId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [stackId]);
+  }, [appId]);
 
   useEffect(() => {
     void load(null, true);
@@ -46,7 +46,7 @@ export function ControlAuditView({ stackId }: { stackId: string }) {
 
   return (
     <Card title="Change Log">
-      <p className="hint">Append-only record of every administrative change to this stack.</p>
+      <p className="hint">Append-only record of every administrative change to this App.</p>
       {error ? <ErrorState message={error} /> : null}
       {page === null && !error ? <LoadingState /> : null}
       {page !== null && page.items.length === 0 ? (

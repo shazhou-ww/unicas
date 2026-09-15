@@ -21,7 +21,7 @@ Use Streamable HTTP. Authentication is handled with OAuth in the browser; no API
 3. Fetch ${skillUrl}, install it in this tool's standard agent-skills location, and follow it.
   Determine the correct location from the tool's own conventions.
 4. Use the CLI (JSON on stdout) or connect over stdio MCP:
-   unicas whoami | unicas stacks list | unicas stacks get <stackId> | unicas stacks create "Operations" --idempotency-key ops-1
+  unicas principal | unicas apps list | unicas apps get <appId> | unicas apps create "Operations" --idempotency-key ops-1
    stdio MCP: command "unicas", args ["mcp"]`;
 
   useEffect(() => {

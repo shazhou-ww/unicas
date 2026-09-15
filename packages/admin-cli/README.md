@@ -7,7 +7,8 @@ then redirects the browser back to the CLI's loopback with a one-time code
 that the CLI exchanges (PKCE) for a session cookie + CSRF token, persisted
 locally. The CLI never talks to Google and needs no client id or secret.
 Commands call the typed `@unicas/admin-client` over the `/admin` HTTP API;
-`unicas mcp` exposes the same 18-tool contract as the MCP ingress hosted by
+`unicas mcp` exposes the same 38-tool contract (23 App tools plus 15 frozen v1
+tools) as the MCP ingress hosted by
 `@unicas/service-cloudflare` as a stdio MCP server backed by that client (for
 clients whose MCP support cannot do OAuth, for example DeepSeek Harness).
 
@@ -18,7 +19,7 @@ https://console.unicas.work/admin  <- /admin control-plane API (BFF session)
 unicas CLI  <- /admin/auth/cli/authorize (BFF does Google OIDC) -> cli/exchange
         |     persists ~/.unicas/session.json
         |
-        +-- plain commands:   unicas whoami / unicas stacks list ...
+        +-- plain commands:   unicas principal / unicas apps list ...
         `-- stdio MCP server: unicas mcp   (DSH: command "unicas", args ["mcp"])
 ```
 
@@ -60,39 +61,44 @@ pnpm --filter @unicas/admin-cli unicas login
 
 | Command | MCP tool |
 | --- | --- |
-| `unicas whoami` | `whoami` |
-| `unicas stacks list [--limit N] [--cursor C]` | `list_stacks` |
-| `unicas stacks get <stackId>` | `get_stack` |
-| `unicas stacks create <displayName> [--idempotency-key K]` | `create_stack` |
-| `unicas stacks update <stackId> [displayName] [--description D] [--etag E]` | `update_stack` |
-| `unicas members list <stackId> [--limit N] [--cursor C]` | `list_members` |
-| `unicas members invite <stackId> <email> [--idempotency-key K]` | `invite_member` |
-| `unicas members remove <stackId> --identity-issuer <url> --subject <sub> [--etag E] [--confirm-subject S]` | `remove_member` |
-| `unicas oauth-issuer get <stackId>` | `get_oauth_issuer` |
-| `unicas oauth-issuer inspect <stackId> <issuer>` | `inspect_oauth_issuer` |
-| `unicas oauth-issuer activate <stackId> <inspectionId> --activation-proof <jws> [--etag E]` | `activate_oauth_issuer` |
-| `unicas ref-domains list <stackId>` | `list_ref_domains` |
-| `unicas audit control <stackId> [--limit N] [--cursor C] [--after ID]` | `list_control_audit_events` |
-| `unicas audit root-domain-refs <stackId> <refDomain> [--tenant-id T] [--limit N] [--cursor C]` | `list_root_domain_refs` |
-| `unicas audit root-domain-events <stackId> <refDomain> [--tenant-id T] [--after N] [--limit N]` | `list_root_domain_events` |
+| `unicas principal` | `get_current_principal` |
+| `unicas apps list [--limit N] [--cursor C]` | `list_apps` |
+| `unicas apps get <appId>` | `get_app` |
+| `unicas apps create <displayName> [--idempotency-key K]` | `create_app` |
+| `unicas apps update <appId> [displayName] [--description D] [--etag E]` | `update_app` |
+| `unicas app-members list <appId> [--limit N] [--cursor C]` | `list_app_members` |
+| `unicas app-members invite <appId> <email> [--idempotency-key K]` | `invite_app_member` |
+| `unicas app-members remove <appId> --issuer <url> --subject <sub> [--etag E] [--confirm-subject S]` | `remove_app_member` |
+| `unicas app-oauth-issuer get <appId>` | `get_app_oauth_issuer` |
+| `unicas app-oauth-issuer inspect <appId> <issuer>` | `inspect_app_oauth_issuer` |
+| `unicas app-oauth-issuer activate <appId> <inspectionId> --activation-proof <jws> [--etag E]` | `activate_app_oauth_issuer` |
+| `unicas app-ref-domains list <appId>` | `list_app_ref_domains` |
+| `unicas app-audit control <appId> [--limit N] [--cursor C] [--after ID]` | `list_app_control_audit_events` |
+| `unicas app-audit root-domain-refs <appId> <refDomain> [--space-id S] [--limit N] [--cursor C]` | `list_space_root_domain_refs` |
+| `unicas app-audit root-domain-events <appId> <refDomain> [--space-id S] [--after N] [--limit N]` | `list_space_root_domain_events` |
 | `unicas logout` | RFC 7009 revocation + clears the session |
 | `unicas status` | Local session summary (no network) |
 | `unicas mcp` | Run as a stdio MCP server |
+
+MCP additionally exposes App invitation acceptance, managed issuer/capability,
+and Principal-owned Playground root operations. `whoami`, `stacks`, `members`,
+`oauth-issuer`, `ref-domains`, and `audit` retain their v1 Stack/Tenant schemas
+as explicitly labeled compatibility commands.
 
 Plain commands print the tool's `structuredContent` as JSON on stdout;
 diagnostics go to stderr.
 
 ## Guardrails
 
-- **ETags.** `update_stack`, `remove_member`, and `activate_oauth_issuer`
+- **ETags.** App update, member removal, issuer activation, and MCP Playground mutations
   need the current ETag. When `--etag` is omitted the CLI reads it first
-  (`get_stack` / `get_oauth_issuer`).
+  (`get_app` / `get_app_oauth_issuer`).
 - **Confirmations.** Destructive operations require their `--confirm-*` flag
   to exactly match the target. Without the flag and a TTY, the CLI prompts;
   without the flag and no TTY (scripts), the command fails.
-- **Idempotency.** `create_stack` and `invite_member` auto-generate a stable
+- **Idempotency.** `create_app` and `invite_app_member` auto-generate a stable
   `unicas-cli:<uuid>` idempotency key when `--idempotency-key` is omitted.
-- **Never secrets on the wire to the CLI.** `activate_oauth_issuer` accepts
+- **Never secrets on the wire to the CLI.** `activate_app_oauth_issuer` accepts
   only a compact-JWS activation proof signed off-CLI with a private key the
   discovered issuer advertises; private key material is never a CLI input, and
   no JWK upload path exists.
@@ -125,7 +131,7 @@ pnpm install --global ./packages/admin-cli
 ```
 
 Alternatively run any command in-process:
-`pnpm --filter @unicas/admin-cli unicas stacks list`.
+`pnpm --filter @unicas/admin-cli unicas apps list`.
 
 > Windows note: pnpm's global bin is a `.CMD` shim. A Node-based MCP client
 > spawning `unicas mcp` must either use `shell: true`, point at the shim path
@@ -167,5 +173,5 @@ pnpm --filter @unicas/admin-cli typecheck
 ```
 
 Tests run against an in-memory fake of the `/admin` BFF API — no network, no
-real OAuth. A live `unicas login` + `unicas whoami` against production is a
+real OAuth. A live `unicas login` + `unicas principal` against production is a
 manual verification step because it requires a real browser Google sign-in.

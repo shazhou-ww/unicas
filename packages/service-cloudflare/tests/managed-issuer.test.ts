@@ -82,4 +82,43 @@ describe("CloudflareManagedIssuer", () => {
       refDomain: expect.stringMatching(/^playground:[0-9a-f]{16}$/),
     });
   });
+
+  test("issues verifiable v2 capabilities with stable member-isolated Spaces", async () => {
+    const authority = await fixture();
+    const stack = {
+      stackId: "cas_first",
+      displayName: "First",
+      description: "",
+      status: "active" as const,
+      createdAt: 1000,
+      revision: 1,
+    };
+    const issuer = await authority.provision(stack.stackId, 1000);
+    const capability = await authority.issueSpace({
+      stack,
+      issuer,
+      identity: { identityIssuer: "https://accounts.google.com", subject: "alice" },
+    });
+
+    expect(capability.permissions).toEqual([
+      `spaces:${capability.spaceId}:cas:read`,
+      `spaces:${capability.spaceId}:cas:write`,
+      `spaces:${capability.spaceId}:cas:manage`,
+    ]);
+    expect(capability).not.toHaveProperty("tenantId");
+
+    const jwks = await authority.jwks() as { keys: Array<Record<string, unknown>> };
+    const publicKey = await importJWK(jwks.keys[0]!, "ES256");
+    const verified = await jwtVerify(capability.accessToken, publicKey, {
+      issuer: capability.issuer,
+      audience: capability.audience,
+      currentDate: new Date(1_700_000_000_000),
+    });
+    expect(verified.payload).toMatchObject({
+      ver: 2,
+      spaceId: capability.spaceId,
+      refDomain: expect.stringMatching(/^playground:[0-9a-f]{16}$/),
+    });
+    expect(verified.payload).not.toHaveProperty("tenantId");
+  });
 });

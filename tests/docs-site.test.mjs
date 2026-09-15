@@ -10,7 +10,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await rm(outputDir, { recursive: true, force: true });
+  await rm(outputDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 async function page(route) {

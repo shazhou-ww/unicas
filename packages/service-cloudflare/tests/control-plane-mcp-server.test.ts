@@ -3,6 +3,7 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import type { D1Database } from "@cloudflare/workers-types";
 import { CLIENT_CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, PROTOCOL_VERSION_META_KEY } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
+import { APP_ADMIN_MCP_TOOL_LIST } from "@unicas/admin-protocol";
 import { createControlPlaneMcpServer } from "../src/mcp/server.js";
 import type { ControlPlaneMcpGrantProps } from "../src/mcp/server.js";
 import { migrateControlSchema } from "../src/control-schema.js";
@@ -31,16 +32,27 @@ describe("adapter-hosted control-plane MCP server", () => {
   test("lists tools and maps whoami to the OAuth identity", async () => {
     const handler = handlerFor(grant(["control:read"]));
     const listed = await mcpRequest(handler, "tools/list", {});
-    const body = await listed.json() as { result: { tools: Array<{ name: string }> } };
+    const body = await listed.json() as { result: { tools: Array<{ name: string; description?: string }> } };
     expect(body.result.tools.map((tool) => tool.name)).toEqual([
-      "whoami", "list_stacks", "get_stack", "list_members", "get_oauth_issuer",
+      "whoami", ...APP_ADMIN_MCP_TOOL_LIST.map((tool) => tool.name),
+      "list_stacks", "get_stack", "list_members", "get_oauth_issuer",
       "list_ref_domains", "list_control_audit_events",
       "list_root_domain_refs", "list_root_domain_events", "create_stack",
       "update_stack", "invite_member", "remove_member", "inspect_oauth_issuer", "activate_oauth_issuer",
     ]);
+    for (const definition of APP_ADMIN_MCP_TOOL_LIST) {
+      expect(body.result.tools.find((tool) => tool.name === definition.name)?.description)
+        .toBe(definition.registration.description);
+    }
     const whoami = await callTool(handler, "whoami", {});
     expect(whoami.structuredContent).toMatchObject({
       identity: { subject: "alice-sub", displayName: "Alice", emailForDisplay: "alice@example.com" },
+      memberships: [],
+    });
+    const principal = await callTool(handler, "get_current_principal", {});
+    expect(principal.structuredContent).toMatchObject({
+      principal: { issuer: "https://accounts.google.com", subject: "alice-sub" },
+      profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
       memberships: [],
     });
   });
@@ -53,6 +65,9 @@ describe("adapter-hosted control-plane MCP server", () => {
     expect((await callTool(handlerFor(grant(["control:write"]), { mutationsEnabled: true }), "invite_member", {
       stackId: "cas_stack", email: "bob@example.com", confirmEmail: "bob@example.com", idempotencyKey: "invite-1",
     })).content[0]?.text).toContain("control:security");
+    expect((await callTool(handlerFor(grant(["control:security"])), "mint_managed_space_capability", {
+      appId: "cas_app",
+    })).content[0]?.text).toContain("disabled by deployment policy");
   });
 
   test("creates idempotent stacks, records MCP audit attribution, and guards writes with ETags", async () => {
@@ -72,6 +87,118 @@ describe("adapter-hosted control-plane MCP server", () => {
         channel: "mcp", oauthClientHandle: "a".repeat(64), toolName: "create_stack",
       }
     });
+  });
+
+  test("serves App CRUD and audit without exposing Stack-shaped fields", async () => {
+    const handler = handlerFor(
+      grant(["control:read", "control:write", "control:security"]),
+      { mutationsEnabled: true },
+    );
+    const created = await callTool(handler, "create_app", {
+      displayName: "Documents",
+      idempotencyKey: "create-app-1",
+    });
+    expect(created.structuredContent).toMatchObject({
+      appId: expect.any(String),
+      displayName: "Documents",
+      revision: 1,
+      etag: '"1"',
+    });
+    expect(created.structuredContent).not.toHaveProperty("stackId");
+    const appId = String(created.structuredContent.appId);
+
+    const listed = await callTool(handler, "list_apps", { limit: 10 });
+    expect(listed.structuredContent).toMatchObject({ items: [{ appId, displayName: "Documents" }] });
+    expect((listed.structuredContent.items as Array<Record<string, unknown>>)[0]).not.toHaveProperty("stackId");
+
+    const updated = await callTool(handler, "update_app", {
+      appId,
+      description: "Production documents",
+      etag: '"1"',
+    });
+    expect(updated.structuredContent).toMatchObject({
+      appId,
+      description: "Production documents",
+      revision: 2,
+      etag: '"2"',
+    });
+
+    const audit = await callTool(handler, "list_app_control_audit_events", { appId, limit: 10 });
+    const events = audit.structuredContent.items as Array<Record<string, unknown>>;
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        appId,
+        actor: { issuer: "https://accounts.google.com", subject: "alice-sub" },
+      }),
+    ]));
+    expect(events.every((event) => !("stackId" in event))).toBe(true);
+  });
+
+  test("serves App memberships and Principal-owned Playground records", async () => {
+    const aliceHandler = handlerFor(
+      grant(["control:read", "control:write", "control:security"]),
+      { mutationsEnabled: true, publicOrigin: "https://console.unicas.work" },
+    );
+    const created = await callTool(aliceHandler, "create_app", {
+      displayName: "Collaboration",
+      idempotencyKey: "create-collaboration-1",
+    });
+    const appId = String(created.structuredContent.appId);
+    const invitation = await callTool(aliceHandler, "invite_app_member", {
+      appId,
+      email: "bob@example.com",
+      confirmEmail: "bob@example.com",
+      idempotencyKey: "invite-bob-app-1",
+    });
+    expect(invitation.structuredContent).toMatchObject({ invitation: { appId, status: "pending" } });
+    const token = String(invitation.structuredContent.acceptUrl).split("/").pop()!;
+
+    const bobHandler = handlerFor({
+      ...grant(["control:read", "control:security"]),
+      subject: "bob-sub",
+      displayName: "Bob",
+      emailForDisplay: "bob@example.com",
+    }, { mutationsEnabled: true });
+    expect((await callTool(bobHandler, "accept_app_member_invitation", { token })).structuredContent)
+      .toMatchObject({
+        appId,
+        principal: { issuer: "https://accounts.google.com", subject: "bob-sub" },
+        profile: { displayName: "Bob", emailForDisplay: "bob@example.com" },
+      });
+
+    const members = await callTool(aliceHandler, "list_app_members", { appId, limit: 10 });
+    expect(members.structuredContent.items).toEqual([
+      expect.objectContaining({
+        appId,
+        principal: expect.objectContaining({ subject: "alice-sub" }),
+      }),
+      expect.objectContaining({
+        appId,
+        principal: expect.objectContaining({ subject: "bob-sub" }),
+        profile: expect.objectContaining({ displayName: "Bob" }),
+      }),
+    ]);
+
+    const manifestHash = "a".repeat(64);
+    const root = await callTool(aliceHandler, "create_app_playground_file_root", {
+      appId,
+      rootId: "root-1",
+      name: "Files",
+      manifestHash,
+    });
+    expect(root.structuredContent).toMatchObject({ rootId: "root-1", etag: '"1"' });
+    expect(await callTool(aliceHandler, "delete_app_playground_file_root", {
+      appId,
+      rootId: "root-1",
+      etag: '"1"',
+      confirmRootId: "wrong",
+    })).toMatchObject({ isError: true, structuredContent: { error: "CONFIRMATION_REQUIRED" } });
+    expect((await callTool(aliceHandler, "delete_app_playground_file_root", {
+      appId,
+      rootId: "root-1",
+      etag: '"1"',
+      confirmRootId: "root-1",
+    })).structuredContent).toEqual({ ok: true });
   });
 
   test("invites, lists, and removes members through the extracted admin service", async () => {
@@ -131,6 +258,64 @@ describe("adapter-hosted control-plane MCP server", () => {
     const stack = await callTool(handler, "create_stack", { displayName: "Audit", idempotencyKey: "create-audit-1" });
     expect((await callTool(handler, "list_ref_domains", { stackId: stack.structuredContent.stackId })).structuredContent)
       .toEqual({ domains: [{ stackId: stack.structuredContent.stackId, refDomain: "doc", revision: 2 }] });
+  });
+
+  test("maps physical audit dimensions to App and Space MCP output", async () => {
+    const requests: URL[] = [];
+    const auditReader = {
+      fetch: async (input: RequestInfo | URL) => {
+        const url = new URL(String(input));
+        requests.push(url);
+        if (url.pathname === "/_internal/audit/domains") {
+          return Response.json({ domains: [{ stackId: url.searchParams.get("stackId"), refDomain: "doc", revision: 2 }] });
+        }
+        if (url.pathname === "/_internal/audit/refs") {
+          return Response.json({
+            revision: 2,
+            refs: [{ tenantId: url.searchParams.get("tenantId"), hash: "a".repeat(64), count: 1 }],
+            nextCursor: null,
+          });
+        }
+        return Response.json({
+          events: [{ revision: 2, tenantId: url.searchParams.get("tenantId"), requestId: "request-1", changes: {}, appliedAt: 1 }],
+          latestRevision: 2,
+          nextAfter: 2,
+        });
+      },
+    };
+    const handler = handlerFor(
+      grant(["control:read", "control:write"]),
+      { mutationsEnabled: true, auditReader },
+    );
+    const app = await callTool(handler, "create_app", {
+      displayName: "Audit App",
+      idempotencyKey: "create-audit-app-1",
+    });
+    const appId = String(app.structuredContent.appId);
+
+    expect((await callTool(handler, "list_app_ref_domains", { appId })).structuredContent)
+      .toEqual({ domains: [{ appId, refDomain: "doc", revision: 2 }] });
+    expect((await callTool(handler, "list_space_root_domain_refs", {
+      appId,
+      refDomain: "doc",
+      spaceId: "space-1",
+    })).structuredContent).toMatchObject({ refs: [{ spaceId: "space-1", count: 1 }] });
+    expect((await callTool(handler, "list_space_root_domain_events", {
+      appId,
+      refDomain: "doc",
+      spaceId: "space-1",
+    })).structuredContent).toMatchObject({ events: [{ spaceId: "space-1", revision: 2 }] });
+
+    expect(requests.map((url) => ({
+      pathname: url.pathname,
+      stackId: url.searchParams.get("stackId"),
+      tenantId: url.searchParams.get("tenantId"),
+      spaceId: url.searchParams.get("spaceId"),
+    }))).toEqual([
+      { pathname: "/_internal/audit/domains", stackId: appId, tenantId: null, spaceId: null },
+      { pathname: "/_internal/audit/refs", stackId: appId, tenantId: "space-1", spaceId: null },
+      { pathname: "/_internal/audit/events", stackId: appId, tenantId: "space-1", spaceId: null },
+    ]);
   });
 });
 

@@ -2,7 +2,7 @@
 
 UniCAS exposes three current diagnostic surfaces:
 
-1. `Server-Timing` headers on tenant-plane responses.
+1. `Server-Timing` headers on Space data-plane responses.
 2. Worker stdout/stderr through Cloudflare logs or the local Miniflare terminal.
 3. Durable control-plane and Root Ref audit records through authenticated admin
    APIs, the `unicas` CLI, or MCP tools.
@@ -12,7 +12,7 @@ OAuth authorization codes.
 
 ## Server-Timing
 
-Tenant routes return a `Server-Timing` header and `Timing-Allow-Origin: *`.
+Space routes return a `Server-Timing` header and `Timing-Allow-Origin: *`.
 Repeated operations are aggregated and include a call count. Depending on the
 request path, entries can include:
 
@@ -20,12 +20,12 @@ request path, entries can include:
 | --- | --- |
 | `cas_edge` | Total edge service time |
 | `cas_schema` | Lazy D1 schema initialization |
-| `cas_auth` | Tenant capability verification |
+| `cas_auth` | Space capability verification |
 | `cas_do` | Durable Object dispatch |
 | `cas_d1_*` | D1 lease, node, Root Ref, and commit operations |
 | `cas_r2_get`, `cas_r2_put`, `cas_r2_head`, `cas_r2_prefix` | R2 operations |
 
-Inspect headers from a tenant request with `curl -i` or the browser network
+Inspect headers from a Space request with `curl -i` or the browser network
 panel. A representative header is:
 
 ```text
@@ -50,12 +50,13 @@ pnpm --filter @unicas/service-cloudflare exec wrangler tail
 
 The current structured events are:
 
-- `cas_stack_authorization`: stack capability authorization decisions. The
-  payload comes from the authority verifier and includes its decision kind.
+- `cas_app_authorization`: App/Space v2 capability authorization decisions.
+- `cas_stack_authorization`: retained v1 telemetry identifier for frozen
+  Stack/Tenant capability decisions. Both payloads include the decision kind.
 - `admin_oidc_callback_failed`: administrator OIDC callback failures with a
   bounded reason such as `state_mismatch` or `id_token_invalid`.
 
-Unexpected tenant authorization, service actor, Durable Object, administrator
+Unexpected Space authorization, service actor, Durable Object, administrator
 BFF, and R2 upload failures are written to stderr with an exception. These are
 incident signals; expected protocol rejections remain structured HTTP
 responses and are not logged as exceptions.
@@ -67,15 +68,15 @@ it for credentials before sharing.
 
 ## Control-plane audit
 
-Control mutations append audit records containing the stack, actor, action,
+Control mutations append audit records containing the App, Principal actor, action,
 target, request identity, trace identity, caller channel, and timestamp. Read
 those records through authenticated control-plane surfaces:
 
 ```powershell
-unicas audit control <stackId> --limit 50
-unicas ref-domains list <stackId>
-unicas audit root-domain-refs <stackId> <refDomain> --limit 50
-unicas audit root-domain-events <stackId> <refDomain> --limit 50
+unicas app-audit control <appId> --limit 50
+unicas app-ref-domains list <appId>
+unicas app-audit root-domain-refs <appId> <refDomain> [--space-id S] --limit 50
+unicas app-audit root-domain-events <appId> <refDomain> [--space-id S] --limit 50
 ```
 
 Use the returned cursor unchanged for the next control or balance page. Root
@@ -91,10 +92,10 @@ not operator-facing public APIs. Prefer the CLI, WebUI, or MCP surface.
 For a basic local or production triage:
 
 1. Check `GET /health` for edge reachability.
-2. Reproduce one authenticated tenant request and inspect `Server-Timing`.
+2. Reproduce one authenticated Space request and inspect `Server-Timing`.
 3. Correlate unexpected failures in `wrangler tail` or the local terminal.
-4. Read the stack's control and Root Ref audit records for the business action.
-5. Verify active issuer state with `unicas oauth-issuer get <stackId>` when
+4. Read the App's control and Root Ref audit records for the business action.
+5. Verify active issuer state with `unicas app-oauth-issuer get <appId>` when
    authorization fails.
 
 The detailed SLOs, alerts, backup procedure, and incident runbooks live in

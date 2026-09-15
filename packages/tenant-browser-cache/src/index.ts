@@ -3,6 +3,7 @@ import type { CasNodeCache, CasNodeCacheKey, CasNodeMetadata, CasNodeRange } fro
 
 export interface BrowserCasNodeCacheOptions {
   readonly namespace: { readonly endpoint: string; readonly principal: string };
+  readonly version?: 1 | 2;
   readonly databaseName?: string;
   readonly maxBytes?: number;
   readonly maxMemoryBytes?: number;
@@ -28,7 +29,7 @@ interface CacheSchema extends DBSchema {
   nodes: { key: string; value: Entry; indexes: { namespace: string; principal: string } };
 }
 
-const defaultDatabaseName = "unicas-node-cache-v1";
+const defaultDatabaseName = (version: 1 | 2) => `unicas-node-cache-v${version}`;
 const liveCaches = new Set<{ namespace: string; principal: string; databaseName: string; invalidate: () => void }>();
 
 function openDatabase(databaseName: string): Promise<IDBPDatabase<CacheSchema> | undefined> {
@@ -61,8 +62,8 @@ function invalidationChannel(databaseName: string): BroadcastChannel | undefined
   catch { return undefined; }
 }
 
-export async function clearBrowserCasNodeCaches(options: { readonly principal: string; readonly databaseName?: string }): Promise<void> {
-  const databaseName = options.databaseName ?? defaultDatabaseName;
+export async function clearBrowserCasNodeCaches(options: { readonly principal: string; readonly version?: 1 | 2; readonly databaseName?: string }): Promise<void> {
+  const databaseName = options.databaseName ?? defaultDatabaseName(options.version ?? 1);
   for (const live of liveCaches) if (live.principal === options.principal && live.databaseName === databaseName) live.invalidate();
   const channel = invalidationChannel(databaseName);
   channel?.postMessage({ principal: options.principal });
@@ -82,9 +83,12 @@ export function createBrowserCasNodeCache(options: BrowserCasNodeCacheOptions): 
   const endpoint = new URL(options.namespace.endpoint);
   if (endpoint.username || endpoint.password || endpoint.search || endpoint.hash) throw new TypeError("Cache endpoint must not contain credentials, query, or fragment");
   if (!options.namespace.principal) throw new TypeError("Cache principal is required");
+  const version = options.version ?? 1;
   const principal = options.namespace.principal;
-  const namespace = JSON.stringify([endpoint.href.replace(/\/$/, ""), principal]);
-  const databaseName = options.databaseName ?? defaultDatabaseName;
+  const namespace = version === 1
+    ? JSON.stringify([endpoint.href.replace(/\/$/, ""), principal])
+    : JSON.stringify(["v2", endpoint.href.replace(/\/$/, ""), principal]);
+  const databaseName = options.databaseName ?? defaultDatabaseName(version);
   const maxBytes = options.maxBytes ?? 64 * 1024 * 1024;
   const maxMemoryBytes = options.maxMemoryBytes ?? 8 * 1024 * 1024;
   const maxEntryBytes = options.maxEntryBytes ?? 4 * 1024 * 1024;
@@ -124,6 +128,13 @@ export function createBrowserCasNodeCache(options: BrowserCasNodeCacheOptions): 
   }
 
   function keyId(key: CasNodeCacheKey, kind: "metadata" | "content"): string {
+    if (version === 2) {
+      if (!("appId" in key) || key.version !== 2) {
+        throw new TypeError("App/Space cache requires a v2 cache key");
+      }
+      return JSON.stringify([namespace, "v2", key.appId, key.spaceId, key.hash, kind]);
+    }
+    if (!("stackId" in key)) throw new TypeError("Stack/Tenant cache requires a v1 cache key");
     return JSON.stringify([namespace, key.stackId, key.tenantId, key.hash, kind]);
   }
 

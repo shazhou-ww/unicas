@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { UserMinus, UserPlus } from "lucide-react";
-import type { CasStackMember } from "@unicas/admin-client";
+import type { AppMembership } from "@unicas/admin-client";
 import { api, ifMatch } from "../api.js";
 import { Button, Card, EmptyState, ErrorState, LoadingState, Table } from "../components.js";
 import { formatErrorSafe } from "./view-helpers.js";
@@ -10,12 +10,12 @@ interface InvitationResult {
   readonly acceptUrl: string;
 }
 
-export function MembersView({ stackId, stackRevision, onChanged }: {
-  stackId: string;
-  stackRevision: number;
+export function MembersView({ appId, appRevision, onChanged }: {
+  appId: string;
+  appRevision: number;
   onChanged: () => void;
 }) {
-  const [members, setMembers] = useState<CasStackMember[] | null>(null);
+  const [members, setMembers] = useState<AppMembership[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [inviting, setInviting] = useState(false);
@@ -25,12 +25,12 @@ export function MembersView({ stackId, stackRevision, onChanged }: {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const result = await api<{ items: CasStackMember[] }>(`/admin/stacks/${encodeURIComponent(stackId)}/members`);
+      const result = await api<{ items: AppMembership[] }>(`/admin/apps/${encodeURIComponent(appId)}/members`);
       setMembers(result.items);
     } catch (caught) {
       setError(formatErrorSafe(caught));
     }
-  }, [stackId]);
+  }, [appId]);
 
   useEffect(() => {
     void load();
@@ -42,7 +42,7 @@ export function MembersView({ stackId, stackRevision, onChanged }: {
     setInviteResult(null);
     try {
       const result = await api<InvitationResult>(
-        `/admin/stacks/${encodeURIComponent(stackId)}/member-invitations`,
+        `/admin/apps/${encodeURIComponent(appId)}/member-invitations`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -57,13 +57,13 @@ export function MembersView({ stackId, stackRevision, onChanged }: {
     }
   }
 
-  async function removeMember(identityIssuer: string, subject: string) {
+  async function removeMember(issuer: string, subject: string) {
     setRemoving(subject);
     setError(null);
     try {
       await api<{ ok: true }>(
-        `/admin/stacks/${encodeURIComponent(stackId)}/members?identityIssuer=${encodeURIComponent(identityIssuer)}&subject=${encodeURIComponent(subject)}`,
-        { method: "DELETE", headers: ifMatch(stackRevision) },
+        `/admin/apps/${encodeURIComponent(appId)}/members?issuer=${encodeURIComponent(issuer)}&subject=${encodeURIComponent(subject)}`,
+        { method: "DELETE", headers: ifMatch(appRevision) },
       );
       onChanged();
       await load();
@@ -76,7 +76,7 @@ export function MembersView({ stackId, stackRevision, onChanged }: {
 
   return (
     <>
-      <Card title="Invite a member">
+      <Card title="Invite an App administrator">
         <div className="inline-form">
           <input
             aria-label="Email constraint (optional)"
@@ -98,7 +98,7 @@ export function MembersView({ stackId, stackRevision, onChanged }: {
           </div>
         ) : null}
       </Card>
-      <Card title="Members">
+      <Card title="App administrators">
         {error ? <ErrorState message={error} /> : null}
         {members === null && !error ? <LoadingState /> : null}
         {members !== null && members.length === 0 ? (
@@ -109,16 +109,16 @@ export function MembersView({ stackId, stackRevision, onChanged }: {
             columns={["Subject", "Email", ""]}
             empty="No members."
             rows={members.map((member) => [
-              member.subject,
-              member.emailForDisplay ?? "—",
+              member.principal.subject,
+              member.profile.emailForDisplay ?? "—",
               <Button
-                key={`remove-${member.subject}`}
+                key={`remove-${member.principal.subject}`}
                 icon={<UserMinus size={15} />}
                 variant="danger"
-                disabled={removing === member.subject}
-                onClick={() => void removeMember(member.identityIssuer, member.subject)}
+                disabled={removing === member.principal.subject}
+                onClick={() => void removeMember(member.principal.issuer, member.principal.subject)}
               >
-                {removing === member.subject ? "Removing…" : "Remove"}
+                {removing === member.principal.subject ? "Removing…" : "Remove"}
               </Button>,
             ])}
           />

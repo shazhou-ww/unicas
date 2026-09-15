@@ -3,6 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { clearBrowserCasNodeCaches, createBrowserCasNodeCache, type BrowserCasNodeCache, type BrowserCasNodeCacheOptions } from "../src/index.js";
 
 const key = { stackId: "stack", tenantId: "tenant", hash: "a".repeat(64) };
+const spaceKey = { version: 2 as const, appId: "stack", spaceId: "tenant", hash: key.hash };
 const metadata = { hash: key.hash, size: 6, contentType: "text/plain", refs: [] };
 const caches: BrowserCasNodeCache[] = [];
 let databaseNumber = 0;
@@ -49,6 +50,27 @@ test("isolates endpoint, principal, stack and tenant, and clones metadata", asyn
   await cache.metadata({ ...key, stackId: "other" }, load);
   await cache.metadata({ ...key, tenantId: "other" }, load);
   expect(load).toHaveBeenCalledTimes(4);
+});
+
+test("uses a v2 App and Space namespace that cannot collide with v1", async () => {
+  const databaseName = `test-cache-version-${++databaseNumber}`;
+  const namespace = { endpoint: "https://cas.example", principal: "issuer:subject" };
+  const legacy = createBrowserCasNodeCache({ namespace, databaseName, version: 1 });
+  const space = createBrowserCasNodeCache({ namespace, databaseName, version: 2 });
+  caches.push(legacy, space);
+  await legacy.metadata(key, async () => metadata);
+  const loadSpace = vi.fn(async () => metadata);
+  expect(await space.metadata(spaceKey, loadSpace)).toEqual(metadata);
+  expect(loadSpace).toHaveBeenCalledOnce();
+  await space.metadata({ ...spaceKey, appId: "other-app" }, loadSpace);
+  await space.metadata({ ...spaceKey, spaceId: "other-space" }, loadSpace);
+  expect(loadSpace).toHaveBeenCalledTimes(3);
+
+  const loadLegacy = vi.fn(async () => metadata);
+  expect(await legacy.metadata(key, loadLegacy)).toEqual(metadata);
+  expect(loadLegacy).not.toHaveBeenCalled();
+  await expect(space.metadata(key, async () => metadata)).rejects.toThrow("v2 cache key");
+  await expect(legacy.metadata(spaceKey, async () => metadata)).rejects.toThrow("v1 cache key");
 });
 
 test("range misses and oversized reads are not persisted", async () => {

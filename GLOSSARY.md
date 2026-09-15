@@ -8,7 +8,9 @@ wire contracts.
 ## Maintenance rules
 
 - Preserve the canonical spelling and capitalization shown in the **Term** column.
-- Preserve code identifiers such as `docId`, `sessionId`, and `tenantId` exactly.
+- Preserve code identifiers such as `docId` and `sessionId` exactly. Use
+  `appId`/`spaceId` for UniCAS v2; retain `stackId`/`tenantId` only in labeled
+  v1, physical compatibility, or downstream contracts.
 - Use **CAS** for the storage model and **UniCAS** for the independently deployable
   CAS middleware product.
 - Capitalize named platform roles and resources such as **Admin**, **Agent**,
@@ -24,11 +26,11 @@ wire contracts.
 | Term | 中文定义 | Usage and boundary |
 |---|---|---|
 | **UniDocs** | 面向 AI Agent 的通用文档编辑平台。 | Product name. Do not write “Unidocs” or “Uni Docs”. |
-| **UniCAS** | 可独立部署的内容寻址存储中间件，包含 tenant 数据面和 stack 管理控制面。 | Product name. Source lives under [`packages/`](packages/README.md). Do not use this name for every generic CAS implementation. |
+| **UniCAS** | 可独立部署的内容寻址存储中间件，包含 Space 数据面和 App 管理控制面。 | Product name. Source lives under [`packages/`](packages/README.md). Do not use this name for every generic CAS implementation. |
 | **Platform** | 持久化文档、版本、thread、current pointer 与 submission 的平台服务。 | The persistence authority in the Platform v0 model; a View or Operator is not a second persistence authority. |
 | **Gateway** | 面向最终用户的服务入口，负责认证、租户成员关系、文档目录与路由。 | Owns public `docId` to private `sessionId` routing. It does not own document-format behavior. |
 | **Doc service** | 承载某一种文档类型会话和格式逻辑的服务。 | One independently deployable service per document type. It receives an opaque `sessionId`, not end-user identity. |
-| **Admin** | 管理文档类型、bundle、Operator 和 UniCAS stack 的控制面角色或界面。 | Capitalize when naming the product role or surface. “Admin” does not mean the tenant data-plane `cas:manage` permission. |
+| **Admin** | 管理文档类型、bundle、Operator 和 UniCAS App 的控制面角色或界面。 | Capitalize when naming the product role or surface. “Admin” does not mean the Space data-plane `cas:manage` permission. |
 | **Agent** | 代表用户读取、推理并提出文档变更的 AI 参与者。 | Uses the Platform Agent API in the target model. An Agent may call an Operator but is not synonymous with one. |
 | **Host** | 装载 View、提供用户界面外壳并代理 Host RPC 的运行环境。 | A View receives capabilities through the Host; it does not directly become the Platform authority. |
 | **Operator** | 面向 Agent 的文档能力服务，执行领域查询并生成原子 submission。 | Capitalized platform role. An Operator endpoint declares supported document types and Snapshot Contract revisions. |
@@ -77,7 +79,7 @@ contracts.
 | **ready node** | 不可变元数据与已验证 own content 都存在的 node。 | Only ready nodes may be read, receive a Root Ref, or be referenced by a newly inserted node. |
 | **lease** | 在指定截止时间前保护 node 不被 GC 删除的临时声明。 | A lease does not imply readiness or durable business ownership. |
 | **Root Ref** | 由文档 delta、snapshot 或其他业务根持有的持久 CAS 根引用。 | Contributes to `rootRefCount` and protects a root independently of a lease. Preserve this capitalization in UniCAS documentation. |
-| **GC** | Garbage collection；回收租约已过期且 child/root 引用计数均为零的节点。 | Tenant-scoped operation. Expiry makes a node eligible; it does not promise immediate deletion. |
+| **GC** | Garbage collection；回收租约已过期且 child/root 引用计数均为零的节点。 | Space-scoped operation. Expiry makes a node eligible; it does not promise immediate deletion. |
 
 See [CAS Architecture](docs/cas-architecture.md),
 [CAS Binary Format](docs/cas-binary-format.md), and
@@ -88,13 +90,17 @@ semantics.
 
 | Term | 中文定义 | Usage and boundary |
 |---|---|---|
-| **stack** | 顶层部署、信任与数据命名空间。 | Identified by `stackId`. A trusted issuer maps to one stable stack. |
-| **tenant** | stack 内的数据所有权与隔离边界。 | Identified by `tenantId`. Storage, usage, and GC are partitioned by stack and tenant. |
-| **control plane** | 管理 stack、成员、邀请、issuer、密钥与审计的管理面。 | Served through UniCAS Admin APIs and clients. Do not call tenant content operations “admin APIs”. |
-| **data plane** | 租户内容寻址存储的读写与生命周期操作面。 | Served through UniCAS tenant APIs and clients. The `cas:manage` permission is a data-plane permission. |
-| **capability** | 对调用者、租户、权限和可选 Root Ref domain 进行约束的已签名授权声明。 | UniCAS tenant capabilities use JWT claims. A capability authorizes an operation; it is not a public document identifier. |
-| **issuer** | 签发并可被验证信任令牌的身份提供方。 | A registered trusted JWT issuer is associated with one stack; verified claims must agree with request path identity. |
-| **`refDomain`** | Root Ref 的正交审计和授权维度。 | It does not replace `stackId` or `tenantId` and is not a storage partition by itself. |
+| **App** | 顶层应用、信任、管理、issuer、审计与存储命名空间。 | Identified by `appId`. A trusted issuer resolves to one stable App authority. |
+| **Space** | App 内的数据所有权、隔离、授权与用量核算边界。 | Identified by `spaceId`. Storage, usage, leases, Root Refs, and GC are scoped by App and Space. It is not a user or capacity measurement. |
+| **Principal** | 由 `(issuer, subject)` 唯一标识的已认证人或服务身份。 | Immutable authorization identity. A Principal may administer Apps or receive Space capabilities. |
+| **Profile** | display name 与 display email 等非权威展示元数据。 | Profile changes never alter Principal identity, App membership, or Space authorization. |
+| **Member** | 获得某个 App 同等管理员权限的 Principal。 | Membership depends on Principal, not mutable Profile fields. |
+| **control plane** | 管理 App、成员、邀请、issuer 与审计的管理面。 | Served through UniCAS Admin APIs and clients. Do not call Space content operations “admin APIs”. |
+| **data plane** | Space 内容寻址存储的读写与生命周期操作面。 | V2 routes are scoped by both App and Space. The `cas:manage` permission is a data-plane permission. |
+| **capability** | 对 Principal、Space、权限和可选 Root Ref domain 进行约束的已签名授权声明。 | V2 uses `ver: 2`, `spaceId`, and `spaces:{spaceId}:cas:*`. A capability authorizes an operation; it is not a public document identifier. |
+| **issuer** | 签发并可被验证信任令牌的身份提供方。 | A registered issuer establishes App authority; verified Space claims and permissions must agree with the request path. |
+| **`refDomain`** | Root Ref 的正交审计和授权维度。 | It does not replace `appId` or `spaceId` and is not a storage partition by itself. |
+| **v1 Stack/Tenant identifiers** | 冻结兼容合同中的 `stackId`、`tenantId` 与 `tenants:` 权限。 | Retained for `unicas.shazhou.work`, v1 artifacts, tests, and physical adapters. Never reinterpret them as App/Space claims. |
 
 See [Capability Key Operations](docs/capability-key-operations.md) and
 [UniCAS OAuth Discovery and Issuer Migration](docs/cas-oauth-discovery-and-issuer-migration.md)

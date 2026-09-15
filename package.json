@@ -13,6 +13,7 @@
     "deploy:docs": "pnpm docs:build && pnpm --filter @unicas/service-cloudflare exec wrangler deploy --config ../../stacks/unicas/docs-site/wrangler.jsonc",
     "deploy:docs:plan": "pnpm docs:build && pnpm --filter @unicas/service-cloudflare exec wrangler deploy --dry-run --config ../../stacks/unicas/docs-site/wrangler.jsonc",
     "smoke": "node stacks/unicas/deploy/smoke.mjs",
+    "smoke:v1": "node scripts/cas-middleware-smoke.mjs",
     "build": "pnpm -r build",
     "test": "pnpm check:repo && pnpm -r test",
     "check:repo": "vitest run tests/deploy-plan.test.mjs tests/docs-site.test.mjs tests/workspace-boundaries.test.mjs tests/openapi-drift.test.ts tests/task-workflow.test.mjs",

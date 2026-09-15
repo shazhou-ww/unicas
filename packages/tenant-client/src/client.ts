@@ -2,6 +2,7 @@ import { CanonicalNodeContentType } from "@unicas/codec";
 import {
   CasUploadIdHeader,
   CasUploadLengthHeader,
+  appSpaceRoutes,
   casRoutes,
 } from "@unicas/tenant-protocol";
 import type {
@@ -21,9 +22,21 @@ import type {
   CasNodeRange,
   CasNodeSource,
   CasRootRefsResult,
+  SpaceCasClient,
+  SpaceCasClientConfig,
   TenantCasClient,
   TenantCasClientConfig,
 } from "./types.js";
+
+interface CasClientRoutes {
+  readMetadata(hash: string): string;
+  readContent(hash: string): string;
+  lease(hash: string): string;
+  updateRootRefs(): string;
+  listRootRefs(options: CasListRootRefsOptions): string;
+  usage(): string;
+  gc(): string;
+}
 
 function validateRange(range: CasNodeRange): void {
   if (!Number.isSafeInteger(range.offset) || range.offset < 0) {
@@ -35,10 +48,39 @@ function validateRange(range: CasNodeRange): void {
 }
 
 export function createTenantCasClient(config: TenantCasClientConfig): TenantCasClient {
+  const path = { stackId: config.stackId, tenantId: config.tenantId };
+  return createScopedCasClient(config, path, {
+    readMetadata: hash => casRoutes.readMetadata({ ...path, hash }),
+    readContent: hash => casRoutes.readContent({ ...path, hash }),
+    lease: hash => casRoutes.lease({ ...path, hash }),
+    updateRootRefs: () => casRoutes.updateRootRefs(path),
+    listRootRefs: options => casRoutes.listRootRefs(path, options),
+    usage: () => casRoutes.usage(path),
+    gc: () => casRoutes.gc(path),
+  });
+}
+
+export function createSpaceCasClient(config: SpaceCasClientConfig): SpaceCasClient {
+  const path = { appId: config.appId, spaceId: config.spaceId };
+  return createScopedCasClient(config, { version: 2, ...path }, {
+    readMetadata: hash => appSpaceRoutes.readMetadata({ ...path, hash }),
+    readContent: hash => appSpaceRoutes.readContent({ ...path, hash }),
+    lease: hash => appSpaceRoutes.lease({ ...path, hash }),
+    updateRootRefs: () => appSpaceRoutes.updateRootRefs(path),
+    listRootRefs: options => appSpaceRoutes.listRootRefs(path, options),
+    usage: () => appSpaceRoutes.usage(path),
+    gc: () => appSpaceRoutes.gc(path),
+  });
+}
+
+function createScopedCasClient(
+  config: TenantCasClientConfig | SpaceCasClientConfig,
+  scope: Omit<import("./types.js").CasNodeCacheKey, "hash">,
+  routes: CasClientRoutes,
+): TenantCasClient {
   const baseUrl = config.baseUrl.replace(/\/$/, "");
   const fetcher = config.fetcher ?? { fetch: globalThis.fetch.bind(globalThis) };
   const uploadFetcher = config.uploadFetcher ?? fetcher;
-  const path = { stackId: config.stackId, tenantId: config.tenantId };
 
   const request = async (
     route: string,
@@ -65,10 +107,10 @@ export function createTenantCasClient(config: TenantCasClientConfig): TenantCasC
   const client: TenantCasClient = {
     readMetadata(hash, options: { readonly signal?: AbortSignal } = {}) {
       options.signal?.throwIfAborted();
-      const key = { ...path, hash };
+      const key = { ...scope, hash } as import("./types.js").CasNodeCacheKey;
       const loadMetadata = async (): Promise<CasNodeMetadata> => {
         const response = await requireOk(
-          await request(casRoutes.readMetadata({ ...path, hash }), { signal: options.signal }),
+          await request(routes.readMetadata(hash), { signal: options.signal }),
           "metadata",
         );
         const body = await response.json() as { metadata: CasNodeMetadata };
@@ -80,7 +122,7 @@ export function createTenantCasClient(config: TenantCasClientConfig): TenantCasC
     readContent(hash, range?: CasNodeRange, options: { readonly signal?: AbortSignal } = {}) {
       options.signal?.throwIfAborted();
       if (range !== undefined) validateRange(range);
-      const key = { ...path, hash };
+      const key = { ...scope, hash } as import("./types.js").CasNodeCacheKey;
       const loadContent = async (): Promise<ReadableStream<Uint8Array>> => {
         if (range?.length === 0) {
           return new ReadableStream({ start: controller => controller.close() });
@@ -89,7 +131,7 @@ export function createTenantCasClient(config: TenantCasClientConfig): TenantCasC
           ? undefined
           : { Range: `bytes=${range.offset}-${range.length === undefined ? "" : range.offset + range.length - 1}` };
         const response = await requireOk(
-          await request(casRoutes.readContent({ ...path, hash }), { headers, signal: options.signal }),
+          await request(routes.readContent(hash), { headers, signal: options.signal }),
           "read",
         );
         if (response.body === null) {
@@ -109,7 +151,7 @@ export function createTenantCasClient(config: TenantCasClientConfig): TenantCasC
           prepareHeaders.set("X-CAS-Lease-Duration", String(options.durationMs));
         }
         const preparedResponse = await requireOk(
-          await request(casRoutes.lease({ ...path, hash }), {
+          await request(routes.lease(hash), {
             method: "POST",
             headers: prepareHeaders,
             signal: options.signal,
@@ -143,7 +185,7 @@ export function createTenantCasClient(config: TenantCasClientConfig): TenantCasC
           finalizeHeaders.set("X-CAS-Lease-Duration", String(options.durationMs));
         }
         const finalized = await requireOk(
-          await request(casRoutes.lease({ ...path, hash }), {
+          await request(routes.lease(hash), {
             method: "POST",
             headers: finalizeHeaders,
             signal: options.signal,
@@ -177,7 +219,7 @@ export function createTenantCasClient(config: TenantCasClientConfig): TenantCasC
         (init as RequestInit & { duplex?: "half" }).duplex = "half";
       }
       const response = await requireOk(
-        await request(casRoutes.lease({ ...path, hash }), init),
+        await request(routes.lease(hash), init),
         "lease",
       );
       return response.json();
@@ -185,7 +227,7 @@ export function createTenantCasClient(config: TenantCasClientConfig): TenantCasC
 
     async updateRootRefs(update: CasRootRefUpdate): Promise<CasRootRefsResult> {
       const response = await requireOk(
-        await request(casRoutes.updateRootRefs(path), {
+        await request(routes.updateRootRefs(), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(update),
@@ -197,7 +239,7 @@ export function createTenantCasClient(config: TenantCasClientConfig): TenantCasC
 
     async listRootRefs(options: CasListRootRefsOptions = {}): Promise<CasRootRefsPage> {
       const response = await requireOk(
-        await request(casRoutes.listRootRefs(path, options), { signal: options.signal }),
+        await request(routes.listRootRefs(options), { signal: options.signal }),
         "listRootRefs",
       );
       return response.json() as Promise<CasRootRefsPage>;
@@ -205,7 +247,7 @@ export function createTenantCasClient(config: TenantCasClientConfig): TenantCasC
 
     async usage(signal?: AbortSignal): Promise<CasUsage> {
       const response = await requireOk(
-        await request(casRoutes.usage(path), { signal }),
+        await request(routes.usage(), { signal }),
         "usage",
       );
       return response.json() as Promise<CasUsage>;
@@ -213,7 +255,7 @@ export function createTenantCasClient(config: TenantCasClientConfig): TenantCasC
 
     async gc(options: CasGcOptions = {}): Promise<CasGcResult> {
       const response = await requireOk(
-        await request(casRoutes.gc(path), {
+        await request(routes.gc(), {
           method: "POST",
           headers: options.maxNodes === undefined ? undefined : { "Content-Type": "application/json" },
           body: options.maxNodes === undefined ? undefined : JSON.stringify({ maxNodes: options.maxNodes }),

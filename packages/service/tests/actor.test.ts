@@ -131,6 +131,28 @@ describe("createUniCasService", () => {
     });
   });
 
+  test("routes shared administrator paths through the App contract", () => {
+    expect(matchUniCasServiceRoute(new Request(
+      "https://console.unicas.work/admin/me",
+    ))).toEqual({
+      plane: "app-admin",
+      route: { operation: "me" },
+    });
+    expect(matchUniCasServiceRoute(new Request(
+      "https://console.unicas.work/admin/member-invitations/invite-1/accept",
+      { method: "POST" },
+    ))).toEqual({
+      plane: "app-admin",
+      route: { operation: "acceptMemberInvitation", token: "invite-1" },
+    });
+    expect(matchUniCasServiceRoute(new Request(
+      "https://console.unicas.work/admin/stacks/cas-1",
+    ))).toEqual({
+      plane: "admin",
+      route: { operation: "getStack", stackId: "cas-1" },
+    });
+  });
+
   test("returns not implemented until v2 platform handlers are configured", async () => {
     const actor = createUniCasService({
       platform,

@@ -21,9 +21,9 @@ See `packages/admin-cli/README.md` for the full command reference.
 ```powershell
 pnpm --filter @unicas/admin-cli build
 pnpm --filter @unicas/admin-cli unicas login        # browser: Google sign-in + consent (via the BFF)
-pnpm --filter @unicas/admin-cli unicas whoami
-pnpm --filter @unicas/admin-cli unicas stacks list
-pnpm --filter @unicas/admin-cli unicas stacks create "Operations" --idempotency-key create-ops-1
+pnpm --filter @unicas/admin-cli unicas principal
+pnpm --filter @unicas/admin-cli unicas apps list
+pnpm --filter @unicas/admin-cli unicas apps create "Operations" --idempotency-key create-ops-1
 pnpm --filter @unicas/admin-cli unicas logout       # ends the BFF session (POST /admin/auth/logout)
 ```
 
@@ -53,28 +53,40 @@ it with `shell: true`, reference the shim path directly, or use the `node` +
 `dist/cli.js` form above (a plain `spawn("unicas")` fails with `ENOENT`).
 
 Alternatively, skip MCP entirely and have DSH run plain shell commands
-(`unicas stacks list`, `unicas whoami`, …); the CLI prints JSON on stdout.
+(`unicas apps list`, `unicas principal`, ...); the CLI prints JSON on stdout.
 
-## Command surface = control-plane MCP tool set
+## App command surface
 
 | Group | Commands |
 | --- | --- |
-| Read (`control:read`) | `whoami`, `stacks list/get`, `members list`, `oauth-issuer get`, `ref-domains list`, `audit control/root-domain-refs/root-domain-events` |
-| Write (`control:write`) | `stacks create` (idempotency key), `stacks update` (ETag) |
-| Security (`control:security`) | `members invite/remove`, `oauth-issuer inspect/activate` |
+| Read (`control:read`) | `principal`, `apps list/get`, `app-members list`, `app-oauth-issuer get`, `app-ref-domains list`, `app-audit control/root-domain-refs/root-domain-events` |
+| Write (`control:write`) | `apps create` (idempotency key), `apps update` (ETag) |
+| Security (`control:security`) | `app-members invite/remove`, `app-oauth-issuer inspect/activate` |
 
-Creation tools take or auto-generate an idempotency key; mutations on existing
+V2 commands use `appId`, Principal `{ issuer, subject }`, and `--space-id`.
+They never return `stackId`, `tenantId`, or flattened identity/profile fields.
+The broader remote and stdio MCP catalog also exposes App Playground and managed
+issuer operations that do not have plain CLI wrappers.
+
+## Legacy v1 compatibility
+
+`whoami`, `stacks`, `members`, `oauth-issuer`, `ref-domains`, and `audit` retain
+their original Stack/Tenant schemas for explicit v1 use. They are not aliases
+for the App commands, and the client rejects the opposite response contract
+rather than guessing a version.
+
+Creation commands take or auto-generate an idempotency key; mutations on existing
 resources resolve the current ETag when none is passed; destructive operations
 require an explicit `--confirm-*` flag matching the target (or a TTY prompt).
-`oauth-issuer activate` accepts only a compact-JWS activation proof signed
+`app-oauth-issuer activate` accepts only a compact-JWS activation proof signed
 off-CLI with a key the discovered issuer advertises — private key material is
 never a valid input, and there is no manual JWK upload path: UniCAS derives
 keys exclusively from verified issuer JWKS discovery.
 
 The WebUI reads the optional custom issuer with
-`GET /admin/stacks/:stackId/oauth-issuer?optional=true`. An authorized member
-receives `200 null` when no custom issuer is configured; membership and stack
-errors remain errors. Omitting `optional` preserves the default `404 NOT_FOUND`
+`GET /admin/apps/:appId/oauth-issuer?optional=true`. An authorized member
+receives `200 null` when no custom issuer is configured; membership failures
+remain errors and use App vocabulary. Omitting `optional` preserves the default `404 NOT_FOUND`
 behavior used by the CLI and MCP. Configured issuers still return their metadata
 and ETag.
 
@@ -83,18 +95,19 @@ in page memory. Switching roots or folders reuses those snapshots without a
 network request. Refresh reloads the selected root from the server and invalidates
 other cached roots whose catalog revision or manifest hash changed. Successful
 edits update the working snapshot; failed edits discard uncommitted changes and
-evict it. Leaving the Playground or changing stacks clears these working snapshots.
+evict it. Leaving the Playground or changing Apps clears these working snapshots.
 
 Immutable node metadata and completely read small node content use the independent
 `@unicas/tenant-browser-cache` strategy (8 MiB memory, 64 MiB IndexedDB per
-endpoint/principal, 4 MiB entry limit). These bytes survive page reloads. Keys also
-include stack, tenant and hash. Session identity discovery, capability issuance and
+endpoint/Principal, 4 MiB entry limit). These bytes survive page reloads. V2
+keys include App, Space, hash, and an explicit cache version, so they cannot
+collide with frozen Stack/Tenant entries. Principal discovery, capability issuance and
 the mutable root catalog remain live server reads before reopening a root; a
 changed manifest hash loads new content. Refresh reloads the catalog, but may reuse
 unchanged immutable bytes. Logout clears the current principal's persisted entries
 across endpoints, including prior page sessions. Storage failures degrade to
 memory/network; deletion is best-effort when browser storage is unavailable.
-Tenant capabilities remain memory-only and renew when a request needs an
+Space capabilities remain memory-only and renew when a request needs an
 unexpired token. A cached node is not proof of current server existence, permission,
 lease or retention; usage, GC and other mutable node state are never cached here.
 
@@ -108,5 +121,5 @@ pnpm check:workspace
 
 Unit tests mock the BFF `/admin` API (login/exchange, control-plane operations)
 and a stateless stdio MCP server; they never touch production. A real
-`unicas login` + `unicas whoami` against `https://console.unicas.work/admin` is a
+`unicas login` + `unicas principal` against `https://console.unicas.work/admin` is a
 manual verification step (browser Google sign-in + UniCAS consent required).

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus } from "lucide-react";
-import type { CasStack } from "@unicas/admin-client";
+import type { App } from "@unicas/admin-client";
 import { api } from "../api.js";
 import { formatErrorSafe } from "./view-helpers.js";
 import { Button, Card, ConceptGuide, EmptyState, ErrorState, LoadingState, Page } from "../components.js";
 
-export function MyStacksView() {
-  const [stacks, setStacks] = useState<CasStack[] | null>(null);
+export function MyAppsView() {
+  const [apps, setApps] = useState<App[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -14,8 +14,8 @@ export function MyStacksView() {
 
   const load = useCallback(async () => {
     try {
-      const result = await api<{ items: CasStack[] }>("/admin/stacks");
-      setStacks(result.items);
+      const result = await api<{ items: App[] }>("/admin/apps");
+      setApps(result.items);
     } catch (caught) {
       setError(formatErrorSafe(caught));
     }
@@ -25,11 +25,11 @@ export function MyStacksView() {
     void load();
   }, [load]);
 
-  async function createStack() {
+  async function createApp() {
     setCreating(true);
     setCreateError(null);
     try {
-      await api<CasStack>("/admin/stacks", {
+      await api<App>("/admin/apps", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ displayName: name }),
@@ -44,43 +44,43 @@ export function MyStacksView() {
   }
 
   return (
-    <Page title="My Stacks">
+    <Page title="My Apps">
       <ConceptGuide
-        title="CAS stacks"
-        summary="A stack is the top-level UniCAS trust and storage boundary for one independently administered application deployment."
+        title="UniCAS Apps"
+        summary="An App is the top-level UniCAS trust, administration, and storage namespace for an integrating application."
         concepts={[
-          { term: "Isolation", detail: "Each stack has independent issuer trust, tenants, data history, and stored objects." },
-          { term: "Stable identity", detail: "UniCAS generates an opaque stack ID. The display name is only an operator-facing label." },
-          { term: "First membership", detail: "Registering a stack makes your current OIDC identity its first administrator." },
+          { term: "Isolation", detail: "Each App has independent issuer trust, Spaces, data history, and stored objects." },
+          { term: "Stable identity", detail: "UniCAS generates an opaque App ID. The display name is only an administrator-facing label." },
+          { term: "First membership", detail: "Creating an App grants your current Principal its first administrator membership." },
         ]}
       />
-      <Card title="Register a stack">
+      <Card title="Create an App">
         <div className="inline-form">
           <input
-            aria-label="Stack display name"
+            aria-label="App display name"
             value={name}
             placeholder="e.g. unidocs-cloudflare"
             onChange={(event) => setName(event.target.value)}
           />
-          <Button icon={<Plus size={15} />} variant="primary" onClick={() => void createStack()} disabled={creating || name.trim().length === 0}>
-            {creating ? "Creating…" : "Create stack"}
+          <Button icon={<Plus size={15} />} variant="primary" onClick={() => void createApp()} disabled={creating || name.trim().length === 0}>
+            {creating ? "Creating…" : "Create App"}
           </Button>
         </div>
         {createError ? <ErrorState message={createError} /> : null}
       </Card>
-      <Card title="Your stacks">
+      <Card title="Your Apps">
         {error ? <ErrorState message={error} /> : null}
-        {stacks === null && !error ? <LoadingState /> : null}
-        {stacks !== null && stacks.length === 0 ? (
-          <EmptyState message="You are not a member of any stack yet. Register one above." />
+        {apps === null && !error ? <LoadingState /> : null}
+        {apps !== null && apps.length === 0 ? (
+          <EmptyState message="You are not a member of any App yet. Create one above." />
         ) : null}
-        {stacks !== null && stacks.length > 0 ? (
+        {apps !== null && apps.length > 0 ? (
           <ul className="stack-list">
-            {stacks.map((stack) => (
-              <li key={stack.stackId}>
-                <a href={`#/stacks/${encodeURIComponent(stack.stackId)}`}>
-                  <strong>{stack.displayName}</strong>
-                  <span className="muted">{stack.stackId}</span>
+            {apps.map((app) => (
+              <li key={app.appId}>
+                <a href={`#/apps/${encodeURIComponent(app.appId)}`}>
+                  <strong>{app.displayName}</strong>
+                  <span className="muted">{app.appId}</span>
                 </a>
               </li>
             ))}

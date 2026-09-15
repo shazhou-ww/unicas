@@ -1,7 +1,7 @@
 /**
- * Smoke-test the deployed CAS middleware through a base URL.
+ * Smoke-test the frozen Stack/Tenant v1 compatibility contract.
  *
- * Usage: node scripts/cas-middleware-smoke.mjs [baseUrl]
+ * Usage: pnpm smoke:v1 -- [baseUrl]
  *   baseUrl defaults to https://api.unicas.work (the live machine API);
  *   pass http://127.0.0.1:<port> to test `wrangler dev --remote` tunnels.
  *   UNICAS_SMOKE_STACK_ID/ISSUER/AUDIENCE/KID/KEY_FILE must identify one

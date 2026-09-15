@@ -13,6 +13,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { AdminClient } from "@unicas/admin-client";
 import { createAdminClient } from "@unicas/admin-client";
+import type { AppAdminMcpToolName } from "@unicas/admin-protocol";
 import type { ToolDefinition } from "./catalog.js";
 import { TOOL_CATALOG } from "./catalog.js";
 import type { TokenStore } from "../store.js";
@@ -59,6 +60,22 @@ export async function runMcpStdioServer(options: McpStdioServerOptions): Promise
 }
 
 type ToolHandler = (admin: AdminClient, args: Record<string, unknown>) => Promise<unknown>;
+type LegacyToolName =
+  | "whoami"
+  | "list_stacks"
+  | "get_stack"
+  | "list_members"
+  | "get_oauth_issuer"
+  | "list_ref_domains"
+  | "list_control_audit_events"
+  | "list_root_domain_refs"
+  | "list_root_domain_events"
+  | "create_stack"
+  | "update_stack"
+  | "invite_member"
+  | "remove_member"
+  | "inspect_oauth_issuer"
+  | "activate_oauth_issuer";
 
 function registerCatalogTool(
   server: McpServer,
@@ -66,7 +83,7 @@ function registerCatalogTool(
   getOrCreateAdmin: () => Promise<AdminClient>,
   log: (message: string) => void,
 ): void {
-  const handler = TOOL_HANDLERS[tool.name];
+  const handler = TOOL_HANDLERS[tool.name as keyof typeof TOOL_HANDLERS];
   server.registerTool(
     tool.name,
     {
@@ -127,9 +144,180 @@ async function resolveEtag(
 }
 
 /** Maps the remote tool contract to admin-client operations. */
-const TOOL_HANDLERS: Readonly<Record<string, ToolHandler>> = {
+const TOOL_HANDLERS = {
   async whoami(admin) {
     return admin.me();
+  },
+
+  async get_current_principal(admin) {
+    return admin.getCurrentPrincipal();
+  },
+
+  async list_apps(admin, args) {
+    return admin.listApps(pick(args, ["limit", "cursor"]));
+  },
+
+  async get_app(admin, args) {
+    const result = await admin.getApp({ appId: str(args.appId) });
+    return { ...result.value, etag: result.etag };
+  },
+
+  async create_app(admin, args) {
+    const result = await admin.createApp(
+      { displayName: str(args.displayName) },
+      { idempotencyKey: str(args.idempotencyKey) },
+    );
+    return { ...result.value, etag: result.etag };
+  },
+
+  async update_app(admin, args) {
+    const appId = str(args.appId);
+    const result = await admin.patchApp(
+      { appId },
+      {
+        ...(args.displayName !== undefined ? { displayName: str(args.displayName) } : {}),
+        ...(args.description !== undefined ? { description: str(args.description) } : {}),
+      },
+      str(args.etag),
+    );
+    return { ...result.value, etag: result.etag };
+  },
+
+  async list_app_members(admin, args) {
+    return admin.listAppMembers(
+      { appId: str(args.appId) },
+      pick(args, ["limit", "cursor"]),
+    );
+  },
+
+  async invite_app_member(admin, args) {
+    requireMatch(args.confirmEmail, args.email, "confirmEmail must exactly match the invited email");
+    return admin.createAppMemberInvitation(
+      { appId: str(args.appId) },
+      { emailConstraint: str(args.email) },
+      { idempotencyKey: str(args.idempotencyKey) },
+    );
+  },
+
+  async accept_app_member_invitation(admin, args) {
+    return admin.acceptAppMemberInvitation({ token: str(args.token) });
+  },
+
+  async remove_app_member(admin, args) {
+    const subject = str(args.subject);
+    requireMatch(args.confirmSubject, subject, "confirmSubject must exactly match subject");
+    return admin.deleteAppMember(
+      { appId: str(args.appId) },
+      { issuer: str(args.issuer), subject },
+      str(args.etag),
+    );
+  },
+
+  async list_app_playground_file_roots(admin, args) {
+    return admin.listAppPlaygroundFileRoots({ appId: str(args.appId) });
+  },
+
+  async create_app_playground_file_root(admin, args) {
+    const result = await admin.createAppPlaygroundFileRoot(
+      { appId: str(args.appId) },
+      {
+        rootId: str(args.rootId),
+        name: str(args.name),
+        manifestHash: str(args.manifestHash),
+      },
+    );
+    return { ...result.value, etag: result.etag };
+  },
+
+  async update_app_playground_file_root(admin, args) {
+    const result = await admin.patchAppPlaygroundFileRoot(
+      { appId: str(args.appId), rootId: str(args.rootId) },
+      { name: str(args.name), manifestHash: str(args.manifestHash) },
+      str(args.etag),
+    );
+    return { ...result.value, etag: result.etag };
+  },
+
+  async delete_app_playground_file_root(admin, args) {
+    const rootId = str(args.rootId);
+    requireMatch(args.confirmRootId, rootId, "confirmRootId must exactly match rootId");
+    return admin.deleteAppPlaygroundFileRoot(
+      { appId: str(args.appId), rootId },
+      str(args.etag),
+    );
+  },
+
+  async get_app_oauth_issuer(admin, args) {
+    const result = await admin.getAppOAuthIssuer({ appId: str(args.appId) });
+    if (result.value === null) throw new Error("OAuth issuer is not configured");
+    return { ...result.value, etag: result.etag };
+  },
+
+  async inspect_app_oauth_issuer(admin, args) {
+    const result = await admin.inspectAppOAuthIssuer(
+      { appId: str(args.appId) },
+      { issuer: str(args.issuer) },
+    );
+    return { ...result.value, etag: result.etag };
+  },
+
+  async activate_app_oauth_issuer(admin, args) {
+    const appId = str(args.appId);
+    const etag = await resolveEtag(
+      admin,
+      () => admin.getAppOAuthIssuer({ appId }),
+      "App OAuth issuer",
+      args.etag,
+    );
+    const result = await admin.activateAppOAuthIssuer(
+      { appId },
+      { inspectionId: str(args.inspectionId), activationProof: str(args.activationProof) },
+      etag,
+    );
+    return { ...result.value, etag: result.etag };
+  },
+
+  async get_app_managed_issuer(admin, args) {
+    const result = await admin.getAppManagedIssuer({ appId: str(args.appId) });
+    return { ...result.value, etag: result.etag };
+  },
+
+  async update_app_managed_issuer(admin, args) {
+    const result = await admin.patchAppManagedIssuer(
+      { appId: str(args.appId) },
+      { enabled: args.enabled === true },
+      str(args.etag),
+    );
+    return { ...result.value, etag: result.etag };
+  },
+
+  async mint_managed_space_capability(admin, args) {
+    return admin.mintManagedSpaceCapability({ appId: str(args.appId) });
+  },
+
+  async list_app_ref_domains(admin, args) {
+    return admin.listAppRefDomains({ appId: str(args.appId) });
+  },
+
+  async list_app_control_audit_events(admin, args) {
+    return admin.listAppControlAuditEvents(
+      { appId: str(args.appId) },
+      pick(args, ["limit", "cursor", "after"]),
+    );
+  },
+
+  async list_space_root_domain_refs(admin, args) {
+    return admin.listSpaceRootDomainRefs(
+      { appId: str(args.appId), refDomain: str(args.refDomain) },
+      pick(args, ["spaceId", "limit", "cursor"]),
+    );
+  },
+
+  async list_space_root_domain_events(admin, args) {
+    return admin.listSpaceRootDomainEvents(
+      { appId: str(args.appId), refDomain: str(args.refDomain) },
+      pick(args, ["spaceId", "after", "limit"]),
+    );
   },
 
   async list_stacks(admin, args) {
@@ -227,7 +415,7 @@ const TOOL_HANDLERS: Readonly<Record<string, ToolHandler>> = {
       pick(args, ["tenantId", "after", "limit"]),
     );
   },
-};
+} satisfies Readonly<Record<AppAdminMcpToolName | LegacyToolName, ToolHandler>>;
 
 function str(value: unknown): string {
   if (typeof value !== "string" || value.length === 0) {

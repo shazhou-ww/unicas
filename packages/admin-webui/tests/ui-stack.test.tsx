@@ -2,7 +2,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { StackView } from "../src/ui/index.js";
+import { AppView } from "../src/ui/index.js";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -11,18 +11,18 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-const CURRENT_STACK = {
-  stackId: "cas_one",
-  displayName: "Primary stack",
-  description: "Primary production stack",
+const CURRENT_APP = {
+  appId: "cas_one",
+  displayName: "Primary App",
+  description: "Primary production App",
   status: "active",
   createdAt: 1,
   revision: 3,
 };
 
-const OTHER_STACK = {
-  stackId: "cas_two",
-  displayName: "Secondary stack",
+const OTHER_APP = {
+  appId: "cas_two",
+  displayName: "Secondary App",
   description: "",
   status: "active",
   createdAt: 2,
@@ -30,11 +30,11 @@ const OTHER_STACK = {
 };
 
 beforeEach(() => {
-  window.location.hash = "#/stacks/cas_one";
+  window.location.hash = "#/apps/cas_one";
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const pathname = new URL(String(input), "http://localhost").pathname;
-    if (pathname === "/admin/stacks/cas_one") return json(CURRENT_STACK);
-    if (pathname === "/admin/stacks") return json({ items: [CURRENT_STACK, OTHER_STACK] });
+    if (pathname === "/admin/apps/cas_one") return json(CURRENT_APP);
+    if (pathname === "/admin/apps") return json({ items: [CURRENT_APP, OTHER_APP] });
     if (pathname.endsWith("/members")) return json({ items: [] });
     if (pathname.endsWith("/managed-issuer")) return json({
       stackId: "cas_one", mode: "managed", issuer: "https://cas.example/managed-issuers/cas_one",
@@ -47,7 +47,7 @@ beforeEach(() => {
   }));
 });
 
-describe("StackView", () => {
+describe("AppView", () => {
   test("takes a disabled Playground to managed issuer settings without enabling it", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.mocked(fetch);
@@ -61,7 +61,7 @@ describe("StackView", () => {
       if (pathname.endsWith("/file-roots")) return json({ items: [] });
       return original(input, init);
     });
-    render(<StackView stackId="cas_one" onOpenMcpConfiguration={vi.fn()} onLogout={vi.fn()} />);
+    render(<AppView appId="cas_one" onOpenMcpConfiguration={vi.fn()} onLogout={vi.fn()} />);
     await user.click(await screen.findByRole("tab", { name: "Playground" }));
     expect(await screen.findByRole("heading", { name: "Managed issuer required" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Go to managed issuer settings" }));
@@ -69,43 +69,43 @@ describe("StackView", () => {
     const settings = screen.getByRole("region", { name: "Managed issuer settings" });
     await within(settings).findByRole("button", { name: "Enable managed issuer" });
     expect(settings).toHaveFocus();
-    expect(settings).toHaveTextContent("Admin sign-in grants stack management access, not access to tenant data");
-    expect(settings).toHaveTextContent("isolated sandbox tenant");
+    expect(settings).toHaveTextContent("Admin sign-in grants App management access, not access to Space data");
+    expect(settings).toHaveTextContent("isolated personal Space");
     expect(settings).toHaveTextContent("Applications using a custom OAuth issuer do not need to enable it");
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === "PATCH" || init?.method === "POST")).toBe(false);
   });
 
-  test("renders a stack switcher above vertical management navigation", async () => {
+  test("renders an App switcher above vertical management navigation", async () => {
     const user = userEvent.setup();
-    render(<StackView stackId="cas_one" onOpenMcpConfiguration={vi.fn()} onLogout={vi.fn()} />);
+    render(<AppView appId="cas_one" onOpenMcpConfiguration={vi.fn()} onLogout={vi.fn()} />);
 
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Primary stack" })).toBeInTheDocument());
-    await waitFor(() => expect(document.title).toBe("UniCAS | Primary stack"));
-    const switcher = screen.getByRole("combobox", { name: "Stack" });
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Primary App" })).toBeInTheDocument());
+    await waitFor(() => expect(document.title).toBe("UniCAS | Primary App"));
+    const switcher = screen.getByRole("combobox", { name: "App" });
     expect(switcher).toHaveValue("cas_one");
     expect(screen.getByRole("tablist")).toHaveAttribute("aria-orientation", "vertical");
     expect(screen.getAllByRole("tab")).toHaveLength(4);
     expect(screen.getByRole("tab", { name: "Playground" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Change Log" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Ref domains" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "My Stacks" })).not.toBeInTheDocument();
-    const metadata = screen.getByRole("heading", { name: "Stack metadata" }).closest(".card");
-    expect(metadata).toHaveTextContent("Stack IDcas_one");
+    expect(screen.queryByRole("link", { name: "My Apps" })).not.toBeInTheDocument();
+    const metadata = screen.getByRole("heading", { name: "App metadata" }).closest(".card");
+    expect(metadata).toHaveTextContent("App IDcas_one");
     expect(metadata).toHaveTextContent("Statusactive");
     expect(metadata).toHaveTextContent("Revision3");
     expect(metadata).toHaveTextContent("Created");
 
     await user.selectOptions(switcher, "cas_two");
-    expect(window.location.hash).toBe("#/stacks/cas_two");
+    expect(window.location.hash).toBe("#/apps/cas_two");
   });
 
   test("documents management sections except the task-focused Playground", async () => {
     const user = userEvent.setup();
-    render(<StackView stackId="cas_one" onOpenMcpConfiguration={vi.fn()} onLogout={vi.fn()} />);
+    render(<AppView appId="cas_one" onOpenMcpConfiguration={vi.fn()} onLogout={vi.fn()} />);
 
-    await waitFor(() => expect(screen.getByRole("complementary", { name: "Stack identity" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("complementary", { name: "App identity" })).toBeInTheDocument());
     const guides = [
-      ["Members", "Stack administrators"],
+      ["Members", "App administrators"],
       ["Change Log", "Change Log"],
     ] as const;
 
@@ -124,31 +124,31 @@ describe("StackView", () => {
     expect(screen.getByRole("heading", { name: "Usage" })).toBeInTheDocument();
   });
 
-  test("updates the stack description with the current revision", async () => {
+  test("updates the App description with the current revision", async () => {
     const user = userEvent.setup();
-    let currentStack = CURRENT_STACK;
+    let currentApp = CURRENT_APP;
     let patchBody: Record<string, unknown> | null = null;
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const pathname = new URL(String(input), "http://localhost").pathname;
-      if (pathname === "/admin/stacks/cas_one" && init?.method === "PATCH") {
+      if (pathname === "/admin/apps/cas_one" && init?.method === "PATCH") {
         patchBody = JSON.parse(String(init.body));
-        currentStack = { ...currentStack, description: String(patchBody.description), revision: 4 };
-        return json(currentStack);
+        currentApp = { ...currentApp, description: String(patchBody.description), revision: 4 };
+        return json(currentApp);
       }
-      if (pathname === "/admin/stacks/cas_one") return json(currentStack);
-      if (pathname === "/admin/stacks") return json({ items: [currentStack, OTHER_STACK] });
+      if (pathname === "/admin/apps/cas_one") return json(currentApp);
+      if (pathname === "/admin/apps") return json({ items: [currentApp, OTHER_APP] });
       throw new Error(`Unexpected request: ${pathname}`);
     }));
 
-    render(<StackView stackId="cas_one" onOpenMcpConfiguration={vi.fn()} onLogout={vi.fn()} />);
+    render(<AppView appId="cas_one" onOpenMcpConfiguration={vi.fn()} onLogout={vi.fn()} />);
     const description = await screen.findByLabelText("Description");
     await user.clear(description);
-    await user.type(description, "Updated production stack");
+    await user.type(description, "Updated production App");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(patchBody).toMatchObject({
-      displayName: "Primary stack",
-      description: "Updated production stack",
+      displayName: "Primary App",
+      description: "Updated production App",
     }));
   });
 
@@ -157,20 +157,20 @@ describe("StackView", () => {
     const onOpenMcpConfiguration = vi.fn();
     const onLogout = vi.fn();
     render(
-      <StackView
-        stackId="cas_one"
+      <AppView
+        appId="cas_one"
         onOpenMcpConfiguration={onOpenMcpConfiguration}
         onLogout={onLogout}
       />,
     );
 
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Primary stack" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Primary App" })).toBeInTheDocument());
     const trigger = screen.getByRole("button", { name: /Open navigation/ });
     expect(trigger).toHaveAttribute("aria-expanded", "false");
 
     await user.click(trigger);
     expect(trigger).toHaveAttribute("aria-expanded", "true");
-    const dialog = screen.getByRole("dialog", { name: "Stack management navigation" });
+    const dialog = screen.getByRole("dialog", { name: "App management navigation" });
     expect(dialog).toHaveAttribute("aria-modal", "true");
     await waitFor(() => expect(within(dialog).getByRole("button", { name: "Close navigation" })).toHaveFocus());
     expect(within(dialog).getByRole("link", { name: /UniCAS Admin/ })).toHaveAttribute("href", "#/");

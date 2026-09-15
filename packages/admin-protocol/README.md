@@ -1,30 +1,34 @@
 # @unicas/admin-protocol
 
-Cloud-neutral UniCAS administrator control-plane contracts.
+Cloud-neutral UniCAS administrator control-plane contracts for App v2 and the
+frozen Stack v1 compatibility surface.
 
 The package exports the existing request/response types, route helpers, and
-matchers together with Zod resource schemas and `casAdminApiContract`, an oRPC
-contract covering all Admin HTTP operations. It contains no transport or
-service implementation.
+matchers together with Zod resource schemas. `appAdminApiContract` is the App
+v2 contract; `casAdminApiContract` remains the frozen Stack v1 contract. The
+package also owns the shared 23-tool App MCP catalog used by remote and stdio
+servers. It contains no transport or service implementation.
 
 Derive an implementation or client type from the shared contract:
 
 ```ts
 import type { ContractRouterClient } from "@orpc/contract";
-import { casAdminApiContract } from "@unicas/admin-protocol";
+import { appAdminApiContract, casAdminApiContract } from "@unicas/admin-protocol";
 
-type AdminClient = ContractRouterClient<typeof casAdminApiContract>;
+type AppAdminClient = ContractRouterClient<typeof appAdminApiContract>;
+type LegacyAdminClient = ContractRouterClient<typeof casAdminApiContract>;
 ```
 
 Generate the OpenAPI 3.1 JSON from the repository root:
 
 ```text
 pnpm --filter @unicas/admin-protocol docs:generate
+pnpm --filter @unicas/admin-protocol docs:generate:v2
 ```
 
-The generated file is `openapi/admin-v1.openapi.json`. The package exports it
-as `./openapi.json`; documentation sites and API explorers may consume that
-artifact without becoming protocol dependencies.
+The generated files are `openapi/admin-v1.openapi.json` and
+`openapi/admin-v2.openapi.json`, exported as `./openapi.json` and
+`./openapi-v2.json`. Their generators are intentionally separate.
 
 Validate with:
 

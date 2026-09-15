@@ -1,7 +1,7 @@
 {
   "name": "@unicas/tenant-protocol",
   "version": "0.1.0",
-  "description": "Tenant data-plane CAS contracts: HTTP types/routes, canonical node codec, validation limits, and the CAS capability claim vocabulary",
+  "description": "UniCAS App/Space v2 and frozen Stack/Tenant v1 data-plane contracts and capability vocabulary",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

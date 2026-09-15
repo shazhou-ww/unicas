@@ -1,6 +1,6 @@
 # Public OAuth discovery and issuer domains
 
-UniCAS is middleware, not the host of downstream authorization servers. Stack
+UniCAS is middleware, not the host of downstream authorization servers. App
 administrators may register a public HTTPS issuer on their application's domain
 without asking the UniCAS operator to approve that domain. The issuer's metadata
 may advertise a JWKS endpoint on another public HTTPS origin.
@@ -24,7 +24,7 @@ Both inspection and runtime JWKS fetching enforce:
   cookies, authorization headers, private service bindings or `cf` overrides.
 - Five-second request/body timeout; caller cancellation also cancels runtime JWKS.
 - Bounded body reads: 128 KiB metadata, 256 KiB JWKS; rejected bodies are cancelled.
-- Metadata issuer must exactly match the requested canonical issuer. Stack
+- Metadata issuer must exactly match the requested canonical issuer. App
   membership, signed activation challenge, resource audience and key validation
   are unchanged. Discoverable does not mean trusted.
 
@@ -44,7 +44,12 @@ deployment adapters must enforce destination-address restrictions at connection
 time, including after DNS resolution, before supporting arbitrary public issuers.
 Injected fetchers in unit tests verify adapter policy, not Cloudflare's network.
 
-## UniDocs migration status (2026-09-08)
+## Frozen UniDocs v1 migration status (2026-09-08)
+
+This section records the legacy `unicas.shazhou.work` Stack/Tenant environment.
+Its identifiers, audiences, configuration variable names, and routes are not
+App/Space aliases and must remain unchanged unless that separate legacy
+migration is explicitly reopened.
 
 Live control-plane reads confirmed:
 

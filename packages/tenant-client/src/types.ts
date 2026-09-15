@@ -46,11 +46,20 @@ export interface CasRootRefsResult {
   readonly revision?: number;
 }
 
-export interface CasNodeCacheKey {
+export interface TenantCasNodeCacheKey {
   readonly stackId: string;
   readonly tenantId: string;
   readonly hash: CasHash;
 }
+
+export interface SpaceCasNodeCacheKey {
+  readonly version: 2;
+  readonly appId: string;
+  readonly spaceId: string;
+  readonly hash: CasHash;
+}
+
+export type CasNodeCacheKey = TenantCasNodeCacheKey | SpaceCasNodeCacheKey;
 
 /** Strategy for caching immutable node metadata and own-content reads. */
 export interface CasNodeCache {
@@ -85,15 +94,25 @@ export interface TenantCasClient {
   gc(options?: CasGcOptions): Promise<CasGcResult>;
 }
 
-export interface TenantCasClientConfig {
+export type SpaceCasClient = TenantCasClient;
+
+interface CasClientConfigBase {
   readonly baseUrl: string;
-  readonly stackId: string;
-  readonly tenantId: string;
   readonly getToken: () => Promise<string>;
   readonly fetcher?: HttpFetcher;
   readonly uploadFetcher?: HttpFetcher;
   readonly cache?: CasNodeCache;
   readonly uploadMode?: "legacy" | "direct";
+}
+
+export interface TenantCasClientConfig extends CasClientConfigBase {
+  readonly stackId: string;
+  readonly tenantId: string;
+}
+
+export interface SpaceCasClientConfig extends CasClientConfigBase {
+  readonly appId: string;
+  readonly spaceId: string;
 }
 
 export type {

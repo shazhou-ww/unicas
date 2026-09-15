@@ -31,7 +31,7 @@ beforeEach(() => {
   fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input), "https://cas.example").pathname;
     if (path.endsWith("/managed-issuer")) return json({ status: "active" });
-    if (path.endsWith("/managed-capabilities")) return json({ accessToken: "memory-token", audience: `https://cas.example/stacks/${stackId}`, tenantId: "member_test", expiresAt: Date.now() + 60_000 });
+    if (path.endsWith("/managed-capabilities")) return json({ accessToken: "memory-token", audience: `https://cas.example/stacks/${stackId}`, spaceId: "member_test", permissions: ["spaces:member_test:cas:manage"], expiresAt: Date.now() + 60_000 });
     if (path.endsWith("/file-roots")) return json({ items: roots });
     if (path.includes("/file-roots/") && init?.method === "PATCH") {
       if (failCommit) return json({ error: "REVISION_MISMATCH", message: "Revision conflict" }, 409);
@@ -61,7 +61,7 @@ async function selectRoot(user: ReturnType<typeof userEvent.setup>, name: string
 
 test("switches cached roots and folders without requests and preserves each root path", async () => {
   const user = userEvent.setup();
-  render(<PlaygroundView stackId={stackId} />);
+  render(<PlaygroundView appId={stackId} />);
   await selectRoot(user, "Alpha");
   expect(screen.getByRole("table", { name: "Folder contents" }).closest(".card")).toBeNull();
   expect(screen.queryByRole("tree")).not.toBeInTheDocument();
@@ -85,7 +85,7 @@ test("switches cached roots and folders without requests and preserves each root
 
 test("refreshes from the server and invalidates roots with changed revisions", async () => {
   const user = userEvent.setup();
-  render(<PlaygroundView stackId={stackId} />);
+  render(<PlaygroundView appId={stackId} />);
   await selectRoot(user, "Alpha");
   await selectRoot(user, "Beta");
   roots[0] = { ...roots[0], revision: 2 };
@@ -102,7 +102,7 @@ test("creates folders, copies within a folder, renames and deletes selected entr
   const user = userEvent.setup();
   const prompt = vi.spyOn(window, "prompt").mockReturnValue("Archive");
   vi.spyOn(window, "confirm").mockReturnValue(true);
-  render(<PlaygroundView stackId={stackId} />);
+  render(<PlaygroundView appId={stackId} />);
   await selectRoot(user, "Alpha");
   await user.click(screen.getByRole("button", { name: "New folder" }));
   await user.type(screen.getByRole("textbox", { name: "Folder name" }), "Archive{Enter}");
@@ -124,7 +124,7 @@ test("creates folders, copies within a folder, renames and deletes selected entr
 
 test("discards failed mutations before a cached root can be reused", async () => {
   const user = userEvent.setup();
-  render(<PlaygroundView stackId={stackId} />);
+  render(<PlaygroundView appId={stackId} />);
   await selectRoot(user, "Alpha");
   failCommit = true;
   await user.click(screen.getByRole("button", { name: "New folder" }));
@@ -141,7 +141,7 @@ test("discards failed mutations before a cached root can be reused", async () =>
 test("opens and cancels folder creation without native prompts or writes", async () => {
   const user = userEvent.setup();
   const prompt = vi.spyOn(window, "prompt").mockImplementation(() => { throw new Error("prompt() is not supported"); });
-  render(<PlaygroundView stackId={stackId} />);
+  render(<PlaygroundView appId={stackId} />);
   await selectRoot(user, "Alpha");
   const requestCount = fetchMock.mock.calls.length;
   await user.click(screen.getByRole("button", { name: "New folder" }));
@@ -158,7 +158,7 @@ test("opens and cancels folder creation without native prompts or writes", async
 
 test("commits the temporary row on blur exactly once", async () => {
   const user = userEvent.setup();
-  render(<PlaygroundView stackId={stackId} />);
+  render(<PlaygroundView appId={stackId} />);
   await selectRoot(user, "Alpha");
   await user.click(screen.getByRole("button", { name: "New folder" }));
   const row = screen.getByRole("row", { name: "New folder" });
@@ -174,7 +174,7 @@ test("commits the temporary row on blur exactly once", async () => {
 
 test("cancels empty blur and rejects duplicate names without writes", async () => {
   const user = userEvent.setup();
-  render(<PlaygroundView stackId={stackId} />);
+  render(<PlaygroundView appId={stackId} />);
   await selectRoot(user, "Alpha");
   const requests = fetchMock.mock.calls.length;
   await user.click(screen.getByRole("button", { name: "New folder" }));
@@ -191,7 +191,7 @@ test("cancels empty blur and rejects duplicate names without writes", async () =
 
 test("retains a failed blur draft and allows explicit retry", async () => {
   const user = userEvent.setup();
-  render(<PlaygroundView stackId={stackId} />);
+  render(<PlaygroundView appId={stackId} />);
   await selectRoot(user, "Alpha");
   failCommit = true;
   await user.click(screen.getByRole("button", { name: "New folder" }));
@@ -206,14 +206,14 @@ test("retains a failed blur draft and allows explicit retry", async () => {
   expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "PATCH")).toHaveLength(2);
 });
 
-test("does not reuse roots or tenant credentials across stacks", async () => {
+test("does not reuse roots or Space capabilities across Apps", async () => {
   const user = userEvent.setup();
-  const view = render(<PlaygroundView stackId={stackId} />);
+  const view = render(<PlaygroundView appId={stackId} />);
   await selectRoot(user, "Alpha");
-  view.rerender(<PlaygroundView stackId="cas_other" />);
+  view.rerender(<PlaygroundView appId="cas_other" />);
   await selectRoot(user, "Alpha");
   expect(fetchMock.mock.calls.filter(([path]) => String(path).endsWith("/managed-capabilities"))).toHaveLength(2);
-  expect(fetchMock.mock.calls.some(([path]) => String(path) === "/admin/stacks/cas_other/managed-capabilities")).toBe(true);
+  expect(fetchMock.mock.calls.some(([path]) => String(path) === "/admin/apps/cas_other/managed-capabilities")).toBe(true);
 });
 
 test("reopens persisted manifests after a fresh session and catalog check, then clears on logout", async () => {
@@ -221,7 +221,7 @@ test("reopens persisted manifests after a fresh session and catalog check, then 
   const user = userEvent.setup();
   const identity = { identityIssuer: "https://login.example", subject: "cache-integration" };
   let session = createPlaygroundCacheSession(identity);
-  const mount = () => render(<PlaygroundCacheContext value={session}><PlaygroundView stackId={stackId} /></PlaygroundCacheContext>);
+  const mount = () => render(<PlaygroundCacheContext value={session}><PlaygroundView appId={stackId} /></PlaygroundCacheContext>);
   let view = mount();
   try {
     await selectRoot(user, "Alpha");
@@ -255,7 +255,7 @@ test("does not display persisted content when the fresh catalog denies access", 
   vi.stubGlobal("Blob", NodeBlob);
   const user = userEvent.setup();
   const session = createPlaygroundCacheSession({ identityIssuer: "https://login.example", subject: "cache-denied" });
-  const mount = () => render(<PlaygroundCacheContext value={session}><PlaygroundView stackId={stackId} /></PlaygroundCacheContext>);
+  const mount = () => render(<PlaygroundCacheContext value={session}><PlaygroundView appId={stackId} /></PlaygroundCacheContext>);
   let view = mount();
   try {
     await selectRoot(user, "Alpha");

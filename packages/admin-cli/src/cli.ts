@@ -9,12 +9,18 @@
 
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { appAuditCommand } from "./commands/app-audit.js";
+import { appMembersCommand } from "./commands/app-members.js";
+import { appOAuthIssuerCommand } from "./commands/app-oauth-issuer.js";
+import { appRefDomainsCommand } from "./commands/app-refdomains.js";
+import { appsCommand } from "./commands/apps.js";
 import { auditCommand } from "./commands/audit.js";
 import { createContext } from "./commands/common.js";
 import { loginCommand } from "./commands/login.js";
 import { logoutCommand } from "./commands/logout.js";
 import { membersCommand } from "./commands/members.js";
 import { oauthIssuerCommand } from "./commands/oauth-issuer.js";
+import { principalCommand } from "./commands/principal.js";
 import { refDomainsCommand } from "./commands/refdomains.js";
 import { stacksCommand } from "./commands/stacks.js";
 import { statusCommand } from "./commands/status.js";
@@ -29,8 +35,28 @@ Usage:
   unicas login [--port N] [--no-browser]                   Google OIDC login, then exchange for an admin session
   unicas logout                                            End the admin session and clear it locally
   unicas status                                             Show local session state
-  unicas whoami                                             Current operator identity and memberships
+  unicas principal                                          Current Principal, Profile, and App memberships
 
+  unicas apps list [--limit N] [--cursor C]
+  unicas apps get <appId>
+  unicas apps create <displayName> [--idempotency-key K]
+  unicas apps update <appId> [displayName] [--description D] [--etag E]
+
+  unicas app-members list <appId> [--limit N] [--cursor C]
+  unicas app-members invite <appId> <email> [--idempotency-key K]
+  unicas app-members remove <appId> --issuer <url> --subject <sub> [--etag E] [--confirm-subject S]
+
+  unicas app-oauth-issuer get <appId>
+  unicas app-oauth-issuer inspect <appId> <issuer>
+  unicas app-oauth-issuer activate <appId> <inspectionId> --activation-proof <jws> [--etag E]
+
+  unicas app-ref-domains list <appId>
+  unicas app-audit control <appId> [--limit N] [--cursor C] [--after ID]
+  unicas app-audit root-domain-refs <appId> <refDomain> [--space-id S] [--limit N] [--cursor C]
+  unicas app-audit root-domain-events <appId> <refDomain> [--space-id S] [--after N] [--limit N]
+
+Legacy v1 compatibility:
+  unicas whoami                                             Legacy operator identity and Stack memberships
   unicas stacks list [--limit N] [--cursor C]
   unicas stacks get <stackId>
   unicas stacks create <displayName> [--idempotency-key K]
@@ -76,6 +102,34 @@ export async function main(argv: readonly string[]): Promise<void> {
     case "whoami":
       await whoamiCommand(ctx);
       return;
+    case "principal":
+      await principalCommand(ctx);
+      return;
+    case "apps": {
+      const [subcommand, ...subArgs] = rest;
+      await appsCommand(ctx, subcommand, subArgs);
+      return;
+    }
+    case "app-members": {
+      const [subcommand, ...subArgs] = rest;
+      await appMembersCommand(ctx, subcommand, subArgs);
+      return;
+    }
+    case "app-oauth-issuer": {
+      const [subcommand, ...subArgs] = rest;
+      await appOAuthIssuerCommand(ctx, subcommand, subArgs);
+      return;
+    }
+    case "app-ref-domains": {
+      const [subcommand, ...subArgs] = rest;
+      await appRefDomainsCommand(ctx, subcommand, subArgs);
+      return;
+    }
+    case "app-audit": {
+      const [subcommand, ...subArgs] = rest;
+      await appAuditCommand(ctx, subcommand, subArgs);
+      return;
+    }
     case "stacks": {
       const [subcommand, ...subArgs] = rest;
       await stacksCommand(ctx, subcommand, subArgs);

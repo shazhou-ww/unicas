@@ -1,7 +1,7 @@
 # UniCAS
 
 UniCAS is an independently deployable content-addressed storage service with
-tenant and administrator access planes. This repository contains its portable
+an App/Space data plane and App administrator access plane. This repository contains its portable
 service core, Cloudflare deployment adapter, protocol packages, clients, CLI,
 and administrator console.
 

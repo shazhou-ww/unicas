@@ -86,10 +86,10 @@ export function matchUniCasServiceRoute(request: Request): UniCasServiceRoute | 
   if (tenantRoute) return { plane: "tenant", route: tenantRoute };
   const spaceRoute = matchAppSpaceRoute(request.method, pathname);
   if (spaceRoute) return { plane: "space", route: spaceRoute };
-  const adminRoute = matchCasAdminRoute(request.method, pathname);
-  if (adminRoute) return { plane: "admin", route: adminRoute };
   const appAdminRoute = matchAppAdminRoute(request.method, pathname);
   if (appAdminRoute) return { plane: "app-admin", route: appAdminRoute };
+  const adminRoute = matchCasAdminRoute(request.method, pathname);
+  if (adminRoute) return { plane: "admin", route: adminRoute };
   return null;
 }
 

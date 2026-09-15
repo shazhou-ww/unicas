@@ -62,11 +62,12 @@ No mutable state participates in identity. Specifically excluded:
 - `childRefCount`;
 - `rootRefCount`;
 - creation/access timestamps;
-- stack ID;
-- tenant ID;
+- App ID;
+- Space ID;
+- physical compatibility identifiers such as `stack_id` and `tenant_id`;
 - R2 object metadata.
 
-The same canonical node bytes in two `(stackId, tenantId)` partitions have the
+The same canonical node bytes in two `(appId, spaceId)` partitions have the
 same digest, but remain physically isolated and independently accounted.
 
 ## 3. Integer and string conventions
@@ -135,9 +136,12 @@ Child refs are ordered and duplicates are significant:
 
 A D1 implementation must preserve this order, typically with an `ordinal` column.
 
-## 6. Physical Cloudflare storage
+## 6. Current physical Cloudflare compatibility storage
 
-The canonical layout is the digest preimage and portable interchange representation. The production Cloudflare adapter physically splits it.
+The canonical layout is the digest preimage and portable interchange
+representation. The production Cloudflare adapter currently maps logical
+App/Space dimensions onto physical Stack/Tenant schema and object names. These
+names are not part of the v2 public contract.
 
 ### 6.1 R2
 
@@ -224,8 +228,8 @@ CREATE TABLE cas_root_ref_requests (
 ```
 
 `payload_hash` is SHA-256 over the canonical sorted root-reference change map.
-Reusing a request ID with different changes in the same stack, tenant, and
-domain is an error. The corresponding audit event is keyed by
+Reusing a request ID with different changes in the same logical App, Space, and
+domain is an error. The corresponding physical audit event is keyed by
 `(stack_id, ref_domain, revision)` and records `tenant_id`.
 
 ## 7. Streaming hash computation
@@ -276,7 +280,8 @@ A metadata-only read cannot prove full node integrity because R2 content is requ
 
 - exactly `refCount` hashes;
 - each hash is 32 bytes;
-- every child belongs to the same `(stackId, tenantId)` partition;
+- every child belongs to the same logical `(appId, spaceId)` partition (mapped
+  to one physical `(stack_id, tenant_id)` partition by the current adapter);
 - every child must be ready before inserting the parent metadata row;
 - duplicate refs are permitted and counted separately;
 - cycles are cryptographically impractical to construct when a parent digest includes child digests, but implementations may still enforce traversal depth and visited-node limits for hostile or corrupt stores.
@@ -364,7 +369,8 @@ It is not required as the public upload wire format; the HTTP API may send metad
 
 The CAS core stores one opaque content object per node. It does not split large files into chunks and does not define folders, paths, or directory entries.
 
-- A large file is one node whose own content is one R2 object, subject to R2, HTTP, account, and per-tenant quota limits.
+- A large file is one node whose own content is one R2 object, subject to R2,
+  HTTP, account, and per-Space quota limits.
 - Child refs represent application-defined Merkle DAG edges only. The CAS does not concatenate child content to reconstruct a file.
 - Names, paths, and folder semantics belong to a higher-level application format if a future use case needs them.
 - The CAS never infers structure from `contentType`.
@@ -397,14 +403,14 @@ The service must enforce configurable limits before allocation or traversal:
 - maximum DAG traversal depth;
 - maximum nodes visited per read;
 - maximum reconstructed response size;
-- per-stack-and-tenant storage quota;
-- per-stack-and-tenant concurrent upload limit.
+- per-App-and-Space storage quota;
+- per-App-and-Space concurrent upload limit.
 
-A valid hash does not authorize access. Every tenant data-plane operation is
-authenticated with a trusted stack JWT capability and scoped to a verified
-`(stackId, tenantId)` partition. Root Refs writes derive `refDomain` from the
+A valid hash does not authorize access. Every Space data-plane operation is
+authenticated with a trusted App JWT capability and scoped to a verified
+`(appId, spaceId)` partition. Root Refs writes derive `refDomain` from the
 verified capability; callers cannot select it through a header, query
-parameter, or body. Stack admin APIs use the separate admin authentication
+parameter, or body. App admin APIs use the separate admin authentication
 plane defined by the CAS architecture.
 
 Content type is descriptive metadata and must not be trusted for content sniffing, browser execution policy, or DOCX image validation. Consumers validate actual bytes for their domain.

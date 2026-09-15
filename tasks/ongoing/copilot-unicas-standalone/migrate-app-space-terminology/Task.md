@@ -60,6 +60,9 @@ and names the top-level application/trust boundary App.
 ## References
 
 - [Task execution plan](Plan.md)
+- [Remaining work breakdown](RemainingWork.md)
+- [Documentation tracker](Documentation.md)
+- [Physical cutover inventory](CutoverInventory.md)
 - [Migration inventory](Inventory.md)
 - [V1/v2 compatibility matrix](CompatibilityMatrix.md)
 - [Finalized terminology](../../../../docs/terminology.md)

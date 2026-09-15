@@ -214,6 +214,20 @@ function fakeControlPlane(): ControlPlaneOperations {
         permissions: ["tenants:member_test:cas:manage"],
       };
     },
+    mintManagedSpaceCapability: async (ctx, appId) => {
+      const app = requireStack(ctx, appId);
+      if (!app) return { error: "STACK_MEMBERSHIP_REQUIRED", message: "app membership required" };
+      return {
+        accessToken: "short-lived-space-token",
+        tokenType: "Bearer",
+        expiresIn: 120,
+        expiresAt: Date.now() + 120_000,
+        issuer: `https://cas.example/managed-issuers/${app.stackId}`,
+        audience: `https://cas.example/stacks/${app.stackId}`,
+        spaceId: "member_test",
+        permissions: ["spaces:member_test:cas:manage"],
+      };
+    },
     inspectOAuthIssuer: error as ControlPlaneOperations["inspectOAuthIssuer"],
     activateOAuthIssuer: error as ControlPlaneOperations["activateOAuthIssuer"],
     listControlAuditEvents: error as ControlPlaneOperations["listControlAuditEvents"],
@@ -926,6 +940,30 @@ describe("cas-admin-webui BFF", () => {
       accessToken: "short-lived-token",
       tenantId: "member_test",
       expiresIn: 120,
+    });
+  });
+
+  test("managed Space capability mint uses the v2 operation and response", async () => {
+    const provider = await createMockProvider();
+    const bff = await createBff(provider);
+    const { cookie, csrf } = await signIn(bff, provider);
+    const appId = await createStack(bff, cookie, csrf, "Managed App");
+
+    const rejected = await authRequest(bff, `/admin/apps/${appId}/managed-capabilities`, cookie, {
+      method: "POST",
+    });
+    expect(rejected.status).toBe(403);
+
+    const minted = await authRequest(bff, `/admin/apps/${appId}/managed-capabilities`, cookie, {
+      method: "POST",
+      headers: { "X-CSRF-Token": csrf },
+    });
+    expect(minted.status).toBe(201);
+    expect(minted.headers.get("Cache-Control")).toBe("no-store");
+    expect(await minted.json()).toMatchObject({
+      accessToken: "short-lived-space-token",
+      spaceId: "member_test",
+      permissions: ["spaces:member_test:cas:manage"],
     });
   });
 

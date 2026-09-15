@@ -6,8 +6,10 @@ Date: 2026-08-26
 
 This document explains the state and lifecycle model behind UniCAS. It complements
 [CAS Architecture](./cas-architecture.md), which specifies the concrete node,
-storage, lease, and garbage-collection behavior, together with the multi-stack
-service boundary and Root Refs audit API.
+storage, lease, and garbage-collection behavior, together with the multi-App
+service boundary and Root Refs audit API. In the current public model this is a
+multi-App boundary; Stack/Tenant names remain only in physical adapters and
+frozen v1 contracts.
 
 The purpose of this document is to establish one conceptual model and a set of
 invariants for reasoning about:
@@ -45,7 +47,7 @@ This separation is important:
 
 ## 2. Authoritative CAS state
 
-For one `(stackId, tenantId)` partition, the authoritative root state at time
+For one `(appId, spaceId)` partition, the authoritative root state at time
 $t$ is the signed-count map:
 
 $$
@@ -82,8 +84,8 @@ changes which graphs the system is obligated to retain.
 The analogy has limits. UniDocs CAS has a counted set of roots rather than one
 canonical root selected by consensus. Root updates may also be emitted by
 independent business domains. Audit revisions are monotonic per
-`(stackId, refDomain)` and span tenant-bearing events inside that stack. They
-do not define a consensus-like total order across domains or stacks.
+`(appId, refDomain)` and span Space-bearing events inside that App. They
+do not define a consensus-like total order across domains or Apps.
 
 It is therefore most precise to call Root Refs the authoritative CAS
 **retention state**. The application state described by the content remains
@@ -91,7 +93,7 @@ owned by the business system.
 
 ## 3. The semantic live set
 
-For one fixed `(stackId, tenantId)` partition, let:
+For one fixed `(appId, spaceId)` partition, let:
 
 - $V_t$ be the set of nodes stored in that partition at time $t$;
 - $E_t$ be the immutable parent-to-child edges stored for those nodes;
@@ -364,7 +366,7 @@ $$
 Collection proceeds incrementally:
 
 1. Select a currently eligible node.
-2. Recheck eligibility within the stack-and-tenant serialization boundary.
+2. Recheck eligibility within the App-and-Space serialization boundary.
 3. Delete its content.
 4. Delete its outgoing edges and node metadata atomically.
 5. Decrement each child's `childRefCount` by edge occurrence count.
@@ -381,7 +383,7 @@ Two properties matter:
 **Safety:** GC never deletes committed state.
 
 This follows from $W_t \subseteq P_t$ and the rule that GC deletes only outside
-$P_t$, provided reference counts, lease checks, readiness rules, and tenant
+$P_t$, provided reference counts, lease checks, readiness rules, and Space
 serialization remain correct.
 
 **Eventual reclamation:** abandoned data is eventually deleted.
@@ -421,8 +423,8 @@ The dangerous implementation errors are those that break the ordering:
 ## 10. Audit boundary
 
 The Root Refs ledger records accepted signed deltas by
-`(stackId, refDomain)`. Every event and balance row records the affected
-`tenantId`. The tenant dimension identifies data ownership; the domain
+`(appId, refDomain)`. Every event and balance row records the affected
+`spaceId`. The Space dimension identifies data ownership; the domain
 dimension identifies audit attribution. Domain projections remain audit data,
 while aggregate `cas_nodes.root_ref_count` remains authoritative for
 validation, readiness, leasing, and GC.
@@ -457,16 +459,16 @@ or a separate archival policy. The audit ledger alone is not an archive.
 
 ### 10.2 Domain revisions and total order
 
-Revisions are monotonic per `(stackId, refDomain)` and order accepted events
-for that business domain across tenants in the stack. They are sufficient for
-stack-domain balance reads, event replay, and reconciliation. Signed deltas
-from different domains commute when deriving each tenant's final aggregate
+Revisions are monotonic per `(appId, refDomain)` and order accepted events
+for that business domain across Spaces in the App. They are sufficient for
+App-domain balance reads, event replay, and reconciliation. Signed deltas
+from different domains commute when deriving each Space's final aggregate
 balance.
 
 Domain revisions do not establish the exact cross-domain order of all root
 transitions. If a future requirement needs to correlate the precise aggregate
 state after every accepted update with GC or another global event stream, CAS
-would need a separate stack-global or stack-and-tenant commit sequence. That is
+would need a separate App-global or App-and-Space commit sequence. That is
 not required for the current reconciliation model.
 
 ## 11. Design consequences
@@ -524,8 +526,8 @@ Implementations should directly test the following properties.
 
 - Every newly accepted Root Refs update writes exactly one audit event in the
   same commit.
-- Every event records the affected `tenantId` and receives the next revision
-  for its `(stackId, refDomain)` stream.
+- Every event records the affected `spaceId` and receives the next revision
+  for its `(appId, refDomain)` stream.
 - Audit write failure rolls back aggregate Root Refs and idempotency state.
 - Idempotent retries append no event.
 - Root validation and GC do not read domain event or balance tables.

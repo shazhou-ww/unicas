@@ -18,7 +18,7 @@ test("uses the CSRF token returned by the session endpoint for mutations", async
     }));
 
   await api("/admin/me");
-  await api("/admin/stacks", { method: "POST", body: "{}" });
+  await api("/admin/apps", { method: "POST", body: "{}" });
 
   const mutationInit = fetchMock.mock.calls[1]?.[1];
   expect(new Headers(mutationInit?.headers).get("X-CSRF-Token")).toBe("csrf-from-session");

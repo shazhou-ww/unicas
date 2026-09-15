@@ -1,1 +1,1 @@
-await import("../../../scripts/cas-middleware-smoke.mjs");
+await import("../../../scripts/cas-app-space-smoke.mjs");

@@ -2,7 +2,7 @@
   "name": "@unicas/admin-webui",
   "version": "0.1.0",
   "private": true,
-  "description": "CAS stack administration WebUI (browser only)",
+  "description": "UniCAS App administration and personal Space Playground WebUI (browser only)",
   "type": "module",
   "main": "./src/ui/index.ts",
   "types": "./src/ui/index.ts",

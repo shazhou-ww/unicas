@@ -1,7 +1,7 @@
 {
   "name": "@unicas/codec",
   "version": "0.1.0",
-  "description": "Wire-format encodings for the CAS tenant data plane: canonical node binary format, digest, streaming node parse, validation limits, and blob index CBOR",
+  "description": "Wire-format encodings for the UniCAS data plane: canonical node binary format, digest, streaming parse, and validation limits",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

@@ -1,8 +1,13 @@
 # packages — UniCAS 包结构与边界
 
-UniCAS 是独立可部署的 CAS 中间件（content-addressed storage + stack 控制面）。
+UniCAS 是独立可部署的 CAS 中间件（content-addressed storage + App 控制面）。
 `packages/` 是 standalone 仓库的 workspace package 边界。2026-08-29 重组后，
 本目录内**零 `@unidocs/*` 依赖**，该承诺完全兑现。
+
+公共 v2 资源名是 **App** 和 **Space**。`tenant-*` 是既有数据访问面包族的
+稳定 package identifier，不表示 v2 资源仍叫 Tenant。该包族同时承载冻结的
+Stack/Tenant v1 与 App/Space v2 契约；物理 `stack_id`/`tenant_id` 名称在切换
+门禁通过前由显式 adapter 隔离，不得暴露到 v2 wire、CLI、MCP 或 WebUI。
 
 ## 命名规则
 
@@ -10,8 +15,8 @@ UniCAS 是独立可部署的 CAS 中间件（content-addressed storage + stack �
    改名必须同时改目录名与 `package.json` 的 `name`（依赖 guard 强制校验，
   见 `tests/workspace-boundaries.test.mjs`）。
 2. **客户端按 actor 分两组**：
-   - `tenant-*` — 租户数据面（内容寻址存储）
-   - `admin-*` — 管理员控制面（stack 管理）
+  - `tenant-*` — 数据面 package family（frozen v1 + Space v2）
+  - `admin-*` — App 管理控制面
 3. **编码层**：`codec` —— wire 编码，独立发布、独立测试，无 workspace 依赖。
 4. **契约包**：`tenant-protocol`（数据面 HTTP 契约 + capability）/
    `admin-protocol`（控制面契约）。只放类型、路由、校验、常量——无 IO、
@@ -20,12 +25,13 @@ UniCAS 是独立可部署的 CAS 中间件（content-addressed storage + stack �
 5. **界面/入口**：`admin-webui`（管理 WebUI，纯浏览器包）、
    `admin-cli`（管理 CLI + stdio MCP）、`tenant-client`（数据面 HTTP client）。
 6. **服务端按平台分层，不按 actor 拆部署**：`service` 是 cloud-neutral 的
-  tenant + admin HTTP actor 与平台端口；`service-cloudflare` 是唯一 Cloudflare
+  data + admin HTTP actor 与平台端口；`service-cloudflare` 是唯一 Cloudflare
   Worker 和公网入口。控制面实现归属这两个包，不存在独立控制面部署单元。
 
 ## 客户端访问面固定结构
 
-admin 与 tenant 两类参与者的访问面保持分离，客户端包采用同一套角色：
+admin 与 data 两类参与者的访问面保持分离，客户端包采用同一套角色。下图的
+`tenant` 是 package-family 名，不是 v2 public resource：
 
 ```
 admin:  [admin-cli, admin-webui] -> admin-client -> admin-protocol
@@ -60,14 +66,15 @@ packages/                           @unicas org
 │         控制面契约：类型、路由、错误码、并发/ETag、authz、威胁模型
 │
 ├── ■ 内核/库层（cloud-neutral）
-│   ├── service/           @unicas/service            tenant + admin HTTP actor
-│   │     精确匹配两套 protocol；定义 control/tenant SQL、blob、按 key 串行
-│   │     actor 等平台端口；内置 stack capability 校验、权限矩阵与有界 authority
+│   ├── service/           @unicas/service            data + admin HTTP actor
+│   │     精确匹配 v2 App/Space 与 frozen v1 protocol；定义 control/data SQL、
+│   │     blob、按 key 串行 actor 等平台端口；内置 App/Space 与 v1 capability
+│   │     校验、权限矩阵与有界 authority
 │   │     cache，以及 Root Ref 校验/幂等/投影/revision/retry 业务内核；不依赖
 │   │     Cloudflare 类型或 control-plane 实现；node GC 的候选复核、删除顺序与
-│   │     回收统计、tenant node usage、node content range/metadata read，以及
+│   │     回收统计、Space node usage、node content range/metadata read，以及
 │   │     streaming/bodyless node lease 语义，同样通过 semantic repository port 执行；
-│   │     控制面业务内核（stack/member/invitation/issuer/key/audit 语义）经
+│   │     控制面业务内核（App/member/invitation/issuer/audit 语义）经
 │   │     ControlPlaneAdminService 与 semantic repository port 执行
 │   └── control-auth/      @unicas/control-auth       admin 组
 │         OIDC 认证库：discovery、PKCE、id_token 校验（admin BFF 与
@@ -83,7 +90,8 @@ packages/                           @unicas org
     │     经 @unicas/admin-client 取 admin-protocol 类型；不含任何服务端代码
     ├── tenant-client/     @unicas/tenant-client       tenant 组 · 传输层
     │     纯 HTTP 封装，每个路由一个函数（readMetadata/readContent/
-    │     leaseNode/updateRootRefs/usage/gc），factory 绑定 tenantId/JWT；
+    │     leaseNode/updateRootRefs/usage/gc）；`createTenantCasClient` 绑定 v1
+    │     Stack/Tenant，`createSpaceCasClient` 绑定 v2 App/Space；
     │     无编码、无业务封装，仅组装层使用
     ├── tenant-blob-client/@unicas/tenant-blob-client  tenant 组 · 业务面
     │     业务方唯一入口：storeBlob / openBlob(含元数据的句柄式随机读) /
@@ -96,7 +104,8 @@ packages/                           @unicas org
     │     经注入的业务 catalog port 持久化，CAS 仍不解析目录语义
     ├── tenant-browser-cache/@unicas/tenant-browser-cache  tenant 组 · 浏览器缓存策略
     │     实现 CasNodeCache；仅缓存不可变节点元数据和完整内容，内存 + IndexedDB LRU
-    │     按 endpoint/principal/stack/tenant/hash 隔离，不持久化凭据或 working tree
+    │     v1 按 endpoint/principal/stack/tenant/hash，v2 按
+    │     endpoint/Principal/App/Space/hash/version 隔离，不持久化凭据或 working tree
     ├── admin-client/      @unicas/admin-client        admin 组 · 控制面 HTTP client
     │     纯函数传输层（对标 tenant-client）：每操作一函数，类型直接来自
     │     @unicas/admin-protocol；session cookie + CSRF 由 session provider 提供
@@ -121,14 +130,15 @@ packages/                           @unicas org
 
 - **codec 是最底层**：无 workspace 依赖，仅外部 `cborg`；`tenant-protocol`
   不 re-export codec 符号（强制迁移，2026-08-29 决策）。
-- **tenant-client 是纯函数传输层**：与 HTTP 路由一一对应，factory 只绑定
-  tenantId/JWT 等公共参数，无编码、无业务封装、无对象模式（`node()` 已移除）。
+- **tenant-client 是纯函数传输层**：与 HTTP 路由一一对应。冻结 v1 factory
+  绑定 `stackId`/`tenantId`，v2 factory 绑定 `appId`/`spaceId`；两者只组装 JWT
+  与公共传输参数，无编码、无业务封装、无对象模式（`node()` 已移除）。
 - **业务方只用 tenant-blob-client**：其接口覆盖完整数据面
   （blob 写/随机读 + 节点元数据/续租/root-refs + usage/gc），应用栈不再直接
   依赖 tenant-client；`createTenantCasClient` 只在组装点喂给
   `createCasBlobClient`。
-- 契约层：`tenant-protocol` 仅外部 `jose`；`admin-protocol` 当前无依赖，
-  未来只可为复用两面共用协议类型而依赖 `tenant-protocol`。
+- 契约层：`tenant-protocol` 持有数据面共享类型；`admin-protocol` 仅通过允许的
+  单向依赖复用 App/Space identity 类型，反向依赖禁止。
 - `service` 同时依赖 tenant/admin protocol，统一两套服务端 HTTP surface；
   平台 context 显式提供 control/tenant SQL、blob 与 keyed actor 端口。tenant
   capability 校验属于该 cloud-neutral actor：authority 只经只读 resolver port

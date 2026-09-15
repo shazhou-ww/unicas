@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   MembersView,
+  InvitationView,
   IssuerView,
   ControlAuditView,
   UsageView,
@@ -19,9 +20,28 @@ function json(body: unknown, status = 200): Response {
 
 const STACK = "cas_stack_a";
 
+describe("InvitationView", () => {
+  test("accepts an App membership invitation", async () => {
+    fetchMock.mockResolvedValueOnce(json({
+      appId: STACK,
+      principal: { issuer: "https://accounts.example", subject: "alice" },
+      profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+    }));
+    const user = userEvent.setup();
+    render(<InvitationView token="invite/1" />);
+
+    await user.click(screen.getByRole("button", { name: "Accept membership" }));
+    expect(await screen.findByText(/You are now a member of App/)).toHaveTextContent(STACK);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/admin/member-invitations/invite%2F1/accept",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+});
+
 function managedIssuer() {
   return {
-    stackId: STACK,
+    appId: STACK,
     mode: "managed",
     issuer: `https://cas.example/managed-issuers/${STACK}`,
     audience: `https://cas.example/stacks/${STACK}`,
@@ -49,14 +69,14 @@ describe("PlaygroundView", () => {
       .mockResolvedValueOnce(json(managedIssuer()))
       .mockResolvedValueOnce(json({ items: [] }))
       .mockResolvedValueOnce(json({
-        accessToken: "tenant-token",
+        accessToken: "space-token",
         tokenType: "Bearer",
         expiresIn: 3600,
         expiresAt: Date.now() + 3_600_000,
         issuer: `https://cas.example/managed-issuers/${STACK}`,
         audience: `https://cas.example/stacks/${STACK}`,
-        tenantId: "member_abc",
-        permissions: ["tenants:member_abc:cas:manage"],
+        spaceId: "member_abc",
+        permissions: ["spaces:member_abc:cas:manage"],
       }))
       .mockResolvedValueOnce(json({ hash: "a".repeat(64), ready: true, leaseStartedAt: 1, leaseExpiresAt: 2 }))
       .mockResolvedValueOnce(json({ success: true, revision: 1 }))
@@ -65,7 +85,7 @@ describe("PlaygroundView", () => {
       .mockResolvedValueOnce(new Response(Uint8Array.from([0xa2, 0x61, 0x65, 0x80, 0x61, 0x76, 0x01])))
       .mockResolvedValueOnce(json({ items: [{ rootId: "root-1", name: "Project", manifestHash: "a".repeat(64), revision: 1, createdAt: 1, updatedAt: 1 }] }));
     const user = userEvent.setup();
-    render(<PlaygroundView stackId={STACK} />);
+    render(<PlaygroundView appId={STACK} />);
 
     await user.click(await screen.findByRole("button", { name: "Create root" }));
     const editor = screen.getByRole("textbox", { name: "New root name" });
@@ -74,7 +94,7 @@ describe("PlaygroundView", () => {
 
     await waitFor(() => expect(within(screen.getByRole("complementary", { name: "File roots" })).getByRole("button", { name: /Project/ })).toBeInTheDocument());
     const createCall = fetchMock.mock.calls.find(([path, init]) =>
-      path === `/admin/stacks/${STACK}/playground/file-roots` && init?.method === "POST"
+      path === `/admin/apps/${STACK}/playground/file-roots` && init?.method === "POST"
     );
     expect(createCall).toBeDefined();
     expect(JSON.parse(String(createCall?.[1]?.body))).toMatchObject({ name: "Project" });
@@ -85,7 +105,7 @@ describe("PlaygroundView", () => {
       .mockResolvedValueOnce(json(managedIssuer()))
       .mockResolvedValueOnce(json({ items: [] }));
     const user = userEvent.setup();
-    render(<PlaygroundView stackId={STACK} />);
+    render(<PlaygroundView appId={STACK} />);
 
     await user.click(await screen.findByRole("button", { name: "Create root" }));
     await user.type(screen.getByRole("textbox", { name: "New root name" }), "   ");
@@ -100,7 +120,7 @@ describe("PlaygroundView", () => {
       .mockResolvedValueOnce(json(managedIssuer()))
       .mockResolvedValueOnce(json({ items: [{ rootId: "root-1", name: "Project", manifestHash: "a".repeat(64), revision: 1, createdAt: 1, updatedAt: 1 }] }));
     const user = userEvent.setup();
-    render(<PlaygroundView stackId={STACK} />);
+    render(<PlaygroundView appId={STACK} />);
 
     await user.click(await screen.findByRole("button", { name: "Create root" }));
     await user.type(screen.getByRole("textbox", { name: "New root name" }), "project");
@@ -110,23 +130,23 @@ describe("PlaygroundView", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  test("keeps the member capability private and reads tenant usage", async () => {
+  test("keeps the member capability private and reads Space usage", async () => {
     fetchMock
       .mockResolvedValueOnce(json(managedIssuer()))
       .mockResolvedValueOnce(json({ items: [] }))
       .mockResolvedValueOnce(json({
-        accessToken: "tenant-token",
+        accessToken: "space-token",
         tokenType: "Bearer",
         expiresIn: 3600,
         expiresAt: Date.now() + 3_600_000,
         issuer: `https://cas.example/managed-issuers/${STACK}`,
         audience: `https://cas.example/stacks/${STACK}`,
-        tenantId: "member_abc",
-        permissions: ["tenants:member_abc:cas:manage"],
+        spaceId: "member_abc",
+        permissions: ["spaces:member_abc:cas:manage"],
       }))
       .mockResolvedValueOnce(json({ nodeCount: 0, readyContentBytes: 0, readyStoredBytes: 0, reservedBytes: 0, notReadyNodeCount: 0, leasedNodeCount: 0 }));
     const user = userEvent.setup();
-    render(<PlaygroundView stackId={STACK} />);
+    render(<PlaygroundView appId={STACK} />);
 
     expect(await screen.findByRole("button", { name: /Usage/ })).toBeInTheDocument();
     expect(screen.getByText("File roots")).toBeInTheDocument();
@@ -134,17 +154,17 @@ describe("PlaygroundView", () => {
     await user.click(screen.getByRole("button", { name: "Refresh usage" }));
     await waitFor(() => expect(screen.getByText("Nodes").nextSibling).toHaveTextContent("0"));
     expect(screen.getByText("member_abc")).toBeInTheDocument();
-    expect(screen.queryByDisplayValue("tenant-token")).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue("space-token")).not.toBeInTheDocument();
 
     expect(fetchMock).toHaveBeenNthCalledWith(3,
-      `/admin/stacks/${STACK}/managed-capabilities`,
+      `/admin/apps/${STACK}/managed-capabilities`,
       expect.objectContaining({ method: "POST" }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(4,
-      `https://cas.example/stacks/${STACK}/tenants/member_abc/cas/usage`,
+      `https://cas.example/v2/apps/${STACK}/spaces/member_abc/cas/usage`,
       expect.objectContaining({ headers: expect.any(Headers) }),
     );
-    expect((fetchMock.mock.calls[3][1]?.headers as Headers).get("Authorization")).toBe("Bearer tenant-token");
+    expect((fetchMock.mock.calls[3][1]?.headers as Headers).get("Authorization")).toBe("Bearer space-token");
   });
 
   test.each([false, true])("refreshes usage after GC and preserves its result if the refresh fails (%s)", async (refreshFails) => {
@@ -154,17 +174,17 @@ describe("PlaygroundView", () => {
       .mockResolvedValueOnce(json(managedIssuer()))
       .mockResolvedValueOnce(json({ items: [] }))
       .mockResolvedValueOnce(json({
-        accessToken: "tenant-token", tokenType: "Bearer", expiresIn: 3600,
+        accessToken: "space-token", tokenType: "Bearer", expiresIn: 3600,
         expiresAt: Date.now() + 3_600_000,
         issuer: `https://cas.example/managed-issuers/${STACK}`,
-        audience: `https://cas.example/stacks/${STACK}`, tenantId: "member_abc",
-        permissions: ["tenants:member_abc:cas:manage"],
+        audience: `https://cas.example/stacks/${STACK}`, spaceId: "member_abc",
+        permissions: ["spaces:member_abc:cas:manage"],
       }))
       .mockResolvedValueOnce(json(before))
       .mockResolvedValueOnce(json({ examined: 3, deleted: 2, reclaimedContentBytes: 1024 }))
       .mockResolvedValueOnce(refreshFails ? json({ error: "UNAVAILABLE", message: "Usage temporarily unavailable" }, 503) : json(after));
     const user = userEvent.setup();
-    render(<PlaygroundView stackId={STACK} />);
+    render(<PlaygroundView appId={STACK} />);
     await user.click(await screen.findByRole("button", { name: "Refresh usage" }));
     await waitFor(() => expect(screen.getByText("Nodes").nextSibling).toHaveTextContent("3"));
     const confirmation = screen.getByRole("checkbox", { name: /I understand/ });
@@ -172,8 +192,8 @@ describe("PlaygroundView", () => {
     await user.click(screen.getByRole("button", { name: "Run garbage collection" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Refresh usage" })).toBeEnabled());
     expect(fetchMock.mock.calls.slice(4).map(([path]) => path)).toEqual([
-      `https://cas.example/stacks/${STACK}/tenants/member_abc/cas/gc`,
-      `https://cas.example/stacks/${STACK}/tenants/member_abc/cas/usage`,
+      `https://cas.example/v2/apps/${STACK}/spaces/member_abc/cas/gc`,
+      `https://cas.example/v2/apps/${STACK}/spaces/member_abc/cas/usage`,
     ]);
     expect(screen.getByText(/Examined 3, deleted 2/)).toBeInTheDocument();
     expect(confirmation).not.toBeChecked();
@@ -188,21 +208,21 @@ describe("PlaygroundView", () => {
       accessToken,
       tokenType: "Bearer",
       expiresIn: 1,
-      expiresAt: now + (accessToken === "tenant-token-1" ? 1000 : 10_000),
+      expiresAt: now + (accessToken === "space-token-1" ? 1000 : 10_000),
       issuer: `https://cas.example/managed-issuers/${STACK}`,
       audience: `https://cas.example/stacks/${STACK}`,
-      tenantId: "member_abc",
-      permissions: ["tenants:member_abc:cas:manage"],
+      spaceId: "member_abc",
+      permissions: ["spaces:member_abc:cas:manage"],
     });
     fetchMock
       .mockResolvedValueOnce(json(managedIssuer()))
       .mockResolvedValueOnce(json({ items: [] }))
-      .mockResolvedValueOnce(json(capability("tenant-token-1")))
+      .mockResolvedValueOnce(json(capability("space-token-1")))
       .mockResolvedValueOnce(json({ nodeCount: 1, readyContentBytes: 0, readyStoredBytes: 0, reservedBytes: 0, notReadyNodeCount: 0, leasedNodeCount: 0 }))
-      .mockResolvedValueOnce(json(capability("tenant-token-2")))
+      .mockResolvedValueOnce(json(capability("space-token-2")))
       .mockResolvedValueOnce(json({ nodeCount: 2, readyContentBytes: 0, readyStoredBytes: 0, reservedBytes: 0, notReadyNodeCount: 0, leasedNodeCount: 0 }));
     const user = userEvent.setup();
-    render(<PlaygroundView stackId={STACK} />);
+    render(<PlaygroundView appId={STACK} />);
 
     await user.click(await screen.findByRole("button", { name: "Refresh usage" }));
     await waitFor(() => expect(screen.getByText("Nodes").nextSibling).toHaveTextContent("1"));
@@ -211,10 +231,10 @@ describe("PlaygroundView", () => {
     await waitFor(() => expect(screen.getByText("Nodes").nextSibling).toHaveTextContent("2"));
 
     const issueCalls = fetchMock.mock.calls.filter(([path]) =>
-      path === `/admin/stacks/${STACK}/managed-capabilities`
+      path === `/admin/apps/${STACK}/managed-capabilities`
     );
     expect(issueCalls).toHaveLength(2);
-    expect((fetchMock.mock.calls[5][1]?.headers as Headers).get("Authorization")).toBe("Bearer tenant-token-2");
+    expect((fetchMock.mock.calls[5][1]?.headers as Headers).get("Authorization")).toBe("Bearer space-token-2");
   });
 });
 
@@ -236,38 +256,47 @@ describe("MembersView", () => {
     fetchMock
       .mockResolvedValueOnce(json({
         items: [
-          { stackId: STACK, identityIssuer: "iss", subject: "alice", displayName: "Alice", emailForDisplay: "alice@example.com" },
+          {
+            appId: STACK,
+            principal: { issuer: "iss", subject: "alice" },
+            profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+          },
         ]
       }))
       .mockResolvedValueOnce(json({
-        invitation: { invitationId: "inv_1", stackId: STACK, status: "pending", emailConstraint: null, expiresAt: 2000000000000, createdAt: 1, revision: 1 },
+        invitation: { invitationId: "inv_1", appId: STACK, status: "pending", emailConstraint: null, expiresAt: 2000000000000, createdAt: 1, revision: 1 },
         acceptUrl: "https://cas.example/admin/invitations/token-xyz",
       }));
     const user = userEvent.setup();
-    render(<MembersView stackId={STACK} stackRevision={1} onChanged={() => undefined} />);
+    render(<MembersView appId={STACK} appRevision={1} onChanged={() => undefined} />);
     await waitFor(() => expect(screen.getByText("alice")).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "Create invitation" }));
     await waitFor(() => expect(screen.getByText(/Share this URL once/)).toBeInTheDocument());
     expect(screen.getByText("https://cas.example/admin/invitations/token-xyz")).toBeInTheDocument();
   });
 
-  test("removing a member sends the stack revision as If-Match", async () => {
+  test("removing an App member sends the App revision and Principal query", async () => {
     fetchMock
       .mockResolvedValueOnce(json({
         items: [
-          { stackId: STACK, identityIssuer: "iss", subject: "alice", displayName: null, emailForDisplay: null },
+          {
+            appId: STACK,
+            principal: { issuer: "iss", subject: "alice" },
+            profile: { displayName: null, emailForDisplay: null },
+          },
         ]
       }))
       .mockResolvedValueOnce(json({ ok: true }))
       .mockResolvedValueOnce(json({ items: [] }));
     const user = userEvent.setup();
-    render(<MembersView stackId={STACK} stackRevision={3} onChanged={() => undefined} />);
+    render(<MembersView appId={STACK} appRevision={3} onChanged={() => undefined} />);
     await waitFor(() => expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "Remove" }));
     await waitFor(() => expect(screen.getByText("No members.")).toBeInTheDocument());
     const deleteCall = fetchMock.mock.calls.find((call) => call[1]?.method === "DELETE");
     expect(deleteCall).toBeDefined();
     expect(new Headers(deleteCall![1]!.headers).get("If-Match")).toBe('"3"');
+    expect(deleteCall![0]).toBe(`/admin/apps/${STACK}/members?issuer=iss&subject=alice`);
   });
 });
 
@@ -280,7 +309,7 @@ describe("IssuerView", () => {
       .mockResolvedValueOnce(json(disabled))
       .mockResolvedValueOnce(json({ ...disabled, status: "active", revision: revision + 1 }))
       .mockResolvedValueOnce(json({ ...disabled, revision: revision + 2 }));
-    render(<IssuerView stackId={STACK} />);
+    render(<IssuerView appId={STACK} />);
     const enable = await screen.findByRole("button", { name: "Enable managed issuer" });
     expect(screen.queryByText("Managed issuer URL")).not.toBeInTheDocument();
     expect(screen.queryByText(disabled.issuer)).not.toBeInTheDocument();
@@ -298,7 +327,7 @@ describe("IssuerView", () => {
     const user = userEvent.setup();
     const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
     fetchMock.mockResolvedValueOnce(json(null)).mockResolvedValueOnce(json(managedIssuer()));
-    render(<IssuerView stackId={STACK} />);
+    render(<IssuerView appId={STACK} />);
     const copy = await screen.findByRole("button", { name: "Copy managed issuer URL" });
     expect(screen.queryByRole("textbox", { name: "Managed issuer URL" })).not.toBeInTheDocument();
     expect(copy).toHaveTextContent(managedIssuer().issuer);
@@ -314,7 +343,7 @@ describe("IssuerView", () => {
     const user = userEvent.setup();
     vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
     fetchMock.mockResolvedValueOnce(json(null)).mockResolvedValueOnce(json(managedIssuer()));
-    render(<IssuerView stackId={STACK} />);
+    render(<IssuerView appId={STACK} />);
     await user.click(await screen.findByRole("button", { name: "Copy managed issuer URL" }));
     expect(screen.getByRole("status")).toHaveTextContent("Could not copy URL");
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -324,16 +353,16 @@ describe("IssuerView", () => {
     fetchMock
       .mockResolvedValueOnce(json(null))
       .mockResolvedValueOnce(json(managedIssuer()));
-    render(<IssuerView stackId={STACK} />);
+    render(<IssuerView appId={STACK} />);
     await waitFor(() => expect(screen.getByRole("button", { name: "Inspect issuer" })).toBeInTheDocument());
     const customCard = screen.getByRole("heading", { name: "Custom OAuth authorization server" }).closest(".card")!;
     expect(within(customCard).queryByText(/Status:/)).not.toBeInTheDocument();
-    expect(fetchMock.mock.calls[0][0]).toBe(`/admin/stacks/${STACK}/oauth-issuer?optional=true`);
+    expect(fetchMock.mock.calls[0][0]).toBe(`/admin/apps/${STACK}/oauth-issuer?optional=true`);
   });
 
   test("shows status for an active OAuth issuer", async () => {
     fetchMock.mockResolvedValueOnce(json({
-      stackId: STACK,
+      appId: STACK,
       issuer: "https://issuer.example/oauth",
       audience: `https://cas.example/stacks/${STACK}`,
       metadataUrl: "https://issuer.example/.well-known/oauth-authorization-server/oauth",
@@ -352,7 +381,7 @@ describe("IssuerView", () => {
       capabilityMaxLifetimeSeconds: 1800,
       revision: 2,
     })).mockResolvedValueOnce(json(managedIssuer()));
-    render(<IssuerView stackId={STACK} />);
+    render(<IssuerView appId={STACK} />);
     const customCard = screen.getByRole("heading", { name: "Custom OAuth authorization server" }).closest(".card")!;
     await waitFor(() => expect(within(customCard).getByText(/Status:/)).toHaveTextContent("active"));
     expect(screen.getByRole("button", { name: "Issuer active" })).toBeDisabled();
@@ -366,7 +395,7 @@ describe("IssuerView", () => {
       .mockResolvedValueOnce(json(null))
       .mockResolvedValueOnce(json(managedIssuer()))
       .mockResolvedValueOnce(json({
-        inspectionId: "oinsp_1", stackId: STACK, issuer: "https://auth.example", audience: `https://cas.example/stacks/${STACK}`,
+        inspectionId: "oinsp_1", appId: STACK, issuer: "https://auth.example", audience: `https://cas.example/stacks/${STACK}`,
         metadataUrl: "https://auth.example/.well-known/oauth-authorization-server", metadataType: "oauth",
         authorizationEndpoint: "https://auth.example/authorize", tokenEndpoint: "https://auth.example/token",
         jwksUri: "https://auth.example/jwks", registrationEndpoint: null, scopesSupported: ["cas:read"],
@@ -374,9 +403,9 @@ describe("IssuerView", () => {
         capabilityMaxLifetimeSeconds: 1800, challenge: "cas-oauth-issuer-inspection-v1\nchallenge",
         expiresAt: 1000, keys: [{ kid: "key-1", algorithm: "ES256", publicJwk: {} }], revision: 1,
       }))
-      .mockResolvedValueOnce(json({ stackId: STACK, status: "active", revision: 2 }))
+      .mockResolvedValueOnce(json({ appId: STACK, status: "active", revision: 2 }))
       .mockResolvedValueOnce(json({
-        stackId: STACK,
+        appId: STACK,
         issuer: "https://auth.example",
         audience: `https://cas.example/stacks/${STACK}`,
         metadataUrl: "https://auth.example/.well-known/oauth-authorization-server",
@@ -397,7 +426,7 @@ describe("IssuerView", () => {
       }))
       .mockResolvedValueOnce(json(managedIssuer()));
     const user = userEvent.setup();
-    render(<IssuerView stackId={STACK} />);
+    render(<IssuerView appId={STACK} />);
     await user.type(await screen.findByLabelText("Issuer", { selector: "#oauth-issuer-url" }), "https://auth.example");
     await user.click(screen.getByRole("button", { name: "Inspect issuer" }));
     await screen.findByText(/cas-oauth-issuer-inspection-v1/);
@@ -416,18 +445,18 @@ describe("ControlAuditView", () => {
     fetchMock
       .mockResolvedValueOnce(json({
         items: [
-          { eventId: "evt_1", stackId: STACK, actor: { identityIssuer: "iss", subject: "alice" }, action: "stack.created", target: STACK, requestId: "r1", traceId: null, createdAt: 1 },
-          { eventId: "evt_legacy", stackId: STACK, actor: { identityIssuer: "iss", subject: "alice" }, action: "issuer.put", target: STACK, requestId: "r0", traceId: null, createdAt: 0 },
+          { eventId: "evt_1", appId: STACK, actor: { issuer: "iss", subject: "alice" }, action: "app.created", target: STACK, requestId: "r1", traceId: null, caller: null, createdAt: 1 },
+          { eventId: "evt_legacy", appId: STACK, actor: { issuer: "iss", subject: "alice" }, action: "issuer.put", target: STACK, requestId: "r0", traceId: null, caller: null, createdAt: 0 },
         ], nextCursor: "cursor-2"
       }))
       .mockResolvedValueOnce(json({
         items: [
-          { eventId: "evt_2", stackId: STACK, actor: { identityIssuer: "iss", subject: "bob" }, action: "member.invited", target: "inv_1", requestId: "r2", traceId: null, createdAt: 2 },
+          { eventId: "evt_2", appId: STACK, actor: { issuer: "iss", subject: "bob" }, action: "member.invited", target: "inv_1", requestId: "r2", traceId: null, caller: null, createdAt: 2 },
         ], nextCursor: null
       }));
     const user = userEvent.setup();
-    render(<ControlAuditView stackId={STACK} />);
-    await waitFor(() => expect(screen.getByText("stack.created")).toBeInTheDocument());
+    render(<ControlAuditView appId={STACK} />);
+    await waitFor(() => expect(screen.getByText("app.created")).toBeInTheDocument());
     expect(screen.getByText("Legacy")).toHaveAttribute("title", "Historical action from the retired issuer-key API");
     await user.click(screen.getByRole("button", { name: "Load more" }));
     await waitFor(() => expect(screen.getByText("member.invited")).toBeInTheDocument());
@@ -436,8 +465,8 @@ describe("ControlAuditView", () => {
 });
 
 describe("UsageView", () => {
-  test("documents the delegated tenant-plane read", () => {
-    render(<UsageView stackId={STACK} />);
-    expect(screen.getByText(/Usage is a tenant-plane read/)).toBeInTheDocument();
+  test("documents the delegated Space data-plane read", () => {
+    render(<UsageView appId={STACK} />);
+    expect(screen.getByText(/Usage is a Space data-plane read/)).toBeInTheDocument();
   });
 });

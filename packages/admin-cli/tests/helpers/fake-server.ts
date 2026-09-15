@@ -5,21 +5,25 @@
  * provider.
  */
 
-import { casAdminRoutes } from "@unicas/admin-protocol";
+import { appAdminRoutes, casAdminRoutes } from "@unicas/admin-protocol";
 import { s256Challenge } from "@unicas/control-auth";
 
 export interface FakeAdminOptions {
   /** When set, the exchange endpoint requires exactly this id_token. */
   readonly expectedIdToken?: string;
+  readonly adminVocabulary?: "stack" | "app";
   readonly onRequest?: (request: RecordedRequest) => void;
 }
 
 export interface RecordedRequest {
   readonly method: string;
   readonly pathname: string;
+  readonly search: string;
   readonly body: unknown;
   readonly cookie: string | null;
   readonly csrf: string | null;
+  readonly ifMatch: string | null;
+  readonly idempotencyKey: string | null;
 }
 
 export const FAKE_ORIGIN = "https://unicas.test";
@@ -33,12 +37,23 @@ interface FakeStack {
   revision: number;
 }
 
+interface FakeApp {
+  appId: string;
+  displayName: string;
+  description: string;
+  status: "active" | "suspended";
+  createdAt: number;
+  revision: number;
+}
+
 export class FakeAdminApi {
   readonly requests: RecordedRequest[] = [];
   readonly #options: FakeAdminOptions;
   readonly stacks = new Map<string, FakeStack>();
+  readonly apps = new Map<string, FakeApp>();
   readonly members = new Map<string, { identityIssuer: string; subject: string }[]>();
   oauthIssuer = new Map<string, { issuer: string; audience: string; status: "pending" | "active"; revision: number }>();
+  appOAuthIssuer = new Map<string, { issuer: string; audience: string; status: "pending" | "active"; revision: number }>();
   readonly sessions = new Set<string>();
   /** PKCE challenge the cli/exchange endpoint expects (registered by tests). */
   cliCodeChallenge: string | null = null;
@@ -59,6 +74,15 @@ export class FakeAdminApi {
       revision: 3,
     };
     this.stacks.set(stack.stackId, stack);
+    const app: FakeApp = {
+      appId: "cas_app_a",
+      displayName: "App Ops",
+      description: "",
+      status: "active",
+      createdAt: 1,
+      revision: 3,
+    };
+    this.apps.set(app.appId, app);
     this.members.set(stack.stackId, [
       { identityIssuer: "https://accounts.google.com", subject: "sub-1" },
       { identityIssuer: "https://accounts.google.com", subject: "sub-2" },
@@ -77,7 +101,16 @@ export class FakeAdminApi {
     const csrf = headers.get("X-CSRF-Token");
     const rawBody = typeof init?.body === "string" ? init.body : "";
     const body = rawBody.length > 0 ? JSON.parse(rawBody) as Record<string, unknown> : undefined;
-    this.requests.push({ method, pathname: url.pathname, body, cookie, csrf });
+    this.requests.push({
+      method,
+      pathname: url.pathname,
+      search: url.search,
+      body,
+      cookie,
+      csrf,
+      ifMatch: headers.get("If-Match"),
+      idempotencyKey: headers.get("Idempotency-Key"),
+    });
     this.#options.onRequest?.(this.requests[this.requests.length - 1]);
 
     if (url.pathname === "/admin/auth/exchange" && method === "POST") {
@@ -130,9 +163,136 @@ export class FakeAdminApi {
 
     // me
     if (url.pathname === casAdminRoutes.me()) {
+      if (this.#options.adminVocabulary === "app") {
+        return json({
+          principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
+          profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+          memberships: [{
+            appId: "cas_stack_a",
+            principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
+            profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+          }],
+        });
+      }
       return json({
         identity: { identityIssuer: "https://accounts.google.com", subject: "sub-1", displayName: "Alice", emailForDisplay: "alice@example.com" },
         memberships: [{ stackId: "cas_stack_a", identityIssuer: "https://accounts.google.com", subject: "sub-1", displayName: "Alice", emailForDisplay: "alice@example.com" }],
+      });
+    }
+    // Apps
+    if (url.pathname === appAdminRoutes.apps() && method === "GET") {
+      return json({ items: [...this.apps.values()], nextCursor: null });
+    }
+    if (url.pathname === appAdminRoutes.apps() && method === "POST") {
+      const app: FakeApp = {
+        appId: "cas_app_new",
+        displayName: String(body?.displayName ?? ""),
+        description: "",
+        status: "active",
+        createdAt: 2,
+        revision: 1,
+      };
+      this.apps.set(app.appId, app);
+      return jsonWithEtag(app);
+    }
+    const appMatch = /^\/admin\/apps\/([^/]+)$/.exec(url.pathname);
+    if (appMatch) {
+      const appId = decodeURIComponent(appMatch[1]!);
+      const app = this.apps.get(appId);
+      if (method === "GET") {
+        return app === undefined ? json({ error: "NOT_FOUND" }, 404) : jsonWithEtag(app);
+      }
+      if (method === "PATCH" && app !== undefined) {
+        if (headers.get("If-Match") !== `"rev-${app.revision}"`) return json({ error: "REVISION_MISMATCH" }, 412);
+        app.revision += 1;
+        if (body?.displayName !== undefined) app.displayName = String(body.displayName);
+        if (body?.description !== undefined) app.description = String(body.description);
+        return jsonWithEtag(app);
+      }
+      return json({ error: "NOT_FOUND" }, 404);
+    }
+    if (url.pathname === appAdminRoutes.members({ appId: "cas_app_a" }) && method === "GET") {
+      return json({
+        items: [{
+          appId: "cas_app_a",
+          principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
+          profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+        }],
+        nextCursor: null,
+      });
+    }
+    if (url.pathname === appAdminRoutes.members({ appId: "cas_app_a" }) && method === "DELETE") {
+      return json({ ok: true });
+    }
+    if (url.pathname === appAdminRoutes.memberInvitations({ appId: "cas_app_a" }) && method === "POST") {
+      return json({
+        invitation: {
+          invitationId: "inv-app-1",
+          appId: "cas_app_a",
+          status: "pending",
+          emailConstraint: body?.emailConstraint ?? null,
+          expiresAt: 1_800_000_000,
+          createdAt: 1,
+          revision: 1,
+        },
+        acceptUrl: `${FAKE_ORIGIN}/admin/invitations/inv-app-1`,
+      });
+    }
+    if (url.pathname === appAdminRoutes.oauthIssuerInspections({ appId: "cas_app_a" }) && method === "POST") {
+      const record = {
+        issuer: String(body?.issuer ?? ""),
+        audience: "https://cas.example/stacks/cas_app_a",
+        status: "pending" as const,
+        revision: 1,
+      };
+      this.appOAuthIssuer.set("cas_app_a", record);
+      return jsonWithEtag({
+        inspectionId: "oinsp_app",
+        appId: "cas_app_a",
+        ...record,
+        challenge: "cas-oauth-issuer-inspection-v1\\nchallenge",
+        expiresAt: 1_800_000_000,
+        keys: [],
+      });
+    }
+    if (url.pathname === appAdminRoutes.oauthIssuer({ appId: "cas_app_a" }) && method === "GET") {
+      const record = this.appOAuthIssuer.get("cas_app_a");
+      return record === undefined ? json({ error: "NOT_FOUND" }, 404) : jsonWithEtag({ appId: "cas_app_a", ...record });
+    }
+    if (url.pathname === appAdminRoutes.oauthIssuer({ appId: "cas_app_a" }) && method === "PUT") {
+      const current = this.appOAuthIssuer.get("cas_app_a");
+      if (!current) return json({ error: "NOT_FOUND" }, 404);
+      const record = { ...current, status: "active" as const, revision: current.revision + 1 };
+      this.appOAuthIssuer.set("cas_app_a", record);
+      return jsonWithEtag({ appId: "cas_app_a", ...record });
+    }
+    if (url.pathname === appAdminRoutes.refDomains({ appId: "cas_app_a" })) {
+      return json({ domains: [{ appId: "cas_app_a", refDomain: "doc", revision: 1 }] });
+    }
+    if (url.pathname === appAdminRoutes.controlAuditEvents({ appId: "cas_app_a" })) {
+      return json({
+        items: [{
+          eventId: "event-1",
+          appId: "cas_app_a",
+          actor: { issuer: "https://accounts.google.com", subject: "sub-1" },
+          action: "app.updated",
+          target: "cas_app_a",
+          requestId: null,
+          traceId: null,
+          caller: null,
+          createdAt: 1,
+        }],
+        nextCursor: null,
+      });
+    }
+    if (url.pathname === appAdminRoutes.rootDomainRefs({ appId: "cas_app_a", refDomain: "doc" })) {
+      return json({ revision: 1, refs: [{ spaceId: "space-1", hash: "a".repeat(64), count: 1 }], nextCursor: null });
+    }
+    if (url.pathname === appAdminRoutes.rootDomainEvents({ appId: "cas_app_a", refDomain: "doc" })) {
+      return json({
+        events: [{ revision: 1, spaceId: "space-1", requestId: "request-1", changes: { ["a".repeat(64)]: 1 }, appliedAt: 1 }],
+        latestRevision: 1,
+        nextAfter: 1,
       });
     }
     // stacks

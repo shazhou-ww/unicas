@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const SERVICE_PACKAGE = "@unicas/service-cloudflare";
 const SMOKE_ENVIRONMENT_KEYS = [
-  "UNICAS_SMOKE_STACK_ID",
+  "UNICAS_SMOKE_APP_ID",
   "UNICAS_SMOKE_ISSUER",
   "UNICAS_SMOKE_AUDIENCE",
   "UNICAS_SMOKE_KID",
@@ -51,6 +51,7 @@ export function deploymentPlan({ dryRun = false, env, production = false, skipSm
   if (!skipSmoke) {
     commands.push(["pnpm", "--filter", "@unicas/codec", "build"]);
     commands.push(["pnpm", "--filter", "@unicas/tenant-protocol", "build"]);
+    commands.push(["pnpm", "--filter", "@unicas/tenant-client", "build"]);
     commands.push(["node", "stacks/unicas/deploy/smoke.mjs"]);
   }
   return commands;
