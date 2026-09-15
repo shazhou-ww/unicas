@@ -1,6 +1,6 @@
 # Progress
 
-Updated: 2026-09-15
+Updated: 2026-09-16
 
 ## Checklist
 
@@ -15,10 +15,19 @@ Updated: 2026-09-15
 
 ## Current state
 
-Claim-only change. Publish this claim and record its immutable hash before
-implementation. Next implement the platform authorization model and prove that
-Google authentication alone grants neither admission nor App creation and
-never creates authority implicitly.
+Claim `ff3c87e0318d4c30b76111d8cf96302a0b354fba` is verified on `origin/main`.
+The shared platform authorization model, service guards, D1 tables, and atomic
+access mutation repository are implemented locally and pass focused tests.
+These guards are not yet wired into production login, BFF, or MCP request paths;
+the platform APIs and Console rebuild are not implemented. This record
+accompanies a local checkpoint of the authorization foundations, not a complete
+implementation or published completion milestone. No production deployment
+has been performed.
+
+Next integrate the shared admission guard into authenticated BFF operations
+and test that an existing Google session without a grant or App membership is
+denied without implicitly creating an access-state record. Preserve the
+explicit invitation-limited continuation boundary as that integration proceeds.
 
 ## Decisions
 
@@ -38,7 +47,7 @@ never creates authority implicitly.
 
 | Milestone | Evidence | Status |
 | --- | --- | --- |
-| Claim | Awaiting immutable claim commit on `origin/main`. | Pending |
+| Claim | `origin/main` commit `ff3c87e0318d4c30b76111d8cf96302a0b354fba`. | Published |
 | Implementation complete | Not yet completed. | Pending |
 | Archive | Not yet archived. | Pending |
 
@@ -47,6 +56,13 @@ never creates authority implicitly.
 - `pnpm exec repoledger doctor` passed before this claim.
 - Prerequisite final checks passed workspace typechecks, source/generated
   protocol checks, backend tests, Console tests/build, and repository gates.
+- On 2026-09-16, the focused platform-access test run passed all 10 tests:
+  5 administrator protocol tests, 4 service tests, and 1 D1 integration test.
+  Coverage includes deny-by-default admission, independent App creation
+  authority, explicit out-of-band bootstrap, last-administrator protection,
+  self-block rejection, revision conflicts, and durable audit writes.
+- `pnpm --filter @unicas/service-cloudflare typecheck` passed with the new
+  authorization repository and its protocol/service dependencies.
 
 ## Blockers
 

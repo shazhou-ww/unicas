@@ -1,3 +1,5 @@
+export { PlatformAccessService, PlatformAccessError } from "./platform-access.js";
+export type { PlatformAccessRepository, PlatformAuditRecord } from "./platform-access.js";
 export {
   createUniCasService,
   matchUniCasServiceRoute,

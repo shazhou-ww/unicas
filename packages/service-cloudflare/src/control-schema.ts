@@ -7,6 +7,8 @@
 import type { D1Database } from "@cloudflare/workers-types";
 
 const CONTROL_TABLE_MIGRATIONS = [
+  "CREATE TABLE IF NOT EXISTS cas_platform_principals (principal_ref TEXT PRIMARY KEY, identity_issuer TEXT NOT NULL, subject TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('active','blocked')), platform_admin INTEGER NOT NULL DEFAULT 0 CHECK(platform_admin IN (0,1)), apps_create INTEGER NOT NULL DEFAULT 0 CHECK(apps_create IN (0,1)), revision INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, UNIQUE(identity_issuer, subject))",
+  "CREATE TABLE IF NOT EXISTS cas_platform_audit_events (event_id TEXT PRIMARY KEY, actor_issuer TEXT NOT NULL, actor_subject TEXT NOT NULL, target_issuer TEXT, target_subject TEXT, action TEXT NOT NULL, result TEXT NOT NULL CHECK(result IN ('succeeded','denied')), created_at INTEGER NOT NULL)",
   "CREATE TABLE IF NOT EXISTS cas_operator_identities (identity_issuer TEXT NOT NULL, subject TEXT NOT NULL, display_name TEXT, email_for_display TEXT, created_at INTEGER NOT NULL, PRIMARY KEY (identity_issuer, subject))",
   "CREATE TABLE IF NOT EXISTS cas_apps (app_id TEXT NOT NULL, display_name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','suspended')), created_at INTEGER NOT NULL, revision INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (app_id))",
   "CREATE TABLE IF NOT EXISTS cas_app_members (app_id TEXT NOT NULL, identity_issuer TEXT NOT NULL, subject TEXT NOT NULL, joined_at INTEGER NOT NULL, PRIMARY KEY (app_id, identity_issuer, subject))",
