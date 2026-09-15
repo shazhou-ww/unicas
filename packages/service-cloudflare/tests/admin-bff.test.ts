@@ -5,6 +5,7 @@ import type {
   ControlPlaneCallContext,
   ControlPlaneOperations,
   ControlSessionRepository,
+  PlatformAccessRepository,
   StoredSession,
 } from "@unicas/service";
 import { createAdminBff, OidcClient, SessionCrypto, uiAssets } from "../src/admin-bff/index.js";
@@ -286,6 +287,74 @@ interface MockProvider {
   expectTokenBody: ((body: URLSearchParams) => void) | null;
 }
 
+import type {
+  PlatformAccessState,
+  PlatformAuthority,
+  PlatformPrincipal,
+  Principal,
+  PlatformAuditRecord,
+} from "@unicas/service";
+
+/** Minimal in-memory PlatformAccessRepository for BFF integration tests. */
+class MemoryPlatformAccessRepository implements PlatformAccessRepository {
+  private readonly states = new Map<string, PlatformAccessState>();
+  private readonly members = new Set<string>();
+
+  private key(p: Principal): string {
+    return `${p.issuer}\0${p.subject}`;
+  }
+
+  /** Bootstrap: mark a principal as active with apps.create authority. */
+  grant(issuer: string, subject: string): void {
+    const k = this.key({ issuer, subject });
+    this.states.set(k, {
+      principalRef: k,
+      principal: { issuer, subject },
+      status: "active",
+      authorities: ["apps.create"],
+      revision: 1,
+      createdAt: 0,
+      updatedAt: 0,
+    });
+  }
+
+  /** Mark a granted principal as having App membership (passes via hasMembership). */
+  grantViaMembership(issuer: string, subject: string): void {
+    const k = this.key({ issuer, subject });
+    this.members.add(k);
+  }
+
+  block(issuer: string, subject: string): void {
+    const k = this.key({ issuer, subject });
+    const existing = this.states.get(k);
+    if (existing) {
+      this.states.set(k, { ...existing, status: "blocked" });
+    }
+  }
+
+  async getAccess(principal: Principal): Promise<PlatformAccessState | null> {
+    return this.states.get(this.key(principal)) ?? null;
+  }
+
+  async hasMembership(principal: Principal): Promise<boolean> {
+    return this.members.has(this.key(principal));
+  }
+
+  async getPrincipal(_principalRef: string): Promise<PlatformPrincipal | null> {
+    return null;
+  }
+
+  async listPrincipals(_input: { readonly after: string; readonly limit: number }): Promise<readonly PlatformPrincipal[]> {
+    return [];
+  }
+
+  async patchAccess(_input: Parameters<PlatformAccessRepository["patchAccess"]>[0]): Promise<"updated" | "revision-mismatch" | "last-admin" | "forbidden"> {
+    return "updated";
+  }
+
+  async appendAudit(_event: PlatformAuditRecord): Promise<void> {}
+}
+
 async function createMockProvider(): Promise<MockProvider> {
   const { publicKey, privateKey } = await generateKeyPair("RS256");
   const publicJwk = (await exportJWK(publicKey)) as Record<string, unknown>;
@@ -307,6 +376,7 @@ async function createBff(
   provider: MockProvider,
   auditReader?: { fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> },
   configOverrides: Partial<AdminBffConfig> = {},
+  platformAccessRepository?: PlatformAccessRepository,
 ): Promise<(request: Request) => Promise<Response>> {
   const providerFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? new URL(input) : input instanceof URL ? input : new URL(input.url);
@@ -357,6 +427,7 @@ async function createBff(
     sessionStore: new MemorySessionRepository(config.now),
     oidc,
     auditReader,
+    platformAccessRepository,
   });
 }
 
@@ -766,6 +837,140 @@ describe("cas-admin-webui BFF", () => {
     const me = await authRequest(bff, "/admin/me", cookie);
     expect(me.status).toBe(401);
   });
+
+  test("platform access denied: login is rejected and no session is created when principal has no grant or membership", async () => {
+    const provider = await createMockProvider();
+    const repo = new MemoryPlatformAccessRepository();
+    // Do NOT grant the test user — repo is empty.
+    const bff = await createBff(provider, undefined, {}, repo);
+
+    const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/oidc?returnTo=/admin/`));
+    const preLoginCookie = cookieFrom(login)!;
+    const location = new URL(login.headers.get("Location")!);
+    const state = location.searchParams.get("state")!;
+    provider.pendingClaims = {
+      iss: ISSUER,
+      sub: "google-user-no-access",
+      aud: CLIENT_ID,
+      nonce: location.searchParams.get("nonce")!,
+      email: "noaccess@example.com",
+      email_verified: true,
+      name: "No Access",
+    };
+
+    const callback = await bff(new Request(
+      `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(state)}`,
+      { headers: { Cookie: preLoginCookie } },
+    ));
+    expect(callback.status).toBe(302);
+    expect(callback.headers.get("Location")).toBe("/admin/auth/login?error=access-denied");
+    // Session cookie must not be set on denied login.
+    expect(callback.headers.get("Set-Cookie")).toBeNull();
+  }, 10_000);
+
+  test("platform access granted: login succeeds when principal has an explicit grant", async () => {
+    const provider = await createMockProvider();
+    const repo = new MemoryPlatformAccessRepository();
+    repo.grant(ISSUER, "google-user-with-grant");
+    const bff = await createBff(provider, undefined, {}, repo);
+
+    const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/oidc?returnTo=/admin/`));
+    const preLoginCookie = cookieFrom(login)!;
+    const location = new URL(login.headers.get("Location")!);
+    const state = location.searchParams.get("state")!;
+    provider.pendingClaims = {
+      iss: ISSUER,
+      sub: "google-user-with-grant",
+      aud: CLIENT_ID,
+      nonce: location.searchParams.get("nonce")!,
+      email: "granted@example.com",
+      email_verified: true,
+      name: "Granted User",
+    };
+
+    const callback = await bff(new Request(
+      `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(state)}`,
+      { headers: { Cookie: preLoginCookie } },
+    ));
+    expect(callback.status).toBe(302);
+    expect(callback.headers.get("Location")).toBe("/admin/");
+    const cookie = cookieFrom(callback)!;
+
+    const me = await authRequest(bff, "/admin/me", cookie);
+    expect(me.status).toBe(200);
+    expect(await me.json()).toMatchObject({
+      identity: { subject: "google-user-with-grant" },
+    });
+  }, 10_000);
+
+  test("platform access blocked: authenticated request is denied and session is cleared for a blocked principal", async () => {
+    const provider = await createMockProvider();
+    const repo = new MemoryPlatformAccessRepository();
+    repo.grant(ISSUER, "google-user-to-block");
+    const bff = await createBff(provider, undefined, {}, repo);
+
+    // Sign in while still active.
+    const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/oidc?returnTo=/admin/`));
+    const preLoginCookie = cookieFrom(login)!;
+    const location = new URL(login.headers.get("Location")!);
+    const state = location.searchParams.get("state")!;
+    provider.pendingClaims = {
+      iss: ISSUER,
+      sub: "google-user-to-block",
+      aud: CLIENT_ID,
+      nonce: location.searchParams.get("nonce")!,
+      email: "blocked@example.com",
+      email_verified: true,
+      name: "To Block",
+    };
+    const callback = await bff(new Request(
+      `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(state)}`,
+      { headers: { Cookie: preLoginCookie } },
+    ));
+    expect(callback.status).toBe(302);
+    const cookie = cookieFrom(callback)!;
+
+    // Verify the session is initially valid.
+    const meBefore = await authRequest(bff, "/admin/me", cookie);
+    expect(meBefore.status).toBe(200);
+
+    // Now block the principal.
+    repo.block(ISSUER, "google-user-to-block");
+
+    // Subsequent authenticated request must be rejected and session cleared.
+    const meAfter = await authRequest(bff, "/admin/me", cookie);
+    expect(meAfter.status).toBe(401);
+    expect(await meAfter.json()).toMatchObject({ error: "ADMIN_AUTH_REQUIRED" });
+  }, 10_000);
+
+  test("email allowlist is still the first gate; denied by allowlist before platform access check", async () => {
+    const provider = await createMockProvider();
+    const repo = new MemoryPlatformAccessRepository();
+    // Even if we granted access in repo, the email allowlist should deny first.
+    repo.grant(ISSUER, "google-user-123");
+    const bff = await createBff(provider, undefined, { emailAllowlist: ["allowed@example.com"] }, repo);
+
+    const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/oidc`));
+    const cookie = cookieFrom(login)!;
+    const location = new URL(login.headers.get("Location")!);
+    const state = location.searchParams.get("state")!;
+    provider.pendingClaims = {
+      iss: ISSUER,
+      sub: "google-user-123",
+      aud: CLIENT_ID,
+      nonce: location.searchParams.get("nonce")!,
+      email: "notallowed@example.com",
+      email_verified: true,
+      name: "Not Allowed",
+    };
+
+    const callback = await bff(new Request(
+      `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(state)}`,
+      { headers: { Cookie: cookie } },
+    ));
+    expect(callback.status).toBe(302);
+    expect(callback.headers.get("Location")).toBe("/admin/auth/login?error=not-allowed");
+  }, 10_000);
 
   test("configured test account bypasses OIDC and creates a normal admin session", async () => {
     const provider = await createMockProvider();

@@ -26,7 +26,9 @@ import type {
   ControlPlaneCallContext,
   ControlPlaneOperations,
   ControlSessionRepository,
+  PlatformAccessRepository,
 } from "@unicas/service";
+import { PlatformAccessError, PlatformAccessService } from "@unicas/service";
 import type { AdminBffConfig } from "./config.js";
 const ADMIN_ASSET_CACHE_BUSTER = "issuer-discovery-v1";
 
@@ -66,6 +68,11 @@ export interface CreateAdminBffOptions {
   readonly auditReader?: {
     fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
   };
+  /**
+   * Platform access repository. When present, login and authenticated requests
+   * are gated by the deny-by-default admission guard.
+   */
+  readonly platformAccessRepository?: PlatformAccessRepository;
 }
 
 const NOT_AVAILABLE_MESSAGE = "Root Ref audit reads are not yet available from the admin plane";
@@ -100,6 +107,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
   const controlPlane = options.controlPlane;
   const sessionStore = options.sessionStore;
   const sessionCrypto = new SessionCrypto(config.sessionEncryptionKeys);
+  const platformAccess = options.platformAccessRepository
+    ? new PlatformAccessService(options.platformAccessRepository, now)
+    : null;
   const oidc = options.oidc
     ?? new OidcClient({
       issuer: config.oidcIssuer ?? "https://accounts.google.com",
@@ -382,6 +392,36 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         status: 302,
         headers: { Location: "/admin/auth/login?error=not-allowed" },
       });
+    }
+
+    if (platformAccess !== null) {
+      const loginPrincipal = {
+        issuer: config.oidcIssuer ?? "https://accounts.google.com",
+        subject: identity.sub,
+      };
+      try {
+        await platformAccess.requireAccess(loginPrincipal);
+      } catch (error) {
+        if (error instanceof PlatformAccessError && error.code === "PLATFORM_ACCESS_REQUIRED") {
+          if (sessionId) await sessionStore.delete(sessionId);
+          await auditLoginFailure("platform-access-denied");
+          if (preLogin.cliClientId !== undefined && preLogin.cliRedirectUri && preLogin.cliState) {
+            const redirect = new URL(preLogin.cliRedirectUri);
+            redirect.searchParams.set("error", "access_denied");
+            redirect.searchParams.set("error_description", "platform access denied");
+            redirect.searchParams.set("state", preLogin.cliState);
+            return new Response(null, {
+              status: 302,
+              headers: { Location: redirect.toString() },
+            });
+          }
+          return new Response(null, {
+            status: 302,
+            headers: { Location: "/admin/auth/login?error=access-denied" },
+          });
+        }
+        throw error;
+      }
     }
 
     if (preLogin.cliClientId !== undefined) {
@@ -992,6 +1032,21 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     const payload = await readSession(sessionId);
     if (!payload || !payload.authenticated || payload.subject.length === 0) {
       return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED, "login required");
+    }
+    if (platformAccess !== null) {
+      const sessionPrincipal = {
+        issuer: payload.identityIssuer,
+        subject: payload.subject,
+      };
+      try {
+        await platformAccess.assertNotBlocked(sessionPrincipal);
+      } catch (error) {
+        if (error instanceof PlatformAccessError && error.code === "PLATFORM_ACCESS_REQUIRED") {
+          await sessionStore.delete(sessionId);
+          return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED, "login required");
+        }
+        throw error;
+      }
     }
     await sessionStore.touch(sessionId, sessionTtlMs);
     return { payload, sessionId };
