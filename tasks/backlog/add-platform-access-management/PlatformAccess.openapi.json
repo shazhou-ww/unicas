@@ -4,7 +4,7 @@
     "title": "UniCAS Console and Platform Access API Proposal",
     "version": "0.1.0-proposal",
     "summary": "Discussion contract for platform access and affected App administration workflows.",
-    "description": "Proposal subset only. This document does not replace the generated UniCAS App Administrator API. It models the new platform access surface and the App-level contracts required by the Console redesign.",
+    "description": "Proposal subset only; existing clients and server contracts must migrate together. Read projections own complete resources; writes return minimal receipts or 204 with the mutated resource ETag. Timestamps are Unix epoch milliseconds. See ApiDesign.md for wire conventions and invitation/session rules. This document does not replace the generated UniCAS App Administrator API.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -64,7 +64,7 @@
           "201": {
             "description": "App created",
             "headers": { "ETag": { "$ref": "#/components/headers/ETag" } },
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/App" } } }
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateAppResponse" } } }
           },
           "400": { "$ref": "#/components/responses/InvalidRequest" },
           "401": { "$ref": "#/components/responses/AuthRequired" },
@@ -93,11 +93,7 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "App updated",
-            "headers": { "ETag": { "$ref": "#/components/headers/ETag" } },
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/App" } } }
-          },
+          "204": { "$ref": "#/components/responses/RevisionUpdated" },
           "400": { "$ref": "#/components/responses/InvalidRequest" },
           "401": { "$ref": "#/components/responses/AuthRequired" },
           "403": { "$ref": "#/components/responses/AppMembershipRequired" },
@@ -133,14 +129,14 @@
       "post": {
         "operationId": "createAppMemberInvitation",
         "summary": "Create an App member invitation",
-        "description": "Creates a short-lived single-use invitation for equal App administrator membership.",
+        "description": "Creates a short-lived single-use invitation for equal App administrator membership. emailConstraint remains optional; only constrained invitations can admit an otherwise unadmitted Principal through the login continuation.",
         "tags": ["App Invitations"],
         "parameters": [
           { "$ref": "#/components/parameters/AppId" },
           { "$ref": "#/components/parameters/IdempotencyKey" }
         ],
         "requestBody": {
-          "required": true,
+          "required": false,
           "content": {
             "application/json": {
               "schema": { "$ref": "#/components/schemas/CreateAppMemberInvitationRequest" }
@@ -150,7 +146,8 @@
         "responses": {
           "201": {
             "description": "Invitation created; acceptUrl contains the only returned bearer token",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateAppMemberInvitationResponse" } } }
+            "headers": { "ETag": { "$ref": "#/components/headers/ETag" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateInvitationResponse" } } }
           },
           "400": { "$ref": "#/components/responses/InvalidRequest" },
           "401": { "$ref": "#/components/responses/AuthRequired" },
@@ -163,7 +160,7 @@
       "delete": {
         "operationId": "revokeAppMemberInvitation",
         "summary": "Revoke an App member invitation",
-        "description": "Conditionally transitions a pending unexpired invitation to revoked. The record and audit history are retained.",
+        "description": "Transitions pending unexpired state to revoked. Repeating with the current revoked ETag is a 204 no-op; a stale ETag is always 412. Accepted or expired state returns 409. Retains the record and audit history.",
         "tags": ["App Invitations"],
         "parameters": [
           { "$ref": "#/components/parameters/AppId" },
@@ -171,11 +168,7 @@
           { "$ref": "#/components/parameters/IfMatch" }
         ],
         "responses": {
-          "200": {
-            "description": "Invitation revoked",
-            "headers": { "ETag": { "$ref": "#/components/headers/ETag" } },
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AppMemberInvitation" } } }
-          },
+          "204": { "$ref": "#/components/responses/RevisionUpdated" },
           "401": { "$ref": "#/components/responses/AuthRequired" },
           "403": { "$ref": "#/components/responses/AppMembershipRequired" },
           "404": { "$ref": "#/components/responses/NotFound" },
@@ -189,7 +182,7 @@
       "post": {
         "operationId": "acceptAppMemberInvitation",
         "summary": "Accept an App member invitation",
-        "description": "Consumes the invitation for the matching invitation-limited Google OIDC session and creates App membership.",
+        "description": "Consumes the invitation for the matching token-bound Google OIDC session, creates App membership, and rotates the session. An unconstrained invitation requires prior full admission; a constrained invitation additionally checks verified email. Returns only the App identifier for navigation.",
         "tags": ["App Invitations"],
         "security": [{ "invitationSession": [] }],
         "parameters": [
@@ -197,8 +190,8 @@
         ],
         "responses": {
           "200": {
-            "description": "Invitation accepted",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AppMembership" } } }
+            "description": "Invitation accepted and session rotated; only the destination App identifier is returned",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AcceptAppMemberInvitationResponse" } } }
           },
           "403": { "$ref": "#/components/responses/InvitationSessionRequired" },
           "404": { "$ref": "#/components/responses/NotFound" },
@@ -226,7 +219,7 @@
         "responses": {
           "201": {
             "description": "Candidate issuer inspected",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OAuthIssuerInspection" } } }
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/InspectOAuthIssuerResponse" } } }
           },
           "400": { "$ref": "#/components/responses/InvalidRequest" },
           "401": { "$ref": "#/components/responses/AuthRequired" },
@@ -240,11 +233,12 @@
       "put": {
         "operationId": "activateOrReplaceAppOAuthIssuer",
         "summary": "Activate or replace the production OAuth issuer",
-        "description": "Atomically selects a verified candidate. The current issuer remains authoritative until this commit succeeds.",
+        "description": "Atomically selects a verified candidate. Initial activation requires If-None-Match: *; replacement requires the current external issuer ETag in If-Match. Supply exactly one: neither is 428, both or malformed input is 400, a failed precondition is 412. Never use the App or inspection revision. The old issuer remains authoritative until commit.",
         "tags": ["OAuth Issuers"],
         "parameters": [
           { "$ref": "#/components/parameters/AppId" },
-          { "$ref": "#/components/parameters/IfMatch" }
+          { "$ref": "#/components/parameters/IssuerIfMatch" },
+          { "$ref": "#/components/parameters/IssuerIfNoneMatch" }
         ],
         "requestBody": {
           "required": true,
@@ -255,11 +249,7 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "Production issuer activated or replaced",
-            "headers": { "ETag": { "$ref": "#/components/headers/ETag" } },
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AppOAuthIssuer" } } }
-          },
+          "204": { "$ref": "#/components/responses/RevisionUpdated" },
           "400": { "$ref": "#/components/responses/InvalidRequest" },
           "401": { "$ref": "#/components/responses/AuthRequired" },
           "403": { "$ref": "#/components/responses/AppMembershipRequired" },
@@ -288,11 +278,7 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "Managed issuer state updated",
-            "headers": { "ETag": { "$ref": "#/components/headers/ETag" } },
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AppOAuthIssuer" } } }
-          },
+          "204": { "$ref": "#/components/responses/RevisionUpdated" },
           "400": { "$ref": "#/components/responses/InvalidRequest" },
           "401": { "$ref": "#/components/responses/AuthRequired" },
           "403": { "$ref": "#/components/responses/AppMembershipRequired" },
@@ -325,7 +311,7 @@
         "tags": ["Platform Access"],
         "parameters": [
           { "name": "query", "in": "query", "schema": { "type": "string" }, "description": "Display name, email, or subject search." },
-          { "name": "status", "in": "query", "schema": { "$ref": "#/components/schemas/EffectiveAccess" } },
+          { "name": "effectiveAccess", "in": "query", "schema": { "$ref": "#/components/schemas/EffectiveAccess" } },
           { "name": "authority", "in": "query", "schema": { "oneOf": [{ "$ref": "#/components/schemas/PlatformAuthority" }, { "type": "string", "const": "none" }] } },
           { "$ref": "#/components/parameters/Limit" },
           { "$ref": "#/components/parameters/Cursor" }
@@ -351,8 +337,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Principal detail with read-only App memberships",
-            "headers": { "ETag": { "$ref": "#/components/headers/ETag" } },
+            "description": "Principal detail with read-only App memberships. revision belongs only to access state; this composite projection has no ETag.",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PlatformPrincipalDetail" } } }
           },
           "401": { "$ref": "#/components/responses/AuthRequired" },
@@ -362,6 +347,25 @@
       }
     },
     "/admin/platform/principals/{principalRef}/access": {
+      "get": {
+        "operationId": "getPlatformPrincipalAccess",
+        "summary": "Read versioned platform access state",
+        "description": "Returns only the access resource and its strong ETag, excluding Profile and membership projections that change independently.",
+        "tags": ["Platform Access"],
+        "parameters": [
+          { "$ref": "#/components/parameters/PrincipalRef" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Versioned access state",
+            "headers": { "ETag": { "$ref": "#/components/headers/ETag" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PlatformAccessState" } } }
+          },
+          "401": { "$ref": "#/components/responses/AuthRequired" },
+          "403": { "$ref": "#/components/responses/PlatformAdminRequired" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
       "patch": {
         "operationId": "patchPlatformPrincipalAccess",
         "summary": "Change platform authority or access status",
@@ -380,11 +384,7 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "Platform access updated",
-            "headers": { "ETag": { "$ref": "#/components/headers/ETag" } },
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PlatformAccessState" } } }
-          },
+          "204": { "$ref": "#/components/responses/RevisionUpdated" },
           "400": { "$ref": "#/components/responses/InvalidRequest" },
           "401": { "$ref": "#/components/responses/AuthRequired" },
           "403": { "$ref": "#/components/responses/PlatformAdminRequired" },
@@ -438,7 +438,8 @@
         "responses": {
           "201": {
             "description": "Invitation created; acceptUrl contains the only returned bearer token",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreatePlatformInvitationResponse" } } }
+            "headers": { "ETag": { "$ref": "#/components/headers/ETag" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateInvitationResponse" } } }
           },
           "400": { "$ref": "#/components/responses/InvalidRequest" },
           "401": { "$ref": "#/components/responses/AuthRequired" },
@@ -451,17 +452,14 @@
       "delete": {
         "operationId": "revokePlatformInvitation",
         "summary": "Revoke a platform invitation",
+        "description": "Transitions pending unexpired state to revoked. Repeating with the current revoked ETag is a 204 no-op; a stale ETag is always 412. Accepted or expired state returns 409. Retains the record and audit history.",
         "tags": ["Platform Invitations"],
         "parameters": [
           { "$ref": "#/components/parameters/InvitationId" },
           { "$ref": "#/components/parameters/IfMatch" }
         ],
         "responses": {
-          "200": {
-            "description": "Invitation revoked",
-            "headers": { "ETag": { "$ref": "#/components/headers/ETag" } },
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PlatformInvitation" } } }
-          },
+          "204": { "$ref": "#/components/responses/RevisionUpdated" },
           "401": { "$ref": "#/components/responses/AuthRequired" },
           "403": { "$ref": "#/components/responses/PlatformAdminRequired" },
           "404": { "$ref": "#/components/responses/NotFound" },
@@ -482,9 +480,8 @@
           { "$ref": "#/components/parameters/InvitationToken" }
         ],
         "responses": {
-          "200": {
-            "description": "Invitation accepted and session upgraded",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PlatformAccessState" } } }
+          "204": {
+            "description": "Invitation accepted and session rotated; no response body. Read /admin/me to load current effective access."
           },
           "403": { "$ref": "#/components/responses/InvitationSessionRequired" },
           "404": { "$ref": "#/components/responses/NotFound" },
@@ -498,10 +495,10 @@
         "summary": "List platform authorization audit events",
         "tags": ["Platform Audit"],
         "parameters": [
-          { "name": "action", "in": "query", "schema": { "type": "string" } },
-          { "name": "actorPrincipalRef", "in": "query", "schema": { "type": "string" } },
-          { "name": "targetPrincipalRef", "in": "query", "schema": { "type": "string" } },
-          { "name": "after", "in": "query", "schema": { "type": "string" } },
+          { "name": "action", "in": "query", "schema": { "$ref": "#/components/schemas/PlatformAuditAction" } },
+          { "name": "actorPrincipalRef", "in": "query", "schema": { "$ref": "#/components/schemas/OpaqueId" } },
+          { "name": "targetPrincipalRef", "in": "query", "schema": { "$ref": "#/components/schemas/OpaqueId" } },
+          { "name": "createdAfter", "in": "query", "schema": { "$ref": "#/components/schemas/Timestamp" }, "description": "Exclusive createdAt lower bound in Unix epoch milliseconds, not an event ID. Results sort by createdAt descending then eventId descending; use the opaque cursor for continuation." },
           { "$ref": "#/components/parameters/Limit" },
           { "$ref": "#/components/parameters/Cursor" }
         ],
@@ -535,7 +532,7 @@
     "headers": {
       "ETag": {
         "description": "Strong ETag containing the exact current integer revision.",
-        "schema": { "type": "string", "pattern": "^\"[0-9]+\"$", "example": "\"4\"" }
+        "schema": { "$ref": "#/components/schemas/StrongETag" }
       }
     },
     "parameters": {
@@ -543,21 +540,21 @@
         "name": "appId",
         "in": "path",
         "required": true,
-        "schema": { "type": "string", "minLength": 1 },
+        "schema": { "$ref": "#/components/schemas/OpaqueId" },
         "description": "Opaque UniCAS-generated App identifier."
       },
       "PrincipalRef": {
         "name": "principalRef",
         "in": "path",
         "required": true,
-        "schema": { "type": "string", "minLength": 1 },
+        "schema": { "$ref": "#/components/schemas/OpaqueId" },
         "description": "Opaque API reference; authoritative identity remains issuer plus subject."
       },
       "InvitationId": {
         "name": "invitationId",
         "in": "path",
         "required": true,
-        "schema": { "type": "string", "minLength": 1 }
+        "schema": { "$ref": "#/components/schemas/OpaqueId" }
       },
       "InvitationToken": {
         "name": "token",
@@ -570,15 +567,27 @@
         "name": "If-Match",
         "in": "header",
         "required": true,
-        "schema": { "type": "string", "pattern": "^\"[0-9]+\"$", "example": "\"4\"" },
-        "description": "Strong ETag from the current resource."
+        "schema": { "$ref": "#/components/schemas/StrongETag" },
+        "description": "Exact strong ETag of the resource being mutated. Checked before no-op handling. Missing is 428, malformed is 400, mismatch is 412."
+      },
+      "IssuerIfMatch": {
+        "name": "If-Match",
+        "in": "header",
+        "schema": { "$ref": "#/components/schemas/StrongETag" },
+        "description": "Required for replacement: current external issuer ETag, not App or candidate revision. Mutually exclusive with If-None-Match."
+      },
+      "IssuerIfNoneMatch": {
+        "name": "If-None-Match",
+        "in": "header",
+        "schema": { "type": "string", "const": "*" },
+        "description": "Required for initial activation when no external issuer exists. Mutually exclusive with If-Match; concurrent creation fails with 412."
       },
       "IdempotencyKey": {
         "name": "Idempotency-Key",
         "in": "header",
         "required": true,
         "schema": { "type": "string", "minLength": 1, "maxLength": 200 },
-        "description": "Stable key reused only for an exact retry of the same creation request."
+        "description": "Stable key scoped to Principal, operation, and parent resource. Exact normalized-input retries replay the original receipt and ETag after current authorization checks; changed input is 409 IDEMPOTENCY_CONFLICT. Invitation replay is encrypted, expires no later than the invitation, and cannot recover consumed, expired, or revoked invitations (409 INVITATION_NOT_PENDING)."
       },
       "Limit": {
         "name": "limit",
@@ -588,8 +597,8 @@
       "Cursor": {
         "name": "cursor",
         "in": "query",
-        "schema": { "type": "string", "minLength": 1 },
-        "description": "Opaque snapshot-bound continuation cursor."
+        "schema": { "$ref": "#/components/schemas/PaginationCursor" },
+        "description": "Opaque snapshot-bound continuation cursor; keep filters and order unchanged, and recheck current authorization on every page."
       },
       "InvitationStatus": {
         "name": "status",
@@ -598,6 +607,48 @@
       }
     },
     "schemas": {
+      "OpaqueId": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Opaque resource identifier or Principal reference. Domain is determined by the field name; never a display label or bearer token."
+      },
+      "NullableOpaqueId": {
+        "anyOf": [{ "$ref": "#/components/schemas/OpaqueId" }, { "type": "null" }]
+      },
+      "Timestamp": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991,
+        "description": "Unix epoch milliseconds."
+      },
+      "NullableTimestamp": {
+        "anyOf": [{ "$ref": "#/components/schemas/Timestamp" }, { "type": "null" }]
+      },
+      "Revision": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991,
+        "description": "Exact version of the owning mutable resource, never a cross-resource or snapshot version."
+      },
+      "StrongETag": {
+        "type": "string",
+        "pattern": "^\"(0|[1-9][0-9]*)\"$",
+        "examples": ["\"4\""],
+        "description": "Quoted canonical decimal Revision. Wildcards, weak tags, leading zeros, and tag lists are not accepted."
+      },
+      "PaginationCursor": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Opaque snapshot-bound cursor, not a resource identifier or timestamp."
+      },
+      "NextCursor": {
+        "anyOf": [{ "$ref": "#/components/schemas/PaginationCursor" }, { "type": "null" }]
+      },
+      "EmailConstraint": {
+        "type": "string",
+        "format": "email",
+        "description": "Verified-email constraint normalized using the existing invitation email comparison. Not a durable authorization identity."
+      },
       "Principal": {
         "type": "object",
         "additionalProperties": false,
@@ -621,6 +672,12 @@
         "type": "string",
         "enum": ["platform.admin", "apps.create"]
       },
+      "PlatformAuthorities": {
+        "type": "array",
+        "items": { "$ref": "#/components/schemas/PlatformAuthority" },
+        "uniqueItems": true,
+        "description": "Authority set. Request order is irrelevant; responses use enum declaration order. An empty array removes all platform authority."
+      },
       "PlatformAccessStatus": {
         "type": "string",
         "enum": ["active", "blocked"]
@@ -629,24 +686,24 @@
         "type": "string",
         "enum": ["active", "blocked", "no_access"]
       },
+      "PlatformAccessFields": {
+        "type": "object",
+        "properties": {
+          "principalRef": { "$ref": "#/components/schemas/OpaqueId" },
+          "principal": { "$ref": "#/components/schemas/Principal" },
+          "status": { "$ref": "#/components/schemas/PlatformAccessStatus" },
+          "authorities": { "$ref": "#/components/schemas/PlatformAuthorities" },
+          "revision": { "$ref": "#/components/schemas/Revision" },
+          "createdAt": { "$ref": "#/components/schemas/Timestamp" },
+          "updatedAt": { "$ref": "#/components/schemas/Timestamp" }
+        },
+        "required": ["principalRef", "principal", "status", "authorities", "revision", "createdAt", "updatedAt"],
+        "description": "Reusable fields, closed at each response projection with unevaluatedProperties. Profile and memberships are not versioned by this revision."
+      },
       "PlatformAccessState": {
         "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "principalRef": { "type": "string", "minLength": 1 },
-          "principal": { "$ref": "#/components/schemas/Principal" },
-          "profile": { "$ref": "#/components/schemas/Profile" },
-          "status": { "$ref": "#/components/schemas/PlatformAccessStatus" },
-          "authorities": {
-            "type": "array",
-            "items": { "$ref": "#/components/schemas/PlatformAuthority" },
-            "uniqueItems": true
-          },
-          "revision": { "type": "integer", "minimum": 0 },
-          "createdAt": { "type": "integer", "minimum": 0 },
-          "updatedAt": { "type": "integer", "minimum": 0 }
-        },
-        "required": ["principalRef", "principal", "profile", "status", "authorities", "revision", "createdAt", "updatedAt"]
+        "allOf": [{ "$ref": "#/components/schemas/PlatformAccessFields" }],
+        "unevaluatedProperties": false
       },
       "PlatformAccessSummary": {
         "type": "object",
@@ -656,21 +713,21 @@
           "platformAdminCount": { "type": "integer", "minimum": 0 },
           "appCreatorCount": { "type": "integer", "minimum": 0 },
           "blockedPrincipalCount": { "type": "integer", "minimum": 0 },
-          "revision": { "type": "integer", "minimum": 0 }
+          "generatedAt": { "$ref": "#/components/schemas/Timestamp" }
         },
-        "required": ["activePrincipalCount", "platformAdminCount", "appCreatorCount", "blockedPrincipalCount", "revision"]
+        "required": ["activePrincipalCount", "platformAdminCount", "appCreatorCount", "blockedPrincipalCount", "generatedAt"]
       },
       "AppMembership": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "appId": { "type": "string", "minLength": 1 },
+          "appId": { "$ref": "#/components/schemas/OpaqueId" },
           "principal": { "$ref": "#/components/schemas/Principal" },
           "profile": { "$ref": "#/components/schemas/Profile" }
         },
         "required": ["appId", "principal", "profile"]
       },
-      "CurrentSession": {
+      "AppAdminMeResponse": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
@@ -680,10 +737,10 @@
             "type": "object",
             "additionalProperties": false,
             "properties": {
-              "principalRef": { "type": "string" },
+              "principalRef": { "$ref": "#/components/schemas/OpaqueId" },
               "status": { "type": "string", "const": "active" },
-              "authorities": { "type": "array", "items": { "$ref": "#/components/schemas/PlatformAuthority" }, "uniqueItems": true },
-              "revision": { "type": "integer", "minimum": 0 }
+              "authorities": { "$ref": "#/components/schemas/PlatformAuthorities" },
+              "revision": { "$ref": "#/components/schemas/Revision" }
             },
             "required": ["principalRef", "status", "authorities", "revision"]
           },
@@ -699,12 +756,12 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "appId": { "type": "string", "minLength": 1 },
+          "appId": { "$ref": "#/components/schemas/OpaqueId" },
           "displayName": { "type": "string", "minLength": 1 },
           "description": { "type": "string" },
           "status": { "$ref": "#/components/schemas/AppStatus" },
-          "createdAt": { "type": "integer", "minimum": 0 },
-          "revision": { "type": "integer", "minimum": 0 }
+          "createdAt": { "$ref": "#/components/schemas/Timestamp" },
+          "revision": { "$ref": "#/components/schemas/Revision" }
         },
         "required": ["appId", "displayName", "description", "status", "createdAt", "revision"]
       },
@@ -716,13 +773,21 @@
         },
         "required": ["displayName"]
       },
+      "CreateAppResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "appId": { "$ref": "#/components/schemas/OpaqueId" }
+        },
+        "required": ["appId"]
+      },
       "PatchAppRequest": {
         "type": "object",
         "additionalProperties": false,
         "minProperties": 1,
         "properties": {
           "displayName": { "type": "string", "minLength": 1 },
-          "description": { "type": "string", "maxLength": 2000 },
+          "description": { "type": "string" },
           "status": { "$ref": "#/components/schemas/AppStatus" }
         }
       },
@@ -734,13 +799,13 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "invitationId": { "type": "string", "minLength": 1 },
-          "appId": { "type": "string", "minLength": 1 },
+          "invitationId": { "$ref": "#/components/schemas/OpaqueId" },
+          "appId": { "$ref": "#/components/schemas/OpaqueId" },
           "status": { "$ref": "#/components/schemas/InvitationStatus" },
-          "emailConstraint": { "type": ["string", "null"], "format": "email" },
-          "expiresAt": { "type": "integer", "minimum": 0 },
-          "createdAt": { "type": "integer", "minimum": 0 },
-          "revision": { "type": "integer", "minimum": 0 }
+          "emailConstraint": { "anyOf": [{ "$ref": "#/components/schemas/EmailConstraint" }, { "type": "null" }] },
+          "expiresAt": { "$ref": "#/components/schemas/Timestamp" },
+          "createdAt": { "$ref": "#/components/schemas/Timestamp" },
+          "revision": { "$ref": "#/components/schemas/Revision" }
         },
         "required": ["invitationId", "appId", "status", "emailConstraint", "expiresAt", "createdAt", "revision"]
       },
@@ -748,25 +813,35 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "emailConstraint": { "type": "string", "format": "email" }
+          "emailConstraint": { "$ref": "#/components/schemas/EmailConstraint" }
         },
-        "required": ["emailConstraint"]
+        "description": "Omit emailConstraint for an unconstrained invitation; it cannot bootstrap an unadmitted Principal. Requests do not use null to mean omitted."
       },
-      "CreateAppMemberInvitationResponse": {
+      "CreateInvitationResponse": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "invitation": { "$ref": "#/components/schemas/AppMemberInvitation" },
-          "acceptUrl": { "type": "string", "format": "uri" }
+          "invitationId": { "$ref": "#/components/schemas/OpaqueId" },
+          "acceptUrl": { "type": "string", "format": "uri" },
+          "expiresAt": { "$ref": "#/components/schemas/Timestamp" }
         },
-        "required": ["invitation", "acceptUrl"]
+        "required": ["invitationId", "acceptUrl", "expiresAt"],
+        "description": "Shared App and platform invitation creation receipt. The ETag header carries the invitation revision; no resource, request fields, or token field are echoed."
+      },
+      "AcceptAppMemberInvitationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "appId": { "$ref": "#/components/schemas/OpaqueId" }
+        },
+        "required": ["appId"]
       },
       "AppMemberInvitationPage": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "items": { "type": "array", "items": { "$ref": "#/components/schemas/AppMemberInvitation" } },
-          "nextCursor": { "type": ["string", "null"] }
+          "nextCursor": { "$ref": "#/components/schemas/NextCursor" }
         },
         "required": ["items", "nextCursor"]
       },
@@ -778,26 +853,34 @@
         },
         "required": ["issuer"]
       },
-      "OAuthIssuerInspection": {
+      "InspectOAuthIssuerResponse": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "inspectionId": { "type": "string" },
-          "appId": { "type": "string" },
-          "issuer": { "type": "string", "format": "uri" },
+          "inspectionId": { "$ref": "#/components/schemas/OpaqueId" },
           "metadataUrl": { "type": "string", "format": "uri" },
           "jwksUri": { "type": "string", "format": "uri" },
-          "challenge": { "type": "string" },
-          "expiresAt": { "type": "integer", "minimum": 0 },
-          "revision": { "type": "integer", "minimum": 0 }
+          "challenge": { "type": "string", "minLength": 1, "description": "Exact UTF-8 payload to sign as compact JWS; never decode and reserialize before signing." },
+          "expiresAt": { "$ref": "#/components/schemas/Timestamp" },
+          "keys": { "type": "array", "items": { "$ref": "#/components/schemas/InspectionSigningKey" }, "minItems": 1, "uniqueItems": true }
         },
-        "required": ["inspectionId", "appId", "issuer", "metadataUrl", "jwksUri", "challenge", "expiresAt", "revision"]
+        "required": ["inspectionId", "metadataUrl", "jwksUri", "challenge", "expiresAt", "keys"],
+        "description": "Only candidate identifier, computed discovery URLs for review, exact proof payload, expiry, and eligible kid/algorithm choices. Does not repeat the request issuer or path App ID, export captured public JWKs, or expose an unrelated mutable-resource revision."
+      },
+      "InspectionSigningKey": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "kid": { "type": "string", "minLength": 1 },
+          "algorithm": { "type": "string", "minLength": 1 }
+        },
+        "required": ["kid", "algorithm"]
       },
       "ActivateOAuthIssuerRequest": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "inspectionId": { "type": "string", "minLength": 1 },
+          "inspectionId": { "$ref": "#/components/schemas/OpaqueId" },
           "activationProof": { "type": "string", "minLength": 1, "description": "Compact JWS signed outside UniCAS." }
         },
         "required": ["inspectionId", "activationProof"]
@@ -810,35 +893,29 @@
         },
         "required": ["enabled"]
       },
-      "AppOAuthIssuer": {
+      "PlatformPrincipalSummaryFields": {
         "type": "object",
-        "additionalProperties": true,
         "properties": {
-          "appId": { "type": "string" },
-          "mode": { "type": "string", "enum": ["managed", "external"] },
-          "issuer": { "type": "string", "format": "uri" },
-          "status": { "type": "string", "enum": ["pending", "active", "stale", "incompatible", "disabled"] },
-          "revision": { "type": "integer", "minimum": 0 }
+          "profile": { "$ref": "#/components/schemas/Profile" },
+          "effectiveAccess": { "$ref": "#/components/schemas/EffectiveAccess" },
+          "appMembershipCount": { "type": "integer", "minimum": 0 },
+          "lastActiveAt": { "$ref": "#/components/schemas/NullableTimestamp" }
         },
-        "required": ["appId", "mode", "issuer", "status", "revision"]
+        "required": ["profile", "effectiveAccess", "appMembershipCount", "lastActiveAt"]
       },
       "PlatformPrincipalListItem": {
+        "type": "object",
         "allOf": [
-          { "$ref": "#/components/schemas/PlatformAccessState" },
-          {
-            "type": "object",
-            "properties": {
-              "effectiveAccess": { "$ref": "#/components/schemas/EffectiveAccess" },
-              "appMembershipCount": { "type": "integer", "minimum": 0 },
-              "lastActiveAt": { "type": ["integer", "null"], "minimum": 0 }
-            },
-            "required": ["effectiveAccess", "appMembershipCount", "lastActiveAt"]
-          }
-        ]
+          { "$ref": "#/components/schemas/PlatformAccessFields" },
+          { "$ref": "#/components/schemas/PlatformPrincipalSummaryFields" }
+        ],
+        "unevaluatedProperties": false
       },
       "PlatformPrincipalDetail": {
+        "type": "object",
         "allOf": [
-          { "$ref": "#/components/schemas/PlatformPrincipalListItem" },
+          { "$ref": "#/components/schemas/PlatformAccessFields" },
+          { "$ref": "#/components/schemas/PlatformPrincipalSummaryFields" },
           {
             "type": "object",
             "properties": {
@@ -846,14 +923,15 @@
             },
             "required": ["memberships"]
           }
-        ]
+        ],
+        "unevaluatedProperties": false
       },
       "PlatformPrincipalPage": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "items": { "type": "array", "items": { "$ref": "#/components/schemas/PlatformPrincipalListItem" } },
-          "nextCursor": { "type": ["string", "null"] }
+          "nextCursor": { "$ref": "#/components/schemas/NextCursor" }
         },
         "required": ["items", "nextCursor"]
       },
@@ -863,21 +941,21 @@
         "minProperties": 1,
         "properties": {
           "status": { "$ref": "#/components/schemas/PlatformAccessStatus" },
-          "authorities": { "type": "array", "items": { "$ref": "#/components/schemas/PlatformAuthority" }, "uniqueItems": true }
+          "authorities": { "$ref": "#/components/schemas/PlatformAuthorities" }
         }
       },
       "PlatformInvitation": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "invitationId": { "type": "string" },
-          "emailConstraint": { "type": "string", "format": "email" },
-          "authorities": { "type": "array", "items": { "$ref": "#/components/schemas/PlatformAuthority" }, "minItems": 1, "uniqueItems": true },
+          "invitationId": { "$ref": "#/components/schemas/OpaqueId" },
+          "emailConstraint": { "$ref": "#/components/schemas/EmailConstraint" },
+          "authorities": { "$ref": "#/components/schemas/PlatformAuthorities", "minItems": 1 },
           "status": { "$ref": "#/components/schemas/InvitationStatus" },
-          "expiresAt": { "type": "integer", "minimum": 0 },
-          "createdAt": { "type": "integer", "minimum": 0 },
+          "expiresAt": { "$ref": "#/components/schemas/Timestamp" },
+          "createdAt": { "$ref": "#/components/schemas/Timestamp" },
           "createdBy": { "$ref": "#/components/schemas/Principal" },
-          "revision": { "type": "integer", "minimum": 0 }
+          "revision": { "$ref": "#/components/schemas/Revision" }
         },
         "required": ["invitationId", "emailConstraint", "authorities", "status", "expiresAt", "createdAt", "createdBy", "revision"]
       },
@@ -885,51 +963,48 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "emailConstraint": { "type": "string", "format": "email" },
-          "authorities": { "type": "array", "items": { "$ref": "#/components/schemas/PlatformAuthority" }, "minItems": 1, "uniqueItems": true }
+          "emailConstraint": { "$ref": "#/components/schemas/EmailConstraint" },
+          "authorities": { "$ref": "#/components/schemas/PlatformAuthorities", "minItems": 1 }
         },
         "required": ["emailConstraint", "authorities"]
-      },
-      "CreatePlatformInvitationResponse": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "invitation": { "$ref": "#/components/schemas/PlatformInvitation" },
-          "acceptUrl": { "type": "string", "format": "uri" }
-        },
-        "required": ["invitation", "acceptUrl"]
       },
       "PlatformInvitationPage": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "items": { "type": "array", "items": { "$ref": "#/components/schemas/PlatformInvitation" } },
-          "nextCursor": { "type": ["string", "null"] }
+          "nextCursor": { "$ref": "#/components/schemas/NextCursor" }
         },
         "required": ["items", "nextCursor"]
+      },
+      "PlatformAuditAction": {
+        "type": "string",
+        "enum": ["platform_invitation.created", "platform_invitation.revoked", "platform_invitation.accepted", "platform_access.authority_changed", "platform_access.blocked", "platform_access.restored", "platform_access.change_denied", "app.create_denied"]
       },
       "PlatformAuditEvent": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "eventId": { "type": "string" },
-          "action": { "type": "string" },
-          "actor": { "$ref": "#/components/schemas/Principal" },
+          "eventId": { "$ref": "#/components/schemas/OpaqueId" },
+          "action": { "$ref": "#/components/schemas/PlatformAuditAction" },
+          "actorPrincipalRef": { "$ref": "#/components/schemas/NullableOpaqueId" },
+          "actorPrincipal": { "$ref": "#/components/schemas/Principal" },
+          "targetPrincipalRef": { "$ref": "#/components/schemas/NullableOpaqueId" },
           "targetPrincipal": { "oneOf": [{ "$ref": "#/components/schemas/Principal" }, { "type": "null" }] },
-          "targetInvitationId": { "type": ["string", "null"] },
+          "targetInvitationId": { "$ref": "#/components/schemas/NullableOpaqueId" },
           "result": { "type": "string", "enum": ["succeeded", "denied"] },
-          "requestId": { "type": ["string", "null"] },
-          "createdAt": { "type": "integer", "minimum": 0 },
+          "requestId": { "$ref": "#/components/schemas/NullableOpaqueId" },
+          "createdAt": { "$ref": "#/components/schemas/Timestamp" },
           "details": { "type": "object", "additionalProperties": { "type": ["string", "number", "boolean", "null"] } }
         },
-        "required": ["eventId", "action", "actor", "targetPrincipal", "targetInvitationId", "result", "requestId", "createdAt", "details"]
+        "required": ["eventId", "action", "actorPrincipalRef", "actorPrincipal", "targetPrincipalRef", "targetPrincipal", "targetInvitationId", "result", "requestId", "createdAt", "details"]
       },
       "PlatformAuditPage": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
           "items": { "type": "array", "items": { "$ref": "#/components/schemas/PlatformAuditEvent" } },
-          "nextCursor": { "type": ["string", "null"] }
+          "nextCursor": { "$ref": "#/components/schemas/NextCursor" }
         },
         "required": ["items", "nextCursor"]
       },
@@ -968,9 +1043,13 @@
       }
     },
     "responses": {
+      "RevisionUpdated": {
+        "description": "Mutation succeeded. No response body; ETag is the new revision of the mutated resource. Read its GET representation when refreshed display data is needed.",
+        "headers": { "ETag": { "$ref": "#/components/headers/ETag" } }
+      },
       "CurrentSession": {
         "description": "Current fully admitted Console session",
-        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CurrentSession" } } }
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AppAdminMeResponse" } } }
       },
       "AuthRequired": {
         "description": "Administrator authentication is required",
@@ -1009,15 +1088,15 @@
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "NOT_FOUND" } } }
       },
       "PreconditionRequired": {
-        "description": "If-Match is required",
+        "description": "A concurrency precondition is required: If-Match for an existing resource, or If-None-Match: * for initial external issuer activation",
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "PRECONDITION_REQUIRED" } } }
       },
       "RevisionMismatch": {
-        "description": "If-Match does not match the current resource revision",
+        "description": "If-Match does not match the owning resource revision, or If-None-Match: * failed because the external issuer already exists",
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "REVISION_MISMATCH" } } }
       },
       "IdempotencyConflict": {
-        "description": "Idempotency key was reused with different input",
+        "description": "IDEMPOTENCY_CONFLICT when a key was reused with different input; INVITATION_NOT_PENDING when an invitation receipt can no longer be replayed",
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" }, "example": { "error": "IDEMPOTENCY_CONFLICT" } } }
       },
       "IssuerConflict": {

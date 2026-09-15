@@ -11,7 +11,7 @@ primitives and one responsive two-column Console shell. The left navigation is
 the durable App and workspace context. The right pane is the selected App or
 Platform Administration detail.
 
-The interactive reference is [ConsoleMock.html](./ConsoleMock.html). It covers:
+The interactive reference is [ConsoleMock.html](/tasks/backlog/add-platform-access-management/ConsoleMock.html). It covers:
 
 - selecting Apps from primary navigation;
 - switching Overview, Members, Invitations, Playground, and Change Logs in the
@@ -25,9 +25,8 @@ The interactive reference is [ConsoleMock.html](./ConsoleMock.html). It covers:
 - managed and custom OAuth issuer management;
 - App member invitation listing and revocation.
 
-The earlier [PlatformAdminMock.html](./PlatformAdminMock.html) is retained only
-as exploration history. `ConsoleMock.html` supersedes its shell and visual
-direction.
+`ConsoleMock.html` is the sole interactive reference for the Console shell,
+workflows, and visual direction.
 
 ## Information architecture
 

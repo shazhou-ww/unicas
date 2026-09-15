@@ -188,15 +188,22 @@ customized for UniCAS, and makes the App list the primary navigation.
   preserve `[admin-webui] -> admin-client -> admin-protocol` direction.
 - Use explicit idempotency and optimistic concurrency for grant mutations where
   retries or competing administrators could otherwise overwrite authority.
+- Affected write APIs return only newly allocated identifiers and necessary
+  operation receipts, or `204` with the owning resource ETag. Do not echo full
+  resources, request fields, or revisions already present in response headers.
+- Use the shared API design conventions for identifiers, Principal/Profile,
+  statuses, authorities, timestamps, pagination, nullability, errors, and
+  resource-specific preconditions across parameters and responses.
 - Never place credentials, invitation bearer tokens, private profile data, or
   production Principal details in task artifacts, documentation, logs, or tests.
 
 ## References
 
-- [Console UI redesign](./UiDesign.md)
-- [Interactive Console mock](./ConsoleMock.html)
-- [Platform access API design](./ApiDesign.md)
-- [Superseded Platform-only exploration mock](./PlatformAdminMock.html)
+- [Console UI redesign](/tasks/backlog/add-platform-access-management/UiDesign.md)
+- [Interactive Console mock](/tasks/backlog/add-platform-access-management/ConsoleMock.html)
+- [Platform access API design](/tasks/backlog/add-platform-access-management/ApiDesign.md)
+- [API proposal schema](/tasks/backlog/add-platform-access-management/PlatformAccess.openapi.json)
+- [Rendered API reference](/tasks/backlog/add-platform-access-management/ApiReference.html)
 - [UniCAS architecture](/docs/cas-architecture.md)
 - [UniCAS control-plane CLI](/docs/cas-control-plane-cli.md)
 - [UniCAS control-plane MCP](/docs/cas-control-plane-mcp.md)

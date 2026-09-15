@@ -6,8 +6,8 @@ Updated: 2026-09-15
 
 ## Design target
 
-Support the platform workflows in [ConsoleMock.html](./ConsoleMock.html) and
-[UiDesign.md](./UiDesign.md) without treating Google authentication, OAuth
+Support the platform workflows in [ConsoleMock.html](/tasks/backlog/add-platform-access-management/ConsoleMock.html) and
+[UiDesign.md](/tasks/backlog/add-platform-access-management/UiDesign.md) without treating Google authentication, OAuth
 scopes, App navigation visibility, or App membership as platform authority.
 
 The proposed model has three independent inputs to authorization:
@@ -71,7 +71,6 @@ export type PlatformAccessStatus = "active" | "blocked";
 export interface PlatformAccessState {
   readonly principalRef: string;
   readonly principal: Principal;
-  readonly profile: Profile;
   readonly status: PlatformAccessStatus;
   readonly authorities: readonly PlatformAuthority[];
   readonly revision: number;
@@ -101,6 +100,98 @@ invitation acceptance, App invitation acceptance, and App administrator routes
 regardless of current authorities or memberships.
 
 ## Read models
+
+### Shared wire conventions
+
+[PlatformAccess.openapi.json](/tasks/backlog/add-platform-access-management/PlatformAccess.openapi.json) is the executable
+proposal contract; [ApiReference.html](/tasks/backlog/add-platform-access-management/ApiReference.html) renders that file
+directly. These remain design artifacts, not a replacement for the generated
+administrator protocol. Existing clients and server contracts must migrate
+together when the affected prerequisite tasks are implemented.
+
+- JSON fields and query parameters use lower camel case. Resource identifiers
+  keep their domain names (`appId`, `invitationId`, `inspectionId`, `eventId`,
+  `principalRef`); all are non-empty opaque strings, never display labels.
+- `Principal` always means `{ issuer, subject }`. `Profile` contains only
+  non-authoritative `displayName` and `emailForDisplay`. A Principal reference
+  is a locator, not a replacement identity or authorization grant.
+- All `*At` timestamps and the `createdAfter` filter are non-negative Unix
+  epoch milliseconds. Durations use an explicit unit suffix. Unknown read
+  values are `null`; omitted request fields mean unchanged or not supplied.
+  Empty strings are not substitutes for missing identifiers or cursors.
+- `revision` is a non-negative safe integer owned by one mutable resource.
+  A strong ETag is that integer quoted as canonical decimal (`"4"`, not
+  `W/"4"` or `"04"`). `If-Match` uses that exact tag, not an App revision
+  for an issuer, an inspection revision for activation, or a list cursor.
+- Every list uses `{ items, nextCursor }`, with `nextCursor: null` at the end.
+  `limit` is 1..1000, default 50. Cursors bind the snapshot, filters, and order;
+  they are not event IDs, timestamps, or authorization snapshots. Authorization
+  is rechecked on every page; incompatible traversal parameters return
+  `400 INVALID_CURSOR`.
+- `status` is a persisted resource lifecycle: platform access is
+  `active | blocked`, an App is `active | suspended`, and invitations share
+  `pending | accepted | expired | revoked`. `effectiveAccess` is the derived
+  admission result `active | blocked | no_access`, including in list filters.
+  `no_access` is never a persisted status or PATCH input.
+- `authorities` is a set encoded as a duplicate-free array of the shared
+  `PlatformAuthority` enum. Responses use enum declaration order; request
+  order has no authorization meaning. An empty set revokes all authorities;
+  invitation creation requires at least one. The `authority=none` list filter
+  selects an empty set and is never itself an authority value.
+- Requests reject unknown fields. PATCH requires at least one recognized
+  field, rejects `null`, and atomically replaces supplied fields. Lists and
+  read projections have explicit schemas, not arbitrary object extensions.
+
+App invitations retain the existing optional `emailConstraint`: omission
+creates an unconstrained bearer invitation, represented as `null` on reads.
+Platform invitations require the same normalized email format. Only an
+email-constrained invitation can admit an otherwise unadmitted Principal via
+the new login continuation; an unconstrained App invitation remains usable by
+an already admitted Principal through a token-bound continuation. This avoids
+silently changing existing App invitation semantics or opening registration.
+
+### Minimal write responses
+
+The HTTP success status acknowledges the mutation. Never echo the submitted
+fields, the known resource ID from the path, complete resources, membership
+objects, or `{ ok: true }` merely to confirm success. Mutable-resource versions
+are returned once, in `ETag`, not duplicated in the body. Clients invalidate
+affected read queries and reload GET projections when needed; they must not
+attach a new ETag to an old cached object and present it as refreshed data.
+
+| Operation | Success | Body | Version owner |
+| --- | --- | --- | --- |
+| Create App | `201` | `{ appId }` | App ETag |
+| Update/suspend/restore App | `204` | None | App ETag |
+| Create App or platform invitation | `201` | `{ invitationId, acceptUrl, expiresAt }` | Invitation ETag |
+| Revoke App or platform invitation | `204` | None | Invitation ETag |
+| Accept App invitation | `200` | `{ appId }` for navigation | No ETag; membership is not the invitation resource |
+| Accept platform invitation | `204` | None; reload `/admin/me` | No ETag; multiple records/session state change |
+| Inspect OAuth issuer | `201` | `{ inspectionId, metadataUrl, jwksUri, challenge, expiresAt, keys }` | Immutable candidate, no mutable-resource ETag |
+| Activate/replace external issuer | `204` | None | External issuer ETag |
+| Enable/disable managed issuer | `204` | None | Managed issuer ETag |
+| Change platform access | `204` | None | Platform access ETag |
+
+Invitation creation returns the ID for later revocation, the one-time delivery
+URL, and its server-selected expiry. It does not echo constrained email,
+authorities, App ID, status, creator, or creation time. Both invitation types
+use `CreateInvitationResponse` with exactly the same shape.
+
+App and invitation creation retries use `Idempotency-Key`, scoped to the authenticated Principal,
+operation, and parent resource, with current authorization rechecked first.
+An exact retry returns the original receipt and ETag without creating another
+record. A key reused with different normalized input returns `409
+IDEMPOTENCY_CONFLICT`. Any replay storage containing an accept URL must be
+encrypted, expire no later than the invitation, and never be exposed through
+reads, audit, or logs; a consumed/expired/revoked invitation is not recoverable
+via replay and returns `409 INVITATION_NOT_PENDING`.
+
+Conditional writes check their precondition before reporting success, even on
+no-ops. A same-value PATCH or already-revoked invitation with its current ETag
+returns `204` with that unchanged ETag; an old ETag returns `412`. An actual
+transition increments only its owning resource revision. Missing required
+preconditions return `428`; malformed or conflicting preconditions return
+`400`; accepted or expired invitations cannot be revoked and return `409`.
 
 ### Current session
 
@@ -152,19 +243,21 @@ export interface PlatformAccessSummary {
   readonly platformAdminCount: number;
   readonly appCreatorCount: number;
   readonly blockedPrincipalCount: number;
-  readonly revision: number;
+  readonly generatedAt: number;
 }
 ```
 
 Requires `platform.admin`. Counts are current, not snapshot-bound to a Principal
-list traversal.
+list traversal. `activePrincipalCount` counts effective full admission;
+authority counts include only active access state with the named authority.
+`generatedAt` is the aggregate computation time, not a mutation revision.
 
 ### List Principals
 
 ```http
 GET /admin/platform/principals
   ?query=<name-email-subject>
-  &status=active|blocked|no_access
+  &effectiveAccess=active|blocked|no_access
   &authority=platform.admin|apps.create|none
   &limit=<1..1000>
   &cursor=<opaque>
@@ -172,6 +265,7 @@ GET /admin/platform/principals
 
 ```ts
 export interface PlatformPrincipalListItem extends PlatformAccessState {
+  readonly profile: Profile;
   readonly effectiveAccess: "active" | "blocked" | "no_access";
   readonly appMembershipCount: number;
   readonly lastActiveAt: number | null;
@@ -183,9 +277,12 @@ export interface PlatformPrincipalPage {
 }
 ```
 
-The list is a platform projection over access state and current membership
-counts. Pagination uses the existing snapshot-bound opaque cursor convention.
-Profile fields are searchable display metadata, not identity keys.
+The list is a platform projection over access state, current Profile, and
+membership counts. Pagination uses the existing snapshot-bound opaque cursor
+convention. Profile fields are searchable display metadata, not identity keys
+or part of the access revision. OpenAPI shares open field schemas internally
+and closes each final projection with `unevaluatedProperties: false`; it must
+not extend a closed object with `allOf` and reject the added projection fields.
 
 ### Read one Principal
 
@@ -200,8 +297,11 @@ export interface PlatformPrincipalDetail extends PlatformPrincipalListItem {
 ```
 
 Requires `platform.admin`. This response supplies the detail drawer and the
-exact `revision` needed for mutation. Memberships are read-only in this
-resource; App membership changes continue to use App routes.
+access-state `revision` needed for mutation. It has no composite-resource ETag:
+membership/Profile changes are not versioned by access state. The dedicated
+`GET /admin/platform/principals/{principalRef}/access` returns
+`PlatformAccessState` and its strong ETag for read-modify-write callers.
+Memberships remain read-only here; their mutations use App routes.
 
 ## Mutations
 
@@ -220,8 +320,9 @@ export interface PatchPlatformAccessRequest {
 }
 ```
 
-The supplied fields replace their current values atomically. The response is
-the updated `PlatformAccessState` with a new revision and strong ETag.
+The supplied fields replace their current values atomically. Success returns
+`204 No Content` and the resulting access-state ETag, not `PlatformAccessState`.
+The drawer reloads its read model when updated display data is needed.
 
 Rules:
 
@@ -252,9 +353,10 @@ export interface CreatePlatformInvitationRequest {
   readonly authorities: readonly PlatformAuthority[];
 }
 
-export interface CreatePlatformInvitationResponse {
-  readonly invitation: PlatformInvitation;
+export interface CreateInvitationResponse {
+  readonly invitationId: string;
   readonly acceptUrl: string;
+  readonly expiresAt: number;
 }
 ```
 
@@ -297,10 +399,12 @@ DELETE /admin/platform/invitations/{invitationId}
 If-Match: "<revision>"
 ```
 
-Both require `platform.admin`. Delete means revoke and returns the updated
-invitation with a new revision rather than physically deleting audit-relevant
-state. Only a pending invitation can be revoked; repeating with the resulting
-revision returns its current revoked representation.
+Both require `platform.admin`. DELETE revokes without physically deleting
+audit-relevant state and returns `204 No Content` plus the invitation ETag.
+Only a pending, unexpired invitation can transition to revoked; a repeat with
+the resulting ETag returns `204` without another transition. A stale ETag still
+returns `412`. App and platform invitations share these rules, including
+projecting elapsed pending invitations as expired before testing revocability.
 
 ### Accept a platform invitation
 
@@ -317,15 +421,15 @@ Acceptance atomically:
 
 1. consumes the single-use invitation;
 2. creates or updates access state for the immutable Google Principal;
-3. replaces the Principal's platform authorities with the invitation's
-   authorities only when no prior access state exists;
+3. unions the invited authorities with the current set (empty for a new record);
 4. refuses to override a blocked existing Principal;
 5. records a platform audit event;
 6. upgrades the invitation-limited session to a full session.
 
-If an existing active Principal accepts an invitation, merge the invited
-authorities with current authorities rather than removing current authority.
-This exception to step 3 must be explicit in the service operation and tested.
+Acceptance never removes existing authority. Success returns `204 No Content`
+after session rotation, then the client reloads `/admin/me`. App invitation
+acceptance uses the same session rules but returns only `{ appId }` for routing;
+neither response duplicates Principal, Profile, memberships, or access state.
 
 ## Invitation login boundary
 
@@ -344,7 +448,9 @@ special authorization continuation:
 6. Successful acceptance rotates the session identifier before granting full
    access.
 
-Use the same mechanism for platform and App invitations. This replaces the
+Use the same mechanism for platform and email-constrained App invitations.
+Unconstrained App invitations require prior full admission and cannot cross
+this initial login gate. This replaces the
 current static email allowlist as the only way an invited external member can
 cross the initial login gate without opening general registration.
 
@@ -364,7 +470,9 @@ It now requires:
 - the existing idempotency behavior.
 
 Successful creation still grants the creator first equal-authority App
-membership. A Principal with App memberships but no `apps.create` receives:
+membership, but returns only `201 { appId }` and the App ETag. The Console reads
+App metadata separately. A Principal with App memberships but no `apps.create`
+receives:
 
 ```text
 403 APP_CREATION_AUTHORITY_REQUIRED
@@ -401,7 +509,8 @@ Content-Type: application/json
 
 `status` is optional alongside existing display metadata fields, and one field
 must be present. Each transition increments the App revision and emits App
-control audit action `app.suspended` or `app.restored`.
+control audit action `app.suspended` or `app.restored`. Success is `204` plus
+the App ETag, with no echoed App object.
 
 Suspension semantics are fail-closed and App-wide:
 
@@ -444,8 +553,9 @@ unconsumed pending invitation whose `expiresAt <= now` is returned as
 service operation.
 
 Delete means revoke, not physical deletion. Only pending unexpired invitations
-can transition to revoked. The response returns the updated invitation and ETag
-so the UI can reconcile races. Accepted, expired, and revoked records remain
+can transition to revoked. Success returns `204` plus the invitation ETag,
+including an already-revoked no-op with a current precondition. The UI reloads
+the list to reconcile races. Accepted, expired, and revoked records remain
 visible for recent-history and audit workflows according to retention policy.
 
 These endpoints require current App membership and the existing
@@ -470,15 +580,27 @@ If-Match: "<current-active-issuer-revision>"
 }
 ```
 
-An inspection is a candidate resource and never changes current authority.
-After validating unexpired discovery data, captured JWKS, signed challenge, App
-revision precondition, and global issuer uniqueness, PUT atomically replaces
-the active external issuer and advances its revision. The old issuer remains
-authoritative until that commit; after commit it stops resolving within the
-bounded authority-cache window.
+An inspection is an immutable candidate and never changes current authority.
+Its creation receipt includes only the candidate ID, computed discovery URLs
+for review, exact challenge payload, server-selected expiry, and eligible
+signing-key choices `{ kid, algorithm }`. The caller signs the exact UTF-8
+challenge bytes as compact JWS; it must not parse and reserialize the payload.
+Captured public JWKs remain server-side. Request `issuer`, path `appId`, and
+the mutable issuer's revision are not echoed. A fresh inspection request may
+create a new candidate and challenge; it is not an idempotent authority write.
 
-If no external issuer exists, the same PUT performs initial activation. A
-failed or abandoned inspection leaves the current issuer untouched. The UI
+After validating unexpired discovery data, captured JWKS, signed challenge,
+external issuer revision precondition, and global issuer uniqueness, PUT
+atomically replaces the active external issuer and advances its revision. The
+old issuer remains authoritative until that commit; after commit it stops
+resolving within the bounded authority-cache window.
+
+If no external issuer exists, the same PUT performs initial activation using
+`If-None-Match: *`, not a fictional issuer or inspection revision. Exactly one
+of `If-Match` and `If-None-Match` is required; an existence/precondition race
+returns `412`. Successful activation or replacement returns `204` and the new
+external issuer ETag. A failed or abandoned inspection leaves the current
+issuer untouched. The UI
 labels the operation `Change issuer`, displays candidate progress separately,
 and never presents an unverified candidate as active.
 
@@ -494,6 +616,9 @@ If-Match: "<revision>"
 { "enabled": true | false }
 ```
 
+Managed issuer updates return `204` and the managed issuer ETag. Their revision
+is independent of the App, external issuer, and candidate inspection.
+
 ## Platform audit
 
 ```http
@@ -501,12 +626,16 @@ GET /admin/platform/audit-events
   ?action=<exact-action>
   &actorPrincipalRef=<ref>
   &targetPrincipalRef=<ref>
-  &after=<timestamp-or-event-id>
+  &createdAfter=<unix-epoch-milliseconds>
   &limit=<1..1000>
   &cursor=<opaque>
 ```
 
-Requires `platform.admin` and returns snapshot-bound pages. Recommended actions:
+Requires `platform.admin` and returns snapshot-bound pages, ordered by
+`createdAt` descending then `eventId` descending. `createdAfter` is an exclusive
+time filter, never an event ID; subsequent pages use only the opaque cursor
+with unchanged filters. `action` uses the same `PlatformAuditAction` enum as
+event responses. Recommended actions:
 
 ```text
 platform_invitation.created
@@ -522,8 +651,10 @@ app.create_denied
 ```ts
 export interface PlatformAuditEvent {
   readonly eventId: string;
-  readonly action: string;
-  readonly actor: Principal;
+  readonly action: PlatformAuditAction;
+  readonly actorPrincipalRef: string | null;
+  readonly actorPrincipal: Principal;
+  readonly targetPrincipalRef: string | null;
   readonly targetPrincipal: Principal | null;
   readonly targetInvitationId: string | null;
   readonly result: "succeeded" | "denied";
@@ -532,6 +663,12 @@ export interface PlatformAuditEvent {
   readonly details: Readonly<Record<string, string | number | boolean | null>>;
 }
 ```
+
+Actor and target references use the same `principalRef` domain as Principal
+routes and filters. References are `null` when no access-state record exists;
+the immutable Principal is still retained. Denial audit must not create access
+state just to allocate a reference. `requestId` is a non-empty opaque string or
+`null`, never a session identifier.
 
 `details` uses an action-specific allowlist. It must never contain invitation
 tokens, session identifiers, OAuth credentials, raw headers, or arbitrary
@@ -594,6 +731,12 @@ No v1 Stack endpoint receives this surface. Existing v1 creation must also be
 denied unless the Principal holds `apps.create`, or be removed from production
 routing before migration completes; it must not remain a privilege bypass.
 
+The existing v2 `{ error, message? }` envelope remains shared across all
+operations; errors do not embed current resource objects. A `412` causes the
+client to fetch the relevant read projection rather than obtain state from an
+error payload. Ordinary authorization and rate-limit errors keep their
+existing HTTP semantics.
+
 ## UI-to-API check
 
 | Mock interaction | API support | Assessment |
@@ -603,7 +746,7 @@ routing before migration completes; it must not remain a privilege bypass.
 | Switch App detail section | Client route state | No API change; selected App and section are URL-owned |
 | Open profile actions | Existing client behavior | Documentation, MCP configuration, and logout need no new platform API |
 | Summary counts | `GET /admin/platform/access-summary` | Separate aggregate avoids incorrect page-local counts |
-| Search and filter Principals | `GET /admin/platform/principals` | Query, effective status, authority, snapshot cursor are sufficient |
+| Search and filter Principals | `GET /admin/platform/principals` | Query, effectiveAccess, authority, snapshot cursor are sufficient |
 | Open Principal drawer | `GET /admin/platform/principals/{principalRef}` | Includes authority revision and read-only App memberships |
 | Save authority checkboxes | `PATCH .../{principalRef}/access` | Atomic replacement plus `If-Match` prevents lost updates |
 | Block or restore access | Same PATCH endpoint | Status is independent from authority and memberships |
@@ -621,6 +764,34 @@ The mock does not require bulk authority changes, direct pre-login grants by
 email, arbitrary roles, invitation resend, physical deletion of Principals, or
 App membership mutation from the Platform workspace. Those should remain out
 of the first API unless a concrete operator workflow requires them.
+
+## Review record
+
+Design review on 2026-09-15 addressed:
+
+- Full-resource write echoes across all 12 proposed write operations; the
+  minimal-response matrix now defines every success body and version owner.
+- Inconsistent persisted/effective status names, untyped audit action/time
+  filters, opaque identifiers, timestamp units, cursor nullability, and
+  authority-set validation; these now share explicit schemas.
+- Closed-schema inheritance rejecting valid Principal projections, and a
+  composite detail ETag incorrectly implying that access revision covered
+  Profile and membership changes.
+- Ambiguous initial issuer activation preconditions, missing eligible signing
+  key choices, and accidental removal of optional App email constraints.
+
+Validation: all 49 proposal schemas compiled with the workspace's existing
+AJV 2020 validator; 31 positive/negative fixtures covered Principal projections,
+unknown fields, authority sets, email optionality, timestamps, cursors, ETags,
+and invitation receipts. All 12 write response contracts and local schema
+references passed focused assertions. `pnpm check:tasks` passed the ledger
+check and all 6 policy tests. These validate the design artifacts, not runtime
+authorization, HTTP handlers, or client behavior.
+
+Next action: settle the remaining product/security decisions below, then
+implement the prerequisite task contracts and migrate source protocols,
+clients, and Console workflows together. This review does not claim or begin
+the production implementation task.
 
 ## Decisions still open
 
