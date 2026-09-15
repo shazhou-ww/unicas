@@ -38,7 +38,7 @@ The compatibility matrix, v2 contracts, generated OpenAPI artifacts, verifier,
 Worker ingress, physical compatibility adapter, and managed Space capability
 issuance are implemented. V2 requests are authorized by issuer-derived App
 authority and exact Space scope, while v1 remains a separate frozen contract.
-Milestone commits through `83e502e` record the contract foundation and the
+Milestone commits through `b6485a7` record the contract foundation and the
 completed public App/Space surfaces before the physical storage slices.
 
 The new environment returns App-shaped responses for the shared `/admin/me` and
@@ -64,13 +64,10 @@ while using managed Space capabilities, `/v2/apps/{appId}/spaces/{spaceId}`
 data routes, and a non-colliding v2 browser cache keyed by Principal, App, and
 Space. App/Space smoke is the deployment default, frozen v1 smoke remains
 explicit, and the documentation tracker is complete with all retained old
-terminology classified. The next concrete action is the section 7 physical
-source slice in `RemainingWork.md`: replace the new environment's physical
-control/data schema, Durable Object naming, and R2 keys with App/Space names,
-then update the reset plan and tests. `CutoverInventory.md` proves the current
-environment is smoke-only and selects a clean rebuild. Production reset/deploy
-was not executed and still requires fresh off-machine backups, repeated
-inventory, rendered plan review, and explicit approval.
+terminology classified. `CutoverInventory.md` records the smoke-only evidence
+and clean-rebuild decision. Production reset/deploy was not executed and still
+requires fresh off-machine backups, repeated inventory, rendered plan review,
+and explicit approval.
 
 The clean physical source cutover is complete. Control D1 now creates
 `cas_apps`, `cas_app_members`, and related App tables with `app_id`; its
@@ -80,11 +77,13 @@ legacy Stack tables. Data D1 uses `app_id`/`space_id`, canonical objects use
 `apps/{appId}/spaces/{spaceId}/nodes-v2/{hash}`, and the CAS Durable Object
 normalizes both v1 and v2 ingress to an App/Space scope before sending
 App/Space-only commands to the Root Ref domain object. No production execution
-has occurred. The one-time pre-cutover reset now
-checks every scoped legacy table and drops the old schemas so the new Worker
-can create clean App/Space tables. The next concrete action is completing the
-remaining non-destructive build/dry-run gates, then repeating the production
-inventory and off-machine backups before seeking reset/deploy approval.
+has occurred. The one-time pre-cutover reset now checks every scoped legacy
+table and drops the old schemas so the new Worker can create clean App/Space
+tables. The four public origins are live, both split-origin Google callbacks
+are registered, and all local build, test, typecheck, dry-run, and secret-scan
+gates pass. The next concrete action is to repeat the production inventory,
+create fresh verified off-machine backups, review the current rendered reset
+plan, and seek explicit reset/deploy approval.
 
 ## Decisions
 
@@ -278,6 +277,24 @@ inventory and off-machine backups before seeking reset/deploy approval.
 - The live reset-plan command ran without `--execute`. It rejected the stale
   explicit smoke ID, accepted the newly read target only after all scope and
   issuer checks passed, and rendered commands without executing them.
+- Milestone commits `b6485a7`, `f935afc`, `cac4352`, and `9d2c4f2` record the
+  public-surface, control-D1, data/DO/R2, and reset-guard slices after rebasing
+  onto the shared task-ledger workflow.
+- `api.unicas.work/health`, `unicas.work`, and `docs.unicas.work` returned 200;
+  the unauthenticated console returned the expected login redirect. Product
+  site and docs Wrangler dry-runs passed, as did the service Worker dry-run.
+- The Google OAuth client retained its legacy, localhost, and apex callbacks
+  and now also persists `https://console.unicas.work/admin/auth/callback` and
+  `https://api.unicas.work/oauth/google/callback`. The live administrator OIDC
+  start returned 302 to Google with the console callback and PKCE S256.
+- `pnpm build` and `pnpm typecheck` passed all 13 packages. The serialized full
+  test run passed 108 repository tests and every package suite, including 202
+  Cloudflare, 42 CLI, and 49 WebUI tests.
+- Wrangler dry-runs passed for the service, product site, and 18-page docs
+  site. Checksum-verified gitleaks 8.28.0 scanned 332 commits and found no
+  leaks. GitHub Actions remains pending until these commits are published.
+- After adopting the shared task-ledger workflow, `pnpm check:tasks` passed all
+  9 checks with this task under the `copilot-unicas-standalone` identity.
 
 ## Blockers
 

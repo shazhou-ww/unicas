@@ -127,8 +127,8 @@ After the gate is reviewed and passed:
 - [x] Replace data D1 `stack_id`/`tenant_id` dimensions with `app_id`/`space_id`.
 - [x] Replace Durable Object names and R2 keys with App/Space scopes.
 - [x] Update reset guards to the approved physical model.
-- [ ] Coordinate `api.unicas.work`, `console.unicas.work`, the product site, and docs.
-- [ ] Register and verify the required Google OAuth callbacks.
+- [x] Coordinate `api.unicas.work`, `console.unicas.work`, the product site, and docs.
+- [x] Register and verify the required Google OAuth callbacks.
 - [ ] Run Wrangler dry-runs, deploy, recreate Production Smoke, and run v2 smoke.
 - [ ] Verify rollback before removing transitional aliases from the new environment.
 - [ ] Run build, typecheck, tests, smoke, dry-run, gitleaks, and CI.
