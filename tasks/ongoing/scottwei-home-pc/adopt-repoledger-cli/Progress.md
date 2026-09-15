@@ -30,7 +30,7 @@ and verify the resulting Linux CI run before archiving the task.
 | Milestone | Evidence | Status |
 | --- | --- | --- |
 | Claim | `origin/main` commit `4b6c1a2e62129e8fa3bded15edad5eb3feb307bc`. | Published |
-| Implementation complete | Pending. | Pending |
+| Implementation complete | `origin/main` commit `96082d3ed835e9968b692d6e9d91b45e8feec77a`. | Published |
 | Archive | Pending. | Pending |
 
 ## Validation
