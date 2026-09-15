@@ -98,7 +98,7 @@ class MockAdminService {
     }
     if (path === appAdminRoutes.app({ appId: APP }) && request.method === "PATCH") {
       this.app.revision += 1;
-      return Response.json(this.app, { headers: { ETag: `"${this.app.revision}"` } });
+      return new Response(null, { status: 204, headers: { ETag: `"${this.app.revision}"` } });
     }
     if (path === appAdminRoutes.members({ appId: APP }) && request.method === "GET") {
       return Response.json({
@@ -365,8 +365,8 @@ describe("functional admin client", () => {
       { idempotencyKey: "create-app-1" },
     )).toMatchObject({ value: { appId: APP }, etag: '"3"' });
     expect(await client.getApp({ appId: APP })).toMatchObject({ value: { appId: APP }, etag: '"3"' });
-    expect(await client.patchApp({ appId: APP }, { description: "Production" }, '"3"'))
-      .toMatchObject({ value: { revision: 4 }, etag: '"4"' });
+    expect(await client.patchApp({ appId: APP }, { description: "Production", status: "suspended" }, '"3"'))
+      .toEqual({ etag: '"4"' });
     expect(await client.listAppMembers({ appId: APP }, { limit: 10 })).toMatchObject({
       items: [{ appId: APP, principal: { subject: "sub-1" } }],
     });
@@ -384,7 +384,12 @@ describe("functional admin client", () => {
     expect(service.requests).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: "/admin/apps", search: "?limit=5&cursor=next" }),
       expect.objectContaining({ path: "/admin/apps", method: "POST", origin: "https://admin.test", csrf: "csrf-1", idempotencyKey: "create-app-1" }),
-      expect.objectContaining({ path: `/admin/apps/${APP}`, method: "PATCH", ifMatch: '"3"' }),
+      expect.objectContaining({
+        path: `/admin/apps/${APP}`,
+        method: "PATCH",
+        ifMatch: '"3"',
+        body: JSON.stringify({ description: "Production", status: "suspended" }),
+      }),
       expect.objectContaining({
         path: `/admin/apps/${APP}/members`,
         search: "?issuer=https%3A%2F%2Faccounts.google.com&subject=sub-1",

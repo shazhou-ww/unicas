@@ -38,6 +38,14 @@ The CAS does not attempt to provide a distributed transaction spanning a documen
 
 ## 2. App and Space isolation
 
+`App.status = suspended` is a reversible App-wide data-plane deny override.
+Issuer resolution includes the owning App's status for external and managed
+issuers, and the Space verifier denies every operation with `APP_SUSPENDED`.
+Cached authority refreshes after 30 seconds and cannot authorize beyond a
+60-second hard stale bound on refresh failure. Administrator recovery routes
+remain available. Suspension does not change retention, membership, or data;
+see [operations](cas-operations.md#suspend-and-restore-an-app).
+
 `appId` is the top-level trust and storage namespace. Within an App,
 `spaceId` identifies data ownership; `refDomain` is an orthogonal Root Ref
 audit dimension.

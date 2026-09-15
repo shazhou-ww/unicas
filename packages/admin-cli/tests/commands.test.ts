@@ -131,16 +131,16 @@ describe("command layer", () => {
     const server = new FakeAdminApi({ adminVocabulary: "app" });
     ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
     const { writes } = captureStdout();
-    await appsCommand(ctx, "update", ["cas_app_a", "Renamed", "--description", "Production"]);
-    expect(JSON.parse(writes.join(""))).toMatchObject({
-      appId: "cas_app_a",
-      displayName: "Renamed",
-      description: "Production",
-      revision: 4,
-    });
+    await appsCommand(ctx, "update", ["cas_app_a", "Renamed", "--description", "Production", "--status", "suspended"]);
+    expect(JSON.parse(writes.join(""))).toEqual({ etag: '"rev-4"' });
     expect(server.requests).toEqual([
       expect.objectContaining({ pathname: "/admin/apps/cas_app_a", method: "GET" }),
-      expect.objectContaining({ pathname: "/admin/apps/cas_app_a", method: "PATCH", ifMatch: '"rev-3"' }),
+      expect.objectContaining({
+        pathname: "/admin/apps/cas_app_a",
+        method: "PATCH",
+        ifMatch: '"rev-3"',
+        body: { displayName: "Renamed", description: "Production", status: "suspended" },
+      }),
     ]);
   });
 

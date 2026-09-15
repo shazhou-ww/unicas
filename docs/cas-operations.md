@@ -151,6 +151,46 @@ change during signer rotation, so no new control-plane activation is needed.
 Rotate Worker runtime secrets separately with `wrangler secret put`; never
 copy them into GitHub deployment configuration.
 
+### Suspend and restore an App
+
+An App member can pause all App Space data-plane operations without deleting
+data or changing memberships, issuer configuration, or Root Ref retention:
+
+```text
+unicas apps update <appId> --status suspended --etag '"4"'
+unicas apps update <appId> --status active --etag '"5"'
+```
+
+Read the current App with `unicas apps get <appId>` before selecting an ETag.
+The HTTP operation is `PATCH /admin/apps/{appId}` with `If-Match`; success is
+`204 No Content` with the resulting App ETag. CLI and MCP return only
+`{ etag }`. A current same-value update is a no-op; stale preconditions fail
+with `412 REVISION_MISMATCH`. Actual transitions append `app.suspended` or
+`app.restored` control audit events with the immutable actor identity.
+
+Suspension rejects reads, metadata reads, leases, Root Ref reads/updates,
+usage, and GC with `403 APP_SUSPENDED` once the verifier observes the change.
+External and managed capabilities issued before suspension are both covered.
+Issuer authority refreshes after 30 seconds and fails closed at 60 seconds
+since its last successful read if registry refresh fails. Failure must never
+preserve old access beyond that hard bound; requests then fail with registry
+unavailability until current state can be read. An in-flight operation already
+authorized before the boundary is not rolled back.
+
+Protected-resource metadata and managed issuer metadata/JWKS are served only
+for active Apps; suspended Apps return an unavailable-issuer response. Prior
+positive discovery responses may remain cached for at most their 60-second
+max-age, but do not override capability verification. Managed Space capability
+issuance rejects suspended Apps immediately on its authoritative App read.
+
+App administrator reads and recovery mutations remain available, including
+metadata repair, membership and invitation administration, issuer repair,
+audit, and Restore. Suspension neither releases Root Refs nor initiates GC.
+Restore leaves data and configuration intact; verifiers observe it on refresh.
+The existing authorization event stream records suspension denials without
+recording bearer capabilities. Frozen v1 issuer resolution also refuses a
+suspended owning App so it cannot bypass this operational stop.
+
 ### Rollback
 
 Wrangler retains prior versions. Inspect each unit that may have changed and

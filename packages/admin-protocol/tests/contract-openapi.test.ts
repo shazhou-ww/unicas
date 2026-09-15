@@ -21,6 +21,7 @@ import {
   CasStackSchema,
   PrincipalSchema,
   ProfileSchema,
+  PatchAppRequestSchema,
   ManagedSpaceCapabilitySchema,
   SpaceRootRefBalanceSchema,
   appAdminApiContract,
@@ -40,6 +41,14 @@ function operations(document: Awaited<ReturnType<typeof generateAdminOpenApiDocu
 }
 
 describe("CAS admin schemas", () => {
+  test("validates strict nonempty App status patches", () => {
+    for (const status of ["active", "suspended"]) {
+      expect(PatchAppRequestSchema.safeParse({ status }).success).toBe(true);
+    }
+    for (const body of [{}, { status: "inactive" }, { status: null }, { unknown: true }, { status: "active", unknown: true }]) {
+      expect(PatchAppRequestSchema.safeParse(body).success).toBe(false);
+    }
+  });
   test("validates stack wire records", () => {
     expect(CasStackSchema.safeParse({
       stackId: "stack-1",
@@ -193,6 +202,10 @@ describe("CAS admin OpenAPI", () => {
     expect(Object.keys(document.paths ?? {})).toHaveLength(16);
     expect(allOperations).toHaveLength(23);
     expect(document.paths?.["/admin/apps/{appId}"]?.get).toHaveProperty("operationId", "getApp");
+    const patch = document.paths?.["/admin/apps/{appId}"]?.patch;
+    expect(patch?.responses?.["204"]).toHaveProperty("headers.ETag.required", true);
+    expect(patch?.responses?.["204"]).not.toHaveProperty("content");
+    expect(patch?.responses).not.toHaveProperty("200");
     expect(serialized).not.toMatch(/stackId|tenantId|Stack|Tenant/);
   });
 

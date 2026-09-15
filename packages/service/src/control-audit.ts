@@ -8,6 +8,8 @@ export const ControlAuditActions = {
   identityUpdated: "operator.identity.updated",
   stackCreated: "stack.created",
   stackPatched: "stack.patched",
+  appSuspended: "app.suspended",
+  appRestored: "app.restored",
   memberInvited: "member.invited",
   memberInvitationAccepted: "member.invitation.accepted",
   memberRemoved: "member.removed",

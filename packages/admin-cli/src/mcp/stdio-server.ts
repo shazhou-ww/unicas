@@ -172,15 +172,20 @@ const TOOL_HANDLERS = {
 
   async update_app(admin, args) {
     const appId = str(args.appId);
+    const status = args.status;
+    if (status !== undefined && status !== "active" && status !== "suspended") {
+      throw new Error("status must be active or suspended");
+    }
     const result = await admin.patchApp(
       { appId },
       {
         ...(args.displayName !== undefined ? { displayName: str(args.displayName) } : {}),
         ...(args.description !== undefined ? { description: str(args.description) } : {}),
+        ...(status !== undefined ? { status } : {}),
       },
       str(args.etag),
     );
-    return { ...result.value, etag: result.etag };
+    return result;
   },
 
   async list_app_members(admin, args) {

@@ -259,7 +259,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "APP_MEMBERSHIP_REQUIRED"
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
                       ]
                     },
                     "message": {
@@ -594,7 +595,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "APP_MEMBERSHIP_REQUIRED"
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
                       ]
                     },
                     "message": {
@@ -909,7 +911,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "APP_MEMBERSHIP_REQUIRED"
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
                       ]
                     },
                     "message": {
@@ -1208,7 +1211,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "APP_MEMBERSHIP_REQUIRED"
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
                       ]
                     },
                     "message": {
@@ -1373,8 +1377,8 @@
       },
       "patch": {
         "operationId": "patchApp",
-        "summary": "Update an App",
-        "description": "Updates display metadata under an exact If-Match revision without changing App identity.",
+        "summary": "Update, suspend, or restore an App",
+        "description": "Conditionally updates App metadata or status. Returns no body and the resulting App revision in ETag. Same-value updates with a current precondition are successful no-ops.",
         "tags": [
           "Apps"
         ],
@@ -1413,67 +1417,33 @@
                     "minLength": 1
                   },
                   "description": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "status": {
+                    "enum": [
+                      "active",
+                      "suspended"
+                    ],
                     "type": "string"
                   }
                 },
+                "additionalProperties": false,
                 "readOnly": true
               }
             }
           }
         },
         "responses": {
-          "200": {
+          "204": {
             "description": "OK",
-            "content": {
-              "application/json": {
+            "headers": {
+              "ETag": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "appId": {
-                      "type": "string",
-                      "minLength": 1,
-                      "description": "Opaque UniCAS-generated App identifier."
-                    },
-                    "displayName": {
-                      "type": "string",
-                      "minLength": 1,
-                      "description": "Administrator-visible App name."
-                    },
-                    "description": {
-                      "type": "string",
-                      "description": "Administrator-visible App description; empty means none."
-                    },
-                    "status": {
-                      "enum": [
-                        "active",
-                        "suspended"
-                      ],
-                      "type": "string",
-                      "description": "Operational status. A suspended App cannot serve normal Space traffic."
-                    },
-                    "createdAt": {
-                      "type": "integer",
-                      "minimum": 0,
-                      "maximum": 9007199254740991,
-                      "description": "Time at which UniCAS created the App."
-                    },
-                    "revision": {
-                      "type": "integer",
-                      "minimum": 0,
-                      "maximum": 9007199254740991,
-                      "description": "Current App revision used for optimistic concurrency."
-                    }
-                  },
-                  "required": [
-                    "appId",
-                    "displayName",
-                    "description",
-                    "status",
-                    "createdAt",
-                    "revision"
-                  ],
-                  "readOnly": true
-                }
+                  "type": "string",
+                  "pattern": "^\"(0|[1-9][0-9]*)\"$"
+                },
+                "required": true
               }
             }
           },
@@ -1536,7 +1506,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "APP_MEMBERSHIP_REQUIRED"
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
                       ]
                     },
                     "message": {
@@ -1903,7 +1874,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "APP_MEMBERSHIP_REQUIRED"
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
                       ]
                     },
                     "message": {
@@ -2199,7 +2171,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "APP_MEMBERSHIP_REQUIRED"
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
                       ]
                     },
                     "message": {
@@ -2552,7 +2525,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "APP_MEMBERSHIP_REQUIRED"
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
                       ]
                     },
                     "message": {
@@ -2872,7 +2846,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "APP_MEMBERSHIP_REQUIRED"
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
                       ]
                     },
                     "message": {
@@ -3182,7 +3157,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "APP_MEMBERSHIP_REQUIRED"
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
                       ]
                     },
                     "message": {
@@ -3508,7 +3484,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "APP_MEMBERSHIP_REQUIRED"
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
                       ]
                     },
                     "message": {
@@ -3851,7 +3828,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "APP_MEMBERSHIP_REQUIRED"
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
                       ]
                     },
                     "message": {
@@ -4131,7 +4109,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "APP_MEMBERSHIP_REQUIRED"
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
                       ]
                     },
                     "message": {
@@ -4554,7 +4533,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "APP_MEMBERSHIP_REQUIRED"
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
                       ]
                     },
                     "message": {
@@ -4995,7 +4975,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "APP_MEMBERSHIP_REQUIRED"
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
                       ]
                     },
                     "message": {
@@ -5418,7 +5399,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "APP_MEMBERSHIP_REQUIRED"
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
                       ]
                     },
                     "message": {
@@ -5825,7 +5807,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "APP_MEMBERSHIP_REQUIRED"
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
                       ]
                     },
                     "message": {
@@ -6260,7 +6243,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "APP_MEMBERSHIP_REQUIRED"
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
                       ]
                     },
                     "message": {
@@ -6565,7 +6549,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "APP_MEMBERSHIP_REQUIRED"
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
                       ]
                     },
                     "message": {
@@ -6854,7 +6839,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "APP_MEMBERSHIP_REQUIRED"
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
                       ]
                     },
                     "message": {
@@ -7291,7 +7277,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "APP_MEMBERSHIP_REQUIRED"
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
                       ]
                     },
                     "message": {
@@ -7636,7 +7623,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "APP_MEMBERSHIP_REQUIRED"
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
                       ]
                     },
                     "message": {
@@ -8003,7 +7991,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "APP_MEMBERSHIP_REQUIRED"
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
                       ]
                     },
                     "message": {

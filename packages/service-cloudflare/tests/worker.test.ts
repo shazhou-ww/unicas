@@ -188,12 +188,15 @@ describe("service-cloudflare public routing", () => {
     });
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
     expect(handlers.migrateControl).toHaveBeenCalledTimes(1);
+    expect(metadataEnv.CAS_CONTROL_DB.prepare).toHaveBeenCalledWith(expect.stringContaining("JOIN cas_apps AS app"));
+    expect(metadataEnv.CAS_CONTROL_DB.prepare).toHaveBeenCalledWith(expect.stringContaining("app.status = 'active'"));
 
     all.mockResolvedValueOnce({ results: [] });
     const missing = await worker.fetch(new Request(
       "https://cas.example/.well-known/oauth-protected-resource/stacks/cas_stack_missing",
     ), metadataEnv, ctx);
     expect(missing.status).toBe(404);
+    expect(missing.headers.get("Cache-Control")).toBe("no-store");
   });
 
   test("routes tenant protocol requests without admin cookies or internal secrets", async () => {

@@ -116,16 +116,25 @@ describe("adapter-hosted control-plane MCP server", () => {
       description: "Production documents",
       etag: '"1"',
     });
-    expect(updated.structuredContent).toMatchObject({
-      appId,
-      description: "Production documents",
-      revision: 2,
-      etag: '"2"',
-    });
+    expect(updated.structuredContent).toEqual({ etag: '"2"' });
+    expect((await callTool(handler, "get_app", { appId })).structuredContent)
+      .toMatchObject({ appId, description: "Production documents", revision: 2 });
+    expect((await callTool(handler, "update_app", { appId, status: "suspended", etag: '"2"' })).structuredContent)
+      .toEqual({ etag: '"3"' });
+    expect((await callTool(handler, "get_app", { appId })).structuredContent).toMatchObject({ status: "suspended" });
+    expect((await callTool(handler, "update_app", { appId, status: "suspended", etag: '"3"' })).structuredContent)
+      .toEqual({ etag: '"3"' });
+    expect((await callTool(handler, "update_app", { appId, status: "active", etag: '"2"' })).structuredContent)
+      .toMatchObject({ error: "REVISION_MISMATCH" });
+    expect((await callTool(handler, "update_app", { appId, status: "active", etag: '"3"' })).structuredContent)
+      .toEqual({ etag: '"4"' });
+    expect((await callTool(handler, "get_app", { appId })).structuredContent).toMatchObject({ status: "active" });
 
     const audit = await callTool(handler, "list_app_control_audit_events", { appId, limit: 10 });
     const events = audit.structuredContent.items as Array<Record<string, unknown>>;
     expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ action: "app.suspended" }),
+      expect.objectContaining({ action: "app.restored" }),
       expect.objectContaining({
         appId,
         actor: { issuer: "https://accounts.google.com", subject: "alice-sub" },

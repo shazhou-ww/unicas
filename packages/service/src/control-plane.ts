@@ -1,4 +1,5 @@
 import type {
+  App,
   CasAdminAcceptMemberInvitationRequest,
   CasAdminAcceptMemberInvitationResponse,
   CasAdminActivateOAuthIssuerRequest,
@@ -84,6 +85,12 @@ export interface ControlPlaneOperations {
     request: Omit<CasAdminPatchStackRequest, "headers">,
     mutation: ServiceMutationInput,
   ): Promise<CasAdminPatchStackResponse>;
+  patchApp(
+    ctx: ControlPlaneCallContext,
+    appId: string,
+    patch: Readonly<Partial<Pick<App, "displayName" | "description" | "status">>>,
+    mutation: ServiceMutationInput,
+  ): Promise<{ readonly revision: number } | CasAdminErrorResponse>;
   listMembers(ctx: ControlPlaneCallContext, request: CasAdminListMembersRequest): Promise<CasAdminListMembersResponse>;
   listPlaygroundFileRoots(ctx: ControlPlaneCallContext, request: CasAdminListPlaygroundFileRootsRequest): Promise<CasAdminListPlaygroundFileRootsResponse>;
   createPlaygroundFileRoot(ctx: ControlPlaneCallContext, request: CasAdminCreatePlaygroundFileRootRequest): Promise<CasAdminCreatePlaygroundFileRootResponse>;
@@ -131,7 +138,7 @@ export interface ControlPlaneOperations {
   mintManagedSpaceCapability(
     ctx: ControlPlaneCallContext,
     appId: string,
-  ): Promise<ManagedSpaceCapability | CasAdminErrorResponse>;
+  ): Promise<ManagedSpaceCapability | CasAdminErrorResponse | { readonly error: "APP_SUSPENDED"; readonly message: string }>;
   inspectOAuthIssuer(
     ctx: ControlPlaneCallContext,
     request: CasAdminInspectOAuthIssuerRequest,

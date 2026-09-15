@@ -26,6 +26,7 @@ const error = (status: number, message: string) => ({ status, message, data: Err
 export const AppAdminApiErrorMap = {
   ADMIN_AUTH_REQUIRED: error(401, "Administrator authentication is required"),
   APP_MEMBERSHIP_REQUIRED: error(403, "App membership is required"),
+  APP_SUSPENDED: error(403, "App is suspended"),
   NOT_FOUND: error(404, "The requested control-plane resource was not found"),
   LAST_MEMBER: error(409, "The final App member cannot be removed"),
   RATE_LIMITED: error(429, "The control-plane request was rate limited"),
@@ -54,6 +55,14 @@ const mutationHeaders = z.object({ "if-match": RevisionSchema }).readonly();
 const rootDomainParams = appParams.unwrap().extend({
   refDomain: z.string().min(1),
 }).readonly();
+
+export const PatchAppRequestSchema = z.object({
+  displayName: z.string().min(1).optional(),
+  description: z.string().max(2000).optional(),
+  status: z.enum(["active", "suspended"]).optional(),
+}).strict().refine(body => Object.values(body).some(value => value !== undefined), {
+  message: "At least one change is required",
+}).readonly().meta({ id: "PatchAppRequest" });
 
 function pageSchema(item: z.ZodType) {
   return z.object({
@@ -127,20 +136,21 @@ export const patchAppContract = appProcedure
     method: "PATCH",
     path: `${AppAdminApiBasePath}/{appId}`,
     operationId: "patchApp",
-    summary: "Update an App",
-    description: "Updates display metadata under an exact If-Match revision without changing App identity.",
+    summary: "Update, suspend, or restore an App",
+    description: "Conditionally updates App metadata or status. Returns no body and the resulting App revision in ETag. Same-value updates with a current precondition are successful no-ops.",
     inputStructure: "detailed",
+    outputStructure: "detailed",
+    successStatus: 204,
     tags: ["Apps"],
   })
   .input(z.object({
     params: appParams,
     headers: mutationHeaders,
-    body: z.object({
-      displayName: z.string().min(1).optional(),
-      description: z.string().optional(),
-    }).readonly(),
+    body: PatchAppRequestSchema,
   }).readonly())
-  .output(AppSchema);
+  .output(z.object({
+    headers: z.object({ ETag: z.string().regex(/^"(0|[1-9][0-9]*)"$/) }).readonly(),
+  }).readonly());
 
 export const listAppMembersContract = appProcedure
   .route({

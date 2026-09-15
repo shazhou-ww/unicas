@@ -22,6 +22,22 @@ async function invoke(
 }
 
 describe("App admin physical compatibility adapter", () => {
+  test("forwards App mutations without legacy rewriting and preserves no-content responses", async () => {
+    const handler = vi.fn(async () => new Response(null, {
+      status: 204,
+      headers: { ETag: '"4"', "Cache-Control": "no-store" },
+    }));
+    const response = await handleAppAdminCompatibilityRequest(
+      request("/admin/apps/app-1", { method: "PATCH", body: JSON.stringify({ status: "suspended" }) }),
+      { operation: "patchApp", appId: "app-1" },
+      handler,
+    );
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ url: "https://console.unicas.work/admin/apps/app-1" }));
+    expect(response.status).toBe(204);
+    expect(response.headers.get("ETag")).toBe('"4"');
+    expect(await response.text()).toBe("");
+  });
+
   test("maps the shared current-administrator response to Principal and Profile", async () => {
     const { response, legacyHandler } = await invoke(
       { operation: "me" },

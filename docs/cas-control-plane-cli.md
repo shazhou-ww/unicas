@@ -68,6 +68,13 @@ They never return `stackId`, `tenantId`, or flattened identity/profile fields.
 The broader remote and stdio MCP catalog also exposes App Playground and managed
 issuer operations that do not have plain CLI wrappers.
 
+`apps update <appId> --status active|suspended [--etag E]` restores or suspends
+the App. Status may be combined with display metadata changes. The command
+returns only `{ etag }`; use `apps get` for refreshed App data. A current
+same-value update succeeds without advancing revision, while stale ETags fail.
+Suspension requires current App membership and stops all Space traffic within
+the bounded authority-cache window; App recovery operations remain available.
+
 ## Legacy v1 compatibility
 
 `whoami`, `stacks`, `members`, `oauth-issuer`, `ref-domains`, and `audit` retain

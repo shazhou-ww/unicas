@@ -71,6 +71,12 @@ App write tools:
 - `update_app_playground_file_root`
 - `delete_app_playground_file_root`
 
+`update_app` accepts optional `status: "active" | "suspended"` alongside
+metadata, requires the current App ETag and `control:write`, and returns only
+`{ etag }`. Both MCP transports use this same shape. The tool is marked
+potentially destructive because suspension interrupts all Space traffic;
+server-side App membership and exact revision checks remain mandatory.
+
 App security tools:
 
 - `invite_app_member`, `accept_app_member_invitation`, `remove_app_member`

@@ -23,7 +23,7 @@ interface FakeStack {
   stackId: string;
   displayName: string;
   description: string;
-  status: "active";
+  status: "active" | "suspended";
   createdAt: number;
   revision: number;
   members: Map<string, ControlPlaneCallContext>;
@@ -162,6 +162,14 @@ function fakeControlPlane(): ControlPlaneOperations {
       stack.revision += 1;
       const { members: _members, ...response } = stack;
       return response;
+    },
+    patchApp: async (ctx, appId, patch, mutation) => {
+      const app = requireStack(ctx, appId);
+      if (!app) return { error: "STACK_MEMBERSHIP_REQUIRED", message: "stack membership required" };
+      if (mutation.ifMatch !== `"${app.revision}"`) return { error: "REVISION_MISMATCH", message: "revision mismatch" };
+      Object.assign(app, patch);
+      app.revision += 1;
+      return { revision: app.revision };
     },
     listMembers: error as ControlPlaneOperations["listMembers"],
     listPlaygroundFileRoots: async (ctx, request) => ({
@@ -853,6 +861,39 @@ describe("cas-admin-webui BFF", () => {
     expect(created.description).toBe("");
     expect(created.stackId).toMatch(/^cas_/);
     expect(ok.headers.get("ETag")).toBe('"1"');
+  });
+
+  test("App status mutations enforce CSRF, strict input, and minimal responses", async () => {
+    const provider = await createMockProvider();
+    const bff = await createBff(provider);
+    const { cookie, csrf } = await signIn(bff, provider);
+    const appId = await createStack(bff, cookie, csrf, "App");
+    const headers = { "X-CSRF-Token": csrf, "Content-Type": "application/json", "If-Match": '"1"' };
+    const noCsrf = await authRequest(bff, `/admin/apps/${appId}`, cookie, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "If-Match": '"1"' },
+      body: JSON.stringify({ status: "suspended" }),
+    });
+    expect(noCsrf.status).toBe(403);
+    for (const body of [{}, { status: "inactive" }, { status: null }, { unknown: true }, { status: "active", unknown: true }]) {
+      const invalid = await authRequest(bff, `/admin/apps/${appId}`, cookie, {
+        method: "PATCH", headers, body: JSON.stringify(body),
+      });
+      expect(invalid.status).toBe(400);
+    }
+    const denied = await authRequest(bff, "/admin/apps/not-a-member", cookie, {
+      method: "PATCH", headers, body: JSON.stringify({ status: "suspended" }),
+    });
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({ error: "APP_MEMBERSHIP_REQUIRED" });
+    const response = await authRequest(bff, `/admin/apps/${appId}`, cookie, {
+      method: "PATCH", headers, body: JSON.stringify({ status: "suspended" }),
+    });
+    expect(response.status).toBe(204);
+    expect(response.headers.get("ETag")).toBe('"2"');
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(await response.text()).toBe("");
+    expect(fakeStacks.get(appId)?.status).toBe("suspended");
   });
 
   test("stack lifecycle through the BFF with ETags", async () => {

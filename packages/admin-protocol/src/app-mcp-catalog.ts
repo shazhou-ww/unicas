@@ -167,14 +167,15 @@ export const APP_ADMIN_MCP_TOOLS = {
     name: "update_app",
     requiredScope: "control:write",
     registration: {
-      description: "Update App metadata using its current ETag.",
+      description: "Update App metadata or suspend/restore it using its current ETag; returns only the resulting ETag.",
       inputSchema: z.object({
         appId,
         displayName: displayName.optional(),
         description: description.optional(),
+        status: z.enum(["active", "suspended"]).optional(),
         etag,
       }),
-      annotations: { destructiveHint: false, idempotentHint: false },
+      annotations: { destructiveHint: true, idempotentHint: true },
     },
   }),
   invite_app_member: tool({

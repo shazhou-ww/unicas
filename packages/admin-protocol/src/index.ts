@@ -83,6 +83,7 @@ export {
 export {
   AppAdminApiBasePath,
   AppAdminApiErrorMap,
+  PatchAppRequestSchema,
   appAdminApiContract,
 } from "./app-v2-contract.js";
 export type { AppAdminApiContract } from "./app-v2-contract.js";

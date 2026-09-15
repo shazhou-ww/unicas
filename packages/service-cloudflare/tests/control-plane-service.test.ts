@@ -105,7 +105,8 @@ describe("D1-backed control-plane service", () => {
   });
 
   test("mints a managed Space capability accepted by the App authority adapter", async () => {
-    const now = () => 1_700_000_000_000;
+    let clock = 1_700_000_000_000;
+    const now = () => clock;
     const { privateKey } = await generateKeyPair("ES256", { extractable: true });
     const managedIssuer = new CloudflareManagedIssuer({
       publicOrigin: "https://cas.example",
@@ -142,6 +143,25 @@ describe("D1-backed control-plane service", () => {
       spaceId: capability.spaceId,
       permissions: capability.permissions,
     });
+    const request = new Request(`https://cas.example/v2/apps/${appId}/spaces/${capability.spaceId}/cas/usage`, {
+      headers: { Authorization: `Bearer ${capability.accessToken}` },
+    });
+    const route = { operation: "usage" as const, appId, spaceId: capability.spaceId };
+    expect(await service.patchApp(ctx(alice), appId, { status: "suspended" }, { ifMatch: '"1"' })).toEqual({ revision: 2 });
+    expect(await service.mintManagedSpaceCapability(ctx(alice), appId)).toMatchObject({ error: "APP_SUSPENDED" });
+    clock += 30_000;
+    await expect(verifier.verify(request, route)).rejects.toMatchObject({ code: "APP_SUSPENDED" });
+    expect(await service.getManagedOAuthIssuer(ctx(alice), { path: { stackId: appId } })).toMatchObject({ status: "active" });
+    expect(await service.patchApp(ctx(alice), appId, { status: "active" }, { ifMatch: '"2"' })).toEqual({ revision: 3 });
+    clock += 30_000;
+    await expect(verifier.verify(request, route)).resolves.toMatchObject({ appId, spaceId: capability.spaceId });
+    const audit = await db.prepare(
+      "SELECT action, identity_issuer, subject FROM cas_control_audit_events WHERE app_id = ? AND action IN ('app.suspended', 'app.restored')",
+    ).bind(appId).all();
+    expect(audit.results).toEqual(expect.arrayContaining([
+      { action: "app.suspended", identity_issuer: alice.identityIssuer, subject: alice.subject },
+      { action: "app.restored", identity_issuer: alice.identityIssuer, subject: alice.subject },
+    ]));
   }, 10_000);
 
   test("enforces invitation constraints, expiry, one-time use, and last-member transfer", async () => {

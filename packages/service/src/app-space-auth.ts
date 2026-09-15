@@ -20,6 +20,7 @@ import type { JwksFetcher } from "./tenant-auth.js";
 
 export interface ResolvedAppAuthority {
   readonly appId: string;
+  readonly appStatus: "active" | "suspended";
   readonly issuer: string;
   readonly audience: string;
   readonly jwksUri: string;
@@ -158,6 +159,9 @@ export class AppSpaceCapabilityVerifier {
     const authority = await this.#resolveAuthority(unverifiedIssuer);
     if (!authority) {
       throw new CapabilityAuthenticationError("unknown_issuer", "CAS capability issuer is not registered");
+    }
+    if (authority.appStatus !== "active") {
+      throw new CapabilityAuthorizationError("APP_SUSPENDED", "App is suspended");
     }
     const keySet = this.#remoteKeySet(authority.jwksUri);
     let payload: Omit<VerifiedAppSpacePayload, "appId" | "kid">;

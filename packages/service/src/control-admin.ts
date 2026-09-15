@@ -193,6 +193,7 @@ export interface ControlPatchStackPlan {
   readonly expectedRevision: number;
   readonly displayName: string;
   readonly description: string;
+  readonly status: ControlStackRecord["status"];
   readonly nextRevision: number;
   readonly audit: ControlAuditRecord;
 }
@@ -822,12 +823,12 @@ export class ControlPlaneAdminService {
   mintManagedSpaceCapability(
     ctx: ControlPlaneCallContext,
     appId: string,
-  ): Promise<ManagedSpaceCapability | CasAdminErrorResponse> {
+  ): Promise<ManagedSpaceCapability | CasAdminErrorResponse | { readonly error: "APP_SUSPENDED"; readonly message: string }> {
     return this.#guard(async () => {
       await this.#requireMember(ctx.identity, appId);
       const app = await this.#requireStack(appId);
       if (app.status !== "active") {
-        throw new ControlPlaneError(CasAdminErrorCodes.INVALID_REQUEST, "app is suspended");
+        return { error: "APP_SUSPENDED" as const, message: "App is suspended" };
       }
       const issuer = await this.#repository.getManagedOAuthIssuer(app.stackId);
       if (!issuer || issuer.mode !== "managed" || issuer.status !== "active") {
@@ -1180,13 +1181,35 @@ export class ControlPlaneAdminService {
     request: Omit<CasAdminPatchStackRequest, "headers">,
     mutation: ServiceMutationInput,
   ): Promise<CasAdminPatchStackResponse> {
+    return this.#patchAppSettings(ctx, request, mutation, false);
+  }
+
+  async patchApp(
+    ctx: ControlPlaneCallContext,
+    appId: string,
+    patch: Readonly<Partial<Pick<ControlStackRecord, "displayName" | "description" | "status">>>,
+    mutation: ServiceMutationInput,
+  ): Promise<{ readonly revision: number } | CasAdminErrorResponse> {
+    const result = await this.#patchAppSettings(ctx, { path: { stackId: appId }, body: patch }, mutation, true);
+    return "error" in result ? result : { revision: result.revision };
+  }
+
+  #patchAppSettings(
+    ctx: ControlPlaneCallContext,
+    request: Omit<CasAdminPatchStackRequest, "headers"> & {
+      readonly body: { readonly status?: ControlStackRecord["status"] };
+    },
+    mutation: ServiceMutationInput,
+    appMutation: boolean,
+  ): Promise<CasAdminPatchStackResponse> {
     return this.#guard(async () => {
       await this.#requireMember(ctx.identity, request.path.stackId);
       const stack = await this.#requireStack(request.path.stackId);
       this.#requireIfMatch(mutation.ifMatch, stack.revision);
       const rawName = request.body.displayName;
       const rawDescription = request.body.description;
-      if (rawName === undefined && rawDescription === undefined) {
+      const rawStatus = appMutation ? request.body.status : undefined;
+      if (rawName === undefined && rawDescription === undefined && rawStatus === undefined) {
         throw new ControlPlaneError(CasAdminErrorCodes.INVALID_REQUEST, "no change requested");
       }
       if (rawName !== undefined) {
@@ -1196,9 +1219,14 @@ export class ControlPlaneAdminService {
       if (rawDescription !== undefined && (typeof rawDescription !== "string" || rawDescription.length > 2_000)) {
         throw new ControlPlaneError(CasAdminErrorCodes.INVALID_REQUEST, "description must be a string of at most 2000 characters");
       }
+      if (rawStatus !== undefined && rawStatus !== "active" && rawStatus !== "suspended") {
+        throw new ControlPlaneError(CasAdminErrorCodes.INVALID_REQUEST, "status must be active or suspended");
+      }
       const displayName = rawName?.trim() ?? stack.displayName;
       const description = rawDescription?.trim() ?? stack.description;
-      if (displayName === stack.displayName && description === stack.description) {
+      const status = rawStatus ?? stack.status;
+      if (displayName === stack.displayName && description === stack.description && status === stack.status) {
+        if (appMutation) return toCasStack(stack);
         throw new ControlPlaneError(CasAdminErrorCodes.INVALID_REQUEST, "no change requested");
       }
       const result = await this.#repository.commitPatchStack({
@@ -1206,14 +1234,17 @@ export class ControlPlaneAdminService {
         expectedRevision: stack.revision,
         displayName,
         description,
+        status,
         nextRevision: stack.revision + 1,
-        audit: this.#audit(ctx, ControlAuditActions.stackPatched, stack.stackId, stack.stackId),
+        audit: this.#audit(ctx, status !== stack.status
+          ? status === "suspended" ? ControlAuditActions.appSuspended : ControlAuditActions.appRestored
+          : ControlAuditActions.stackPatched, stack.stackId, stack.stackId),
       });
       if (result.kind === "not-found") throw new ControlPlaneError(CasAdminErrorCodes.NOT_FOUND, "stack not found");
       if (result.kind === "revision-mismatch") {
         throw new ControlPlaneError(CasAdminErrorCodes.REVISION_MISMATCH, "resource revision has changed");
       }
-      return toCasStack({ ...stack, displayName, description, revision: stack.revision + 1 });
+      return toCasStack({ ...stack, displayName, description, status, revision: stack.revision + 1 });
     });
   }
 

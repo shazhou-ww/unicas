@@ -8,7 +8,7 @@ export async function handleAppAdminCompatibilityRequest(
   route: AppAdminRoute,
   legacyHandler: AdminHandler,
 ): Promise<Response> {
-  if (route.operation === "mintManagedCapability") {
+  if (route.operation === "mintManagedCapability" || route.operation === "patchApp") {
     return legacyHandler(request);
   }
 
@@ -63,8 +63,9 @@ export function transformAppAdminResponse(route: AppAdminRoute, body: unknown): 
       return mapPage(body, mapApp);
     case "createApp":
     case "getApp":
-    case "patchApp":
       return mapApp(body);
+    case "patchApp":
+      return body;
     case "listMembers":
       return mapPage(body, mapMembership);
     case "createMemberInvitation":

@@ -223,14 +223,17 @@ export function createControlPlaneMcpServer(
   server.registerTool(
     APP_ADMIN_MCP_TOOLS.update_app.name,
     APP_ADMIN_MCP_TOOLS.update_app.registration,
-    async ({ appId, displayName, description, etag }) => {
+    async ({ appId, displayName, description, status, etag }) => {
       const grant = requireMutation("control:write", options);
-      const result = await controlPlane.patchStack(
+      const result = await controlPlane.patchApp(
         serviceContext(grant, "update_app"),
-        { path: { stackId: appId }, body: { displayName, description } },
+        appId,
+        { displayName, description, status },
         { ifMatch: etag },
       );
-      return appToolResult({ operation: "patchApp", appId }, withEtag(result));
+      return appToolResult({ operation: "patchApp", appId }, "error" in result
+        ? result
+        : { etag: formatCasAdminETag(result.revision) });
     },
   );
 

@@ -47,22 +47,22 @@ hard to explain and unsafe during incident response.
 
 ## Acceptance criteria
 
-- [ ] An App administrator can conditionally suspend and restore an App through
+- [x] An App administrator can conditionally suspend and restore an App through
       the v2 administrator contract, with stale revisions rejected.
-- [ ] While suspended, every App Space data-plane read, write, and management
+- [x] While suspended, every App Space data-plane read, write, and management
       operation fails closed with one stable error regardless of managed or
       external issuer mode.
-- [ ] Capabilities issued before suspension stop authorizing within the defined
+- [x] Capabilities issued before suspension stop authorizing within the defined
       and tested hard stale bound; refresh failure does not extend authority.
-- [ ] Protected-resource metadata, managed issuer documents, and managed
+- [x] Protected-resource metadata, managed issuer documents, and managed
       capability issuance do not advertise or serve a suspended App as active.
-- [ ] App members can still inspect control-plane configuration and perform the
+- [x] App members can still inspect control-plane configuration and perform the
       explicitly allowed repair and recovery mutations, including Restore.
-- [ ] Suspension does not delete App data, change membership, remove issuer
+- [x] Suspension does not delete App data, change membership, remove issuer
       records, release Root Refs, or trigger garbage collection.
-- [ ] Suspend, restore, and representative denied data-plane requests produce
+- [x] Suspend, restore, and representative denied data-plane requests produce
       useful audit/observability evidence without logging capabilities.
-- [ ] Focused service, Cloudflare adapter, protocol, client, CLI/MCP, cache-bound,
+- [x] Focused service, Cloudflare adapter, protocol, client, CLI/MCP, cache-bound,
       and cross-issuer tests pass together with relevant repository validation.
 
 ## Constraints

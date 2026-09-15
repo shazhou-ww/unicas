@@ -312,7 +312,8 @@ export type CapabilityErrorCode =
   | "resource_scope_mismatch"
   | "unknown_issuer"
   | "registry_unavailable"
-  | "unsupported_algorithm";
+  | "unsupported_algorithm"
+  | "APP_SUSPENDED";
 
 export abstract class CapabilityError extends Error {
   abstract readonly status: 401 | 403;
@@ -348,7 +349,8 @@ export class CapabilityAuthorizationError extends CapabilityError {
       | "insufficient_permission"
       | "resource_scope_mismatch"
       | "unsupported_algorithm"
-      | "registry_unavailable",
+      | "registry_unavailable"
+      | "APP_SUSPENDED",
     message: string,
   ) {
     super(code, message);

@@ -256,8 +256,8 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
 
   async commitPatchStack(plan: ControlPatchStackPlan): Promise<ControlPatchStackCommitResult> {
     const update = this.#db
-      .prepare("UPDATE cas_apps SET display_name = ?, description = ?, revision = ? WHERE app_id = ? AND revision = ?")
-      .bind(plan.displayName, plan.description, plan.nextRevision, plan.stackId, plan.expectedRevision);
+      .prepare("UPDATE cas_apps SET display_name = ?, description = ?, status = ?, revision = ? WHERE app_id = ? AND revision = ?")
+      .bind(plan.displayName, plan.description, plan.status, plan.nextRevision, plan.stackId, plan.expectedRevision);
     const requireUpdated = this.#db.prepare(
       "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('invalid', '$') END AS updated",
     );

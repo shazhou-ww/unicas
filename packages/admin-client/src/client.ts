@@ -71,9 +71,9 @@ export interface AdminClient {
   getApp(path: { readonly appId: AppId }): Promise<AdminClientRead<App>>;
   patchApp(
     path: { readonly appId: AppId },
-    body: { readonly displayName?: string; readonly description?: string },
+    body: { readonly displayName?: string; readonly description?: string; readonly status?: App["status"] },
     ifMatch: string,
-  ): Promise<AdminClientRead<App>>;
+  ): Promise<{ readonly etag: string }>;
   listAppMembers(
     path: { readonly appId: AppId },
     query?: CasAdminPageQuery,
@@ -333,7 +333,7 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
         }),
         "patchApp",
       );
-      return { value: await response.json(), etag: readEtag(response) };
+      return { etag: readEtag(response) };
     },
 
     async listAppMembers(path, query) {

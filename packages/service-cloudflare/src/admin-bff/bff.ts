@@ -13,6 +13,7 @@ import {
   formatCasAdminETag,
   matchAppAdminRoute,
   matchCasAdminRoute,
+  PatchAppRequestSchema,
 } from "@unicas/admin-protocol";
 import type {
   CasAdminErrorResponse,
@@ -45,6 +46,7 @@ import {
 } from "./session.js";
 import type { AdminSessionPayload, CliOneTimeCodePayload } from "./session.js";
 import { checkCsrfToken, checkSameOrigin } from "./csrf.js";
+import { transformAppAdminError } from "../app-admin-adapter.js";
 
 export interface CreateAdminBffOptions {
   readonly config: AdminBffConfig;
@@ -171,6 +173,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     const appRoute = matchAppAdminRoute(method, pathname);
     if (appRoute?.operation === "mintManagedCapability") {
       return handleManagedSpaceCapability(request, appRoute.appId);
+    }
+    if (appRoute?.operation === "patchApp") {
+      return handleAppPatch(request, appRoute.appId);
     }
     return json({ error: "Not Found" }, 404);
   };
@@ -643,6 +648,22 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     );
   }
 
+  async function handleAppPatch(request: Request, appId: string): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!(await passCsrf(request, auth.payload))) return csrfRejected();
+    const parsed = PatchAppRequestSchema.safeParse(await readJsonBody(request));
+    if (!parsed.success) return invalidRequest("A valid App patch is required");
+    const result = await controlPlane.patchApp(serviceContext(auth.payload, request), appId, parsed.data, {
+      ifMatch: request.headers.get("If-Match") ?? undefined,
+    });
+    if ("error" in result) return json(transformAppAdminError({ ...result }), casAdminErrorHttpStatus[result.error]);
+    return new Response(null, {
+      status: 204,
+      headers: { ETag: formatCasAdminETag(result.revision), "Cache-Control": "no-store" },
+    });
+  }
+
   async function handleAdminApi(
     request: Request,
     url: URL,
@@ -832,7 +853,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       serviceContext(auth.payload, request),
       appId,
     );
-    const response = json(result, "error" in result ? casAdminErrorHttpStatus[result.error] : 201);
+    const response = "error" in result
+      ? json(transformAppAdminError({ ...result }), result.error === "APP_SUSPENDED" ? 403 : casAdminErrorHttpStatus[result.error])
+      : json(result, 201);
     response.headers.set("Cache-Control", "no-store");
     return response;
   }

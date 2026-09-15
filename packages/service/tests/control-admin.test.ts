@@ -246,6 +246,26 @@ describe("ControlPlaneAdminService", () => {
     );
   });
 
+  test("App suspension requires membership and exact revisions while preserving recovery", async () => {
+    const { repository, service } = fixture();
+    const created = await service.createStack(context(), { body: { displayName: "App" } });
+    if ("error" in created) throw new Error(created.error);
+    expectError(await service.patchApp(context(), created.stackId, { status: "suspended" }, {}), CasAdminErrorCodes.PRECONDITION_REQUIRED);
+    expectError(await service.patchApp(context(bob, "Bob"), created.stackId, { status: "suspended" }, { ifMatch: '"1"' }), CasAdminErrorCodes.STACK_MEMBERSHIP_REQUIRED);
+    expect(await service.patchApp(context(), created.stackId, { status: "suspended" }, { ifMatch: '"1"' })).toEqual({ revision: 2 });
+    expect(repository.audits.at(-1)).toMatchObject({ action: "app.suspended", subject: alice.subject });
+    expect(await service.getStack(context(), { path: { stackId: created.stackId } })).toMatchObject({ status: "suspended" });
+    expect(await service.mintManagedSpaceCapability(context(), created.stackId)).toMatchObject({ error: "APP_SUSPENDED" });
+    expect(await service.listMembers(context(), { path: { stackId: created.stackId } })).toHaveProperty("items");
+    expectError(await service.patchApp(context(), created.stackId, { status: "active" }, { ifMatch: '"1"' }), CasAdminErrorCodes.REVISION_MISMATCH);
+    expect(await service.patchApp(context(), created.stackId, { status: "suspended" }, { ifMatch: '"2"' })).toEqual({ revision: 2 });
+    expect(repository.patchPlans).toHaveLength(1);
+    expect(await service.patchApp(context(), created.stackId, { description: "Repair" }, { ifMatch: '"2"' })).toEqual({ revision: 3 });
+    expect(await service.patchApp(context(), created.stackId, { status: "active" }, { ifMatch: '"3"' })).toEqual({ revision: 4 });
+    expect(repository.audits.at(-1)).toMatchObject({ action: "app.restored", subject: alice.subject });
+    expect(await service.getStack(context(), { path: { stackId: created.stackId } })).toMatchObject({ status: "active", description: "Repair" });
+  });
+
   test("enforces patch preconditions, rejects no-ops, and commits one revision with audit", async () => {
     const { repository, service } = fixture();
     const created = await service.createStack(context(), { body: { displayName: "Stack" } });
@@ -678,6 +698,7 @@ class MemoryControlAdminRepository implements ControlPlaneAdminRepository {
       ...current,
       displayName: plan.displayName,
       description: plan.description,
+      status: plan.status,
       revision: plan.nextRevision,
     });
     this.audits.push(plan.audit);

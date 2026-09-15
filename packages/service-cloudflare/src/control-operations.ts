@@ -32,6 +32,7 @@ export function createControlPlaneOperations(
     createStack: admin.createStack.bind(admin),
     getStack: admin.getStack.bind(admin),
     patchStack: admin.patchStack.bind(admin),
+    patchApp: admin.patchApp.bind(admin),
     listMembers: admin.listMembers.bind(admin),
     listPlaygroundFileRoots: admin.listPlaygroundFileRoots.bind(admin),
     createPlaygroundFileRoot: admin.createPlaygroundFileRoot.bind(admin),

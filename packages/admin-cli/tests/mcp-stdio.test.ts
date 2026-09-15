@@ -208,6 +208,17 @@ describe("unicas mcp (stdio server)", () => {
       structuredContent: { refs: [{ spaceId: "space-1", count: 1 }] },
     });
 
+    stdin.write(`${JSON.stringify({
+      jsonrpc: "2.0",
+      id: 5,
+      method: "tools/call",
+      params: { name: "update_app", arguments: { appId: "cas_app_a", status: "suspended", etag: '"rev-3"' } },
+    })}\n`);
+    const updated = await reader.next();
+    expect(updated.result).toMatchObject({ isError: false, structuredContent: { etag: '"rev-4"' } });
+    expect((updated.result as { structuredContent: object }).structuredContent).toEqual({ etag: '"rev-4"' });
+    expect(server.requests.at(-1)).toMatchObject({ method: "PATCH", body: { status: "suspended" }, ifMatch: '"rev-3"' });
+
     stdin.end();
     await done;
   });
