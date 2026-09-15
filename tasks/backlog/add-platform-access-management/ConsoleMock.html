@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UniCAS Console Mock</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      --background: #f5f6f7;
+      --foreground: #17191c;
+      --card: #ffffff;
+      --card-foreground: #17191c;
+      --popover: #ffffff;
+      --popover-foreground: #17191c;
+      --primary: #202327;
+      --primary-foreground: #fafafa;
+      --secondary: #edf0f2;
+      --secondary-foreground: #25292e;
+      --muted: #f0f2f4;
+      --muted-foreground: #687078;
+      --accent: #e8edef;
+      --accent-foreground: #192125;
+      --destructive: #b42318;
+      --border: #dfe3e6;
+      --input: #d6dade;
+      --ring: #3c6264;
+      --sidebar: #edf0f1;
+      --sidebar-foreground: #293035;
+      --sidebar-primary: #234f51;
+      --sidebar-primary-foreground: #ffffff;
+      --sidebar-accent: #dce4e4;
+      --sidebar-accent-foreground: #183f41;
+      --sidebar-border: #d4dadd;
+      --teal: #2f696b;
+      --teal-soft: #e8f1f0;
+      --coral: #a84430;
+      --coral-soft: #f9ece8;
+      --success: #28734d;
+      --warning: #926415;
+      --radius: 0.5rem;
+      --sidebar-width: 17rem;
+      color-scheme: light;
+      font-synthesis: none;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      color: var(--foreground);
+      background:
+        linear-gradient(rgba(32,35,39,.018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(32,35,39,.018) 1px, transparent 1px),
+        var(--background);
+      background-size: 32px 32px;
+      font-family: "Manrope", sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      letter-spacing: 0;
+    }
+    button, input, select { font: inherit; letter-spacing: 0; }
+    button { color: inherit; }
+    [hidden] { display: none !important; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+    .app-shell { display: flex; min-height: 100svh; }
+    .sidebar {
+      position: fixed;
+      inset: 0 auto 0 0;
+      z-index: 40;
+      display: flex;
+      width: var(--sidebar-width);
+      flex-direction: column;
+      color: var(--sidebar-foreground);
+      background: color-mix(in srgb, var(--sidebar) 96%, transparent);
+      border-right: 1px solid var(--sidebar-border);
+      backdrop-filter: blur(14px);
+    }
+    .sidebar-header { flex: 0 0 auto; padding: 0.85rem; }
+    .brand {
+      display: flex;
+      min-height: 42px;
+      align-items: center;
+      gap: 0.7rem;
+      padding: 0.35rem 0.45rem;
+      border-radius: calc(var(--radius) - 2px);
+    }
+    .brand-mark {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      flex: 0 0 auto;
+      place-items: center;
+      color: var(--sidebar-primary-foreground);
+      background: var(--sidebar-primary);
+      border-radius: 7px;
+      font-size: 0.78rem;
+      font-weight: 800;
+      box-shadow: 0 1px 2px rgba(24,32,34,.18);
+    }
+    .brand-copy { min-width: 0; }
+    .brand-copy strong, .brand-copy span { display: block; }
+    .brand-copy strong { font-size: 0.87rem; font-weight: 750; }
+    .brand-copy span { color: var(--muted-foreground); font-size: 0.68rem; }
+    .sidebar-content { min-height: 0; flex: 1 1 auto; padding: 0 0.65rem 0.75rem; overflow-x: hidden; overflow-y: auto; }
+    .sidebar-group { padding: 0.45rem 0; }
+    .group-heading { display: flex; min-height: 30px; align-items: center; justify-content: space-between; padding: 0 0.55rem; }
+    .group-label { color: #747c83; font-size: 0.66rem; font-weight: 750; text-transform: uppercase; }
+    .group-action, .icon-button {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      padding: 0;
+      color: var(--muted-foreground);
+      background: transparent;
+      border: 0;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .group-action:hover, .icon-button:hover { color: var(--foreground); background: var(--sidebar-accent); }
+    .group-action svg, .icon-button svg { width: 15px; height: 15px; }
+    .sidebar-menu { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+    .sidebar-menu > li { min-width: 0; max-width: 100%; }
+    .sidebar-menu-button {
+      position: relative;
+      display: flex;
+      width: 100%;
+      max-width: 100%;
+      min-height: 38px;
+      align-items: center;
+      gap: 0.65rem;
+      padding: 0.48rem 0.58rem;
+      overflow: hidden;
+      color: #4e575e;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      cursor: pointer;
+      text-align: left;
+    }
+    .sidebar-menu-button:hover { color: var(--sidebar-accent-foreground); background: color-mix(in srgb, var(--sidebar-accent) 72%, transparent); }
+    .sidebar-menu-button.active { color: var(--sidebar-accent-foreground); background: var(--card); border-color: var(--sidebar-border); box-shadow: 0 1px 2px rgba(22,35,36,.06); }
+    .sidebar-menu-button.active::before { position: absolute; inset: 8px auto 8px 0; width: 3px; content: ""; background: var(--sidebar-primary); border-radius: 0 3px 3px 0; }
+    .app-icon { display: grid; width: 24px; height: 24px; flex: 0 0 auto; place-items: center; color: #3f595a; background: #dde5e5; border-radius: 6px; font-size: 0.67rem; font-weight: 750; }
+    .sidebar-menu-button.active .app-icon { color: #fff; background: var(--sidebar-primary); }
+    .menu-copy { min-width: 0; flex: 1 1 0; overflow: hidden; }
+    .menu-copy strong, .menu-copy small { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .menu-copy strong { font-size: 0.78rem; font-weight: 650; }
+    .menu-copy small { color: var(--muted-foreground); font-size: 0.65rem; }
+    .sidebar-separator { height: 1px; margin: 0.45rem 0.45rem; background: var(--sidebar-border); }
+    .platform-icon { color: var(--coral); background: var(--coral-soft); }
+    .admin-badge { margin-left: auto; padding: 0.05rem 0.35rem; color: var(--coral); background: var(--coral-soft); border: 1px solid #edc9c0; border-radius: 999px; font-size: 0.59rem; font-weight: 750; text-transform: uppercase; }
+
+    .sidebar-footer { position: relative; flex: 0 0 auto; padding: 0.65rem; border-top: 1px solid var(--sidebar-border); }
+    .profile-trigger {
+      display: flex;
+      width: 100%;
+      min-height: 48px;
+      align-items: center;
+      gap: 0.65rem;
+      padding: 0.45rem 0.5rem;
+      color: var(--sidebar-foreground);
+      background: transparent;
+      border: 0;
+      border-radius: 7px;
+      cursor: pointer;
+      text-align: left;
+    }
+    .profile-trigger:hover, .profile-trigger[aria-expanded="true"] { background: var(--sidebar-accent); }
+    .avatar { display: grid; width: 31px; height: 31px; flex: 0 0 auto; place-items: center; color: #fff; background: #506769; border-radius: 7px; font-size: 0.67rem; font-weight: 750; }
+    .profile-copy { min-width: 0; flex: 1 1 auto; }
+    .profile-copy strong, .profile-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .profile-copy strong { font-size: 0.77rem; font-weight: 650; }
+    .profile-copy span { color: var(--muted-foreground); font-size: 0.64rem; }
+    .profile-trigger > svg { width: 14px; color: var(--muted-foreground); }
+    .dropdown {
+      position: absolute;
+      right: 0.65rem;
+      bottom: calc(100% - 0.15rem);
+      z-index: 70;
+      width: 236px;
+      padding: 0.35rem;
+      color: var(--popover-foreground);
+      background: var(--popover);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 14px 34px rgba(18,25,28,.16);
+      animation: menu-in 120ms ease-out both;
+    }
+    .dropdown-label { padding: 0.45rem 0.5rem 0.55rem; }
+    .dropdown-label strong, .dropdown-label span { display: block; }
+    .dropdown-label strong { font-size: 0.78rem; }
+    .dropdown-label span { color: var(--muted-foreground); font-size: 0.68rem; }
+    .dropdown-separator { height: 1px; margin: 0.25rem -0.35rem; background: var(--border); }
+    .dropdown-item { display: flex; width: 100%; min-height: 34px; align-items: center; gap: 0.55rem; padding: 0.42rem 0.5rem; color: #3e454b; background: transparent; border: 0; border-radius: 5px; cursor: pointer; font-size: 0.75rem; text-align: left; }
+    .dropdown-item:hover { color: var(--foreground); background: var(--muted); }
+    .dropdown-item.destructive { color: var(--destructive); }
+    .dropdown-item svg { width: 14px; height: 14px; }
+
+    .sidebar-inset { min-width: 0; flex: 1 1 auto; margin-left: var(--sidebar-width); }
+    .mobile-bar { display: none; }
+    .content { width: min(1160px, calc(100% - 4rem)); margin: 0 auto; padding: 2rem 0 4rem; }
+    .content.playground-active { padding-bottom: 0; }
+    .content-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+    .eyebrow { margin: 0 0 0.2rem; color: var(--muted-foreground); font-size: 0.67rem; font-weight: 750; text-transform: uppercase; }
+    .content-header h1 { max-width: min(680px, 60vw); margin: 0; overflow: hidden; font-size: 1.45rem; font-weight: 700; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+    .content-header p:not(.eyebrow) { max-width: 680px; margin: 0.3rem 0 0; color: var(--muted-foreground); font-size: 0.82rem; }
+    .actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; }
+    .button {
+      display: inline-flex;
+      min-height: 36px;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      padding: 0.48rem 0.72rem;
+      color: var(--foreground);
+      background: var(--card);
+      border: 1px solid var(--input);
+      border-radius: calc(var(--radius) - 2px);
+      cursor: pointer;
+      font-size: 0.75rem;
+      font-weight: 650;
+      box-shadow: 0 1px 1px rgba(20,25,28,.03);
+    }
+    .button:hover { background: var(--muted); }
+    .button.primary { color: var(--primary-foreground); background: var(--primary); border-color: var(--primary); }
+    .button.primary:hover { background: #080a0c; }
+    .button.destructive { color: var(--destructive); }
+    .button.ghost { min-height: 30px; padding: 0.3rem 0.45rem; background: transparent; border-color: transparent; box-shadow: none; }
+    .button svg { width: 14px; height: 14px; }
+
+    .tabs-list { display: flex; gap: 1.3rem; margin-bottom: 1.25rem; overflow-x: auto; border-bottom: 1px solid var(--border); scrollbar-width: none; }
+    .tabs-list::-webkit-scrollbar { display: none; }
+    .tab-trigger { position: relative; min-height: 42px; flex: 0 0 auto; padding: 0.55rem 0.05rem; color: var(--muted-foreground); background: transparent; border: 0; cursor: pointer; font-size: 0.76rem; font-weight: 650; }
+    .tab-trigger:hover { color: var(--foreground); }
+    .tab-trigger.active { color: var(--foreground); }
+    .tab-trigger.active::after { position: absolute; inset: auto 0 -1px; height: 2px; content: ""; background: var(--teal); }
+
+    .grid { display: grid; gap: 1rem; }
+    .grid.two { grid-template-columns: minmax(0, 1.25fr) minmax(280px, .75fr); }
+    .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .card { min-width: 0; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 1px 2px rgba(20,25,28,.025); }
+    .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.8rem; padding: 1rem 1rem 0.65rem; }
+    .card-header h2 { margin: 0; font-size: 0.87rem; font-weight: 700; }
+    .card-header p { margin: 0.18rem 0 0; color: var(--muted-foreground); font-size: 0.72rem; }
+    .card-content { padding: 0.35rem 1rem 1rem; }
+    .metric { padding: 1rem; }
+    .metric-label { color: var(--muted-foreground); font-size: 0.68rem; font-weight: 650; }
+    .metric-value { display: block; margin-top: 0.35rem; font-size: 1.42rem; font-weight: 700; }
+    .metric-note { display: block; margin-top: 0.2rem; color: var(--muted-foreground); font-size: 0.67rem; }
+    .definition-list { display: grid; margin: 0; }
+    .definition-row { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 1rem; padding: 0.7rem 0; border-bottom: 1px solid var(--border); }
+    .definition-row:last-child { border-bottom: 0; }
+    .definition-row dt { color: var(--muted-foreground); font-size: 0.72rem; }
+    .definition-row dd { margin: 0; font-size: 0.75rem; overflow-wrap: anywhere; }
+    .mono { font-family: "Cascadia Code", Consolas, monospace; font-size: 0.68rem; }
+    .copy-bubble { display: inline-flex; max-width: 100%; min-height: 28px; align-items: center; gap: 0.4rem; padding: 0.26rem 0.55rem; color: #34585a; background: var(--teal-soft); border: 1px solid #c4dbd9; border-radius: 999px; cursor: pointer; }
+    .copy-bubble:hover { background: #dcebea; }
+    .copy-bubble:disabled { color: #8b9298; background: #f0f2f3; border-color: var(--border); cursor: not-allowed; }
+    .copy-bubble:disabled:hover { background: #f0f2f3; }
+    .copy-bubble code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .copy-bubble svg { width: 12px; height: 12px; flex: 0 0 auto; }
+    .issuer-list { display: grid; }
+    .issuer-section { min-width: 0; padding: 0.6rem 0; }
+    .issuer-section:first-child { padding-top: 0; }
+    .issuer-section:last-child { padding-bottom: 0; border-top: 1px solid var(--border); }
+    .issuer-section-header { display: flex; min-height: 34px; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.4rem; }
+    .issuer-section-title { display: flex; min-width: 0; align-items: center; gap: 0.5rem; }
+    .issuer-section-title h3 { margin: 0; font-size: 0.74rem; font-weight: 700; }
+    .issuer-action { width: 84px; flex: 0 0 84px; }
+    .issuer-url { width: 100%; justify-content: space-between; border-radius: 6px; }
+    .issuer-url code { min-width: 0; }
+    .status { display: inline-flex; align-items: center; gap: 0.34rem; font-size: 0.7rem; font-weight: 650; }
+    .status::before { width: 7px; height: 7px; content: ""; background: var(--success); border-radius: 50%; }
+    .badge { display: inline-flex; min-height: 22px; align-items: center; gap: 0.3rem; padding: 0.12rem 0.42rem; color: #4c555b; background: var(--muted); border: 1px solid var(--border); border-radius: 999px; font-size: 0.65rem; font-weight: 650; white-space: nowrap; }
+    .badge.teal { color: #285d5f; background: var(--teal-soft); border-color: #c4dbd9; }
+    .badge.coral { color: var(--coral); background: var(--coral-soft); border-color: #ecc9c0; }
+    .badge svg { width: 11px; height: 11px; }
+    .callout { display: flex; gap: 0.7rem; padding: 0.8rem; color: #315153; background: var(--teal-soft); border-left: 3px solid var(--teal); border-radius: 0 6px 6px 0; font-size: 0.72rem; }
+    .callout svg { width: 16px; flex: 0 0 auto; margin-top: 0.08rem; }
+    .danger-zone { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1rem; padding: 1rem; background: var(--card); border: 1px solid #e6b9b2; border-radius: var(--radius); }
+    .danger-zone h2 { margin: 0; color: #8f2f22; font-size: 0.82rem; }
+    .danger-zone p { margin: 0.2rem 0 0; color: var(--muted-foreground); font-size: 0.7rem; }
+
+    .toolbar { display: flex; align-items: center; gap: 0.55rem; padding: 0.75rem; border-bottom: 1px solid var(--border); }
+    .search { display: flex; min-width: 220px; flex: 1 1 320px; align-items: center; gap: 0.45rem; padding: 0 0.6rem; background: var(--card); border: 1px solid var(--input); border-radius: 6px; }
+    .search:focus-within { border-color: var(--ring); box-shadow: 0 0 0 3px rgba(60,98,100,.12); }
+    .search svg { width: 14px; color: var(--muted-foreground); }
+    .search input { width: 100%; min-height: 34px; padding: 0; background: transparent; border: 0; outline: 0; font-size: 0.73rem; }
+    select { min-height: 36px; padding: 0.4rem 1.8rem 0.4rem 0.6rem; color: var(--foreground); background: var(--card); border: 1px solid var(--input); border-radius: 6px; font-size: 0.72rem; }
+    .table-wrap { width: 100%; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 0.72rem 0.85rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+    th { color: var(--muted-foreground); background: #fbfcfc; font-size: 0.64rem; font-weight: 750; text-transform: uppercase; white-space: nowrap; }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: #fafbfb; }
+    .person { display: flex; min-width: 180px; align-items: center; gap: 0.6rem; }
+    .person .avatar { width: 28px; height: 28px; border-radius: 6px; background: #63777a; }
+    .person strong, .person small { display: block; }
+    .person strong { font-size: 0.74rem; }
+    .person small { color: var(--muted-foreground); font-size: 0.64rem; }
+    .role-line { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+
+    .playground { display: grid; height: calc(100svh - 178px); min-height: 520px; grid-template-columns: 230px minmax(0, 1fr); overflow: hidden; }
+    .file-tree { padding: 0.8rem; background: #f8f9f9; border-right: 1px solid var(--border); }
+    .file-tree-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem; }
+    .file-tree-head strong { font-size: 0.7rem; }
+    .file-item { display: flex; width: 100%; min-height: 32px; align-items: center; gap: 0.45rem; padding: 0.3rem 0.4rem; color: #566067; background: transparent; border: 0; border-radius: 5px; font-size: 0.68rem; text-align: left; }
+    .file-item.active { color: #244e50; background: var(--teal-soft); }
+    .file-item svg { width: 13px; }
+    .editor { display: grid; grid-template-rows: auto 1fr; background: #fff; }
+    .editor-head { display: flex; min-height: 42px; align-items: center; justify-content: space-between; padding: 0 0.8rem; border-bottom: 1px solid var(--border); }
+    .editor-head strong { font-size: 0.7rem; }
+    .code { margin: 0; padding: 1rem; overflow: auto; color: #334345; background: #fcfdfd; font-family: "Cascadia Code", Consolas, monospace; font-size: 0.7rem; line-height: 1.8; }
+
+    .overlay { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 1rem; background: rgba(20,25,28,.45); animation: fade-in 130ms ease-out both; }
+    .dialog { width: min(460px, 100%); background: var(--popover); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 22px 58px rgba(18,25,28,.22); }
+    .dialog-header, .dialog-body, .dialog-footer { padding: 1rem; }
+    .dialog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--border); }
+    .dialog-header h2 { margin: 0; font-size: 0.95rem; }
+    .dialog-header p { margin: 0.2rem 0 0; color: var(--muted-foreground); font-size: 0.7rem; }
+    .dialog-body { display: grid; gap: 0.8rem; }
+    .dialog-footer { display: flex; justify-content: flex-end; gap: 0.5rem; background: #fafbfb; border-top: 1px solid var(--border); }
+    .field { display: grid; gap: 0.32rem; }
+    .field label { color: #4c545a; font-size: 0.7rem; font-weight: 650; }
+    .field input { width: 100%; min-height: 38px; padding: 0.45rem 0.6rem; background: var(--card); border: 1px solid var(--input); border-radius: 6px; outline: 0; }
+    .field input:focus { border-color: var(--ring); box-shadow: 0 0 0 3px rgba(60,98,100,.12); }
+    .permission { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 0.6rem; padding: 0.7rem; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+    .permission:hover { background: var(--muted); }
+    .permission input { width: 15px; height: 15px; margin: 0.15rem 0 0; accent-color: var(--teal); }
+    .permission strong, .permission span { display: block; }
+    .permission strong { font-size: 0.72rem; }
+    .permission span { margin-top: 0.08rem; color: var(--muted-foreground); font-size: 0.66rem; }
+    .toast { position: fixed; right: 1rem; bottom: 1rem; z-index: 120; display: flex; align-items: center; gap: 0.5rem; padding: 0.7rem 0.85rem; color: #20583b; background: #edf8f1; border: 1px solid #bedfca; border-radius: 7px; box-shadow: 0 12px 28px rgba(18,25,28,.14); font-size: 0.72rem; animation: menu-in 140ms ease-out both; }
+    .toast svg { width: 15px; }
+
+    @keyframes menu-in { from { opacity: 0; transform: translateY(4px) scale(.985); } to { opacity: 1; transform: none; } }
+    @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes sidebar-in { from { transform: translateX(-18px); opacity: .7; } to { transform: none; opacity: 1; } }
+
+    @media (max-width: 900px) {
+      .sidebar { transform: translateX(-100%); transition: transform 180ms ease-out; }
+      .sidebar.open { transform: none; box-shadow: 16px 0 36px rgba(18,25,28,.17); animation: sidebar-in 180ms ease-out both; }
+      .sidebar-scrim { position: fixed; inset: 0; z-index: 35; background: rgba(20,25,28,.35); }
+      .sidebar-inset { margin-left: 0; }
+      .mobile-bar { display: flex; min-height: 52px; align-items: center; gap: 0.65rem; padding: 0 1rem; background: rgba(255,255,255,.94); border-bottom: 1px solid var(--border); backdrop-filter: blur(10px); }
+      .mobile-bar strong { min-width: 0; overflow: hidden; font-size: 0.78rem; text-overflow: ellipsis; white-space: nowrap; }
+      .content { width: min(100% - 2rem, 1160px); padding-top: 1.35rem; }
+      .grid.two { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      .content { width: min(100% - 1.2rem, 1160px); }
+      .content-header { align-items: stretch; flex-direction: column; }
+      .actions { justify-content: flex-start; }
+      .grid.three { grid-template-columns: 1fr; }
+      .toolbar { align-items: stretch; flex-direction: column; }
+      .search { min-width: 0; flex-basis: auto; }
+      .toolbar select { width: 100%; }
+      .definition-row { grid-template-columns: 1fr; gap: 0.2rem; }
+      .playground { min-height: 560px; grid-template-columns: 1fr; grid-template-rows: 170px 1fr; }
+      .content.playground-active .playground { height: calc(100svh - 277px); min-height: 520px; }
+      .file-tree { overflow-y: auto; border-right: 0; border-bottom: 1px solid var(--border); }
+      .sidebar { width: min(18rem, 88vw); }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="sidebar-scrim" id="sidebar-scrim" hidden></div>
+    <aside class="sidebar" id="sidebar" aria-label="Console navigation">
+      <div class="sidebar-header">
+        <div class="brand">
+          <span class="brand-mark">U</span>
+          <div class="brand-copy"><strong>UniCAS</strong><span>Developer Console</span></div>
+        </div>
+      </div>
+
+      <div class="sidebar-content">
+        <section class="sidebar-group">
+          <div class="group-heading">
+            <span class="group-label">Apps</span>
+            <button class="group-action" id="new-app" type="button" title="Create App" aria-label="Create App"><i data-lucide="plus"></i></button>
+          </div>
+          <ul class="sidebar-menu" id="app-menu">
+            <li><button class="sidebar-menu-button app-link active" type="button" data-app="canvas" title="Canvas Sync"><span class="app-icon">CS</span><span class="menu-copy"><strong>Canvas Sync</strong></span></button></li>
+            <li><button class="sidebar-menu-button app-link" type="button" data-app="archive" title="Archive Tools"><span class="app-icon">AT</span><span class="menu-copy"><strong>Archive Tools</strong></span></button></li>
+            <li><button class="sidebar-menu-button app-link" type="button" data-app="media" title="Media Pipeline With A Very Long Name"><span class="app-icon">MP</span><span class="menu-copy"><strong>Media Pipeline With A Very Long Name</strong></span></button></li>
+          </ul>
+        </section>
+
+        <div class="sidebar-separator"></div>
+
+        <section class="sidebar-group">
+          <div class="group-heading"><span class="group-label">Administration</span></div>
+          <ul class="sidebar-menu">
+            <li>
+              <button class="sidebar-menu-button" id="platform-link" type="button">
+                <span class="app-icon platform-icon"><i data-lucide="shield-check"></i></span>
+                <span class="menu-copy"><strong>Platform access</strong><small>Principals and authority</small></span>
+                <span class="admin-badge">Admin</span>
+              </button>
+            </li>
+          </ul>
+        </section>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="dropdown" id="profile-menu" role="menu" hidden>
+          <div class="dropdown-label"><strong>Wei Zhang</strong><span>wei@unicas.work</span></div>
+          <div class="dropdown-separator"></div>
+          <button class="dropdown-item" type="button" role="menuitem"><i data-lucide="book-open-text"></i>Documentation<i data-lucide="external-link" style="margin-left:auto"></i></button>
+          <button class="dropdown-item" id="connect-ai" type="button" role="menuitem"><i data-lucide="cable"></i>Connect AI tools</button>
+          <div class="dropdown-separator"></div>
+          <button class="dropdown-item destructive" type="button" role="menuitem"><i data-lucide="log-out"></i>Sign out</button>
+        </div>
+        <button class="profile-trigger" id="profile-trigger" type="button" aria-expanded="false" aria-haspopup="menu">
+          <span class="avatar">WZ</span>
+          <span class="profile-copy"><strong>Wei Zhang</strong><span>Platform admin</span></span>
+          <i data-lucide="chevrons-up-down"></i>
+        </button>
+      </div>
+    </aside>
+
+    <div class="sidebar-inset">
+      <div class="mobile-bar"><button class="icon-button" id="mobile-menu" type="button" aria-label="Open navigation"><i data-lucide="panel-left"></i></button><strong id="mobile-title">Canvas Sync</strong></div>
+
+      <main class="content">
+        <section id="app-workspace">
+          <header class="content-header">
+            <div><p class="eyebrow">App</p><h1 id="app-title">Canvas Sync</h1><p id="app-description">Shared canvas persistence for collaborative workspaces.</p></div>
+            <div class="actions"><span class="badge teal" id="app-status-badge"><i data-lucide="circle-check"></i>Active</span></div>
+          </header>
+
+          <nav class="tabs-list" aria-label="App details" role="tablist">
+            <button class="tab-trigger active" type="button" role="tab" aria-selected="true" data-tab="overview">Overview</button>
+            <button class="tab-trigger" type="button" role="tab" aria-selected="false" data-tab="members">Members</button>
+            <button class="tab-trigger" type="button" role="tab" aria-selected="false" data-tab="invitations">Invitations</button>
+            <button class="tab-trigger" type="button" role="tab" aria-selected="false" data-tab="playground">Playground</button>
+            <button class="tab-trigger" type="button" role="tab" aria-selected="false" data-tab="logs">Change Logs</button>
+          </nav>
+
+          <div class="tab-panel" id="overview-panel" role="tabpanel">
+            <div class="grid three" style="margin-bottom:1rem">
+              <div class="card metric"><span class="metric-label">Stored data</span><strong class="metric-value">18.4 GB</strong><span class="metric-note">Across 24 active Spaces</span></div>
+              <div class="card metric"><span class="metric-label">App administrators</span><strong class="metric-value">4</strong><span class="metric-note">Equal App authority</span></div>
+              <div class="card metric"><span class="metric-label">Issuer health</span><strong class="metric-value" style="font-size:1.05rem;color:var(--success)">Healthy</strong><span class="metric-note">Verified 11 minutes ago</span></div>
+            </div>
+            <div class="grid two" style="margin-bottom:1rem">
+              <section class="card">
+                <header class="card-header"><div><h2>App identity</h2><p>Stable identity and administrator-facing metadata.</p></div><button class="button ghost" type="button"><i data-lucide="pencil"></i>Edit</button></header>
+                <div class="card-content"><dl class="definition-list"><div class="definition-row"><dt>App ID</dt><dd><button class="copy-bubble" id="copy-app-id" type="button" title="Copy App ID" aria-label="Copy App ID"><code id="app-id">app_7h3k9c</code><i data-lucide="copy"></i></button></dd></div><div class="definition-row"><dt>Status</dt><dd><span class="status" id="app-status-detail">Active</span></dd></div><div class="definition-row"><dt>Created</dt><dd>August 21, 2026</dd></div><div class="definition-row"><dt>Description</dt><dd id="app-detail-description">Shared canvas persistence for collaborative workspaces.</dd></div></dl></div>
+              </section>
+              <section class="card">
+                <header class="card-header"><div><h2>OAuth issuers</h2><p>Authorization servers trusted for Space capabilities.</p></div></header>
+                <div class="card-content">
+                  <div class="issuer-list">
+                    <section class="issuer-section" aria-labelledby="managed-issuer-title"><div class="issuer-section-header"><div class="issuer-section-title"><h3 id="managed-issuer-title">Managed</h3></div><button class="button ghost issuer-action" id="toggle-managed" type="button"><i data-lucide="power"></i>Disable</button></div><button class="copy-bubble issuer-url" id="copy-managed-issuer" type="button" title="Copy managed issuer URL" aria-label="Copy managed issuer URL"><code>https://api.unicas.work/managed-issuers/app_7h3k9c</code><i data-lucide="copy"></i></button></section>
+                    <section class="issuer-section" aria-labelledby="production-issuer-title"><div class="issuer-section-header"><div class="issuer-section-title"><h3 id="production-issuer-title">Production</h3></div><button class="button ghost issuer-action" id="change-issuer" type="button"><i data-lucide="replace"></i>Change</button></div><button class="copy-bubble issuer-url" id="copy-production-issuer" type="button" title="Copy production issuer URL" aria-label="Copy production issuer URL"><code>https://auth.canvas.example</code><i data-lucide="copy"></i></button></section>
+                  </div>
+                </div>
+              </section>
+            </div>
+            <section class="danger-zone" aria-labelledby="danger-zone-title"><div><h2 id="danger-zone-title">Danger zone</h2><p>Suspend all Space data-plane access while keeping App administration available.</p></div><button class="button destructive" id="suspend-app" type="button"><i data-lucide="pause-circle"></i>Suspend App</button></section>
+          </div>
+
+          <div class="tab-panel" id="members-panel" role="tabpanel" hidden>
+            <section class="card"><header class="card-header"><div><h2>App members</h2><p>Members have equal administrator authority over this App.</p></div><button class="button primary" id="invite-member" type="button"><i data-lucide="user-plus"></i>Invite member</button></header><div class="table-wrap"><table><thead><tr><th>Principal</th><th>Identity issuer</th><th>Joined</th><th></th></tr></thead><tbody><tr><td><div class="person"><span class="avatar">WZ</span><div><strong>Wei Zhang</strong><small>wei@unicas.work</small></div></div></td><td class="mono">https://accounts.google.com</td><td>Aug 21, 2026</td><td><button class="button ghost" type="button"><i data-lucide="ellipsis"></i></button></td></tr><tr><td><div class="person"><span class="avatar">LW</span><div><strong>Leo Wang</strong><small>leo@example.dev</small></div></div></td><td class="mono">https://accounts.google.com</td><td>Sep 12, 2026</td><td><button class="button ghost" type="button"><i data-lucide="ellipsis"></i></button></td></tr></tbody></table></div></section>
+          </div>
+
+          <div class="tab-panel" id="invitations-panel" role="tabpanel" hidden>
+            <section class="card"><header class="card-header"><div><h2>Member invitations</h2><p>Pending and recent invitations for this App.</p></div><button class="button primary" type="button"><i data-lucide="user-plus"></i>Invite member</button></header><div class="table-wrap"><table><thead><tr><th>Email constraint</th><th>Status</th><th>Created</th><th>Expires</th><th></th></tr></thead><tbody><tr><td>new-member@example.dev</td><td><span class="badge">Pending</span></td><td>Sep 15, 2026</td><td>Sep 16, 2026</td><td><button class="button ghost destructive revoke-app-invite" type="button">Revoke</button></td></tr><tr><td>leo@example.dev</td><td><span class="status">Accepted</span></td><td>Sep 11, 2026</td><td>Sep 12, 2026</td><td></td></tr><tr><td>old@example.dev</td><td><span class="badge">Expired</span></td><td>Sep 4, 2026</td><td>Sep 5, 2026</td><td></td></tr></tbody></table></div></section>
+          </div>
+
+          <div class="tab-panel" id="playground-panel" role="tabpanel" hidden>
+            <section class="card playground">
+              <aside class="file-tree"><div class="file-tree-head"><strong>Personal Space</strong><button class="icon-button" type="button"><i data-lucide="file-plus-2"></i></button></div><button class="file-item" type="button"><i data-lucide="folder-open"></i>samples</button><button class="file-item active" type="button"><i data-lucide="file-json"></i>canvas-state.json</button><button class="file-item" type="button"><i data-lucide="file"></i>notes.txt</button></aside>
+              <div class="editor"><div class="editor-head"><strong>canvas-state.json</strong><div class="actions"><button class="button ghost" type="button"><i data-lucide="rotate-cw"></i>Refresh</button><button class="button primary" type="button"><i data-lucide="save"></i>Commit</button></div></div><pre class="code">{
+  "version": 12,
+  "viewport": { "x": 40, "y": 18 },
+  "objects": [
+    { "id": "shape_01", "type": "rectangle" },
+    { "id": "text_02", "type": "label" }
+  ]
+}</pre></div>
+            </section>
+          </div>
+
+          <div class="tab-panel" id="logs-panel" role="tabpanel" hidden>
+            <section class="card"><header class="card-header"><div><h2>Change Logs</h2><p>Append-only administrative changes for this App.</p></div></header><div class="table-wrap"><table><thead><tr><th>Time</th><th>Action</th><th>Actor</th><th>Target</th><th>Request ID</th></tr></thead><tbody><tr><td>Sep 15, 19:32</td><td class="mono">member.invitation_created</td><td>Wei Zhang</td><td>membership</td><td class="mono">req_01K58T9</td></tr><tr><td>Sep 14, 11:04</td><td class="mono">managed_issuer.enabled</td><td>Mina Chen</td><td>oauth-issuer</td><td class="mono">req_01K56B4</td></tr><tr><td>Sep 12, 16:48</td><td class="mono">member.invitation_accepted</td><td>Leo Wang</td><td>membership</td><td class="mono">req_01K52PQ</td></tr></tbody></table></div></section>
+          </div>
+        </section>
+
+        <section id="platform-workspace" hidden>
+          <header class="content-header"><div><p class="eyebrow">Platform administration</p><h1>Access management</h1><p>Control who may use UniCAS and who may create Apps.</p></div><div class="actions"><button class="button primary" id="invite-developer" type="button"><i data-lucide="user-plus"></i>Invite developer</button></div></header>
+          <nav class="tabs-list" aria-label="Platform administration" role="tablist"><button class="tab-trigger active" type="button" data-platform-tab="principals">Principals</button><button class="tab-trigger" type="button" data-platform-tab="invitations">Invitations</button><button class="tab-trigger" type="button" data-platform-tab="audit">Audit</button></nav>
+          <div id="principals-platform-panel">
+            <div class="grid three" style="margin-bottom:1rem"><div class="card metric"><span class="metric-label">Active principals</span><strong class="metric-value">3</strong><span class="metric-note">Platform or App access</span></div><div class="card metric"><span class="metric-label">App creators</span><strong class="metric-value">2</strong><span class="metric-note">Explicit authority</span></div><div class="card metric"><span class="metric-label">Blocked</span><strong class="metric-value">1</strong><span class="metric-note">Denied across admin plane</span></div></div>
+            <section class="card"><div class="toolbar"><label class="search"><i data-lucide="search"></i><input type="search" placeholder="Search name, email, or subject" aria-label="Search principals"></label><select aria-label="Filter authority"><option>All authority</option><option>Platform admin</option><option>App creator</option><option>App member only</option></select></div><div class="table-wrap"><table><thead><tr><th>Principal</th><th>Platform authority</th><th>App access</th><th>Status</th><th></th></tr></thead><tbody><tr><td><div class="person"><span class="avatar">WZ</span><div><strong>Wei Zhang</strong><small>wei@unicas.work</small></div></div></td><td><div class="role-line"><span class="badge coral"><i data-lucide="shield"></i>Platform admin</span><span class="badge teal">App creator</span></div></td><td>3 Apps</td><td><span class="status">Active</span></td><td><button class="button ghost" type="button">Manage</button></td></tr><tr><td><div class="person"><span class="avatar">MC</span><div><strong>Mina Chen</strong><small>mina@unicas.work</small></div></div></td><td><span class="badge teal">App creator</span></td><td>2 Apps</td><td><span class="status">Active</span></td><td><button class="button ghost" type="button">Manage</button></td></tr><tr><td><div class="person"><span class="avatar">LW</span><div><strong>Leo Wang</strong><small>leo@example.dev</small></div></div></td><td style="color:var(--muted-foreground)">None</td><td>Canvas Sync</td><td><span class="status">Active</span></td><td><button class="button ghost" type="button">Manage</button></td></tr></tbody></table></div></section>
+          </div>
+          <div id="invitations-platform-panel" hidden><section class="card"><header class="card-header"><div><h2>Developer invitations</h2><p>Pending and recently accepted platform authority invitations.</p></div></header><div class="table-wrap"><table><thead><tr><th>Email</th><th>Authority</th><th>Status</th><th>Expires</th><th></th></tr></thead><tbody><tr><td>devon@unicas.work</td><td><span class="badge teal">App creator</span></td><td><span class="badge">Pending</span></td><td>Sep 17, 2026</td><td><button class="button ghost destructive" type="button">Revoke</button></td></tr><tr><td>mina@unicas.work</td><td><span class="badge teal">App creator</span></td><td><span class="status">Accepted</span></td><td>Sep 10, 2026</td><td></td></tr></tbody></table></div></section></div>
+          <div id="audit-platform-panel" hidden><section class="card"><header class="card-header"><div><h2>Platform audit</h2><p>Append-only platform authorization history.</p></div></header><div class="table-wrap"><table><thead><tr><th>Time</th><th>Action</th><th>Actor</th><th>Target</th><th>Result</th></tr></thead><tbody><tr><td>Sep 15, 20:14</td><td class="mono">platform_access.authority_changed</td><td>Wei Zhang</td><td>Mina Chen</td><td><span class="status">Succeeded</span></td></tr><tr><td>Sep 13, 16:07</td><td class="mono">app.create_denied</td><td>Leo Wang</td><td>App creation</td><td><span class="badge coral">Denied</span></td></tr></tbody></table></div></section></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="overlay" id="create-app-dialog" hidden><section class="dialog" role="dialog" aria-modal="true" aria-labelledby="create-app-title"><header class="dialog-header"><div><h2 id="create-app-title">Create an App</h2><p>A stable App ID will be generated automatically.</p></div><button class="icon-button close-dialog" type="button" aria-label="Close"><i data-lucide="x"></i></button></header><div class="dialog-body"><div class="field"><label for="new-app-name">Display name</label><input id="new-app-name" type="text" placeholder="e.g. Document Sync"></div></div><footer class="dialog-footer"><button class="button close-dialog" type="button">Cancel</button><button class="button primary" id="create-app-submit" type="button">Create App</button></footer></section></div>
+  <div class="overlay" id="invite-dialog" hidden><section class="dialog" role="dialog" aria-modal="true" aria-labelledby="invite-title"><header class="dialog-header"><div><h2 id="invite-title">Invite internal developer</h2><p>Bind platform authority to a verified Google email.</p></div><button class="icon-button close-invite" type="button" aria-label="Close"><i data-lucide="x"></i></button></header><div class="dialog-body"><div class="field"><label for="developer-email">Google account email</label><input id="developer-email" type="email" placeholder="developer@unicas.work"></div><label class="permission"><input type="checkbox" checked><span><strong>App creator</strong><span>May create Apps and becomes their first administrator.</span></span></label><label class="permission"><input type="checkbox"><span><strong>Platform admin</strong><span>May manage platform access and audit.</span></span></label></div><footer class="dialog-footer"><button class="button close-invite" type="button">Cancel</button><button class="button primary" id="invite-submit" type="button">Create invitation</button></footer></section></div>
+  <div class="overlay" id="ai-dialog" hidden><section class="dialog" role="dialog" aria-modal="true" aria-labelledby="ai-title"><header class="dialog-header"><div><h2 id="ai-title">Connect AI tools</h2><p>Use the authenticated UniCAS CLI as a local MCP server.</p></div><button class="icon-button close-ai" type="button" aria-label="Close"><i data-lucide="x"></i></button></header><div class="dialog-body"><div class="callout"><i data-lucide="terminal"></i><code class="mono">unicas login<br>unicas mcp</code></div><div class="field"><label>MCP server URL</label><input readonly value="https://api.unicas.work/mcp"></div></div><footer class="dialog-footer"><button class="button close-ai" type="button">Done</button></footer></section></div>
+  <div class="overlay" id="suspend-dialog" hidden><section class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="suspend-title"><header class="dialog-header"><div><h2 id="suspend-title">Suspend this App?</h2><p>Canvas Sync remains visible to its administrators.</p></div><button class="icon-button close-suspend" type="button" aria-label="Close"><i data-lucide="x"></i></button></header><div class="dialog-body"><div class="callout"><i data-lucide="shield-alert"></i><div>All Space data-plane reads, writes, and management requests will fail after the bounded authority cache expires. Playground will be unavailable. App configuration, members, issuers, audit, and Restore remain accessible.</div></div></div><footer class="dialog-footer"><button class="button close-suspend" type="button">Cancel</button><button class="button destructive" id="confirm-suspend" type="button"><i data-lucide="pause-circle"></i>Suspend App</button></footer></section></div>
+  <div class="overlay" id="issuer-dialog" hidden><section class="dialog" role="dialog" aria-modal="true" aria-labelledby="issuer-title"><header class="dialog-header"><div><h2 id="issuer-title">Change production OAuth issuer</h2><p>The current issuer remains active until its replacement is verified.</p></div><button class="icon-button close-issuer" type="button" aria-label="Close"><i data-lucide="x"></i></button></header><div class="dialog-body"><div class="field"><label for="replacement-issuer">Replacement issuer URL</label><input id="replacement-issuer" type="url" placeholder="https://authorization.example"></div><div class="callout"><i data-lucide="search-check"></i><div>UniCAS will inspect discovery metadata and JWKS, then request a signed ownership proof before atomically activating the replacement.</div></div></div><footer class="dialog-footer"><button class="button close-issuer" type="button">Cancel</button><button class="button primary" id="inspect-issuer" type="button"><i data-lucide="search"></i>Inspect replacement</button></footer></section></div>
+  <div class="toast" id="toast" hidden><i data-lucide="circle-check"></i><span id="toast-copy">Saved</span></div>
+
+  <script>
+    const apps = {
+      canvas: { name: "Canvas Sync", id: "app_7h3k9c", description: "Shared canvas persistence for collaborative workspaces." },
+      archive: { name: "Archive Tools", id: "app_2m8p4q", description: "Long-term immutable asset retention and inspection." },
+      media: { name: "Media Pipeline With A Very Long Name", id: "app_9x1d6r", description: "Content-addressed media ingest, transformation, and delivery." }
+    };
+    let selectedApp = "canvas";
+    let currentTab = "overview";
+    const sidebar = document.getElementById("sidebar");
+    const scrim = document.getElementById("sidebar-scrim");
+
+    function icons() { if (window.lucide) window.lucide.createIcons(); }
+    function closeSidebar() { sidebar.classList.remove("open"); scrim.hidden = true; document.body.style.overflow = ""; }
+    document.getElementById("mobile-menu").addEventListener("click", () => { sidebar.classList.add("open"); scrim.hidden = false; document.body.style.overflow = "hidden"; });
+    scrim.addEventListener("click", closeSidebar);
+
+    function selectApp(key) {
+      selectedApp = key;
+      const app = apps[key];
+      document.querySelectorAll(".app-link").forEach((link) => link.classList.toggle("active", link.dataset.app === key));
+      document.getElementById("platform-link").classList.remove("active");
+      document.getElementById("app-workspace").hidden = false;
+      document.getElementById("platform-workspace").hidden = true;
+      document.getElementById("app-title").textContent = app.name;
+      document.getElementById("mobile-title").textContent = app.name;
+      document.getElementById("app-description").textContent = app.description;
+      document.getElementById("app-detail-description").textContent = app.description;
+      document.getElementById("app-id").textContent = app.id;
+      selectTab(currentTab);
+      closeSidebar();
+    }
+    document.querySelectorAll(".app-link").forEach((link) => link.addEventListener("click", () => selectApp(link.dataset.app)));
+
+    function selectTab(tab) {
+      currentTab = tab;
+      document.querySelector("main.content").classList.toggle("playground-active", tab === "playground");
+      document.querySelectorAll("[data-tab]").forEach((trigger) => { const active = trigger.dataset.tab === tab; trigger.classList.toggle("active", active); trigger.setAttribute("aria-selected", String(active)); });
+      ["overview", "members", "invitations", "playground", "logs"].forEach((name) => { document.getElementById(`${name}-panel`).hidden = name !== tab; });
+    }
+    document.querySelectorAll("[data-tab]").forEach((trigger) => trigger.addEventListener("click", () => selectTab(trigger.dataset.tab)));
+    document.querySelectorAll("[data-goto-tab]").forEach((trigger) => trigger.addEventListener("click", () => selectTab(trigger.dataset.gotoTab)));
+
+    document.getElementById("platform-link").addEventListener("click", () => {
+      document.querySelectorAll(".app-link").forEach((link) => link.classList.remove("active"));
+      document.getElementById("platform-link").classList.add("active");
+      document.getElementById("app-workspace").hidden = true;
+      document.getElementById("platform-workspace").hidden = false;
+      document.getElementById("mobile-title").textContent = "Platform access";
+      closeSidebar();
+    });
+    document.querySelectorAll("[data-platform-tab]").forEach((trigger) => trigger.addEventListener("click", () => {
+      const tab = trigger.dataset.platformTab;
+      document.querySelectorAll("[data-platform-tab]").forEach((item) => item.classList.toggle("active", item === trigger));
+      ["principals", "invitations", "audit"].forEach((name) => { document.getElementById(`${name}-platform-panel`).hidden = name !== tab; });
+    }));
+    const profileTrigger = document.getElementById("profile-trigger");
+    const profileMenu = document.getElementById("profile-menu");
+    function closeProfile() { profileMenu.hidden = true; profileTrigger.setAttribute("aria-expanded", "false"); }
+    profileTrigger.addEventListener("click", () => { const open = profileMenu.hidden; profileMenu.hidden = !open; profileTrigger.setAttribute("aria-expanded", String(open)); });
+
+    function openDialog(id, focusId) { closeProfile(); document.getElementById(id).hidden = false; document.body.style.overflow = "hidden"; if (focusId) setTimeout(() => document.getElementById(focusId).focus(), 0); }
+    function closeDialog(id) { document.getElementById(id).hidden = true; document.body.style.overflow = ""; }
+    document.getElementById("new-app").addEventListener("click", () => openDialog("create-app-dialog", "new-app-name"));
+    document.querySelectorAll(".close-dialog").forEach((button) => button.addEventListener("click", () => closeDialog("create-app-dialog")));
+    document.getElementById("create-app-submit").addEventListener("click", () => { closeDialog("create-app-dialog"); showToast("App created"); });
+    document.getElementById("invite-developer").addEventListener("click", () => openDialog("invite-dialog", "developer-email"));
+    document.querySelectorAll(".close-invite").forEach((button) => button.addEventListener("click", () => closeDialog("invite-dialog")));
+    document.getElementById("invite-submit").addEventListener("click", () => { closeDialog("invite-dialog"); showToast("Developer invitation created"); });
+    document.getElementById("connect-ai").addEventListener("click", () => openDialog("ai-dialog"));
+    document.querySelectorAll(".close-ai").forEach((button) => button.addEventListener("click", () => closeDialog("ai-dialog")));
+    document.getElementById("invite-member").addEventListener("click", () => showToast("App member invitation flow"));
+    document.querySelectorAll(".revoke-app-invite").forEach((button) => button.addEventListener("click", () => { button.closest("tr").remove(); showToast("Member invitation revoked"); }));
+    document.getElementById("copy-app-id").addEventListener("click", () => showToast(`Copied ${apps[selectedApp].id}`));
+    document.getElementById("copy-managed-issuer").addEventListener("click", () => showToast("Managed issuer URL copied"));
+    document.getElementById("copy-production-issuer").addEventListener("click", () => showToast("Production issuer URL copied"));
+    let managedEnabled = true;
+    document.getElementById("toggle-managed").addEventListener("click", (event) => { managedEnabled = !managedEnabled; const issuerUrl = document.getElementById("copy-managed-issuer"); issuerUrl.disabled = !managedEnabled; issuerUrl.title = managedEnabled ? "Copy managed issuer URL" : "Activate the managed issuer to copy its URL"; event.currentTarget.innerHTML = `<i data-lucide="power"></i>${managedEnabled ? "Disable" : "Activate"}`; icons(); showToast(`Managed issuer ${managedEnabled ? "activated" : "disabled"}`); });
+    document.getElementById("change-issuer").addEventListener("click", () => openDialog("issuer-dialog", "replacement-issuer"));
+    document.querySelectorAll(".close-issuer").forEach((button) => button.addEventListener("click", () => closeDialog("issuer-dialog")));
+    document.getElementById("inspect-issuer").addEventListener("click", () => { closeDialog("issuer-dialog"); showToast("Replacement issuer inspected; ownership proof required"); });
+    let appSuspended = false;
+    document.getElementById("suspend-app").addEventListener("click", () => { if (appSuspended) { appSuspended = false; updateAppStatus(); showToast("App restored"); } else openDialog("suspend-dialog"); });
+    document.querySelectorAll(".close-suspend").forEach((button) => button.addEventListener("click", () => closeDialog("suspend-dialog")));
+    document.getElementById("confirm-suspend").addEventListener("click", () => { appSuspended = true; closeDialog("suspend-dialog"); updateAppStatus(); showToast("App suspended"); });
+    function updateAppStatus() { document.getElementById("app-status-badge").innerHTML = `<i data-lucide="${appSuspended ? "pause-circle" : "circle-check"}"></i>${appSuspended ? "Suspended" : "Active"}`; document.getElementById("app-status-detail").textContent = appSuspended ? "Suspended" : "Active"; const button = document.getElementById("suspend-app"); button.innerHTML = `<i data-lucide="${appSuspended ? "play-circle" : "pause-circle"}"></i>${appSuspended ? "Restore App" : "Suspend App"}`; button.classList.toggle("destructive", !appSuspended); icons(); }
+
+    let toastTimer;
+    function showToast(copy) { const toast = document.getElementById("toast"); document.getElementById("toast-copy").textContent = copy; toast.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { toast.hidden = true; }, 2400); }
+    document.addEventListener("click", (event) => { if (!profileMenu.hidden && !event.target.closest(".sidebar-footer")) closeProfile(); });
+    document.addEventListener("keydown", (event) => { if (event.key !== "Escape") return; ["create-app-dialog", "invite-dialog", "ai-dialog", "suspend-dialog", "issuer-dialog"].forEach((id) => closeDialog(id)); closeProfile(); closeSidebar(); });
+    icons();
+  </script>
+</body>
+</html>

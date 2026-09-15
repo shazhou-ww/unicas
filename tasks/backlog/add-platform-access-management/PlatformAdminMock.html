@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UniCAS Platform Admin Mock</title>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      --background: #f8f8f9;
+      --surface: #ffffff;
+      --surface-subtle: #f4f4f5;
+      --surface-hover: #f0f0f1;
+      --border: #e1e1e4;
+      --border-strong: #c9c9ce;
+      --foreground: #18181b;
+      --muted: #71717a;
+      --muted-strong: #52525b;
+      --primary: #27272a;
+      --primary-hover: #09090b;
+      --primary-foreground: #fafafa;
+      --platform: #9f341f;
+      --platform-subtle: #fff5f1;
+      --danger: #b42318;
+      --danger-hover: #912018;
+      --danger-subtle: #fff1f0;
+      --success: #26734d;
+      --success-subtle: #eef8f2;
+      --warning: #8a5a16;
+      --warning-subtle: #fff8e8;
+      --ring: #52525b;
+      --radius: 7px;
+      color-scheme: light;
+      font-synthesis: none;
+    }
+
+    * { box-sizing: border-box; }
+    html { min-height: 100%; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      color: var(--foreground);
+      background-color: var(--background);
+      background-image:
+        linear-gradient(rgba(24, 24, 27, 0.022) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(24, 24, 27, 0.022) 1px, transparent 1px);
+      background-size: 28px 28px;
+      font-family: "Aptos", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      letter-spacing: 0;
+    }
+    button, input, select { font: inherit; }
+    button { letter-spacing: 0; }
+    [hidden] { display: none !important; }
+
+    .app-header {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      display: flex;
+      min-height: 52px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0 1.25rem;
+      background: rgba(255, 255, 255, 0.95);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(10px);
+    }
+    .brand, .header-actions, .identity, .platform-context, .button, .nav-item, .tab,
+    .badge, .status, .search, .role-line, .dialog-title, .toast { display: flex; align-items: center; }
+    .brand { gap: 0.55rem; font-size: 0.92rem; font-weight: 650; }
+    .brand-mark {
+      display: grid;
+      width: 26px;
+      height: 26px;
+      place-items: center;
+      color: var(--primary-foreground);
+      background: var(--primary);
+      border-radius: 6px;
+      font-size: 0.78rem;
+      font-weight: 750;
+    }
+    .platform-context { gap: 0.45rem; padding-left: 0.75rem; border-left: 1px solid var(--border-strong); }
+    .platform-context strong { font-size: 0.82rem; font-weight: 650; }
+    .platform-pill {
+      padding: 0.12rem 0.42rem;
+      color: var(--platform);
+      background: var(--platform-subtle);
+      border: 1px solid #ebc9bf;
+      border-radius: 999px;
+      font-size: 0.67rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .header-actions { gap: 0.45rem; }
+    .header-link, .identity {
+      min-height: 34px;
+      gap: 0.4rem;
+      padding: 0.4rem 0.55rem;
+      color: var(--muted-strong);
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      font-size: 0.82rem;
+      font-weight: 550;
+    }
+    .header-link:hover, .identity:hover { color: var(--foreground); background: var(--surface-hover); }
+
+    .shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: calc(100vh - 52px); }
+    .sidebar {
+      position: sticky;
+      top: 52px;
+      height: calc(100vh - 52px);
+      padding: 1rem 0.75rem;
+      background: rgba(250, 250, 250, 0.9);
+      border-right: 1px solid var(--border);
+    }
+    .nav-label {
+      margin: 0.7rem 0.65rem 0.35rem;
+      color: var(--muted);
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .nav-item {
+      width: 100%;
+      min-height: 38px;
+      gap: 0.65rem;
+      padding: 0.5rem 0.65rem;
+      color: var(--muted-strong);
+      background: transparent;
+      border: 0;
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: left;
+    }
+    .nav-item:hover { color: var(--foreground); background: var(--surface-hover); }
+    .nav-item.active { color: var(--foreground); background: var(--surface); box-shadow: inset 3px 0 var(--platform), 0 0 0 1px var(--border); }
+    .nav-item svg { width: 16px; height: 16px; }
+    .nav-spacer { height: 0.8rem; border-bottom: 1px solid var(--border); }
+
+    main { min-width: 0; }
+    .page { width: min(1220px, calc(100% - 3rem)); margin: 0 auto; padding: 2rem 0 4rem; animation: page-in 160ms ease-out both; }
+    .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; }
+    .page-heading h1 { margin: 0; font-size: 1.55rem; line-height: 1.25; letter-spacing: 0; }
+    .page-heading p { margin: 0.3rem 0 0; color: var(--muted-strong); }
+    .page-actions { display: flex; gap: 0.55rem; }
+
+    .button {
+      min-height: 36px;
+      justify-content: center;
+      gap: 0.42rem;
+      padding: 0.46rem 0.72rem;
+      color: var(--foreground);
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+    .button:hover { background: var(--surface-hover); }
+    .button.primary { color: var(--primary-foreground); background: var(--primary); border-color: var(--primary); }
+    .button.primary:hover { background: var(--primary-hover); }
+    .button.danger { color: var(--danger); border-color: #e7b9b4; }
+    .button.danger:hover { background: var(--danger-subtle); }
+    .button.ghost { min-height: 30px; padding: 0.32rem 0.5rem; background: transparent; border-color: transparent; }
+    .button.icon-only { width: 34px; padding: 0; }
+    .button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .button svg { width: 15px; height: 15px; }
+
+    .tabs { gap: 0.25rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); }
+    .tab {
+      min-height: 40px;
+      gap: 0.42rem;
+      padding: 0.55rem 0.72rem;
+      color: var(--muted-strong);
+      background: transparent;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      font-size: 0.84rem;
+      font-weight: 600;
+    }
+    .tab.active { color: var(--foreground); border-bottom-color: var(--platform); }
+    .tab svg { width: 15px; height: 15px; }
+    .count { min-width: 20px; padding: 0 0.36rem; background: var(--surface-subtle); border-radius: 999px; font-size: 0.7rem; text-align: center; }
+
+    .summary-band {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      margin-bottom: 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .summary-item { min-width: 0; padding: 0.9rem 1rem; border-right: 1px solid var(--border); }
+    .summary-item:last-child { border-right: 0; }
+    .summary-label { color: var(--muted); font-size: 0.72rem; font-weight: 650; text-transform: uppercase; }
+    .summary-value { display: block; margin-top: 0.18rem; font-size: 1.25rem; font-weight: 700; line-height: 1.2; }
+
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+    .toolbar { display: flex; align-items: center; gap: 0.65rem; padding: 0.75rem; border-bottom: 1px solid var(--border); }
+    .search { min-width: 220px; flex: 1 1 340px; gap: 0.5rem; padding: 0 0.65rem; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; }
+    .search:focus-within { border-color: var(--ring); box-shadow: 0 0 0 3px rgba(82, 82, 91, 0.12); }
+    .search svg { width: 15px; color: var(--muted); }
+    .search input { width: 100%; min-height: 36px; padding: 0; border: 0; outline: 0; background: transparent; }
+    select, .field input {
+      min-height: 38px;
+      padding: 0.45rem 0.65rem;
+      color: var(--foreground);
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+    }
+    select:focus, .field input:focus { outline: none; border-color: var(--ring); box-shadow: 0 0 0 3px rgba(82, 82, 91, 0.12); }
+
+    .table-wrap { width: 100%; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 0.75rem 0.85rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+    th { color: var(--muted); background: #fcfcfc; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; white-space: nowrap; }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: #fafafa; }
+    .person { display: flex; min-width: 190px; align-items: center; gap: 0.65rem; }
+    .avatar { display: grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; color: #474747; background: #e9e7e5; border-radius: 50%; font-size: 0.72rem; font-weight: 750; }
+    .person strong, .person small { display: block; }
+    .person strong { font-size: 0.84rem; }
+    .person small, .muted { color: var(--muted); }
+    .role-line { flex-wrap: wrap; gap: 0.35rem; }
+    .badge { min-height: 22px; gap: 0.3rem; padding: 0.1rem 0.42rem; color: var(--muted-strong); background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 999px; font-size: 0.7rem; font-weight: 600; white-space: nowrap; }
+    .badge.platform { color: var(--platform); background: var(--platform-subtle); border-color: #ebc9bf; }
+    .badge svg { width: 12px; height: 12px; }
+    .status { width: fit-content; gap: 0.35rem; font-size: 0.76rem; font-weight: 600; white-space: nowrap; }
+    .status::before { width: 7px; height: 7px; content: ""; background: var(--success); border-radius: 50%; }
+    .status.blocked { color: var(--danger); }
+    .status.blocked::before { background: var(--danger); }
+    .status.pending { color: var(--warning); }
+    .status.pending::before { background: var(--warning); }
+    .empty { padding: 2rem; color: var(--muted); text-align: center; }
+    .pagination { display: flex; align-items: center; justify-content: space-between; padding: 0.65rem 0.8rem; color: var(--muted); border-top: 1px solid var(--border); font-size: 0.76rem; }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+      background: rgba(24, 24, 27, 0.46);
+      animation: overlay-in 140ms ease-out both;
+    }
+    .dialog { width: min(520px, 100%); max-height: calc(100vh - 2rem); overflow-y: auto; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 20px 56px rgba(24, 24, 27, 0.22); }
+    .dialog-header, .dialog-body, .dialog-footer { padding: 1rem 1.1rem; }
+    .dialog-header { display: flex; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--border); }
+    .dialog-title { align-items: flex-start; gap: 0.65rem; }
+    .dialog-title .icon-box { display: grid; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; color: var(--platform); background: var(--platform-subtle); border-radius: 6px; }
+    .dialog-title h2 { margin: 0; font-size: 1.05rem; }
+    .dialog-title p { margin: 0.18rem 0 0; color: var(--muted); font-size: 0.78rem; }
+    .dialog-body { display: grid; gap: 1rem; }
+    .dialog-footer { display: flex; justify-content: flex-end; gap: 0.5rem; background: #fcfcfc; border-top: 1px solid var(--border); }
+    .field { display: grid; gap: 0.35rem; }
+    .field label, .section-label { color: var(--muted-strong); font-size: 0.76rem; font-weight: 700; }
+    .field input { width: 100%; }
+    .permission-list { display: grid; gap: 0.55rem; }
+    .permission-option { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.65rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+    .permission-option:hover { background: var(--surface-subtle); }
+    .permission-option input { width: 16px; height: 16px; margin: 0.18rem 0 0; accent-color: var(--platform); }
+    .permission-option strong { display: block; font-size: 0.82rem; }
+    .permission-option span { display: block; margin-top: 0.08rem; color: var(--muted); font-size: 0.75rem; }
+    .warning-box { padding: 0.7rem 0.8rem; color: #723d0a; background: var(--warning-subtle); border-left: 3px solid #c57c13; border-radius: 0 6px 6px 0; font-size: 0.78rem; }
+
+    .drawer-overlay { position: fixed; inset: 52px 0 0; z-index: 80; background: rgba(24, 24, 27, 0.2); animation: overlay-in 140ms ease-out both; }
+    .drawer { position: absolute; top: 0; right: 0; width: min(440px, 100%); height: 100%; overflow-y: auto; background: var(--surface); border-left: 1px solid var(--border-strong); box-shadow: -16px 0 36px rgba(24, 24, 27, 0.12); animation: drawer-in 180ms ease-out both; }
+    .drawer-header { position: sticky; top: 0; z-index: 2; display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1rem; background: rgba(255,255,255,.96); border-bottom: 1px solid var(--border); }
+    .drawer-header h2 { margin: 0; font-size: 1.08rem; }
+    .drawer-header p { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.78rem; }
+    .drawer-body { display: grid; gap: 1.2rem; padding: 1rem; }
+    .drawer-section { display: grid; gap: 0.55rem; }
+    .drawer-section h3 { margin: 0; font-size: 0.8rem; text-transform: uppercase; color: var(--muted); }
+    .membership-list { margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 6px; }
+    .membership-list li { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--border); }
+    .membership-list li:last-child { border-bottom: 0; }
+    .mono { font-family: "Cascadia Code", Consolas, monospace; font-size: 0.73rem; overflow-wrap: anywhere; }
+    .drawer-footer { position: sticky; bottom: 0; display: flex; justify-content: space-between; gap: 0.5rem; padding: 0.8rem 1rem; background: rgba(255,255,255,.96); border-top: 1px solid var(--border); }
+
+    .audit-action { font-family: "Cascadia Code", Consolas, monospace; font-size: 0.74rem; }
+    .toast { position: fixed; right: 1rem; bottom: 1rem; z-index: 150; gap: 0.55rem; min-width: 260px; padding: 0.75rem 0.9rem; color: #164c32; background: var(--success-subtle); border: 1px solid #b8dcc8; border-radius: 7px; box-shadow: 0 12px 30px rgba(24,24,27,.15); animation: toast-in 180ms ease-out both; }
+    .toast svg { width: 17px; }
+
+    @keyframes page-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    @keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes drawer-in { from { transform: translateX(24px); opacity: .7; } to { transform: none; opacity: 1; } }
+    @keyframes toast-in { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+    @media (max-width: 900px) {
+      .shell { grid-template-columns: 1fr; }
+      .sidebar { position: sticky; top: 52px; z-index: 20; display: flex; width: 100%; height: auto; gap: 0.4rem; padding: 0.5rem 0.75rem; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); }
+      .nav-label, .nav-spacer { display: none; }
+      .nav-item { width: auto; flex: 0 0 auto; }
+      .nav-item.active { box-shadow: inset 0 -2px var(--platform); }
+      .summary-band { grid-template-columns: repeat(2, 1fr); }
+      .summary-item:nth-child(2) { border-right: 0; }
+      .summary-item:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
+    }
+    @media (max-width: 640px) {
+      .app-header { padding: 0 0.75rem; }
+      .platform-context strong, .header-link, .identity span { display: none; }
+      .page { width: min(100% - 1.25rem, 1220px); padding-top: 1.2rem; }
+      .page-header { align-items: stretch; flex-direction: column; }
+      .page-actions .button { width: 100%; }
+      .toolbar { align-items: stretch; flex-direction: column; }
+      .search { min-width: 0; width: 100%; flex-basis: auto; }
+      .summary-band { grid-template-columns: 1fr 1fr; }
+      .summary-item { padding: 0.75rem; }
+      th, td { padding: 0.65rem; }
+      .drawer-overlay { inset-top: 52px; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; } }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark">U</span>
+      <span>UniCAS</span>
+      <div class="platform-context">
+        <strong>Platform administration</strong>
+        <span class="platform-pill">Privileged</span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="header-link" type="button"><i data-lucide="book-open-text"></i><span>Documentation</span></button>
+      <button class="identity" type="button"><i data-lucide="circle-user-round"></i><span>Wei Zhang</span><i data-lucide="chevron-down"></i></button>
+    </div>
+  </header>
+
+  <div class="shell">
+    <aside class="sidebar" aria-label="Primary navigation">
+      <p class="nav-label">Workspace</p>
+      <button class="nav-item" type="button" data-workspace="apps"><i data-lucide="boxes"></i><span>My Apps</span></button>
+      <div class="nav-spacer"></div>
+      <p class="nav-label">Platform</p>
+      <button class="nav-item active" type="button" data-view="access"><i data-lucide="shield-check"></i><span>Access</span></button>
+      <button class="nav-item" type="button" data-view="invitations"><i data-lucide="mail-plus"></i><span>Invitations</span></button>
+      <button class="nav-item" type="button" data-view="audit"><i data-lucide="scroll-text"></i><span>Audit log</span></button>
+    </aside>
+
+    <main>
+      <section class="page" id="access-view">
+        <header class="page-header">
+          <div class="page-heading">
+            <h1>Platform access</h1>
+            <p>Principals with platform authority or App membership.</p>
+          </div>
+          <div class="page-actions">
+            <button class="button primary" id="open-invite" type="button"><i data-lucide="user-plus"></i>Invite developer</button>
+          </div>
+        </header>
+
+        <nav class="tabs" aria-label="Platform access views">
+          <button class="tab active" type="button" data-view="access"><i data-lucide="users"></i>Principals <span class="count">4</span></button>
+          <button class="tab" type="button" data-view="invitations"><i data-lucide="mail"></i>Invitations <span class="count">2</span></button>
+          <button class="tab" type="button" data-view="audit"><i data-lucide="history"></i>Audit</button>
+        </nav>
+
+        <div class="summary-band" aria-label="Access summary">
+          <div class="summary-item"><span class="summary-label">Active principals</span><strong class="summary-value">3</strong></div>
+          <div class="summary-item"><span class="summary-label">Platform admins</span><strong class="summary-value">2</strong></div>
+          <div class="summary-item"><span class="summary-label">App creators</span><strong class="summary-value">2</strong></div>
+          <div class="summary-item"><span class="summary-label">Blocked</span><strong class="summary-value">1</strong></div>
+        </div>
+
+        <section class="panel" aria-label="Platform principals">
+          <div class="toolbar">
+            <label class="search"><i data-lucide="search"></i><input id="principal-search" type="search" placeholder="Search name, email, or subject" aria-label="Search principals"></label>
+            <select id="status-filter" aria-label="Filter by status">
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="blocked">Blocked</option>
+            </select>
+            <select id="authority-filter" aria-label="Filter by authority">
+              <option value="all">All authority</option>
+              <option value="admin">Platform admin</option>
+              <option value="creator">App creator</option>
+              <option value="member">App member only</option>
+            </select>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Principal</th><th>Platform authority</th><th>App access</th><th>Status</th><th>Last active</th><th></th></tr></thead>
+              <tbody id="principal-rows">
+                <tr data-name="wei zhang wei@unicas.work google-oauth2|104829" data-status="active" data-authority="admin creator">
+                  <td><div class="person"><span class="avatar">WZ</span><div><strong>Wei Zhang</strong><small>wei@unicas.work</small></div></div></td>
+                  <td><div class="role-line"><span class="badge platform"><i data-lucide="shield"></i>Platform admin</span><span class="badge"><i data-lucide="plus-square"></i>App creator</span></div></td>
+                  <td>3 Apps</td><td><span class="status">Active</span></td><td class="muted">8 minutes ago</td>
+                  <td><button class="button ghost manage" type="button" data-person="wei" aria-label="Manage Wei Zhang"><i data-lucide="ellipsis"></i>Manage</button></td>
+                </tr>
+                <tr data-name="mina chen mina@unicas.work google-oauth2|109551" data-status="active" data-authority="creator">
+                  <td><div class="person"><span class="avatar">MC</span><div><strong>Mina Chen</strong><small>mina@unicas.work</small></div></div></td>
+                  <td><div class="role-line"><span class="badge"><i data-lucide="plus-square"></i>App creator</span></div></td>
+                  <td>2 Apps</td><td><span class="status">Active</span></td><td class="muted">Yesterday</td>
+                  <td><button class="button ghost manage" type="button" data-person="mina" aria-label="Manage Mina Chen"><i data-lucide="ellipsis"></i>Manage</button></td>
+                </tr>
+                <tr data-name="leo wang leo@example.dev google-oauth2|117028" data-status="active" data-authority="member">
+                  <td><div class="person"><span class="avatar">LW</span><div><strong>Leo Wang</strong><small>leo@example.dev</small></div></div></td>
+                  <td><span class="muted">None</span></td>
+                  <td><span class="badge"><i data-lucide="box"></i>Canvas Sync</span></td><td><span class="status">Active</span></td><td class="muted">Sep 12, 2026</td>
+                  <td><button class="button ghost manage" type="button" data-person="leo" aria-label="Manage Leo Wang"><i data-lucide="ellipsis"></i>Manage</button></td>
+                </tr>
+                <tr data-name="sara lim sara@contractor.example google-oauth2|112843" data-status="blocked" data-authority="member">
+                  <td><div class="person"><span class="avatar">SL</span><div><strong>Sara Lim</strong><small>sara@contractor.example</small></div></div></td>
+                  <td><span class="muted">None</span></td>
+                  <td><span class="badge"><i data-lucide="box"></i>Archive Tools</span></td><td><span class="status blocked">Blocked</span></td><td class="muted">Aug 29, 2026</td>
+                  <td><button class="button ghost manage" type="button" data-person="sara" aria-label="Manage Sara Lim"><i data-lucide="ellipsis"></i>Manage</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="empty" id="principal-empty" hidden>No principals match these filters.</div>
+          <footer class="pagination"><span>4 principals</span><span>Updated just now</span></footer>
+        </section>
+      </section>
+
+      <section class="page" id="invitations-view" hidden>
+        <header class="page-header">
+          <div class="page-heading"><h1>Platform invitations</h1><p>Pending and recently completed developer invitations.</p></div>
+          <div class="page-actions"><button class="button primary open-invite-secondary" type="button"><i data-lucide="mail-plus"></i>Invite developer</button></div>
+        </header>
+        <nav class="tabs" aria-label="Platform access views">
+          <button class="tab" type="button" data-view="access"><i data-lucide="users"></i>Principals <span class="count">4</span></button>
+          <button class="tab active" type="button" data-view="invitations"><i data-lucide="mail"></i>Invitations <span class="count">2</span></button>
+          <button class="tab" type="button" data-view="audit"><i data-lucide="history"></i>Audit</button>
+        </nav>
+        <section class="panel">
+          <div class="toolbar">
+            <label class="search"><i data-lucide="search"></i><input type="search" placeholder="Search email" aria-label="Search invitations"></label>
+            <select aria-label="Filter invitation status"><option>All statuses</option><option>Pending</option><option>Accepted</option><option>Expired</option><option>Revoked</option></select>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Email</th><th>Authority on acceptance</th><th>Status</th><th>Invited by</th><th>Expires</th><th></th></tr></thead>
+              <tbody>
+                <tr><td><strong>devon@unicas.work</strong></td><td><span class="badge"><i data-lucide="plus-square"></i>App creator</span></td><td><span class="status pending">Pending</span></td><td>Wei Zhang</td><td class="muted">Sep 17, 2026</td><td><button class="button ghost revoke-invite" type="button">Revoke</button></td></tr>
+                <tr><td><strong>ops@unicas.work</strong></td><td><div class="role-line"><span class="badge platform"><i data-lucide="shield"></i>Platform admin</span><span class="badge"><i data-lucide="plus-square"></i>App creator</span></div></td><td><span class="status pending">Pending</span></td><td>Wei Zhang</td><td class="muted">Sep 17, 2026</td><td><button class="button ghost revoke-invite" type="button">Revoke</button></td></tr>
+                <tr><td><strong>mina@unicas.work</strong></td><td><span class="badge"><i data-lucide="plus-square"></i>App creator</span></td><td><span class="status">Accepted</span></td><td>Wei Zhang</td><td class="muted">Sep 10, 2026</td><td></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <footer class="pagination"><span>3 invitations</span><span>Showing recent 30 days</span></footer>
+        </section>
+      </section>
+
+      <section class="page" id="audit-view" hidden>
+        <header class="page-header"><div class="page-heading"><h1>Platform audit</h1><p>Append-only platform authorization history.</p></div></header>
+        <nav class="tabs" aria-label="Platform access views">
+          <button class="tab" type="button" data-view="access"><i data-lucide="users"></i>Principals <span class="count">4</span></button>
+          <button class="tab" type="button" data-view="invitations"><i data-lucide="mail"></i>Invitations <span class="count">2</span></button>
+          <button class="tab active" type="button" data-view="audit"><i data-lucide="history"></i>Audit</button>
+        </nav>
+        <section class="panel">
+          <div class="toolbar">
+            <label class="search"><i data-lucide="search"></i><input type="search" placeholder="Search actor, target, or request ID" aria-label="Search audit events"></label>
+            <select aria-label="Filter audit action"><option>All actions</option><option>Access changed</option><option>Invitation created</option><option>Access blocked</option><option>App creation denied</option></select>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Time</th><th>Action</th><th>Actor</th><th>Target</th><th>Result</th><th>Request ID</th></tr></thead>
+              <tbody>
+                <tr><td class="muted">Sep 15, 20:14</td><td><span class="audit-action">platform_access.authority_changed</span></td><td>Wei Zhang</td><td>Mina Chen</td><td><span class="status">Succeeded</span></td><td class="mono">req_01K58VT7</td></tr>
+                <tr><td class="muted">Sep 15, 18:42</td><td><span class="audit-action">platform_invitation.created</span></td><td>Wei Zhang</td><td>devon@unicas.work</td><td><span class="status">Succeeded</span></td><td class="mono">req_01K58NA1</td></tr>
+                <tr><td class="muted">Sep 14, 09:18</td><td><span class="audit-action">platform_access.blocked</span></td><td>Wei Zhang</td><td>Sara Lim</td><td><span class="status">Succeeded</span></td><td class="mono">req_01K55Y8C</td></tr>
+                <tr><td class="muted">Sep 13, 16:07</td><td><span class="audit-action">app.create_denied</span></td><td>Leo Wang</td><td>Canvas Draft</td><td><span class="status blocked">Denied</span></td><td class="mono">req_01K54W2Q</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <footer class="pagination"><span>4 events</span><button class="button ghost" type="button">Load more</button></footer>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <div class="overlay" id="invite-dialog" hidden>
+    <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="invite-title">
+      <header class="dialog-header">
+        <div class="dialog-title"><span class="icon-box"><i data-lucide="user-plus"></i></span><div><h2 id="invite-title">Invite internal developer</h2><p>The invitation is bound to one verified email.</p></div></div>
+        <button class="button ghost icon-only close-invite" type="button" aria-label="Close"><i data-lucide="x"></i></button>
+      </header>
+      <div class="dialog-body">
+        <div class="field"><label for="invite-email">Google account email</label><input id="invite-email" type="email" placeholder="developer@unicas.work" autocomplete="off"></div>
+        <div>
+          <p class="section-label">Platform authority</p>
+          <div class="permission-list">
+            <label class="permission-option"><input id="invite-creator" type="checkbox" checked><span><strong>App creator</strong><span>May create new Apps and becomes their first App administrator.</span></span></label>
+            <label class="permission-option"><input id="invite-admin" type="checkbox"><span><strong>Platform admin</strong><span>May manage platform access, invitations, and platform audit.</span></span></label>
+          </div>
+        </div>
+      </div>
+      <footer class="dialog-footer"><button class="button close-invite" type="button">Cancel</button><button class="button primary" id="send-invite" type="button" disabled><i data-lucide="send"></i>Create invitation</button></footer>
+    </section>
+  </div>
+
+  <div class="drawer-overlay" id="principal-drawer" hidden>
+    <aside class="drawer" aria-labelledby="drawer-name">
+      <header class="drawer-header">
+        <div><h2 id="drawer-name">Wei Zhang</h2><p id="drawer-email">wei@unicas.work</p></div>
+        <button class="button ghost icon-only close-drawer" type="button" aria-label="Close"><i data-lucide="x"></i></button>
+      </header>
+      <div class="drawer-body">
+        <section class="drawer-section"><h3>Principal</h3><div class="mono" id="drawer-principal">https://accounts.google.com · 104829...</div></section>
+        <section class="drawer-section">
+          <h3>Platform authority</h3>
+          <div class="permission-list">
+            <label class="permission-option"><input id="edit-creator" type="checkbox"><span><strong>App creator</strong><span>May create new Apps.</span></span></label>
+            <label class="permission-option"><input id="edit-admin" type="checkbox"><span><strong>Platform admin</strong><span>May manage platform authorization.</span></span></label>
+          </div>
+        </section>
+        <section class="drawer-section"><h3>App memberships</h3><ul class="membership-list" id="drawer-memberships"></ul></section>
+        <section class="drawer-section"><h3>Access status</h3><div class="warning-box" id="status-copy">Active. Existing sessions remain subject to current authorization.</div></section>
+      </div>
+      <footer class="drawer-footer"><button class="button danger" id="block-access" type="button"><i data-lucide="ban"></i>Block access</button><button class="button primary" id="save-access" type="button"><i data-lucide="save"></i>Save changes</button></footer>
+    </aside>
+  </div>
+
+  <div class="overlay" id="confirm-dialog" hidden>
+    <section class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title">
+      <header class="dialog-header"><div class="dialog-title"><span class="icon-box"><i data-lucide="shield-alert"></i></span><div><h2 id="confirm-title">Block platform access?</h2><p id="confirm-name">Wei Zhang</p></div></div></header>
+      <div class="dialog-body"><div class="warning-box">New Console and MCP requests will be denied. App memberships and audit history are retained.</div></div>
+      <footer class="dialog-footer"><button class="button" id="cancel-block" type="button">Cancel</button><button class="button danger" id="confirm-block" type="button"><i data-lucide="ban"></i>Block access</button></footer>
+    </section>
+  </div>
+
+  <div class="toast" id="toast" hidden><i data-lucide="circle-check"></i><span id="toast-message">Changes saved</span></div>
+
+  <script>
+    const people = {
+      wei: { name: "Wei Zhang", email: "wei@unicas.work", subject: "1048292041405173", admin: true, creator: true, blocked: false, apps: ["Canvas Sync", "Archive Tools", "Docs Preview"] },
+      mina: { name: "Mina Chen", email: "mina@unicas.work", subject: "1095518264120091", admin: false, creator: true, blocked: false, apps: ["Canvas Sync", "Media Pipeline"] },
+      leo: { name: "Leo Wang", email: "leo@example.dev", subject: "1170286915421738", admin: false, creator: false, blocked: false, apps: ["Canvas Sync"] },
+      sara: { name: "Sara Lim", email: "sara@contractor.example", subject: "1128437920156042", admin: false, creator: false, blocked: true, apps: ["Archive Tools"] }
+    };
+    let activePerson = null;
+
+    function refreshIcons() { if (window.lucide) window.lucide.createIcons(); }
+    function setView(view) {
+      ["access", "invitations", "audit"].forEach((name) => {
+        document.getElementById(`${name}-view`).hidden = name !== view;
+      });
+      document.querySelectorAll(".nav-item[data-view]").forEach((item) => item.classList.toggle("active", item.dataset.view === view));
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    document.querySelectorAll("[data-view]").forEach((item) => item.addEventListener("click", () => setView(item.dataset.view)));
+    document.querySelector("[data-workspace='apps']").addEventListener("click", () => showToast("Mock navigation: My Apps"));
+
+    const inviteDialog = document.getElementById("invite-dialog");
+    const inviteEmail = document.getElementById("invite-email");
+    const inviteCreator = document.getElementById("invite-creator");
+    const inviteAdmin = document.getElementById("invite-admin");
+    const sendInvite = document.getElementById("send-invite");
+    function updateInviteButton() { sendInvite.disabled = !inviteEmail.validity.valid || inviteEmail.value.length === 0 || (!inviteCreator.checked && !inviteAdmin.checked); }
+    function openInvite() { inviteDialog.hidden = false; document.body.style.overflow = "hidden"; setTimeout(() => inviteEmail.focus(), 0); }
+    function closeInvite() { inviteDialog.hidden = true; document.body.style.overflow = ""; }
+    document.getElementById("open-invite").addEventListener("click", openInvite);
+    document.querySelector(".open-invite-secondary").addEventListener("click", openInvite);
+    document.querySelectorAll(".close-invite").forEach((button) => button.addEventListener("click", closeInvite));
+    [inviteEmail, inviteCreator, inviteAdmin].forEach((control) => control.addEventListener("input", updateInviteButton));
+    sendInvite.addEventListener("click", () => {
+      const email = inviteEmail.value;
+      closeInvite();
+      inviteEmail.value = "";
+      inviteCreator.checked = true;
+      inviteAdmin.checked = false;
+      updateInviteButton();
+      showToast(`Invitation created for ${email}`);
+      setView("invitations");
+    });
+
+    const drawerOverlay = document.getElementById("principal-drawer");
+    function openDrawer(key) {
+      activePerson = key;
+      const person = people[key];
+      document.getElementById("drawer-name").textContent = person.name;
+      document.getElementById("drawer-email").textContent = person.email;
+      document.getElementById("drawer-principal").textContent = `https://accounts.google.com · ${person.subject}`;
+      document.getElementById("edit-admin").checked = person.admin;
+      document.getElementById("edit-creator").checked = person.creator;
+      document.getElementById("drawer-memberships").innerHTML = person.apps.map((app) => `<li><strong>${app}</strong><span class="badge">Administrator</span></li>`).join("") || '<li class="muted">No App memberships</li>';
+      document.getElementById("status-copy").textContent = person.blocked ? "Blocked. Console and MCP requests are denied." : "Active. Existing sessions remain subject to current authorization.";
+      document.getElementById("block-access").innerHTML = person.blocked ? '<i data-lucide="circle-check"></i>Restore access' : '<i data-lucide="ban"></i>Block access';
+      document.getElementById("block-access").classList.toggle("danger", !person.blocked);
+      drawerOverlay.hidden = false;
+      document.body.style.overflow = "hidden";
+      refreshIcons();
+    }
+    function closeDrawer() { drawerOverlay.hidden = true; document.body.style.overflow = ""; }
+    document.querySelectorAll(".manage").forEach((button) => button.addEventListener("click", () => openDrawer(button.dataset.person)));
+    document.querySelector(".close-drawer").addEventListener("click", closeDrawer);
+    document.getElementById("save-access").addEventListener("click", () => {
+      const person = people[activePerson];
+      person.admin = document.getElementById("edit-admin").checked;
+      person.creator = document.getElementById("edit-creator").checked;
+      closeDrawer();
+      showToast(`Access updated for ${person.name}`);
+    });
+
+    const confirmDialog = document.getElementById("confirm-dialog");
+    document.getElementById("block-access").addEventListener("click", () => {
+      const person = people[activePerson];
+      if (person.blocked) {
+        person.blocked = false;
+        closeDrawer();
+        showToast(`Access restored for ${person.name}`);
+        return;
+      }
+      document.getElementById("confirm-name").textContent = person.name;
+      confirmDialog.hidden = false;
+    });
+    document.getElementById("cancel-block").addEventListener("click", () => { confirmDialog.hidden = true; });
+    document.getElementById("confirm-block").addEventListener("click", () => {
+      const person = people[activePerson];
+      person.blocked = true;
+      confirmDialog.hidden = true;
+      closeDrawer();
+      showToast(`Access blocked for ${person.name}`);
+    });
+
+    document.querySelectorAll(".revoke-invite").forEach((button) => button.addEventListener("click", () => {
+      button.closest("tr").remove();
+      showToast("Invitation revoked");
+    }));
+
+    function filterPrincipals() {
+      const query = document.getElementById("principal-search").value.trim().toLowerCase();
+      const status = document.getElementById("status-filter").value;
+      const authority = document.getElementById("authority-filter").value;
+      let visible = 0;
+      document.querySelectorAll("#principal-rows tr").forEach((row) => {
+        const matchesQuery = row.dataset.name.includes(query);
+        const matchesStatus = status === "all" || row.dataset.status === status;
+        const matchesAuthority = authority === "all" || row.dataset.authority.split(" ").includes(authority);
+        row.hidden = !(matchesQuery && matchesStatus && matchesAuthority);
+        if (!row.hidden) visible += 1;
+      });
+      document.getElementById("principal-empty").hidden = visible !== 0;
+    }
+    ["principal-search", "status-filter", "authority-filter"].forEach((id) => document.getElementById(id).addEventListener("input", filterPrincipals));
+
+    let toastTimer;
+    function showToast(message) {
+      const toast = document.getElementById("toast");
+      document.getElementById("toast-message").textContent = message;
+      toast.hidden = false;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { toast.hidden = true; }, 2600);
+    }
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      if (!confirmDialog.hidden) confirmDialog.hidden = true;
+      else if (!inviteDialog.hidden) closeInvite();
+      else if (!drawerOverlay.hidden) closeDrawer();
+    });
+    refreshIcons();
+  </script>
+</body>
+</html>
