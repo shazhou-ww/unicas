@@ -49,6 +49,8 @@ export function createControlPlaneOperations(
     mintManagedCapability: admin.mintManagedCapability.bind(admin),
     mintManagedSpaceCapability: admin.mintManagedSpaceCapability.bind(admin),
     inspectOAuthIssuer: admin.inspectOAuthIssuer.bind(admin),
+    inspectAppOAuthIssuer: admin.inspectAppOAuthIssuer.bind(admin),
+    activateAppOAuthIssuer: admin.activateAppOAuthIssuer.bind(admin),
     activateOAuthIssuer: admin.activateOAuthIssuer.bind(admin),
     listControlAuditEvents: admin.listControlAuditEvents.bind(admin),
     recordSessionAudit: admin.recordSessionAudit.bind(admin),

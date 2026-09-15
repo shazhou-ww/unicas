@@ -257,15 +257,22 @@ export const getAppOAuthIssuerContract = appProcedure
   .input(z.object({ params: appParams, query: z.object({ optional: z.boolean().optional() }).readonly().optional() }).readonly())
   .output(AppOAuthIssuerSchema.nullable());
 
+export const InspectAppIssuerRequestSchema = z.object({ issuer: z.url() }).strict().readonly();
+export const ActivateAppIssuerRequestSchema = z.object({ inspectionId: z.string().min(1), activationProof: z.string().min(1) }).strict().readonly();
+export const AppIssuerPreconditionSchema = z.object({
+  "if-match": z.string().regex(/^"(0|[1-9][0-9]*)"$/).optional(),
+  "if-none-match": z.literal("*").optional(),
+}).refine(headers => (headers["if-match"] !== undefined) !== (headers["if-none-match"] !== undefined)).readonly();
+
 export const inspectAppOAuthIssuerContract = appProcedure
   .route({ method: "POST", path: `${AppAdminApiBasePath}/{appId}/oauth-issuer/inspections`, operationId: "inspectAppOAuthIssuer", summary: "Inspect an App OAuth issuer", inputStructure: "detailed", successStatus: 201, tags: ["OAuth Issuer"] })
-  .input(z.object({ params: appParams, body: z.object({ issuer: z.url() }).readonly() }).readonly())
+  .input(z.object({ params: appParams, body: InspectAppIssuerRequestSchema }).readonly())
   .output(AppOAuthIssuerInspectionSchema);
 
 export const activateAppOAuthIssuerContract = appProcedure
-  .route({ method: "PUT", path: `${AppAdminApiBasePath}/{appId}/oauth-issuer`, operationId: "activateAppOAuthIssuer", summary: "Activate an App OAuth issuer", inputStructure: "detailed", tags: ["OAuth Issuer"] })
-  .input(z.object({ params: appParams, headers: mutationHeaders, body: z.object({ inspectionId: z.string().min(1), activationProof: z.string().min(1) }).readonly() }).readonly())
-  .output(AppOAuthIssuerSchema);
+  .route({ method: "PUT", path: `${AppAdminApiBasePath}/{appId}/oauth-issuer`, operationId: "activateAppOAuthIssuer", summary: "Activate or replace an App OAuth issuer", description: "Use exactly one precondition: If-None-Match: * for initial activation or the current external issuer If-Match ETag for replacement. A verified candidate is selected atomically; current authority is unchanged until success.", inputStructure: "detailed", outputStructure: "detailed", successStatus: 204, tags: ["OAuth Issuer"] })
+  .input(z.object({ params: appParams, headers: AppIssuerPreconditionSchema, body: ActivateAppIssuerRequestSchema }).readonly())
+  .output(z.object({ headers: z.object({ ETag: z.string().regex(/^"(0|[1-9][0-9]*)"$/) }).readonly() }).readonly());
 
 export const getAppManagedIssuerContract = appProcedure
   .route({ method: "GET", path: `${AppAdminApiBasePath}/{appId}/managed-issuer`, operationId: "getAppManagedIssuer", summary: "Read the managed App issuer", inputStructure: "detailed", tags: ["Managed Issuer"] })

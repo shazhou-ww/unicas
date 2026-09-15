@@ -428,10 +428,36 @@ describe("IssuerView", () => {
     render(<IssuerView appId={STACK} />);
     const customCard = screen.getByRole("heading", { name: "Custom OAuth authorization server" }).closest(".card")!;
     await waitFor(() => expect(within(customCard).getByText(/Status:/)).toHaveTextContent("active"));
-    expect(screen.getByRole("button", { name: "Issuer active" })).toBeDisabled();
-    expect(screen.getByLabelText("Issuer")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Inspect replacement" })).toBeEnabled();
+    expect(screen.getByLabelText("Issuer")).toBeEnabled();
     expect(screen.getByRole("link", { name: "https://issuer.example/oauth/jwks" }))
       .toHaveAttribute("href", "https://issuer.example/oauth/jwks");
+  });
+
+  test("keeps current authority visible while inspecting and replacing a candidate", async () => {
+    const current = { ...managedIssuer(), mode: "external", issuer: "https://current.example", revision: 9 };
+    fetchMock.mockResolvedValueOnce(json(current)).mockResolvedValueOnce(json(managedIssuer()))
+      .mockResolvedValueOnce(json({ inspectionId: "candidate", metadataUrl: "https://replacement.example/metadata", jwksUri: "https://replacement.example/jwks", challenge: "candidate-challenge", expiresAt: 4102444800000, keys: [{ kid: "key", algorithm: "ES256" }] }))
+      .mockResolvedValueOnce(new Response(null, { status: 204, headers: { ETag: '"10"' } }))
+      .mockResolvedValueOnce(json({ ...current, issuer: "https://replacement.example", revision: 10 }))
+      .mockResolvedValueOnce(json(managedIssuer()));
+    const user = userEvent.setup();
+    render(<IssuerView appId={STACK} />);
+    const input = await screen.findByLabelText("Issuer", { selector: "#oauth-issuer-url" });
+    await waitFor(() => expect(input).toBeEnabled());
+    await user.clear(input);
+    await user.type(input, "https://replacement.example");
+    await user.click(screen.getByRole("button", { name: "Inspect replacement" }));
+    expect(await screen.findByText("candidate-challenge")).toBeInTheDocument();
+    const custom = screen.getByRole("heading", { name: "Custom OAuth authorization server" }).closest(".card")!;
+    expect(within(custom).getByText(/Mode:/)).toHaveTextContent("https://current.example");
+    expect(within(custom).getByText(/Mode:/)).toHaveTextContent("active");
+    await user.type(screen.getByLabelText("Activation proof (compact JWS)"), "synthetic-proof");
+    await user.click(screen.getByRole("button", { name: "Verify and replace" }));
+    await waitFor(() => expect(within(custom).getByText(/Mode:/)).toHaveTextContent("https://replacement.example"));
+    const update = fetchMock.mock.calls.find(([, init]) => init?.method === "PUT");
+    expect(new Headers(update?.[1]?.headers).get("If-Match")).toBe('"9"');
+    expect(new Headers(update?.[1]?.headers).has("If-None-Match")).toBe(false);
   });
 
   test("inspects and activates a standards-based OAuth issuer", async () => {
@@ -480,7 +506,9 @@ describe("IssuerView", () => {
     await waitFor(() => expect(within(customCard).getByText(/Status:/)).toHaveTextContent("active"));
     const inspectionCall = fetchMock.mock.calls.find((call) => String(call[0]).endsWith("/oauth-issuer/inspections"));
     expect(JSON.parse(inspectionCall![1]!.body as string)).toEqual({ issuer: "https://auth.example" });
-    expect(fetchMock.mock.calls.some((call) => call[1]?.method === "PUT" && String(call[0]).endsWith("/oauth-issuer"))).toBe(true);
+    const activationCall = fetchMock.mock.calls.find((call) => call[1]?.method === "PUT" && String(call[0]).endsWith("/oauth-issuer"));
+    expect(new Headers(activationCall?.[1]?.headers).get("If-None-Match")).toBe("*");
+    expect(new Headers(activationCall?.[1]?.headers).has("If-Match")).toBe(false);
   });
 });
 

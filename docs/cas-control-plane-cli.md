@@ -82,6 +82,13 @@ invitation's revision from the list. The result is only `{ etag }`. Creating
 an App invitation returns `invitationId`, `acceptUrl`, `expiresAt`, and `etag`,
 not a duplicate invitation resource; the URL is not recoverable from reads.
 
+For App issuers, `app-oauth-issuer inspect` returns only the candidate receipt,
+not current authority or an ETag. First activation uses
+`app-oauth-issuer activate <appId> <inspectionId> --activation-proof <jws>
+--if-none-match '*'`. Replacement uses `--etag E` from the current external
+issuer (or resolves that ETag if omitted). These options are mutually
+exclusive. Activation returns only `{ etag }`; read the issuer separately.
+
 ## Legacy v1 compatibility
 
 `whoami`, `stacks`, `members`, `oauth-issuer`, `ref-domains`, and `audit` retain

@@ -544,8 +544,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
     ).bind(inspection.inspectionId, key.kid, key.algorithm, JSON.stringify(key.publicJwk)));
     try {
       await this.#db.batch([
-        issuerStatement,
-        ...requireIssuer,
+        ...(plan.candidateOnly ? [] : [issuerStatement, ...requireIssuer]),
         insertInspection,
         ...keyStatements,
         ...this.#mutationStatements(plan.audit),
@@ -587,6 +586,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
   async commitActivateOAuthIssuer(
     plan: ControlActivateOAuthIssuerPlan,
   ): Promise<ControlActivateOAuthIssuerCommitResult> {
+    if (plan.candidateIssuer) return this.#commitAppIssuerActivation(plan, plan.candidateIssuer);
     const activateIssuer = this.#db.prepare(
       "UPDATE cas_app_oauth_issuers SET status = 'active', verified_at = ?, revision = revision + 1 WHERE app_id = ? AND revision = ? AND status = 'pending' AND mode = 'external'",
     ).bind(plan.activatedAt, plan.stackId, plan.expectedIssuerRevision);
@@ -615,6 +615,29 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
           return { kind: "unavailable" };
         }
         return { kind: "revision-mismatch" };
+      }
+      throw error;
+    }
+  }
+
+  async #commitAppIssuerActivation(plan: ControlActivateOAuthIssuerPlan, issuer: ControlOAuthIssuerRecord): Promise<ControlActivateOAuthIssuerCommitResult> {
+    const precondition = plan.expectedIssuerRevision === null
+      ? this.#db.prepare("SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM cas_app_oauth_issuers WHERE app_id = ?) THEN 1 ELSE json_extract('invalid', '$') END AS allowed").bind(plan.stackId)
+      : this.#db.prepare("SELECT CASE WHEN EXISTS (SELECT 1 FROM cas_app_oauth_issuers WHERE app_id = ? AND revision = ?) THEN 1 ELSE json_extract('invalid', '$') END AS allowed").bind(plan.stackId, plan.expectedIssuerRevision);
+    const consume = this.#db.prepare("UPDATE cas_oauth_issuer_inspections SET used_at = ?, revision = revision + 1 WHERE inspection_id = ? AND app_id = ? AND used_at IS NULL AND expires_at > ?").bind(plan.activatedAt, plan.inspectionId, plan.stackId, plan.activatedAt);
+    const requireConsumed = this.#db.prepare("SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('invalid', '$') END AS consumed");
+    const replace = this.#db.prepare(
+      "INSERT INTO cas_app_oauth_issuers (app_id, mode, issuer, audience, metadata_url, metadata_type, authorization_endpoint, token_endpoint, jwks_uri, registration_endpoint, scopes_supported, code_challenge_methods_supported, status, verified_at, last_refresh_at, last_refresh_error, jwks_digest, capability_max_lifetime_seconds, revision) VALUES (?, 'external', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, NULL, ?, ?, ?) ON CONFLICT(app_id) DO UPDATE SET mode = excluded.mode, issuer = excluded.issuer, audience = excluded.audience, metadata_url = excluded.metadata_url, metadata_type = excluded.metadata_type, authorization_endpoint = excluded.authorization_endpoint, token_endpoint = excluded.token_endpoint, jwks_uri = excluded.jwks_uri, registration_endpoint = excluded.registration_endpoint, scopes_supported = excluded.scopes_supported, code_challenge_methods_supported = excluded.code_challenge_methods_supported, status = excluded.status, verified_at = excluded.verified_at, last_refresh_at = excluded.last_refresh_at, last_refresh_error = NULL, jwks_digest = excluded.jwks_digest, capability_max_lifetime_seconds = excluded.capability_max_lifetime_seconds, revision = excluded.revision",
+    ).bind(plan.stackId, issuer.issuer, issuer.audience, issuer.metadataUrl, issuer.metadataType, issuer.authorizationEndpoint, issuer.tokenEndpoint, issuer.jwksUri, issuer.registrationEndpoint, JSON.stringify(issuer.scopesSupported), JSON.stringify(issuer.codeChallengeMethodsSupported), plan.activatedAt, plan.activatedAt, issuer.jwksDigest, issuer.capabilityMaxLifetimeSeconds, issuer.revision);
+    try {
+      await this.#db.batch([precondition, consume, requireConsumed, replace, ...this.#mutationStatements(plan.audit)]);
+      return { kind: "activated" };
+    } catch (error) {
+      if (isOAuthIssuerConflict(error)) return { kind: "issuer-conflict" };
+      if (isJsonFailure(error)) {
+        const inspection = await this.getOAuthIssuerInspection(plan.inspectionId);
+        return !inspection || inspection.usedAt !== null || inspection.expiresAt <= plan.activatedAt
+          ? { kind: "unavailable" } : { kind: "revision-mismatch" };
       }
       throw error;
     }

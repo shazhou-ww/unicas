@@ -125,12 +125,12 @@ export interface AdminClient {
   inspectAppOAuthIssuer(
     path: { readonly appId: AppId },
     body: { readonly issuer: string },
-  ): Promise<AdminClientRead<AppOAuthIssuerInspection>>;
+  ): Promise<AppOAuthIssuerInspection>;
   activateAppOAuthIssuer(
     path: { readonly appId: AppId },
     body: { readonly inspectionId: string; readonly activationProof: string },
-    ifMatch: string,
-  ): Promise<AdminClientRead<AppOAuthIssuer>>;
+    precondition: string | { readonly ifNoneMatch: "*" },
+  ): Promise<{ readonly etag: string }>;
   listAppRefDomains(path: { readonly appId: AppId }): Promise<{ readonly domains: readonly AppRefDomain[] }>;
   listAppControlAuditEvents(
     path: { readonly appId: AppId },
@@ -487,19 +487,19 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
         }),
         "inspectAppOAuthIssuer",
       );
-      return { value: await response.json(), etag: readEtag(response) };
+      return response.json();
     },
 
-    async activateAppOAuthIssuer(path, body, ifMatch) {
+    async activateAppOAuthIssuer(path, body, precondition) {
       const response = await requireOk(
         await request(appAdminRoutes.oauthIssuer(path), {
           method: "PUT",
-          headers: { "Content-Type": "application/json", ...ifMatchHeader(ifMatch) },
+          headers: { "Content-Type": "application/json", ...(typeof precondition === "string" ? ifMatchHeader(precondition) : { "If-None-Match": precondition.ifNoneMatch }) },
           body: JSON.stringify(body),
         }),
         "activateAppOAuthIssuer",
       );
-      return { value: await response.json(), etag: readEtag(response) };
+      return { etag: readEtag(response) };
     },
 
     async listAppRefDomains(path) {

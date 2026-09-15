@@ -260,7 +260,7 @@ export const APP_ADMIN_MCP_TOOLS = {
     name: "inspect_app_oauth_issuer",
     requiredScope: "control:security",
     registration: {
-      description: "Discover and persist a validated App OAuth issuer snapshot and control challenge.",
+      description: "Create an independent candidate issuer inspection without changing current App authority; returns only proof inputs and discovery review data.",
       inputSchema: z.object({ appId, issuer: url }).strict(),
       annotations: { destructiveHint: false, idempotentHint: false },
     },
@@ -269,14 +269,15 @@ export const APP_ADMIN_MCP_TOOLS = {
     name: "activate_app_oauth_issuer",
     requiredScope: "control:security",
     registration: {
-      description: "Activate an inspected App OAuth issuer using a compact-JWS control proof and current ETag.",
+      description: "Atomically activate or replace a verified App issuer. Use ifNoneMatch '*' for initial activation or the current issuer etag for replacement; returns only the resulting ETag.",
       inputSchema: z.object({
         appId,
         inspectionId: z.string().min(1),
         activationProof: z.string().min(1),
         etag: etag.optional(),
-      }),
-      annotations: { destructiveHint: false, idempotentHint: false },
+        ifNoneMatch: z.literal("*").optional(),
+      }).refine(input => !(input.etag !== undefined && input.ifNoneMatch !== undefined)),
+      annotations: { destructiveHint: true, idempotentHint: false },
     },
   }),
   update_app_managed_issuer: tool({

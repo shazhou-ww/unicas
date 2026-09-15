@@ -44,6 +44,40 @@ deployment adapters must enforce destination-address restrictions at connection
 time, including after DNS resolution, before supporting arbitrary public issuers.
 Injected fetchers in unit tests verify adapter policy, not Cloudflare's network.
 
+## App v2 issuer replacement
+
+`POST /admin/apps/{appId}/oauth-issuer/inspections` persists an independent
+candidate without changing the current issuer, its revision, discovery output,
+or capability authority. The response is limited to `inspectionId`,
+`metadataUrl`, `jwksUri`, `challenge`, `expiresAt`, and eligible signing-key
+`kid`/`algorithm` choices. It contains no issuer resource, request App/issuer
+echo, public JWK collection, or mutable-resource revision.
+
+Sign the exact challenge bytes outside UniCAS using an eligible discovered
+private key, then send `inspectionId` and `activationProof` to
+`PUT /admin/apps/{appId}/oauth-issuer` with exactly one precondition:
+
+- `If-None-Match: *` for initial activation when no external issuer exists;
+- `If-Match: "<revision>"` using the current external issuer's version for
+   replacement, never an App or inspection revision.
+
+Successful activation/replacement returns `204 No Content` and the new issuer
+ETag. Discovery/JWKS snapshots, challenge contents, signature, membership,
+expiry, one-time consumption, global issuer uniqueness, and current resource
+preconditions are verified before one atomic commit. Failed or abandoned
+candidates leave prior authority intact. Replacement records
+`oauth_issuer.replaced` with immutable actor attribution; initial activation
+uses `oauth_issuer.activated`.
+
+Only one external issuer is active at a time. The old issuer stops resolving
+at commit; previously cached authority is refreshed after 30 seconds and fails
+closed at the 60-second hard stale bound if the registry is unavailable.
+There is no token-lifetime-long overlap. Coordinate downstream token issuance
+and discovery refresh with that cutover. The managed issuer is independent
+and remains unchanged. Rollback is another inspection/proof/conditional
+replacement of the previous issuer, not a direct database edit or candidate
+reuse. No live domain or frozen legacy deployment is changed automatically.
+
 ## Frozen UniDocs v1 migration status (2026-09-08)
 
 This section records the legacy `unicas.shazhou.work` Stack/Tenant environment.

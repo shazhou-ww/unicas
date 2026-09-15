@@ -358,21 +358,21 @@ export function createControlPlaneMcpServer(
     APP_ADMIN_MCP_TOOLS.inspect_app_oauth_issuer.registration,
     async ({ appId, issuer }) => {
       const grant = requireMutation("control:security", options);
-      const result = await controlPlane.inspectOAuthIssuer(
+      const result = await controlPlane.inspectAppOAuthIssuer(
         serviceContext(grant, "inspect_app_oauth_issuer"),
-        { path: { stackId: appId }, body: { issuer } },
+        appId, issuer,
       );
-      return appToolResult({ operation: "inspectOAuthIssuer", appId }, withEtag(result));
+      return "error" in result ? toolResult(transformAppAdminError({ ...result })) : toolResult(result);
     },
   );
 
   server.registerTool(
     APP_ADMIN_MCP_TOOLS.activate_app_oauth_issuer.name,
     APP_ADMIN_MCP_TOOLS.activate_app_oauth_issuer.registration,
-    async ({ appId, inspectionId, activationProof, etag }) => {
+    async ({ appId, inspectionId, activationProof, etag, ifNoneMatch }) => {
       const grant = requireMutation("control:security", options);
       let currentEtag = etag;
-      if (!currentEtag) {
+      if (!currentEtag && ifNoneMatch !== "*") {
         const current = await controlPlane.getOAuthIssuer(
           serviceContext(grant, "activate_app_oauth_issuer"),
           { path: { stackId: appId } },
@@ -381,12 +381,12 @@ export function createControlPlaneMcpServer(
         if ("error" in current) return toolResult(current);
         currentEtag = formatCasAdminETag(current.revision);
       }
-      const result = await controlPlane.activateOAuthIssuer(
+      const result = await controlPlane.activateAppOAuthIssuer(
         serviceContext(grant, "activate_app_oauth_issuer"),
-        { path: { stackId: appId }, body: { inspectionId, activationProof } },
-        { ifMatch: currentEtag },
+        appId, { inspectionId, activationProof },
+        { ifMatch: currentEtag, ifNoneMatch },
       );
-      return appToolResult({ operation: "activateOAuthIssuer", appId }, withEtag(result));
+      return "error" in result ? toolResult(transformAppAdminError({ ...result })) : toolResult({ etag: formatCasAdminETag(result.revision) });
     },
   );
 

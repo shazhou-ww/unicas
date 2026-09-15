@@ -9,7 +9,8 @@ export async function handleAppAdminCompatibilityRequest(
   legacyHandler: AdminHandler,
 ): Promise<Response> {
   if (route.operation === "mintManagedCapability" || route.operation === "patchApp"
-    || route.operation === "listMemberInvitations" || route.operation === "revokeMemberInvitation") {
+    || route.operation === "listMemberInvitations" || route.operation === "revokeMemberInvitation"
+    || route.operation === "inspectOAuthIssuer" || route.operation === "activateOAuthIssuer") {
     return legacyHandler(request);
   }
 

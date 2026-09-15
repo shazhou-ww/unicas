@@ -386,7 +386,61 @@ describe("D1-backed control-plane service", () => {
       path: { stackId },
       body: { inspectionId: result.inspectionId, activationProof },
     }, { ifMatch: '"2"' }), CasAdminErrorCodes.NOT_FOUND);
+    const replacement = await service.inspectAppOAuthIssuer(ctx(alice), stackId, "https://replacement.example/oauth");
+    if (!("challenge" in replacement)) throw new Error("replacement inspection failed");
+    expect(replacement).not.toHaveProperty("revision");
+    expect(replacement).not.toHaveProperty("appId");
+    expect(await service.getOAuthIssuer(ctx(alice), { path: { stackId } })).toMatchObject({ issuer: "https://issuer.example/oauth", status: "active", revision: 2 });
+    const replacementProof = await new CompactSign(new TextEncoder().encode(replacement.challenge)).setProtectedHeader({ alg: "ES256", kid: "key-1" }).sign(pair.privateKey);
+    expect(await service.activateAppOAuthIssuer(ctx(alice), stackId, { inspectionId: replacement.inspectionId, activationProof: replacementProof }, { ifMatch: '"1"' })).toMatchObject({ error: "REVISION_MISMATCH" });
+    expect(await service.activateAppOAuthIssuer(ctx(alice), stackId, { inspectionId: replacement.inspectionId, activationProof: replacementProof }, { ifMatch: '"2"' })).toEqual({ revision: 3 });
+    expect(await service.getOAuthIssuer(ctx(alice), { path: { stackId } })).toMatchObject({ issuer: "https://replacement.example/oauth", status: "active", revision: 3 });
+    expect(await new AppAuthorityRepository(db).resolveIssuer("https://issuer.example/oauth")).toBeNull();
+    expect(await new AppAuthorityRepository(db).resolveIssuer("https://replacement.example/oauth")).toMatchObject({ appId: stackId });
   });
+
+  test("initial App activation and replacement fail atomically on proof, expiry, and issuer races", async () => {
+    let clock = 1_000;
+    const pair = await generateKeyPair("ES256");
+    const publicJwk = { ...await exportJWK(pair.publicKey), kid: "candidate-key", alg: "ES256" };
+    const discovery: OAuthDiscoveryPort = { inspectIssuer: async ({ issuer }) => ({
+      metadata: { issuer, metadataUrl: `${issuer}/metadata`, metadataType: "oauth", authorizationEndpoint: `${issuer}/authorize`, tokenEndpoint: `${issuer}/token`, jwksUri: `${issuer}/jwks`, registrationEndpoint: null, scopesSupported: [], codeChallengeMethodsSupported: ["S256"] },
+      metadataDigest: "a".repeat(64), jwksDigest: "b".repeat(64), keys: [{ kid: "candidate-key", algorithm: "ES256", publicJwk }],
+    }) };
+    const { db, service } = await createService(() => clock, discovery);
+    const firstApp = await createStack(service);
+    const secondApp = await createStack(service);
+    async function candidate(appId: string, issuer: string) {
+      const result = await service.inspectAppOAuthIssuer(ctx(alice), appId, issuer);
+      if ("error" in result) throw new Error(result.error);
+      return { result, body: { inspectionId: result.inspectionId, activationProof: await new CompactSign(new TextEncoder().encode(result.challenge)).setProtectedHeader({ alg: "ES256", kid: "candidate-key" }).sign(pair.privateKey) } };
+    }
+    const first = await candidate(firstApp, "https://initial.example");
+    expect(await service.getOAuthIssuer(ctx(alice), { path: { stackId: firstApp }, query: { optional: true } })).toBeNull();
+    expect(await service.activateAppOAuthIssuer(ctx(alice), firstApp, first.body, {})).toMatchObject({ error: "PRECONDITION_REQUIRED" });
+    expect(await service.activateAppOAuthIssuer(ctx(alice), firstApp, first.body, { ifMatch: '"1"', ifNoneMatch: "*" })).toMatchObject({ error: "INVALID_REQUEST" });
+    expect(await service.activateAppOAuthIssuer(ctx(alice), firstApp, { ...first.body, activationProof: "invalid" }, { ifNoneMatch: "*" })).toMatchObject({ error: "INVALID_REQUEST" });
+    expect(await service.activateAppOAuthIssuer(ctx(alice), firstApp, first.body, { ifNoneMatch: "*" })).toEqual({ revision: 1 });
+    const second = await candidate(secondApp, "https://other.example");
+    expect(await service.activateAppOAuthIssuer(ctx(alice), secondApp, second.body, { ifNoneMatch: "*" })).toEqual({ revision: 1 });
+    const contenderOne = await candidate(firstApp, "https://shared-replacement.example");
+    const contenderTwo = await candidate(secondApp, "https://shared-replacement.example");
+    const results = await Promise.all([
+      service.activateAppOAuthIssuer(ctx(alice), firstApp, contenderOne.body, { ifMatch: '"1"' }),
+      service.activateAppOAuthIssuer(ctx(alice), secondApp, contenderTwo.body, { ifMatch: '"1"' }),
+    ]);
+    expect(results.filter(result => !("error" in result))).toEqual([{ revision: 2 }]);
+    expect(results.filter(result => "error" in result)).toEqual([expect.objectContaining({ error: "ISSUER_CONFLICT" })]);
+    const loserIndex = results.findIndex(result => "error" in result);
+    const loserApp = loserIndex === 0 ? firstApp : secondApp;
+    const loserCandidate = loserIndex === 0 ? contenderOne : contenderTwo;
+    expect(await service.getOAuthIssuer(ctx(alice), { path: { stackId: loserApp } })).toMatchObject({ issuer: loserIndex === 0 ? "https://initial.example" : "https://other.example", status: "active", revision: 1 });
+    expect(await db.prepare("SELECT used_at FROM cas_oauth_issuer_inspections WHERE inspection_id = ?").bind(loserCandidate.result.inspectionId).first()).toEqual({ used_at: null });
+    const expiring = await candidate(loserApp, "https://expired.example");
+    clock = expiring.result.expiresAt;
+    expect(await service.activateAppOAuthIssuer(ctx(alice), loserApp, expiring.body, { ifMatch: '"1"' })).toMatchObject({ error: "INVALID_REQUEST" });
+    expect(await service.getOAuthIssuer(ctx(alice), { path: { stackId: loserApp } })).toMatchObject({ status: "active", revision: 1 });
+  }, 20_000);
 
   test("enforces issuer ownership across stacks in the OAuth registry", async () => {
     const oauthDiscovery: OAuthDiscoveryPort = {

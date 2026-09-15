@@ -160,6 +160,30 @@ describe("AppSpaceCapabilityVerifier", () => {
     await expect(verifier.verify(request(token), APP_ROUTE)).resolves.toBeDefined();
   });
 
+  test("replaced issuer authority cannot survive cache refresh or the hard stale bound", async () => {
+    const { now, privateKey, appResolver } = await fixture();
+    let currentTime = now;
+    let replaced = false;
+    let unavailable = false;
+    const repository = { resolveIssuer: async () => {
+      if (unavailable) throw new Error("Registry unavailable");
+      return replaced ? null : appResolver.authority;
+    } };
+    const token = await issue(privateKey, now, { ver: 2, spaceId: SPACE, permissions: [spaceCasReadPermission(SPACE)] });
+    const refreshed = new AppSpaceCapabilityVerifier({ repository, now: () => currentTime });
+    const stale = new AppSpaceCapabilityVerifier({ repository, now: () => currentTime });
+    await refreshed.verify(request(token), APP_ROUTE);
+    await stale.verify(request(token), APP_ROUTE);
+    replaced = true;
+    currentTime = now + 30_000;
+    await expect(refreshed.verify(request(token), APP_ROUTE)).rejects.toMatchObject({ code: "unknown_issuer" });
+    unavailable = true;
+    currentTime = now + 59_999;
+    await expect(stale.verify(request(token), APP_ROUTE)).resolves.toBeDefined();
+    currentTime = now + 60_000;
+    await expect(stale.verify(request(token), APP_ROUTE)).rejects.toMatchObject({ code: "registry_unavailable" });
+  });
+
   test("registry failure cannot preserve pre-suspension authority beyond 60 seconds", async () => {
     const { now, privateKey, appResolver } = await fixture();
     let currentTime = now;

@@ -276,12 +276,15 @@ const TOOL_HANDLERS = {
       { appId: str(args.appId) },
       { issuer: str(args.issuer) },
     );
-    return { ...result.value, etag: result.etag };
+    return result;
   },
 
   async activate_app_oauth_issuer(admin, args) {
     const appId = str(args.appId);
-    const etag = await resolveEtag(
+    if (args.ifNoneMatch !== undefined && (args.ifNoneMatch !== "*" || args.etag !== undefined)) {
+      throw new Error("provide exactly one issuer precondition");
+    }
+    const precondition = args.ifNoneMatch === "*" ? { ifNoneMatch: "*" as const } : await resolveEtag(
       admin,
       () => admin.getAppOAuthIssuer({ appId }),
       "App OAuth issuer",
@@ -290,9 +293,9 @@ const TOOL_HANDLERS = {
     const result = await admin.activateAppOAuthIssuer(
       { appId },
       { inspectionId: str(args.inspectionId), activationProof: str(args.activationProof) },
-      etag,
+      precondition,
     );
-    return { ...result.value, etag: result.etag };
+    return result;
   },
 
   async get_app_managed_issuer(admin, args) {

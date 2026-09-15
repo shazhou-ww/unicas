@@ -639,15 +639,15 @@ class MemoryControlAdminRepository implements ControlPlaneAdminRepository {
     plan: ControlInspectOAuthIssuerPlan,
   ): Promise<ControlInspectOAuthIssuerCommitResult> {
     const existing = this.oauthIssuers.get(plan.issuer.stackId);
-    const expectedRevision = plan.preserveActiveIssuer ? plan.issuer.revision : plan.issuer.revision - 1;
-    if (existing && existing.revision !== expectedRevision) {
+    const expectedRevision = plan.issuer.revision - 1;
+    if (!plan.candidateOnly && existing && existing.revision !== expectedRevision) {
       return Promise.resolve({ kind: "revision-mismatch" });
     }
     if ([...this.oauthIssuers.values()].some((record) =>
       record.issuer === plan.issuer.issuer && record.stackId !== plan.issuer.stackId)) {
       return Promise.resolve({ kind: "issuer-conflict" });
     }
-    if (!plan.preserveActiveIssuer) this.oauthIssuers.set(plan.issuer.stackId, plan.issuer);
+    if (!plan.candidateOnly) this.oauthIssuers.set(plan.issuer.stackId, plan.issuer);
     this.inspections.push(plan.inspection);
     this.audits.push(plan.audit);
     this.snapshot += 1;

@@ -93,24 +93,11 @@ export interface AppOAuthIssuer {
 
 export interface AppOAuthIssuerInspection {
   readonly inspectionId: string;
-  readonly appId: AppId;
-  readonly issuer: string;
-  readonly audience: string;
   readonly metadataUrl: string;
-  readonly metadataType: "oauth" | "oidc";
-  readonly authorizationEndpoint: string;
-  readonly tokenEndpoint: string;
   readonly jwksUri: string;
-  readonly registrationEndpoint: string | null;
-  readonly scopesSupported: readonly string[];
-  readonly codeChallengeMethodsSupported: readonly string[];
-  readonly metadataDigest: string;
-  readonly jwksDigest: string;
-  readonly capabilityMaxLifetimeSeconds: number;
   readonly challenge: string;
   readonly expiresAt: number;
-  readonly keys: readonly CasOAuthIssuerInspectionKey[];
-  readonly revision: number;
+  readonly keys: readonly { readonly kid: string; readonly algorithm: string }[];
 }
 
 export interface ManagedSpaceCapability {

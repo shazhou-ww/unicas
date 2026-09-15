@@ -46,22 +46,22 @@ Change issuer workflow alongside the independently managed built-in issuer.
 
 ## Acceptance criteria
 
-- [ ] An App administrator can inspect a replacement issuer while the current
+- [x] An App administrator can inspect a replacement issuer while the current
       external issuer remains active and authoritative.
-- [ ] A candidate inspection never changes discovery output, capability
+- [x] A candidate inspection never changes discovery output, capability
       verification, or current issuer state before successful activation.
-- [ ] Activation requires an unexpired inspection, a valid compact-JWS ownership
+- [x] Activation requires an unexpired inspection, a valid compact-JWS ownership
       proof from captured eligible JWKS, global issuer uniqueness, and exact
       current issuer revision.
-- [ ] Successful activation atomically selects the replacement, advances the
+- [x] Successful activation atomically selects the replacement, advances the
       resource revision, records audit evidence, and leaves no authority gap.
-- [ ] Failed, stale, conflicting, expired, or abandoned replacement attempts
+- [x] Failed, stale, conflicting, expired, or abandoned replacement attempts
       leave the prior issuer unchanged and usable.
-- [ ] The old issuer stops authorizing within the defined hard stale bound after
+- [x] The old issuer stops authorizing within the defined hard stale bound after
       replacement; cache refresh failure does not preserve it indefinitely.
-- [ ] The Console presents active and candidate issuer states separately and
+- [x] The Console presents active and candidate issuer states separately and
       retains managed issuer status and enable/disable controls.
-- [ ] Focused discovery, proof, concurrency, uniqueness, authority-cache,
+- [x] Focused discovery, proof, concurrency, uniqueness, authority-cache,
       protocol, client, CLI/MCP, WebUI, and migration tests pass with relevant
       repository validation.
 

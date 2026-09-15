@@ -322,14 +322,14 @@ describe("command layer", () => {
     ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
     const { writes } = captureStdout();
     await appOAuthIssuerCommand(ctx, "inspect", ["cas_app_a", "https://issuer.example"]);
-    expect(JSON.parse(writes.join(""))).toMatchObject({ appId: "cas_app_a", inspectionId: "oinsp_app", status: "pending" });
+    expect(JSON.parse(writes.join(""))).toMatchObject({ inspectionId: "oinsp_app", challenge: expect.any(String) });
+    expect(JSON.parse(writes.join(""))).not.toHaveProperty("revision");
     writes.length = 0;
-    await appOAuthIssuerCommand(ctx, "activate", ["cas_app_a", "oinsp_app", "--activation-proof", "proof"]);
-    expect(JSON.parse(writes.join(""))).toMatchObject({ appId: "cas_app_a", status: "active", revision: 2 });
+    await appOAuthIssuerCommand(ctx, "activate", ["cas_app_a", "oinsp_app", "--activation-proof", "proof", "--if-none-match", "*"]);
+    expect(JSON.parse(writes.join(""))).toEqual({ etag: '"1"' });
     expect(server.requests).toEqual(expect.arrayContaining([
       expect.objectContaining({ pathname: "/admin/apps/cas_app_a/oauth-issuer/inspections", method: "POST" }),
-      expect.objectContaining({ pathname: "/admin/apps/cas_app_a/oauth-issuer", method: "GET" }),
-      expect.objectContaining({ pathname: "/admin/apps/cas_app_a/oauth-issuer", method: "PUT", ifMatch: '"rev-1"' }),
+      expect.objectContaining({ pathname: "/admin/apps/cas_app_a/oauth-issuer", method: "PUT", ifNoneMatch: "*", ifMatch: null }),
     ]));
   });
 

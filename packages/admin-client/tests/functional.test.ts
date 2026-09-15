@@ -51,6 +51,7 @@ class MockAdminService {
       origin: request.headers.get("Origin"),
       csrf,
       ifMatch: request.headers.get("If-Match"),
+      ifNoneMatch: request.headers.get("If-None-Match"),
       idempotencyKey: request.headers.get("Idempotency-Key"),
       body,
     });
@@ -160,18 +161,17 @@ class MockAdminService {
       return Response.json(appIssuer, { headers: { ETag: '"4"' } });
     }
     if (path === appAdminRoutes.oauthIssuer({ appId: APP }) && request.method === "PUT") {
-      return Response.json({ ...appIssuer, revision: 5 }, { headers: { ETag: '"5"' } });
+      return new Response(null, { status: 204, headers: { ETag: '"5"' } });
     }
     if (path === appAdminRoutes.oauthIssuerInspections({ appId: APP }) && request.method === "POST") {
       return Response.json({
         inspectionId: "inspection-1",
-        ...appIssuer,
-        metadataDigest: "metadata",
+        metadataUrl: appIssuer.metadataUrl,
+        jwksUri: appIssuer.jwksUri,
         challenge: "challenge",
         expiresAt: 1000,
         keys: [],
-        revision: 1,
-      }, { status: 201, headers: { ETag: '"1"' } });
+      }, { status: 201 });
     }
     if (path === appAdminRoutes.managedIssuer({ appId: APP }) && request.method === "GET") {
       return Response.json(appIssuer, { headers: { ETag: '"4"' } });
@@ -423,12 +423,14 @@ describe("functional admin client", () => {
     expect(await client.inspectAppOAuthIssuer(
       { appId: APP },
       { issuer: "https://issuer.example/oauth" },
-    )).toMatchObject({ value: { inspectionId: "inspection-1", appId: APP }, etag: '"1"' });
+    )).toEqual({ inspectionId: "inspection-1", metadataUrl: "https://cas.example/metadata", jwksUri: "https://cas.example/jwks", challenge: "challenge", expiresAt: 1000, keys: [] });
     expect(await client.activateAppOAuthIssuer(
       { appId: APP },
       { inspectionId: "inspection-1", activationProof: "proof" },
       '"4"',
-    )).toMatchObject({ value: { revision: 5 }, etag: '"5"' });
+    )).toEqual({ etag: '"5"' });
+    await client.activateAppOAuthIssuer({ appId: APP }, { inspectionId: "inspection-1", activationProof: "proof" }, { ifNoneMatch: "*" });
+    expect(service.requests.at(-1)).toMatchObject({ ifMatch: null, ifNoneMatch: "*" });
     expect(service.requests).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: `/admin/apps/${APP}/oauth-issuer`, search: "?optional=true" }),
       expect.objectContaining({ path: `/admin/apps/${APP}/managed-issuer`, method: "PATCH", csrf: "csrf-1", ifMatch: '"4"' }),

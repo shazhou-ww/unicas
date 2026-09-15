@@ -17,6 +17,7 @@ export const ControlAuditActions = {
   memberRemoved: "member.removed",
   oauthIssuerInspected: "oauth_issuer.inspection.created",
   oauthIssuerActivated: "oauth_issuer.activated",
+  oauthIssuerReplaced: "oauth_issuer.replaced",
   managedIssuerEnabled: "managed_issuer.enabled",
   managedIssuerDisabled: "managed_issuer.disabled",
   sessionLogin: "session.login",

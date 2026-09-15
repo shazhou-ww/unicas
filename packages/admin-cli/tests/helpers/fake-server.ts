@@ -23,6 +23,7 @@ export interface RecordedRequest {
   readonly cookie: string | null;
   readonly csrf: string | null;
   readonly ifMatch: string | null;
+  readonly ifNoneMatch: string | null;
   readonly idempotencyKey: string | null;
 }
 
@@ -109,6 +110,7 @@ export class FakeAdminApi {
       cookie,
       csrf,
       ifMatch: headers.get("If-Match"),
+      ifNoneMatch: headers.get("If-None-Match"),
       idempotencyKey: headers.get("Idempotency-Key"),
     });
     this.#options.onRequest?.(this.requests[this.requests.length - 1]);
@@ -238,17 +240,10 @@ export class FakeAdminApi {
       return new Response(null, { status: 204, headers: { ETag: '"2"' } });
     }
     if (url.pathname === appAdminRoutes.oauthIssuerInspections({ appId: "cas_app_a" }) && method === "POST") {
-      const record = {
-        issuer: String(body?.issuer ?? ""),
-        audience: "https://cas.example/stacks/cas_app_a",
-        status: "pending" as const,
-        revision: 1,
-      };
-      this.appOAuthIssuer.set("cas_app_a", record);
-      return jsonWithEtag({
+      return json({
         inspectionId: "oinsp_app",
-        appId: "cas_app_a",
-        ...record,
+        metadataUrl: "https://issuer.example/metadata",
+        jwksUri: "https://issuer.example/jwks",
         challenge: "cas-oauth-issuer-inspection-v1\\nchallenge",
         expiresAt: 1_800_000_000,
         keys: [],
@@ -260,10 +255,10 @@ export class FakeAdminApi {
     }
     if (url.pathname === appAdminRoutes.oauthIssuer({ appId: "cas_app_a" }) && method === "PUT") {
       const current = this.appOAuthIssuer.get("cas_app_a");
-      if (!current) return json({ error: "NOT_FOUND" }, 404);
-      const record = { ...current, status: "active" as const, revision: current.revision + 1 };
+      if (!current && headers.get("If-None-Match") !== "*") return json({ error: "REVISION_MISMATCH" }, 412);
+      const record = { issuer: "https://issuer.example", audience: "https://cas.example/stacks/cas_app_a", ...current, status: "active" as const, revision: (current?.revision ?? 0) + 1 };
       this.appOAuthIssuer.set("cas_app_a", record);
-      return jsonWithEtag({ appId: "cas_app_a", ...record });
+      return new Response(null, { status: 204, headers: { ETag: `"${record.revision}"` } });
     }
     if (url.pathname === appAdminRoutes.refDomains({ appId: "cas_app_a" })) {
       return json({ domains: [{ appId: "cas_app_a", refDomain: "doc", revision: 1 }] });

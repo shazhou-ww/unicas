@@ -100,6 +100,13 @@ The catalog contains 25 App tools and 15 v1 tools. The v1 tools, including `whoa
 They are not aliases for the App tools.
 
 An App's signing authority is exclusively a discovered OAuth issuer:
+the App inspection tool creates an independent candidate and does not disable
+current authority. `activate_app_oauth_issuer` uses `ifNoneMatch: "*"` for first
+activation or the current issuer `etag` for replacement, never both. A
+replacement swaps authority atomically and returns only `{ etag }`. Inspection
+returns only candidate proof inputs and discovery review URLs; no mutable
+issuer revision or captured public JWKs are echoed.
+
 `inspect_app_oauth_issuer` validates and persists the issuer's metadata and JWKS
 snapshot and returns a control challenge, which the operator signs with a key
 the issuer currently advertises and submits as a compact-JWS activation proof

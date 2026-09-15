@@ -14,7 +14,11 @@ import { formatErrorSafe } from "./view-helpers.js";
  * keys: activation proves control of a key the issuer currently advertises,
  * and Space verification reads the issuer's discovered jwks_uri.
  */
-export function IssuerView({ appId, focusManagedIssuer = false }: { appId: string; focusManagedIssuer?: boolean }) {
+export function IssuerView(props: { appId: string; focusManagedIssuer?: boolean }) {
+  return <IssuerPanel key={props.appId} {...props} />;
+}
+
+function IssuerPanel({ appId, focusManagedIssuer = false }: { appId: string; focusManagedIssuer?: boolean }) {
   const managedSettingsRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -33,6 +37,7 @@ export function IssuerView({ appId, focusManagedIssuer = false }: { appId: strin
   const [togglingManaged, setTogglingManaged] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<"copied" | "failed" | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     setCopyStatus(null);
@@ -63,6 +68,7 @@ export function IssuerView({ appId, focusManagedIssuer = false }: { appId: strin
       ]);
       setOAuthIssuer(oauthResult);
       setManagedIssuer(managedResult);
+      setLoaded(true);
       if (oauthResult) {
         setOAuthIssuerUrl(oauthResult.issuer);
       }
@@ -78,6 +84,8 @@ export function IssuerView({ appId, focusManagedIssuer = false }: { appId: strin
   async function inspectOAuthIssuer() {
     setInspecting(true);
     setError(null);
+    setInspection(null);
+    setActivationProof("");
     try {
       const result = await api<AppOAuthIssuerInspection>(`/admin/apps/${encodeURIComponent(appId)}/oauth-issuer/inspections`, {
         method: "POST",
@@ -85,7 +93,6 @@ export function IssuerView({ appId, focusManagedIssuer = false }: { appId: strin
         body: JSON.stringify({ issuer: oauthIssuerUrl.trim() }),
       });
       setInspection(result);
-      setOAuthIssuer({ ...result, mode: "external", status: "pending", verifiedAt: null, lastRefreshAt: Date.now(), lastRefreshError: null });
     } catch (caught) {
       setError(formatErrorSafe(caught));
     } finally {
@@ -94,19 +101,22 @@ export function IssuerView({ appId, focusManagedIssuer = false }: { appId: strin
   }
 
   async function activateOAuthIssuer() {
-    if (!inspection || !oauthIssuer) return;
+    if (!inspection) return;
     setActivating(true);
     setError(null);
     try {
-      await api<AppOAuthIssuer>(`/admin/apps/${encodeURIComponent(appId)}/oauth-issuer`, {
+      await api<void>(`/admin/apps/${encodeURIComponent(appId)}/oauth-issuer`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", ...ifMatch(oauthIssuer.revision) },
+        headers: { "Content-Type": "application/json", ...(oauthIssuer ? ifMatch(oauthIssuer.revision) : { "If-None-Match": "*" }) },
         body: JSON.stringify({ inspectionId: inspection.inspectionId, activationProof: activationProof.trim() }),
       });
       setInspection(null);
       setActivationProof("");
       await load();
     } catch (caught) {
+      setInspection(null);
+      setActivationProof("");
+      await load();
       setError(formatErrorSafe(caught));
     } finally {
       setActivating(false);
@@ -132,7 +142,7 @@ export function IssuerView({ appId, focusManagedIssuer = false }: { appId: strin
   }
 
   const configured = oauthIssuer !== null;
-  const canInspect = oauthIssuer === null || oauthIssuer.status !== "active";
+  const canInspect = loaded && !activating && !inspecting;
 
   return (
     <>
@@ -196,13 +206,19 @@ export function IssuerView({ appId, focusManagedIssuer = false }: { appId: strin
         ) : null}
         <div className="field-row">
           <label htmlFor="oauth-issuer-url">Issuer</label>
-          <input id="oauth-issuer-url" value={oauthIssuerUrl} placeholder="https://authorization.example" disabled={!canInspect} onChange={(event) => setOAuthIssuerUrl(event.target.value)} />
+          <input id="oauth-issuer-url" value={oauthIssuerUrl} placeholder="https://authorization.example" disabled={!canInspect} onChange={(event) => {
+            setOAuthIssuerUrl(event.target.value);
+            setInspection(null);
+            setActivationProof("");
+          }} />
         </div>
         <Button icon={<Search size={15} />} variant="primary" onClick={() => void inspectOAuthIssuer()} disabled={inspecting || !canInspect || oauthIssuerUrl.trim().length === 0}>
-          {inspecting ? "Inspecting…" : oauthIssuer?.status === "active" ? "Issuer active" : "Inspect issuer"}
+          {inspecting ? "Inspecting…" : oauthIssuer?.status === "active" ? "Inspect replacement" : "Inspect issuer"}
         </Button>
         {inspection ? (
           <div className="challenge-box">
+            <h3>Candidate issuer</h3>
+            <p className="hint">{oauthIssuerUrl} · Expires {new Date(inspection.expiresAt).toLocaleString()}</p>
             <p>
               The issuer JWKS contains {inspection.keys.length} eligible signing key(s).
               Sign this one-time control challenge with the matching private key:
@@ -213,7 +229,7 @@ export function IssuerView({ appId, focusManagedIssuer = false }: { appId: strin
               <textarea id="oauth-activation-proof" value={activationProof} rows={3} onChange={(event) => setActivationProof(event.target.value)} />
             </div>
             <Button icon={<ShieldCheck size={15} />} variant="primary" disabled={activating || activationProof.trim().length === 0} onClick={() => void activateOAuthIssuer()}>
-              {activating ? "Activating…" : "Verify and activate"}
+              {activating ? "Activating…" : oauthIssuer?.status === "active" ? "Verify and replace" : "Verify and activate"}
             </Button>
           </div>
         ) : null}

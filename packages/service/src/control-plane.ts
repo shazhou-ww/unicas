@@ -43,6 +43,7 @@ import type {
   CasAdminPatchManagedIssuerRequest,
   CasAdminPatchManagedIssuerResponse,
   CasOperatorIdentityKey,
+  AppOAuthIssuerInspection,
   ManagedSpaceCapability,
 } from "@unicas/admin-protocol";
 import type { ControlAuditAction } from "./control-audit.js";
@@ -66,6 +67,7 @@ export interface ControlPlaneCallContext {
 
 /** Service-level mutation input: raw precondition headers, parsed by the service. */
 export interface ServiceMutationInput {
+  readonly ifNoneMatch?: string;
   /** Raw `If-Match` header value; absent means "no precondition". */
   readonly ifMatch?: string;
   /** Raw `Idempotency-Key` header value for creation endpoints. */
@@ -74,6 +76,11 @@ export interface ServiceMutationInput {
 
 /** Cloud-neutral control-plane operations consumed by admin presentation layers. */
 export interface ControlPlaneOperations {
+  inspectAppOAuthIssuer(ctx: ControlPlaneCallContext, appId: string, issuer: string): Promise<AppOAuthIssuerInspection | CasAdminErrorResponse>;
+  activateAppOAuthIssuer(
+    ctx: ControlPlaneCallContext, appId: string,
+    body: { readonly inspectionId: string; readonly activationProof: string }, mutation: ServiceMutationInput,
+  ): Promise<{ readonly revision: number } | CasAdminErrorResponse>;
   me(ctx: ControlPlaneCallContext): Promise<CasAdminMeResponse | CasAdminErrorResponse>;
   listStacks(ctx: ControlPlaneCallContext, request: CasAdminListStacksRequest): Promise<CasAdminListStacksResponse>;
   createStack(

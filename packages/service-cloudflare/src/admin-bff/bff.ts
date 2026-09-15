@@ -15,6 +15,8 @@ import {
   matchCasAdminRoute,
   PatchAppRequestSchema,
   AppInvitationQuerySchema,
+  InspectAppIssuerRequestSchema,
+  ActivateAppIssuerRequestSchema,
 } from "@unicas/admin-protocol";
 import type {
   CasAdminErrorResponse,
@@ -177,6 +179,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     }
     if (appRoute?.operation === "patchApp") {
       return handleAppPatch(request, appRoute.appId);
+    }
+    if (appRoute?.operation === "inspectOAuthIssuer" || appRoute?.operation === "activateOAuthIssuer") {
+      return handleAppIssuerMutation(request, appRoute.appId, appRoute.operation);
     }
     if (appRoute?.operation === "listMemberInvitations" || appRoute?.operation === "revokeMemberInvitation") {
       return handleAppInvitations(request, appRoute.appId, appRoute.operation === "revokeMemberInvitation" ? appRoute.invitationId : undefined);
@@ -650,6 +655,28 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         },
       },
     );
+  }
+
+  async function handleAppIssuerMutation(request: Request, appId: string, operation: "inspectOAuthIssuer" | "activateOAuthIssuer"): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!(await passCsrf(request, auth.payload))) return csrfRejected();
+    const context = serviceContext(auth.payload, request);
+    const body = await readJsonBody(request);
+    if (operation === "inspectOAuthIssuer") {
+      const parsed = InspectAppIssuerRequestSchema.safeParse(body);
+      if (!parsed.success) return invalidRequest("A valid issuer URL is required");
+      const result = await controlPlane.inspectAppOAuthIssuer(context, appId, parsed.data.issuer);
+      return "error" in result ? json(transformAppAdminError({ ...result }), casAdminErrorHttpStatus[result.error]) : json(result, 201);
+    }
+    const parsed = ActivateAppIssuerRequestSchema.safeParse(body);
+    if (!parsed.success) return invalidRequest("A candidate inspection and activation proof are required");
+    const result = await controlPlane.activateAppOAuthIssuer(context, appId, parsed.data, {
+      ifMatch: request.headers.get("If-Match") ?? undefined,
+      ifNoneMatch: request.headers.get("If-None-Match") ?? undefined,
+    });
+    return "error" in result ? json(transformAppAdminError({ ...result }), casAdminErrorHttpStatus[result.error])
+      : new Response(null, { status: 204, headers: { ETag: formatCasAdminETag(result.revision), "Cache-Control": "no-store" } });
   }
 
   async function handleAppInvitations(request: Request, appId: string, invitationId?: string): Promise<Response> {

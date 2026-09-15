@@ -217,6 +217,15 @@ function fakeControlPlane(): ControlPlaneOperations {
       return request.query?.optional ? null : { error: "NOT_FOUND", message: "OAuth issuer is not configured" };
     },
     getManagedOAuthIssuer: error,
+    inspectAppOAuthIssuer: async (ctx, appId) => {
+      if (!requireStack(ctx, appId)) return { error: "STACK_MEMBERSHIP_REQUIRED" };
+      return { inspectionId: "candidate", metadataUrl: "https://candidate.example/metadata", jwksUri: "https://candidate.example/jwks", challenge: "synthetic", expiresAt: 4102444800000, keys: [{ kid: "key", algorithm: "ES256" }] };
+    },
+    activateAppOAuthIssuer: async (ctx, appId, _body, mutation) => {
+      if (!requireStack(ctx, appId)) return { error: "STACK_MEMBERSHIP_REQUIRED" };
+      if (mutation.ifNoneMatch !== "*" && mutation.ifMatch !== '"9"') return { error: "PRECONDITION_REQUIRED" };
+      return { revision: mutation.ifNoneMatch === "*" ? 1 : 10 };
+    },
     patchManagedOAuthIssuer: error,
     mintManagedCapability: async (ctx, request) => {
       const stack = requireStack(ctx, request.path.stackId);
@@ -871,6 +880,27 @@ describe("cas-admin-webui BFF", () => {
     expect(created.description).toBe("");
     expect(created.stackId).toMatch(/^cas_/);
     expect(ok.headers.get("ETag")).toBe('"1"');
+  });
+
+  test("App issuer mutations preserve minimal receipts and both conditional activation modes", async () => {
+    const provider = await createMockProvider();
+    const bff = await createBff(provider);
+    const { cookie, csrf } = await signIn(bff, provider);
+    const appId = await createStack(bff, cookie, csrf, "App");
+    const path = `/admin/apps/${appId}/oauth-issuer`;
+    const headers = { "X-CSRF-Token": csrf, "Content-Type": "application/json" };
+    const inspection = await authRequest(bff, `${path}/inspections`, cookie, { method: "POST", headers, body: JSON.stringify({ issuer: "https://candidate.example" }) });
+    expect(inspection.status).toBe(201);
+    expect(inspection.headers.has("ETag")).toBe(false);
+    expect(await inspection.json()).toEqual({ inspectionId: "candidate", metadataUrl: "https://candidate.example/metadata", jwksUri: "https://candidate.example/jwks", challenge: "synthetic", expiresAt: 4102444800000, keys: [{ kid: "key", algorithm: "ES256" }] });
+    const body = JSON.stringify({ inspectionId: "candidate", activationProof: "synthetic-proof" });
+    const initial = await authRequest(bff, path, cookie, { method: "PUT", headers: { ...headers, "If-None-Match": "*" }, body });
+    expect(initial.status).toBe(204);
+    expect(initial.headers.get("ETag")).toBe('"1"');
+    expect(await initial.text()).toBe("");
+    const replacement = await authRequest(bff, path, cookie, { method: "PUT", headers: { ...headers, "If-Match": '"9"' }, body });
+    expect(replacement.status).toBe(204);
+    expect(replacement.headers.get("ETag")).toBe('"10"');
   });
 
   test("App invitation list and revoke use strict filters, CSRF, and invitation ETags", async () => {

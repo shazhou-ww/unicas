@@ -22,6 +22,8 @@ import {
   PrincipalSchema,
   ProfileSchema,
   PatchAppRequestSchema,
+  AppIssuerPreconditionSchema,
+  AppOAuthIssuerInspectionSchema,
   ManagedSpaceCapabilitySchema,
   SpaceRootRefBalanceSchema,
   appAdminApiContract,
@@ -41,6 +43,16 @@ function operations(document: Awaited<ReturnType<typeof generateAdminOpenApiDocu
 }
 
 describe("CAS admin schemas", () => {
+  test("distinguishes issuer activation preconditions and rejects full inspection echoes", () => {
+    expect(AppIssuerPreconditionSchema.safeParse({ "if-none-match": "*" }).success).toBe(true);
+    expect(AppIssuerPreconditionSchema.safeParse({ "if-match": '"4"' }).success).toBe(true);
+    for (const headers of [{}, { "if-match": '"4"', "if-none-match": "*" }, { "if-match": "4" }]) {
+      expect(AppIssuerPreconditionSchema.safeParse(headers).success).toBe(false);
+    }
+    const receipt = { inspectionId: "candidate", metadataUrl: "https://issuer.example/metadata", jwksUri: "https://issuer.example/jwks", challenge: "synthetic", expiresAt: 1000, keys: [{ kid: "key", algorithm: "ES256" }] };
+    expect(AppOAuthIssuerInspectionSchema.safeParse(receipt).success).toBe(true);
+    expect(AppOAuthIssuerInspectionSchema.safeParse({ ...receipt, revision: 1, appId: "app" }).success).toBe(false);
+  });
   test("validates strict nonempty App status patches", () => {
     for (const status of ["active", "suspended"]) {
       expect(PatchAppRequestSchema.safeParse({ status }).success).toBe(true);
@@ -211,6 +223,9 @@ describe("CAS admin OpenAPI", () => {
     expect(patch?.responses?.["204"]).toHaveProperty("headers.ETag.required", true);
     expect(patch?.responses?.["204"]).not.toHaveProperty("content");
     expect(patch?.responses).not.toHaveProperty("200");
+    const activate = document.paths?.["/admin/apps/{appId}/oauth-issuer"]?.put;
+    expect(activate?.responses?.["204"]).toHaveProperty("headers.ETag.required", true);
+    expect(activate?.responses?.["204"]).not.toHaveProperty("content");
     expect(serialized).not.toMatch(/stackId|tenantId|Stack|Tenant/);
   });
 
