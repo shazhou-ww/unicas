@@ -132,7 +132,7 @@ After the gate is reviewed and passed:
 - [x] Register and verify the required Google OAuth callbacks.
 - [x] Run Wrangler dry-runs, deploy, recreate Production Smoke, and run v2 smoke.
 - [x] Verify rollback before removing transitional aliases from the new environment.
-- [ ] Run build, typecheck, tests, smoke, dry-run, gitleaks, and CI.
+- [x] Run build, typecheck, tests, smoke, dry-run, gitleaks, and CI.
 
 ## Completion rule
 

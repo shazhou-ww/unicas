@@ -44,7 +44,7 @@ and names the top-level application/trust boundary App.
 - [x] “Space” is never used to mean free or available storage capacity.
 - [x] Cross-App and cross-Space isolation tests pass.
 - [x] Legacy v1 remains unchanged and operational.
-- [ ] Full build, typecheck, tests, smoke, dry-run, gitleaks, and CI pass.
+- [x] Full build, typecheck, tests, smoke, dry-run, gitleaks, and CI pass.
 
 ## Constraints
 
@@ -65,6 +65,6 @@ and names the top-level application/trust boundary App.
 - [Physical cutover inventory](CutoverInventory.md)
 - [Migration inventory](Inventory.md)
 - [V1/v2 compatibility matrix](CompatibilityMatrix.md)
-- [Finalized terminology](../../../../docs/terminology.md)
-- [Finalized domain topology](../../../../docs/domain-topology.md)
-- [UniCAS architecture](../../../../docs/cas-architecture.md)
+- [Finalized terminology](../../../docs/terminology.md)
+- [Finalized domain topology](../../../docs/domain-topology.md)
+- [UniCAS architecture](../../../docs/cas-architecture.md)

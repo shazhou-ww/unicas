@@ -92,9 +92,9 @@ failure also exposed that Node admin-client mutations omitted the required
 same-origin `Origin` header; the client and regression test now enforce both
 Origin and CSRF.
 
-The next concrete action is to commit the final client/docs/task changes, run
-the tracked-source secret scan, push, and require final GitHub CI before
-archiving this task.
+All acceptance criteria and production cutover gates now pass. The task is
+ready to archive; the next concrete action after archival is to resume the
+separate deployment-automation backlog task when ownership is claimed.
 
 ## Decisions
 
@@ -344,12 +344,19 @@ archiving this task.
 - The live CLI create initially exposed a missing Node `Origin` header. The
   admin-client fix passed 14 functional tests, the admin CLI passed 42 tests,
   and the full workspace build, typecheck, and serialized package suites pass.
+- The authenticated production WebUI displays `My Apps` with the recreated
+  `Production Smoke` App at an `#/apps/{appId}` route.
+- Checksum-verified gitleaks 8.28.0 scanned 342 committed revisions with no
+  leaks. GitHub Actions run `34930985138` completed successfully for final
+  source commit `da091d1`.
 
 ## Blockers
 
-- Final GitHub CI must pass on the source fix and completed cutover records
-  before the task is archived.
+- None.
 
 ## Outcome
 
-In progress.
+Completed. The new environment now uses App/Space public and physical models,
+the production smoke-only state was rebuilt and verified, rollback artifacts
+and the retained prior Worker were validated, and the frozen legacy deployment
+remained available throughout.
