@@ -93,6 +93,19 @@ constraints, and references. Create `Progress.md` only when work is claimed;
 keep its current state, next action, decisions, validation, blockers, and final
 outcome current.
 
+## Task links
+
+Task artifacts are rendered on GitHub and in VS Code with the repository root
+as the workspace root. Both resolve a leading `/` from that root, so new or
+edited backlog and ongoing task artifacts use `/path/from/repository/root` for
+repository-local references. These links remain stable when a task moves among
+backlog, identity-scoped ongoing, and archived locations.
+
+Leave external URLs and fragment-only links unchanged. Link checks resolve
+leading `/` targets from the Git repository root and ordinary relative targets
+from the directory containing the Markdown file. Do not rewrite archived task
+history solely to change its link style.
+
 ## Documentation boundary
 
 Put task-specific plans, research, impact inventories, current-state captures,
