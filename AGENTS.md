@@ -2,22 +2,25 @@
 
 ## Task workflow
 
-For planned or multi-step work, follow [`tasks/README.md`](tasks/README.md).
+For Issue triage and all planned or multi-step work, load and follow the
+[`repository-task-ledger` skill](.agents/skills/repository-task-ledger/SKILL.md).
+Then apply the UniCAS-specific profile in [`tasks/README.md`](tasks/README.md).
 
-- Inspect `tasks/ongoing/` and `tasks/backlog/` before creating related work.
+- Inspect `tasks/ongoing/<identity>/` and `tasks/backlog/` before creating or
+  claiming related work.
 - Create accepted new work under `tasks/backlog/<task-name>/Task.md`.
 - Planning and review alone do not start implementation; leave the task in
   `backlog/` until implementation begins.
-- Before the first implementation edit, move the whole task folder with
-  `git mv` to `tasks/ongoing/` and create `Progress.md`.
+- Before the first implementation edit, claim the task with `git mv` under the
+  worktree's registered `tasks/ongoing/<identity>/` lane and create
+  `Progress.md`.
 - Keep the `Progress.md` checklist, current state, decisions, validation, and
   blockers current after meaningful milestones.
 - Before finishing or pausing a session, leave the next concrete action in
   `Progress.md` so another agent can resume without reconstructing context.
 - On completion or abandonment, record the outcome and move the whole folder
   to `tasks/archived/`.
-- Treat the parent directory as the only task status. Never copy one task into
-  multiple status directories.
+- Never copy one task into multiple status or identity directories.
 
 ## Documentation boundary
 

@@ -294,7 +294,7 @@ online migration plan.
 ### 6. Combine with the planned domain cutover
 
 Coordinate with the `split-public-domain-topology` task and follow the finalized
-[UniCAS domain topology](../../../docs/domain-topology.md):
+[UniCAS domain topology](../../../../docs/domain-topology.md):
 
 ```text
 api.unicas.work      App/Space machine API and MCP/OAuth

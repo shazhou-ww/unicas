@@ -1,20 +1,23 @@
 # Repository tasks
 
-This directory is the repository-owned task ledger. Task state travels with the
-code and does not depend on a particular issue tracker or hosting platform.
-Repository agents are required by [`AGENTS.md`](../AGENTS.md) to follow this
-workflow for planned or multi-step work.
+This directory is UniCAS's repository-owned task ledger. GitHub Issues remain
+the open intake surface for bugs and requests, including contributions from
+people without repository write access. A triage acceptance turns that input
+into a task here; rejected, duplicate, and unconfirmed requests remain Issues.
 
-## Documentation boundary
+The shared
+[`repository-task-ledger` skill](../.agents/skills/repository-task-ledger/SKILL.md)
+defines the lifecycle used by people and agents. [`AGENTS.md`](../AGENTS.md)
+requires that skill for Issue triage and planned or multi-step work. This file
+contains only the UniCAS project profile.
 
-Put task-specific plans, research, impact inventories, current-state captures,
-and reference material inside the task folder. These files move with the task.
+## Skill installation
 
-Use `docs/` only for accepted, stable project consensus: architecture,
-terminology, protocols, operations, and current configuration. When a task
-reaches a durable decision, extract that decision into `docs/` and link the
-finalized document from `Task.md`; keep execution details and progress in the
-task folder.
+The installed skill is committed under `.agents/skills/`, and
+[`skills-lock.json`](../skills-lock.json) records its GitHub source and content
+hash. Restore it after cloning with `npx skills experimental_install`. Update it
+deliberately with `npx skills update repository-task-ledger --project --yes`,
+then review and validate the resulting repository diff.
 
 ## Layout
 
@@ -25,10 +28,12 @@ tasks/
 │       ├── Task.md
 │       └── <optional reference material>
 ├── ongoing/
-│   └── <task-name>/
-│       ├── Task.md
-│       ├── Progress.md
-│       └── <optional reference material>
+│   └── <identity>/
+│       ├── .gitkeep
+│       └── <task-name>/
+│           ├── Task.md
+│           ├── Progress.md
+│           └── <optional reference material>
 └── archived/
     └── <task-name>/
         ├── Task.md
@@ -39,124 +44,58 @@ tasks/
 Use the standard spelling `archived/`. Do not create a parallel
 `archieved/` directory.
 
-The parent directory is the single source of truth for status:
+The first directory below `tasks/` is the single source of truth for status:
 
 - `backlog`: accepted but not started;
 - `ongoing`: actively being implemented or investigated;
 - `archived`: completed or deliberately abandoned.
 
-## Lifecycle
+Within `ongoing`, the identity directory records the active claim. An identity
+may represent a person, agent, team, or another actor chosen under the team's
+convention.
 
-1. Create `tasks/backlog/<task-name>/Task.md` when a task is accepted.
-2. Put task-specific source material in the same folder and link to it from
-   `Task.md`. Prefer links to canonical repository docs over copied content.
-3. Before implementation, move the whole folder with `git mv` from `backlog/`
-   to `ongoing/` and create `Progress.md`.
-4. Keep the `Progress.md` checklist current at meaningful checkpoints. Record
-   decisions, validation evidence, blockers, and changed assumptions while they
-   are fresh.
-5. When work completes, record the final outcome and validation, then move the
-   whole folder to `archived/`.
-6. When work is abandoned, record why, what was learned, and any reusable
-   follow-up before moving it to `archived/`.
+## Identity coordination
 
-Never copy a task between status directories. Preserve its history through
-renames so Git can follow the task from backlog to archive.
+- Each worktree should normally use one stable identity.
+- Identity and task names use lowercase kebab-case.
+- Before choosing a new identity, fetch and inspect identity names already on
+  `origin/main`.
+- Reserve a new name by adding `tasks/ongoing/<identity>/.gitkeep` in its own
+  commit and pushing that commit directly to `main`. Never force through a
+  competing reservation.
+- Publish task claims to the shared `main` history before substantial
+  implementation. All worktree branches ultimately integrate into `main`.
+- Keep `.gitkeep` after the lane becomes empty so the identity name remains
+  reserved.
 
-## Naming
+This is a cooperative early-warning protocol, not an absolute lock. Its value
+comes from making work intent visible before participants invest heavily.
 
-Use a short lowercase kebab-case folder name that describes the outcome:
+## Task files
 
-```text
-split-public-domain-topology
-migrate-app-space-terminology
-add-direct-r2-upload-credentials
-```
+Start task files from the skill's
+[`Task.md`](../.agents/skills/repository-task-ledger/assets/Task.md) and
+[`Progress.md`](../.agents/skills/repository-task-ledger/assets/Progress.md)
+templates. Use a short lowercase kebab-case task name that describes the
+outcome. Add a date prefix only to disambiguate otherwise identical names.
 
-Add a date prefix only when two tasks would otherwise have the same name.
+Keep `Task.md` focused on the durable goal, scope, acceptance criteria,
+constraints, and references. Create `Progress.md` only when work is claimed;
+keep its current state, next action, decisions, validation, blockers, and final
+outcome current.
 
-## Task.md
+## Documentation boundary
 
-Every task folder must contain `Task.md`. Use this shape:
+Put task-specific plans, research, impact inventories, current-state captures,
+and reference material inside the task folder so they move with the task.
 
-```markdown
-# Task title
-
-Created: YYYY-MM-DD
-
-## Goal
-
-One testable outcome.
-
-## Context
-
-Why the task exists and the current behavior.
-
-## Scope
-
-- Included change.
-
-## Out of scope
-
-- Explicit non-goal.
-
-## Acceptance criteria
-
-- [ ] Observable completion condition.
-
-## Constraints
-
-- Compatibility, security, sequencing, and rollback constraints.
-
-## References
-
-- Canonical design: `<relative path to finalized document>`
-```
-
-Keep `Task.md` focused on the durable problem, scope, and acceptance criteria.
-Do not turn it into a chronological work log.
-
-## Progress.md
-
-Create `Progress.md` only when moving a task to `ongoing/`. Use this shape:
-
-```markdown
-# Progress
-
-Updated: YYYY-MM-DD
-
-## Checklist
-
-- [ ] Current work item.
-
-## Current state
-
-The latest verified state and the next concrete action.
-
-## Decisions
-
-- Decision and rationale.
+Use `docs/` only for accepted, stable project consensus: architecture,
+terminology, protocols, operations, and current configuration. Extract durable
+decisions there and link them from `Task.md`; leave execution history in the
+task folder. Never store secrets, authentication material, private customer
+data, or local machine credentials in either location.
 
 ## Validation
 
-- Command or behavior checked, with its result.
-
-## Blockers
-
-- Blocker, owner, and required resolution; write `None` when clear.
-
-## Outcome
-
-Fill this in before archiving as `Completed` or `Abandoned`, with a concise
-reason and any remaining follow-up.
-```
-
-Do not store secrets, authentication material, private customer data, or local
-machine credentials in task files. Record secret names and provisioning
-procedures, not values.
-
-## Relationship to external trackers
-
-GitHub issues or other trackers may link to these tasks, but they are not the
-source of truth for repository work. Put durable scope, decisions, progress,
-and validation here so they remain available after a hosting migration.
+Run `pnpm check:tasks` after changing task files, repository instructions, the
+installed skill, or `skills-lock.json`.

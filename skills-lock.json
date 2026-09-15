@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "repository-task-ledger": {
+      "source": "shazhou-ww/skills",
+      "sourceType": "github",
+      "skillPath": "skills/repository-task-ledger/SKILL.md",
+      "computedHash": "d6ce51eabb2d2d9ddeadeb6d6ee73d0c4b182413210a0956cd060a01603b8cb5"
+    }
+  }
+}
