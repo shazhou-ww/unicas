@@ -54,10 +54,11 @@ describe("standalone deployment plan", () => {
     expect(job).toContain("run: pnpm deploy:docs:plan");
   });
 
-  test("gates production deployment behind validation of a main revision", () => {
+  test("gates production deployment behind validation of a release revision", () => {
     const job = productionJob();
     expect(job).toContain("needs: validate");
-    expect(job).toContain("github.ref == 'refs/heads/main'");
+    expect(job).toContain("github.ref == 'refs/heads/release'");
+    expect(job).not.toContain("github.ref == 'refs/heads/main'");
     expect(job).toContain("github.event_name == 'push'");
     expect(job).toContain("github.event_name == 'workflow_dispatch'");
     expect(job).toContain("environment: Production");

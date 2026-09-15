@@ -223,14 +223,15 @@ flow. Never commit the key files or print their contents.
 ## GitHub Actions production deployment
 
 The `deploy-production` job in [the CI workflow](../.github/workflows/ci.yml)
-runs only for a push to `main` or a manual workflow dispatch whose selected
-branch is `main`. It waits for the same workflow's `validate` job, checks out
-`github.sha` again, installs from the lockfile, and rebuilds before publishing.
-Pull requests, fork workflows, non-`main` pushes, and manual runs from another
-branch skip the deployment job before the protected environment is entered.
+runs only for a push to `release` or a manual workflow dispatch whose selected
+branch is `release`. It waits for the same workflow's `validate` job, checks
+out `github.sha` again, installs from the lockfile, and rebuilds before
+publishing. Pull requests, fork workflows, `main` and other non-`release`
+pushes, and manual runs from another branch skip the deployment job before the
+protected environment is entered.
 
 Create one GitHub environment named `Production`. Set its deployment branch
-policy to selected branches and tags, allowing only `main`; add required
+policy to selected branches and tags, allowing only `release`; add required
 reviewers or a wait timer if the repository's release policy requires them.
 Configure these values on that environment, not as unprotected repository
 secrets:
@@ -284,17 +285,27 @@ Initial provisioning is an explicit bootstrap operation:
    `UNICAS_SMOKE_SPACE_ID=deploy-smoke`, and stream the PKCS#8 PEM directly
    into the `UNICAS_SMOKE_PRIVATE_KEY_PKCS8` GitHub environment secret without
    printing it.
-5. Dispatch **CI** from `main` and retain the bootstrap key file only in the
+5. Dispatch **CI** from `release` and retain the bootstrap key file only in the
    approved operator credential store until rotation or recovery no longer
    requires it.
 
-A normal release is a validated push to `main`. The protected job stops on the
-first failure. Its `unicas-production` concurrency group uses `queue: max` and
-does not cancel an in-progress release, so up to 100 validated revisions can
-wait for serialized deployment instead of replacing the current pending run.
-GitHub orders them by the time each deployment job starts waiting, which can
-differ from workflow dispatch order; every job still deploys its own validated
-`github.sha`. The job deploys in this order:
+Use `main` for normal development integration and keep `release` as a promotion
+branch, not a second development line. Protect `release`, require the **CI**
+validation job before merge, and disable force pushes and branch deletion.
+Promote a tested `main` revision by opening a pull request with `release` as
+the base and `main` as the compare branch. Review the exact commit range and
+merge it without bypassing required checks. Direct pushes, rebases, or manual
+commits on `release` obscure what was promoted and should be reserved for an
+explicit recovery procedure.
+
+A normal release is the validated push created by merging that promotion pull
+request into `release`. The protected job stops on the first failure. Its
+`unicas-production` concurrency group uses `queue: max` and does not cancel an
+in-progress release, so up to 100 validated revisions can wait for serialized
+deployment instead of replacing the current pending run. GitHub orders them by
+the time each deployment job starts waiting, which can differ from workflow
+dispatch order; every job still deploys its own validated `github.sha`. The
+job deploys in this order:
 
 1. `pnpm deploy:production` for the API/console service and canonical smoke.
 2. `pnpm deploy:site` for `unicas.work`.
@@ -304,7 +315,8 @@ differ from workflow dispatch order; every job still deploys its own validated
    origins. Redirects to another host or protocol do not pass.
 
 For a manual recovery run, open the **CI** workflow in GitHub Actions, choose
-**Run workflow**, and select `main`. The dispatch repeats validation and the
-same protected deployment path; it is not a bypass around a failed check. See
-[CAS Middleware Operations](cas-operations.md) for failure diagnosis,
-credential rotation, and version-specific rollback.
+**Run workflow**, and select `release`. The dispatch repeats validation and
+the same protected deployment path; selecting `main` or another branch runs
+validation but skips production, and `workflow_dispatch` is not a bypass
+around a failed check. See [CAS Middleware Operations](cas-operations.md) for
+failure diagnosis, credential rotation, and version-specific rollback.

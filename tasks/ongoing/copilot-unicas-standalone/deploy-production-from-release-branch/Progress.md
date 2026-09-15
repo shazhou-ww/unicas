@@ -5,16 +5,18 @@ Updated: 2026-09-15
 ## Checklist
 
 - [x] Confirm the current production gate and release-branch prerequisites.
-- [ ] Change workflow gating, regression coverage, and operator documentation.
+- [x] Change workflow gating, regression coverage, and operator documentation.
 - [ ] Switch the protected environment policy and create `release` safely.
 - [ ] Verify `main` skips production and `release` deploys successfully.
 
 ## Current state
 
-The task is claimed by `copilot-unicas-standalone`. Production currently gates
-on `refs/heads/main`; all branches share one unprivileged validation job, and
-no remote `release` branch or overlapping active task exists. The next action
-is to publish this coordination claim before changing the workflow gate.
+The task is claimed by `copilot-unicas-standalone`. The workflow and regression
+tests now gate production on `refs/heads/release`, while validation remains
+available to every push and pull request. Operator documentation defines
+`main` as development and a reviewed `main` to `release` pull request as the
+normal promotion. The next action is to validate and push this policy commit
+to `main`, proving its production job skips before changing GitHub policy.
 
 ## Decisions
 
@@ -32,11 +34,19 @@ is to publish this coordination claim before changing the workflow gate.
   was clean before the claim.
 - `git ls-remote --heads origin release`: no remote release branch exists.
 - `origin/main` has no active or related backlog task.
+- GitHub Actions run `34943777750` completed the final main-based release:
+  validation passed in 1m40s and production passed in 1m02s.
+- `pnpm exec vitest run tests/deploy-plan.test.mjs`: 21 tests passed after the
+  release-only workflow change.
+- `pnpm docs:check`: 3 tests passed after updating promotion and recovery
+  guidance.
+- The `Production` environment currently has one custom deployment branch
+  policy named `main`; the repository currently has no rulesets.
 
 ## Blockers
 
-- The claim must be published before implementation. Under the current policy,
-  that `main` coordination push will cause one final main-based production run.
+- The environment branch policy and remote `release` branch must not change
+  until the policy commit is validated on `main` with production skipped.
 
 ## Outcome
 

@@ -68,7 +68,7 @@ jobs:
   deploy-production:
     name: Deploy production
     if: >-
-      github.ref == 'refs/heads/main' &&
+      github.ref == 'refs/heads/release' &&
       (github.event_name == 'push' ||
        github.event_name == 'workflow_dispatch')
     needs: validate
