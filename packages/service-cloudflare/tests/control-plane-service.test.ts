@@ -202,6 +202,56 @@ describe("D1-backed control-plane service", () => {
     expectError(await service.acceptMemberInvitation(ctx(alice), { path: { token: expiring.acceptUrl.split("/").pop()! } }), CasAdminErrorCodes.NOT_FOUND);
   }, 10_000);
 
+  test("lists non-secret App invitations and conditionally revokes without deleting history", async () => {
+    const { service } = await createService(() => 5_000);
+    const appId = await createStack(service);
+    const invitation = await service.createMemberInvitation(ctx(alice), { path: { stackId: appId } });
+    if (!("invitation" in invitation)) throw new Error("invite failed");
+    const page = await service.listAppMemberInvitations(ctx(alice), appId, {});
+    expect(page).toMatchObject({ items: [{ appId, invitationId: invitation.invitation.invitationId, status: "pending", revision: 1 }], nextCursor: null });
+    expect(JSON.stringify(page)).not.toMatch(/tokenHash|token_hash|acceptUrl/);
+    expect(await service.revokeAppMemberInvitation(ctx(alice), appId, invitation.invitation.invitationId, { ifMatch: '"1"' })).toEqual({ revision: 2 });
+    expect(await service.revokeAppMemberInvitation(ctx(alice), appId, invitation.invitation.invitationId, { ifMatch: '"2"' })).toEqual({ revision: 2 });
+    expect(await service.revokeAppMemberInvitation(ctx(alice), appId, invitation.invitation.invitationId, { ifMatch: '"1"' })).toMatchObject({ error: "REVISION_MISMATCH" });
+    expect(await service.listAppMemberInvitations(ctx(alice), appId, { status: "revoked" })).toMatchObject({ items: [{ status: "revoked", revision: 2 }] });
+    expect(await service.listAppMemberInvitations(ctx(bob), appId, {})).toMatchObject({ error: "STACK_MEMBERSHIP_REQUIRED" });
+    expect(await service.acceptMemberInvitation(ctx(bob), { path: { token: invitation.acceptUrl.split("/").pop()! } })).toMatchObject({ error: "NOT_FOUND" });
+  });
+
+  test("binds invitation pages to App, filter, and snapshot and reconciles expiry once", async () => {
+    let clock = 5_000;
+    const { db, service } = await createService(() => clock);
+    const appId = await createStack(service);
+    const otherAppId = await createStack(service);
+    for (let index = 0; index < 2; index += 1) await service.createMemberInvitation(ctx(alice), { path: { stackId: appId } });
+    const first = await service.listAppMemberInvitations(ctx(alice), appId, { limit: 1, status: "pending" });
+    if (!("items" in first) || !first.nextCursor) throw new Error("missing invitation cursor");
+    expect(await service.listAppMemberInvitations(ctx(alice), otherAppId, { status: "pending", cursor: first.nextCursor })).toMatchObject({ error: "INVALID_CURSOR" });
+    expect(await service.listAppMemberInvitations(ctx(alice), appId, { status: "revoked", cursor: first.nextCursor })).toMatchObject({ error: "INVALID_CURSOR" });
+    expect(await service.listAppMemberInvitations(ctx(alice), appId, { status: "pending", cursor: first.nextCursor })).toMatchObject({ items: [expect.any(Object)], nextCursor: null });
+    clock = first.items[0]!.expiresAt;
+    expect(await service.listAppMemberInvitations(ctx(alice), appId, { status: "pending", cursor: first.nextCursor })).toMatchObject({ error: "INVALID_CURSOR" });
+    const expired = await service.listAppMemberInvitations(ctx(alice), appId, { status: "expired" });
+    expect(expired).toMatchObject({ items: [{ status: "expired", revision: 2 }, { status: "expired", revision: 2 }] });
+    expect(await service.revokeAppMemberInvitation(ctx(alice), appId, first.items[0]!.invitationId, { ifMatch: '"2"' })).toMatchObject({ error: "INVITATION_NOT_PENDING" });
+    expect(await db.prepare("SELECT count(*) AS count FROM cas_control_audit_events WHERE app_id = ? AND action = 'member.invitation.expired'").bind(appId).first()).toEqual({ count: 2 });
+    expect(await service.revokeAppMemberInvitation(ctx(alice), otherAppId, first.items[0]!.invitationId, { ifMatch: '"2"' })).toMatchObject({ error: "NOT_FOUND" });
+  }, 10_000);
+
+  test("acceptance and revocation cannot both win the same invitation", async () => {
+    const { db, service } = await createService(() => 5_000);
+    const appId = await createStack(service);
+    const created = await service.createMemberInvitation(ctx(alice), { path: { stackId: appId } });
+    if (!("invitation" in created)) throw new Error("invitation failed");
+    const [accept, revoke] = await Promise.all([
+      service.acceptMemberInvitation(ctx(bob), { path: { token: created.acceptUrl.split("/").pop()! } }),
+      service.revokeAppMemberInvitation(ctx(alice), appId, created.invitation.invitationId, { ifMatch: '"1"' }),
+    ]);
+    expect([accept, revoke].filter(result => !("error" in result))).toHaveLength(1);
+    const state = await db.prepare("SELECT status, revision FROM cas_app_member_invitations WHERE invitation_id = ?").bind(created.invitation.invitationId).first();
+    expect(state).toEqual({ status: "error" in accept ? "revoked" : "accepted", revision: 2 });
+  });
+
   test("atomically lets exactly one concurrent claimant consume a pending invitation", async () => {
     const { db, service } = await createService(() => 5_000);
     const stackId = await createStack(service);

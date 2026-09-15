@@ -45,21 +45,21 @@ the invitation lifecycle to be symmetric with Platform Administration.
 
 ## Acceptance criteria
 
-- [ ] An App member can list that App's invitations with opaque snapshot-bound
+- [x] An App member can list that App's invitations with opaque snapshot-bound
       pagination and filter by pending, accepted, expired, or revoked status.
-- [ ] List responses never contain the invitation token, token hash, accept URL,
+- [x] List responses never contain the invitation token, token hash, accept URL,
       session data, or authentication secrets.
-- [ ] A pending unexpired invitation can be conditionally revoked; stale
+- [x] A pending unexpired invitation can be conditionally revoked; stale
       revisions and non-pending invitations return stable conflict semantics.
-- [ ] Expired invitations cannot be accepted or revoked and are represented
+- [x] Expired invitations cannot be accepted or revoked and are represented
       consistently across list, accept, storage, and audit behavior.
-- [ ] Invitation creation, acceptance, expiry, and revocation retain immutable
+- [x] Invitation creation, acceptance, expiry, and revocation retain immutable
       App, actor, and Principal identity evidence without retaining bearer data.
-- [ ] A member of another App and a non-member cannot list or revoke the target
+- [x] A member of another App and a non-member cannot list or revoke the target
       App's invitations.
-- [ ] Console Administrators/Invitations navigation supports create, list,
+- [x] Console Administrators/Invitations navigation supports create, list,
       status, copy-on-create, and revoke workflows at desktop and mobile widths.
-- [ ] Focused protocol, route, service, repository, client, CLI/MCP, WebUI, and
+- [x] Focused protocol, route, service, repository, client, CLI/MCP, WebUI, and
       security tests pass with relevant repository validation.
 
 ## Constraints

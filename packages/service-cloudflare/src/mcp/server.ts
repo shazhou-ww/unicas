@@ -221,6 +221,28 @@ export function createControlPlaneMcpServer(
   );
 
   server.registerTool(
+    APP_ADMIN_MCP_TOOLS.list_app_member_invitations.name,
+    APP_ADMIN_MCP_TOOLS.list_app_member_invitations.registration,
+    async ({ appId, status, limit, cursor }) => {
+      const grant = requireGrantScope("control:security");
+      return appToolResult({ operation: "listMemberInvitations", appId }, await controlPlane.listAppMemberInvitations(
+        serviceContext(grant, "list_app_member_invitations"), appId, { status, limit, cursor },
+      ));
+    },
+  );
+
+  server.registerTool(
+    APP_ADMIN_MCP_TOOLS.revoke_app_member_invitation.name,
+    APP_ADMIN_MCP_TOOLS.revoke_app_member_invitation.registration,
+    async ({ appId, invitationId, confirmInvitationId, etag }) => {
+      const grant = requireMutation("control:security", options);
+      if (invitationId !== confirmInvitationId) return confirmationError("confirmInvitationId must exactly match invitationId");
+      const result = await controlPlane.revokeAppMemberInvitation(serviceContext(grant, "revoke_app_member_invitation"), appId, invitationId, { ifMatch: etag });
+      return appToolResult({ operation: "revokeMemberInvitation", appId, invitationId }, "error" in result ? result : { etag: formatCasAdminETag(result.revision) });
+    },
+  );
+
+  server.registerTool(
     APP_ADMIN_MCP_TOOLS.update_app.name,
     APP_ADMIN_MCP_TOOLS.update_app.registration,
     async ({ appId, displayName, description, status, etag }) => {
@@ -251,7 +273,13 @@ export function createControlPlaneMcpServer(
       const response = "error" in result || !options.publicOrigin
         ? result
         : { ...result, acceptUrl: new URL(result.acceptUrl, options.publicOrigin).toString() };
-      return appToolResult({ operation: "createMemberInvitation", appId }, response);
+      if ("error" in response) return appToolResult({ operation: "createMemberInvitation", appId }, response);
+      return toolResult({
+        invitationId: response.invitation.invitationId,
+        acceptUrl: response.acceptUrl,
+        expiresAt: response.invitation.expiresAt,
+        etag: formatCasAdminETag(response.invitation.revision),
+      });
     },
   );
 

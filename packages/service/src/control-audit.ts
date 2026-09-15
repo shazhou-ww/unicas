@@ -12,6 +12,8 @@ export const ControlAuditActions = {
   appRestored: "app.restored",
   memberInvited: "member.invited",
   memberInvitationAccepted: "member.invitation.accepted",
+  memberInvitationRevoked: "member.invitation.revoked",
+  memberInvitationExpired: "member.invitation.expired",
   memberRemoved: "member.removed",
   oauthIssuerInspected: "oauth_issuer.inspection.created",
   oauthIssuerActivated: "oauth_issuer.activated",

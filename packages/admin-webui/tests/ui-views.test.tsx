@@ -252,6 +252,50 @@ afterEach(() => {
 });
 
 describe("MembersView", () => {
+  test("filters and pages invitations and revokes using the invitation revision", async () => {
+    const invitation = { appId: STACK, invitationId: "inv/1", status: "pending", emailConstraint: "invitee@example.test", expiresAt: 4102444800000, createdAt: 1, revision: 7 };
+    fetchMock
+      .mockResolvedValueOnce(json({ items: [] }))
+      .mockResolvedValueOnce(json({ items: [invitation], nextCursor: "page-2" }))
+      .mockResolvedValueOnce(json({ items: [{ ...invitation, invitationId: "inv_2", emailConstraint: "second@example.test" }], nextCursor: null }))
+      .mockResolvedValueOnce(new Response(null, { status: 204, headers: { ETag: '"8"' } }))
+      .mockResolvedValueOnce(json({ items: [{ ...invitation, status: "revoked", revision: 8 }], nextCursor: null }))
+      .mockResolvedValueOnce(json({ items: [], nextCursor: null }));
+    const user = userEvent.setup();
+    render(<MembersView appId={STACK} appRevision={99} onChanged={() => undefined} />);
+    await user.click(screen.getByRole("tab", { name: "Invitations" }));
+    expect(await screen.findByText("invitee@example.test")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Load more invitations" }));
+    expect(await screen.findByText("second@example.test")).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: "Revoke" })[0]!);
+    expect(screen.getByRole("group", { name: "Revoke invitation confirmation" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Confirm revoke" }));
+    expect(await screen.findByRole("cell", { name: "revoked" })).toBeInTheDocument();
+    const deletion = fetchMock.mock.calls.find(([, init]) => init?.method === "DELETE");
+    expect(deletion?.[0]).toBe(`/admin/apps/${STACK}/member-invitations/inv%2F1`);
+    expect(new Headers(deletion?.[1]?.headers).get("If-Match")).toBe('"7"');
+    expect(fetchMock.mock.calls[2][0]).toContain("cursor=page-2");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Status" }), "expired");
+    expect(await screen.findByText("No invitations.")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.at(-1)?.[0]).toContain("status=expired");
+  });
+
+  test("clears one-time invitation URLs when switching Apps", async () => {
+    fetchMock
+      .mockResolvedValueOnce(json({ items: [] }))
+      .mockResolvedValueOnce(json({ invitationId: "inv_1", expiresAt: 4102444800000, acceptUrl: "https://console.example.test/synthetic-once" }))
+      .mockResolvedValueOnce(json({ items: [] }));
+    const user = userEvent.setup();
+    const { rerender } = render(<MembersView appId={STACK} appRevision={1} onChanged={() => undefined} />);
+    await user.click(screen.getByRole("button", { name: "Create invitation" }));
+    expect(await screen.findByText("https://console.example.test/synthetic-once")).toBeInTheDocument();
+    rerender(<MembersView appId="other-app" appRevision={1} onChanged={() => undefined} />);
+    expect(screen.queryByText("https://console.example.test/synthetic-once")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Administrators" }));
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByRole("tab", { name: "Invitations" })).toHaveAttribute("aria-selected", "true");
+  });
+
   test("lists members and creates an invitation with a copyable URL", async () => {
     fetchMock
       .mockResolvedValueOnce(json({
@@ -264,7 +308,7 @@ describe("MembersView", () => {
         ]
       }))
       .mockResolvedValueOnce(json({
-        invitation: { invitationId: "inv_1", appId: STACK, status: "pending", emailConstraint: null, expiresAt: 2000000000000, createdAt: 1, revision: 1 },
+        invitationId: "inv_1", expiresAt: 2000000000000,
         acceptUrl: "https://cas.example/admin/invitations/token-xyz",
       }));
     const user = userEvent.setup();

@@ -4,6 +4,8 @@ import {
   parseCasAdminETag,
 } from "@unicas/admin-protocol";
 import type {
+  AppMemberInvitation,
+  CasAdminPageQuery,
   CasAdminAcceptMemberInvitationRequest,
   CasAdminAcceptMemberInvitationResponse,
   CasAdminActivateOAuthIssuerRequest,
@@ -387,6 +389,22 @@ export interface ControlPlaneAdminRepository {
     readonly now: number;
   }): Promise<ControlIdempotencyRecord<T> | null>;
   getInvitationByTokenHash(tokenHash: string): Promise<ControlMemberInvitationRecord | null>;
+  getMemberInvitation(stackId: string, invitationId: string): Promise<Omit<ControlMemberInvitationRecord, "tokenHash"> | null>;
+  listMemberInvitations(input: {
+    readonly stackId: string;
+    readonly status?: ControlMemberInvitationRecord["status"];
+    readonly expiresAtOrBefore?: number;
+    readonly afterInvitationId: string;
+    readonly limit: number;
+  }): Promise<readonly Omit<ControlMemberInvitationRecord, "tokenHash">[]>;
+  commitInvitationTransition(input: {
+    readonly stackId: string;
+    readonly invitationId: string;
+    readonly expectedRevision: number;
+    readonly status: "revoked" | "expired";
+    readonly now: number;
+    readonly audit: ControlAuditRecord;
+  }): Promise<"updated" | "unavailable">;
   commitCreateStack(plan: ControlCreateStackPlan): Promise<ControlCreateStackCommitResult>;
   commitPatchStack(plan: ControlPatchStackPlan): Promise<ControlPatchStackCommitResult>;
   commitCreateMemberInvitation(plan: ControlCreateMemberInvitationPlan): Promise<ControlCreateMemberInvitationCommitResult>;
@@ -680,6 +698,102 @@ export class ControlPlaneAdminService {
     });
   }
 
+  listAppMemberInvitations(
+    ctx: ControlPlaneCallContext,
+    appId: string,
+    query: CasAdminPageQuery & { readonly status?: AppMemberInvitation["status"] },
+  ): Promise<{ readonly items: readonly AppMemberInvitation[]; readonly nextCursor: string | null } | CasAdminErrorResponse> {
+    return this.#guard(async () => {
+      await this.#requireMember(ctx.identity, appId);
+      if (query.status !== undefined && !["pending", "accepted", "expired", "revoked"].includes(query.status)) {
+        throw new ControlPlaneError(CasAdminErrorCodes.INVALID_REQUEST, "invalid invitation status");
+      }
+      const limit = this.#listLimit(query.limit);
+      const cursor = this.#cursor(query.cursor);
+      let afterInvitationId = "";
+      if (cursor) {
+        let binding: unknown;
+        try { binding = JSON.parse(cursor.last); } catch { binding = null; }
+        if (!Array.isArray(binding) || binding.length !== 3 || binding[0] !== appId
+          || binding[1] !== (query.status ?? null) || typeof binding[2] !== "string" || binding[2].length === 0) {
+          throw new ControlPlaneError(CasAdminErrorCodes.INVALID_CURSOR, "invitation cursor scope or filter mismatch");
+        }
+        afterInvitationId = binding[2];
+      }
+      const now = this.#now();
+      await this.#reconcileInvitationExpiry(ctx, appId, now);
+      const snapshot = await this.#repository.readSnapshot();
+      if (cursor && cursor.snapshot !== snapshot) {
+        throw new ControlPlaneError(CasAdminErrorCodes.INVALID_CURSOR, "invitation snapshot changed");
+      }
+      const rows = await this.#repository.listMemberInvitations({ stackId: appId, status: query.status, afterInvitationId, limit: limit + 1 });
+      if (await this.#repository.readSnapshot() !== snapshot) {
+        throw new ControlPlaneError(CasAdminErrorCodes.INVALID_CURSOR, "control data changed while listing");
+      }
+      const items = rows.slice(0, limit).map(row => ({
+        appId,
+        invitationId: row.invitationId,
+        status: row.status,
+        emailConstraint: row.emailConstraint,
+        expiresAt: row.expiresAt,
+        createdAt: row.createdAt,
+        revision: row.revision,
+      }));
+      return {
+        items,
+        nextCursor: rows.length > limit
+          ? encodeControlListCursor({ version: 1, snapshot, last: JSON.stringify([appId, query.status ?? null, items.at(-1)!.invitationId]) })
+          : null,
+      };
+    });
+  }
+
+  revokeAppMemberInvitation(
+    ctx: ControlPlaneCallContext,
+    appId: string,
+    invitationId: string,
+    mutation: ServiceMutationInput,
+  ): Promise<{ readonly revision: number } | CasAdminErrorResponse | { readonly error: "INVITATION_NOT_PENDING" }> {
+    return this.#guard(async () => {
+      await this.#requireMember(ctx.identity, appId);
+      const invitation = await this.#repository.getMemberInvitation(appId, invitationId);
+      if (!invitation) throw new ControlPlaneError(CasAdminErrorCodes.NOT_FOUND, "invitation not found");
+      this.#requireIfMatch(mutation.ifMatch, invitation.revision);
+      if (invitation.status === "revoked") return { revision: invitation.revision };
+      const now = this.#now();
+      if (invitation.status !== "pending" || invitation.expiresAt <= now) {
+        if (invitation.status === "pending") await this.#expireInvitation(ctx, invitation, now);
+        return { error: "INVITATION_NOT_PENDING" as const };
+      }
+      const result = await this.#repository.commitInvitationTransition({
+        stackId: appId, invitationId, expectedRevision: invitation.revision, status: "revoked", now,
+        audit: this.#audit(ctx, ControlAuditActions.memberInvitationRevoked, invitationId, appId),
+      });
+      if (result !== "updated") {
+        throw new ControlPlaneError(CasAdminErrorCodes.REVISION_MISMATCH, "invitation changed during revocation");
+      }
+      return { revision: invitation.revision + 1 };
+    });
+  }
+
+  async #expireInvitation(ctx: ControlPlaneCallContext, invitation: Omit<ControlMemberInvitationRecord, "tokenHash">, now: number): Promise<void> {
+    await this.#repository.commitInvitationTransition({
+      stackId: invitation.stackId, invitationId: invitation.invitationId,
+      expectedRevision: invitation.revision, status: "expired", now,
+      audit: this.#audit(ctx, ControlAuditActions.memberInvitationExpired, invitation.invitationId, invitation.stackId),
+    });
+  }
+
+  async #reconcileInvitationExpiry(ctx: ControlPlaneCallContext, appId: string, now: number): Promise<void> {
+    let afterInvitationId = "";
+    while (true) {
+      const expired = await this.#repository.listMemberInvitations({ stackId: appId, status: "pending", expiresAtOrBefore: now, afterInvitationId, limit: 100 });
+      for (const invitation of expired) await this.#expireInvitation(ctx, invitation, now);
+      if (expired.length < 100) return;
+      afterInvitationId = expired.at(-1)!.invitationId;
+    }
+  }
+
   acceptMemberInvitation(
     ctx: ControlPlaneCallContext,
     request: CasAdminAcceptMemberInvitationRequest,
@@ -690,6 +804,9 @@ export class ControlPlaneAdminService {
       const tokenHash = await sha256Hex(request.path.token);
       const invitation = await this.#repository.getInvitationByTokenHash(tokenHash);
       const now = this.#now();
+      if (invitation?.status === "pending" && invitation.expiresAt <= now) {
+        await this.#expireInvitation(ctx, invitation, now);
+      }
       if (!invitation || invitation.status !== "pending" || invitation.expiresAt <= now) {
         throw new ControlPlaneError(CasAdminErrorCodes.NOT_FOUND, "invitation not found, expired, or already used");
       }
@@ -713,7 +830,7 @@ export class ControlPlaneAdminService {
         now,
         identity,
         membership,
-        audit: this.#audit(ctx, ControlAuditActions.memberInvitationAccepted, invitation.stackId, invitation.stackId),
+        audit: this.#audit(ctx, ControlAuditActions.memberInvitationAccepted, invitation.invitationId, invitation.stackId),
       });
       if (result.kind === "unavailable") {
         throw new ControlPlaneError(CasAdminErrorCodes.NOT_FOUND, "invitation not found, expired, or already used");

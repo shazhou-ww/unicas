@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
-import type { AppMembership } from "@unicas/admin-client";
 import { api } from "../api.js";
 import { Button, Card, ErrorState, Page } from "../components.js";
 import { formatErrorSafe } from "./view-helpers.js";
@@ -11,7 +10,7 @@ import { formatErrorSafe } from "./view-helpers.js";
  */
 export function InvitationView({ token }: { token: string }) {
   const [accepting, setAccepting] = useState(false);
-  const [result, setResult] = useState<AppMembership | null>(null);
+  const [result, setResult] = useState<{ readonly appId: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [accepted, setAccepted] = useState(false);
 
@@ -26,7 +25,7 @@ export function InvitationView({ token }: { token: string }) {
     setAccepting(true);
     setError(null);
     try {
-      const member = await api<AppMembership>(`/admin/member-invitations/${encodeURIComponent(token)}/accept`, {
+      const member = await api<{ readonly appId: string }>(`/admin/member-invitations/${encodeURIComponent(token)}/accept`, {
         method: "POST",
       });
       setResult(member);

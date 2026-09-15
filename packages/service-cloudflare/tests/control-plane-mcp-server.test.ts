@@ -143,6 +143,21 @@ describe("adapter-hosted control-plane MCP server", () => {
     expect(events.every((event) => !("stackId" in event))).toBe(true);
   });
 
+  test("lists and revokes App invitations with security scope and exact confirmation", async () => {
+    const handler = handlerFor(grant(["control:read", "control:write", "control:security"]), { mutationsEnabled: true });
+    const created = await callTool(handler, "create_app", { displayName: "Invitations", idempotencyKey: "inv-app-create" });
+    const appId = String(created.structuredContent.appId);
+    const invitation = await callTool(handler, "invite_app_member", { appId, email: "synthetic@example.test", confirmEmail: "synthetic@example.test", idempotencyKey: "inv-create" });
+    const invitationId = String(invitation.structuredContent.invitationId);
+    const list = await callTool(handler, "list_app_member_invitations", { appId, status: "pending" });
+    expect(list.structuredContent).toMatchObject({ items: [{ invitationId, status: "pending" }] });
+    expect(JSON.stringify(list.structuredContent)).not.toMatch(/tokenHash|acceptUrl/);
+    expect((await callTool(handlerFor(grant(["control:read"])), "list_app_member_invitations", { appId })).content[0]?.text).toContain("control:security");
+    expect((await callTool(handler, "revoke_app_member_invitation", { appId, invitationId, confirmInvitationId: "wrong", etag: '"1"' })).isError).toBe(true);
+    expect((await callTool(handler, "revoke_app_member_invitation", { appId, invitationId, confirmInvitationId: invitationId, etag: '"1"' })).structuredContent).toEqual({ etag: '"2"' });
+    expect((await callTool(handler, "list_app_member_invitations", { appId, status: "revoked" })).structuredContent).toMatchObject({ items: [{ invitationId, status: "revoked" }] });
+  });
+
   test("serves App memberships and Principal-owned Playground records", async () => {
     const aliceHandler = handlerFor(
       grant(["control:read", "control:write", "control:security"]),
@@ -159,7 +174,8 @@ describe("adapter-hosted control-plane MCP server", () => {
       confirmEmail: "bob@example.com",
       idempotencyKey: "invite-bob-app-1",
     });
-    expect(invitation.structuredContent).toMatchObject({ invitation: { appId, status: "pending" } });
+    expect(invitation.structuredContent).toMatchObject({ invitationId: expect.any(String), expiresAt: expect.any(Number), etag: '"1"' });
+    expect(invitation.structuredContent).not.toHaveProperty("invitation");
     const token = String(invitation.structuredContent.acceptUrl).split("/").pop()!;
 
     const bobHandler = handlerFor({
@@ -169,11 +185,7 @@ describe("adapter-hosted control-plane MCP server", () => {
       emailForDisplay: "bob@example.com",
     }, { mutationsEnabled: true });
     expect((await callTool(bobHandler, "accept_app_member_invitation", { token })).structuredContent)
-      .toMatchObject({
-        appId,
-        principal: { issuer: "https://accounts.google.com", subject: "bob-sub" },
-        profile: { displayName: "Bob", emailForDisplay: "bob@example.com" },
-      });
+      .toEqual({ appId });
 
     const members = await callTool(aliceHandler, "list_app_members", { appId, limit: 10 });
     expect(members.structuredContent.items).toEqual([

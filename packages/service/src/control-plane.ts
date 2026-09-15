@@ -1,5 +1,7 @@
 import type {
   App,
+  AppMemberInvitation,
+  CasAdminPageQuery,
   CasAdminAcceptMemberInvitationRequest,
   CasAdminAcceptMemberInvitationResponse,
   CasAdminActivateOAuthIssuerRequest,
@@ -114,6 +116,17 @@ export interface ControlPlaneOperations {
     request: Omit<CasAdminCreateMemberInvitationRequest, "headers">,
     mutation?: ServiceMutationInput,
   ): Promise<CasAdminCreateMemberInvitationResponse>;
+  listAppMemberInvitations(
+    ctx: ControlPlaneCallContext,
+    appId: string,
+    query: CasAdminPageQuery & { readonly status?: AppMemberInvitation["status"] },
+  ): Promise<{ readonly items: readonly AppMemberInvitation[]; readonly nextCursor: string | null } | CasAdminErrorResponse>;
+  revokeAppMemberInvitation(
+    ctx: ControlPlaneCallContext,
+    appId: string,
+    invitationId: string,
+    mutation: ServiceMutationInput,
+  ): Promise<{ readonly revision: number } | CasAdminErrorResponse | { readonly error: "INVITATION_NOT_PENDING" }>;
   acceptMemberInvitation(
     ctx: ControlPlaneCallContext,
     request: CasAdminAcceptMemberInvitationRequest,

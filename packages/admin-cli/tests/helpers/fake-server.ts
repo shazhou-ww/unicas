@@ -225,18 +225,17 @@ export class FakeAdminApi {
       return json({ ok: true });
     }
     if (url.pathname === appAdminRoutes.memberInvitations({ appId: "cas_app_a" }) && method === "POST") {
-      return json({
-        invitation: {
-          invitationId: "inv-app-1",
-          appId: "cas_app_a",
-          status: "pending",
-          emailConstraint: body?.emailConstraint ?? null,
-          expiresAt: 1_800_000_000,
-          createdAt: 1,
-          revision: 1,
-        },
+      return Response.json({
+        invitationId: "inv-app-1",
+        expiresAt: 1_800_000_000,
         acceptUrl: `${FAKE_ORIGIN}/admin/invitations/inv-app-1`,
-      });
+      }, { status: 201, headers: { ETag: '"1"' } });
+    }
+    if (url.pathname === appAdminRoutes.memberInvitations({ appId: "cas_app_a" }) && method === "GET") {
+      return json({ items: [{ invitationId: "inv-app-1", appId: "cas_app_a", status: "pending", emailConstraint: null, expiresAt: 1_800_000_000, createdAt: 1, revision: 1 }], nextCursor: null });
+    }
+    if (url.pathname === appAdminRoutes.memberInvitation({ appId: "cas_app_a", invitationId: "inv-app-1" }) && method === "DELETE") {
+      return new Response(null, { status: 204, headers: { ETag: '"2"' } });
     }
     if (url.pathname === appAdminRoutes.oauthIssuerInspections({ appId: "cas_app_a" }) && method === "POST") {
       const record = {

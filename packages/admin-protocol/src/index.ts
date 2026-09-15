@@ -84,6 +84,7 @@ export {
   AppAdminApiBasePath,
   AppAdminApiErrorMap,
   PatchAppRequestSchema,
+  AppInvitationQuerySchema,
   appAdminApiContract,
 } from "./app-v2-contract.js";
 export type { AppAdminApiContract } from "./app-v2-contract.js";

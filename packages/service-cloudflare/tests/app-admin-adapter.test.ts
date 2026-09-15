@@ -72,7 +72,7 @@ describe("App admin physical compatibility adapter", () => {
     });
   });
 
-  test("maps shared invitation acceptance to an App membership", async () => {
+  test("maps shared invitation acceptance to only the target App identifier", async () => {
     const { response, legacyHandler } = await invoke(
       { operation: "acceptMemberInvitation", token: "invite-1" },
       "/admin/member-invitations/invite-1/accept",
@@ -87,11 +87,7 @@ describe("App admin physical compatibility adapter", () => {
     expect(legacyHandler).toHaveBeenCalledWith(expect.objectContaining({
       url: "https://console.unicas.work/admin/member-invitations/invite-1/accept",
     }));
-    await expect(response.json()).resolves.toEqual({
-      appId: "app-1",
-      principal: { issuer: "https://accounts.example", subject: "alice" },
-      profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
-    });
+    await expect(response.json()).resolves.toEqual({ appId: "app-1" });
   });
 
   test("maps legacy membership errors to the App contract", async () => {

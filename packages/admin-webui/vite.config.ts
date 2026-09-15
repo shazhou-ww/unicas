@@ -24,6 +24,7 @@ export default defineConfig({
           const path = req.url ?? "";
           const isBffRoute =
             path === "/admin/me"
+            || path.startsWith("/admin/apps")
             || path.startsWith("/admin/stacks")
             || path.startsWith("/admin/member-invitations")
             || path.startsWith("/admin/auth/")

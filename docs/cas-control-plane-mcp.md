@@ -79,6 +79,7 @@ server-side App membership and exact revision checks remain mandatory.
 
 App security tools:
 
+- `list_app_member_invitations`, `revoke_app_member_invitation`
 - `invite_app_member`, `accept_app_member_invitation`, `remove_app_member`
 - `inspect_app_oauth_issuer`, `activate_app_oauth_issuer`
 - `update_app_managed_issuer`, `mint_managed_space_capability`
@@ -88,7 +89,13 @@ audit operations use Principal `issuer`/`subject` fields. Physical Stack/Tenant
 dimensions are translated only inside the platform adapter and never appear in
 v2 MCP input or output.
 
-The catalog contains 23 App tools and 15 v1 tools. The v1 tools, including `whoami`, `list_stacks`, and
+Invitation listing requires `control:security` and returns non-secret history
+with status filtering and snapshot cursors. Revocation requires the invitation
+ETag and exact `confirmInvitationId`; success returns only `{ etag }`. Creation
+returns `{ invitationId, acceptUrl, expiresAt, etag }`, and acceptance returns
+only `{ appId }`. App membership is checked by the server independently of scopes.
+
+The catalog contains 25 App tools and 15 v1 tools. The v1 tools, including `whoami`, `list_stacks`, and
 `list_root_domain_refs`, remain structurally unchanged for explicit compatibility.
 They are not aliases for the App tools.
 

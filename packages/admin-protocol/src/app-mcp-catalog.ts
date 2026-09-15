@@ -163,6 +163,24 @@ export const APP_ADMIN_MCP_TOOLS = {
       annotations: { destructiveHint: false, idempotentHint: true },
     },
   }),
+  list_app_member_invitations: tool({
+    name: "list_app_member_invitations",
+    requiredScope: "control:security",
+    registration: {
+      description: "List App invitation lifecycle records without bearer tokens or accept URLs.",
+      inputSchema: z.object({ appId, status: z.enum(["pending", "accepted", "expired", "revoked"]).optional(), limit: z.number().int().min(1).max(1000).optional(), cursor: cursor.optional() }),
+      annotations: { readOnlyHint: true, destructiveHint: false },
+    },
+  }),
+  revoke_app_member_invitation: tool({
+    name: "revoke_app_member_invitation",
+    requiredScope: "control:security",
+    registration: {
+      description: "Revoke a pending App invitation with its own current ETag and exact invitation ID confirmation; return only the resulting ETag.",
+      inputSchema: z.object({ appId, invitationId: z.string().min(1), confirmInvitationId: z.string().min(1), etag }),
+      annotations: { destructiveHint: true, idempotentHint: true },
+    },
+  }),
   update_app: tool({
     name: "update_app",
     requiredScope: "control:write",

@@ -87,8 +87,16 @@ export interface AdminClient {
     path: { readonly appId: AppId },
     body?: { readonly emailConstraint?: string },
     headers?: CasAdminCreateHeaders,
-  ): Promise<{ readonly invitation: AppMemberInvitation; readonly acceptUrl: string }>;
-  acceptAppMemberInvitation(path: { readonly token: string }): Promise<AppMembership>;
+  ): Promise<{ readonly invitationId: string; readonly acceptUrl: string; readonly expiresAt: number; readonly etag: string }>;
+  acceptAppMemberInvitation(path: { readonly token: string }): Promise<{ readonly appId: AppId }>;
+  listAppMemberInvitations(
+    path: { readonly appId: AppId },
+    query?: CasAdminPageQuery & { readonly status?: AppMemberInvitation["status"] },
+  ): Promise<CasAdminPage<AppMemberInvitation>>;
+  revokeAppMemberInvitation(
+    path: { readonly appId: AppId; readonly invitationId: string },
+    ifMatch: string,
+  ): Promise<{ readonly etag: string }>;
   listAppPlaygroundFileRoots(path: { readonly appId: AppId }): Promise<{ readonly items: readonly CasPlaygroundFileRoot[] }>;
   createAppPlaygroundFileRoot(
     path: { readonly appId: AppId },
@@ -336,6 +344,18 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
       return { etag: readEtag(response) };
     },
 
+    async listAppMemberInvitations(path, query) {
+      const response = await requireOk(await request(`${appAdminRoutes.memberInvitations(path)}${queryString(query)}`), "listAppMemberInvitations");
+      return response.json();
+    },
+
+    async revokeAppMemberInvitation(path, ifMatch) {
+      const response = await requireOk(await request(appAdminRoutes.memberInvitation(path), {
+        method: "DELETE", headers: ifMatchHeader(ifMatch),
+      }), "revokeAppMemberInvitation");
+      return { etag: readEtag(response) };
+    },
+
     async listAppMembers(path, query) {
       const response = await requireOk(
         await request(`${appAdminRoutes.members(path)}${queryString(pageQuery(query))}`),
@@ -367,7 +387,8 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
         }),
         "createAppMemberInvitation",
       );
-      return response.json();
+      const receipt: { invitationId: string; acceptUrl: string; expiresAt: number } = await response.json();
+      return { ...receipt, etag: readEtag(response) };
     },
 
     async acceptAppMemberInvitation(path) {

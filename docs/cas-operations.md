@@ -151,6 +151,36 @@ change during signer rotation, so no new control-plane activation is needed.
 Rotate Worker runtime secrets separately with `wrangler secret put`; never
 copy them into GitHub deployment configuration.
 
+### App invitation management
+
+App members can inspect invitation history with
+`GET /admin/apps/{appId}/member-invitations`, filtering by
+`status=pending|accepted|expired|revoked` and traversing `{ items, nextCursor }`
+pages with `limit` (1..1000). Cursors bind the App, status filter, and control
+snapshot. Restart traversal after `INVALID_CURSOR`; current membership is
+checked for every page. Reads never return bearer tokens, token hashes, or
+accept URLs.
+
+`DELETE /admin/apps/{appId}/member-invitations/{invitationId}` requires that
+invitation's exact `If-Match`, not the App revision. A pending, unexpired
+invitation becomes revoked and returns `204` with its new ETag. A revoked
+record with a current ETag is a no-op; a stale version returns `412`, and an
+accepted or expired invitation returns `409 INVITATION_NOT_PENDING`.
+
+List, accept, and revoke operations reconcile elapsed pending invitations to
+durable expired state. Accepted, revoked, and expired transitions advance the
+invitation revision and append immutable-actor audit evidence. Acceptance and
+revocation race under one atomic storage precondition, so they cannot both
+succeed. Records remain available for history rather than being deleted.
+
+V2 creation returns only `{ invitationId, acceptUrl, expiresAt }` and the
+invitation ETag. Acceptance returns only `{ appId }` for navigation. The
+Console's Members section includes Administrators and Invitations views with
+filtering, refresh, paging, and revoke confirmation. A freshly created URL is
+copyable only from that creation result and is cleared when switching Apps;
+the invitation list cannot recover it. Legacy creation/acceptance response
+shapes remain unchanged.
+
 ### Suspend and restore an App
 
 An App member can pause all App Space data-plane operations without deleting

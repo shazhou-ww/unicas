@@ -144,6 +144,19 @@ describe("command layer", () => {
     ]);
   });
 
+  test("App invitation commands filter history and confirm a revision-specific revocation", async () => {
+    await seedLoggedIn(ctx.store);
+    const server = new FakeAdminApi({ adminVocabulary: "app" });
+    ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
+    const { writes } = captureStdout();
+    await appMembersCommand(ctx, "invitations", ["cas_app_a", "--status", "pending"]);
+    expect(JSON.parse(writes.join(""))).toMatchObject({ items: [{ invitationId: "inv-app-1" }] });
+    writes.length = 0;
+    await appMembersCommand(ctx, "revoke-invitation", ["cas_app_a", "inv-app-1", "--etag", '"1"', "--confirm-invitation-id", "inv-app-1"]);
+    expect(JSON.parse(writes.join(""))).toEqual({ etag: '"2"' });
+    expect(server.requests.at(-1)).toMatchObject({ method: "DELETE", pathname: "/admin/apps/cas_app_a/member-invitations/inv-app-1", ifMatch: '"1"' });
+  });
+
   test("app-members list returns separate Principal and Profile data", async () => {
     await seedLoggedIn(ctx.store);
     const server = new FakeAdminApi({ adminVocabulary: "app" });
@@ -174,7 +187,7 @@ describe("command layer", () => {
       "--idempotency-key",
       "invite-app-1",
     ]);
-    expect(JSON.parse(writes.join(""))).toMatchObject({ invitation: { appId: "cas_app_a" } });
+    expect(JSON.parse(writes.join(""))).toEqual({ invitationId: "inv-app-1", expiresAt: 1_800_000_000, acceptUrl: `${FAKE_ORIGIN}/admin/invitations/inv-app-1`, etag: '"1"' });
     expect(server.requests[0]).toMatchObject({
       pathname: "/admin/apps/cas_app_a/member-invitations",
       method: "POST",

@@ -684,6 +684,29 @@ a:focus-visible,
   width: auto;
 }
 
+.invitation-list {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.invitation-list .table-wrap {
+  margin: 0;
+}
+
+.invitation-list .table {
+  min-width: 540px;
+}
+
+.invitation-list td:first-child {
+  max-width: 300px;
+  overflow-wrap: anywhere;
+}
+
+.invitation-confirmation p {
+  overflow-wrap: anywhere;
+}
+
 .field-row {
   display: flex;
   flex-direction: column;

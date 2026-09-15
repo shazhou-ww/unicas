@@ -36,6 +36,8 @@ export type AppAdminRoute =
   | { operation: "deletePlaygroundFileRoot"; appId: string; rootId: string }
   | { operation: "deleteMember"; appId: string }
   | { operation: "createMemberInvitation"; appId: string }
+  | { operation: "listMemberInvitations"; appId: string }
+  | { operation: "revokeMemberInvitation"; appId: string; invitationId: string }
   | { operation: "acceptMemberInvitation"; token: string }
   | { operation: "getOAuthIssuer"; appId: string }
   | { operation: "getManagedIssuer"; appId: string }
@@ -102,6 +104,8 @@ export const appAdminRoutes = {
     `/admin/apps/${segment(appId)}/members`,
   memberInvitations: ({ appId }: { appId: string }) =>
     `/admin/apps/${segment(appId)}/member-invitations`,
+  memberInvitation: ({ appId, invitationId }: { appId: string; invitationId: string }) =>
+    `/admin/apps/${segment(appId)}/member-invitations/${segment(invitationId)}`,
   playgroundFileRoots: ({ appId }: { appId: string }) =>
     `/admin/apps/${segment(appId)}/playground/file-roots`,
   playgroundFileRoot: ({ appId, rootId }: { appId: string; rootId: string }) =>
@@ -285,8 +289,13 @@ export function matchAppAdminRoute(
     return null;
   }
 
-  if (parts.length === 4 && parts[3] === "member-invitations" && method === "POST") {
-    return { operation: "createMemberInvitation", appId };
+  if (parts.length === 4 && parts[3] === "member-invitations") {
+    if (method === "POST") return { operation: "createMemberInvitation", appId };
+    if (method === "GET") return { operation: "listMemberInvitations", appId };
+  }
+  if (parts.length === 5 && parts[3] === "member-invitations" && method === "DELETE") {
+    const invitationId = decodeSegment(parts[4]!);
+    return invitationId === null ? null : { operation: "revokeMemberInvitation", appId, invitationId };
   }
 
   if (parts.length === 5 && parts[3] === "playground" && parts[4] === "file-roots") {

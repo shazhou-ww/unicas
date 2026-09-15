@@ -1,4 +1,4 @@
-import type { AppAdminRoute } from "@unicas/admin-protocol";
+import { formatCasAdminETag, type AppAdminRoute } from "@unicas/admin-protocol";
 
 type AdminHandler = (request: Request) => Promise<Response>;
 type JsonRecord = Record<string, unknown>;
@@ -8,7 +8,8 @@ export async function handleAppAdminCompatibilityRequest(
   route: AppAdminRoute,
   legacyHandler: AdminHandler,
 ): Promise<Response> {
-  if (route.operation === "mintManagedCapability" || route.operation === "patchApp") {
+  if (route.operation === "mintManagedCapability" || route.operation === "patchApp"
+    || route.operation === "listMemberInvitations" || route.operation === "revokeMemberInvitation") {
     return legacyHandler(request);
   }
 
@@ -19,6 +20,12 @@ export async function handleAppAdminCompatibilityRequest(
   const body = await legacyResponse.json();
   if (isRecord(body) && typeof body.error === "string") {
     return copyJsonResponse(legacyResponse, transformAppAdminError(body));
+  }
+  if (route.operation === "createMemberInvitation" && isRecord(body) && isRecord(body.invitation)
+    && typeof body.invitation.revision === "number") {
+    const response = copyJsonResponse(legacyResponse, mapInvitationResponse(body));
+    response.headers.set("ETag", formatCasAdminETag(body.invitation.revision));
+    return response;
   }
   return copyJsonResponse(legacyResponse, transformAppAdminResponse(route, body));
 }
@@ -65,13 +72,15 @@ export function transformAppAdminResponse(route: AppAdminRoute, body: unknown): 
     case "getApp":
       return mapApp(body);
     case "patchApp":
+    case "listMemberInvitations":
+    case "revokeMemberInvitation":
       return body;
     case "listMembers":
       return mapPage(body, mapMembership);
     case "createMemberInvitation":
       return mapInvitationResponse(body);
     case "acceptMemberInvitation":
-      return mapMembership(body);
+      return isRecord(body) ? { appId: body.stackId } : body;
     case "getOAuthIssuer":
     case "getManagedIssuer":
     case "patchManagedIssuer":
@@ -126,10 +135,11 @@ function mapMembership(value: unknown): unknown {
 }
 
 function mapInvitationResponse(value: unknown): unknown {
-  if (!isRecord(value)) return value;
+  if (!isRecord(value) || !isRecord(value.invitation)) return value;
   return {
-    ...value,
-    invitation: renameField(value.invitation, "stackId", "appId"),
+    invitationId: value.invitation.invitationId,
+    acceptUrl: value.acceptUrl,
+    expiresAt: value.invitation.expiresAt,
   };
 }
 

@@ -81,11 +81,7 @@ class MockAdminService {
       });
     }
     if (path === appAdminRoutes.acceptMemberInvitation({ token: "invite-1" }) && request.method === "POST") {
-      return Response.json({
-        appId: APP,
-        principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-        profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
-      });
+      return Response.json({ appId: APP });
     }
     if (path === appAdminRoutes.apps() && request.method === "GET") {
       return Response.json({ items: [this.app], nextCursor: null });
@@ -115,17 +111,16 @@ class MockAdminService {
     }
     if (path === appAdminRoutes.memberInvitations({ appId: APP }) && request.method === "POST") {
       return Response.json({
-        invitation: {
-          invitationId: "invite-1",
-          appId: APP,
-          status: "pending",
-          emailConstraint: "alice@example.com",
-          expiresAt: 1000,
-          createdAt: 1,
-          revision: 1,
-        },
+        invitationId: "invite-1",
+        expiresAt: 1000,
         acceptUrl: "https://admin.test/admin/invitations/invite-1",
-      }, { status: 201 });
+      }, { status: 201, headers: { ETag: '"1"' } });
+    }
+    if (path === appAdminRoutes.memberInvitations({ appId: APP }) && request.method === "GET") {
+      return Response.json({ items: [{ invitationId: "invite-1", appId: APP, status: "pending", emailConstraint: null, expiresAt: 1000, createdAt: 1, revision: 1 }], nextCursor: null });
+    }
+    if (path === appAdminRoutes.memberInvitation({ appId: APP, invitationId: "invite-1" }) && request.method === "DELETE") {
+      return new Response(null, { status: 204, headers: { ETag: '"2"' } });
     }
     if (path === appAdminRoutes.playgroundFileRoots({ appId: APP }) && request.method === "GET") {
       return Response.json({ items: [this.fileRoot] });
@@ -336,7 +331,7 @@ describe("functional admin client", () => {
     expect(current.memberships[0]!.appId).toBe(APP);
 
     const membership = await client.acceptAppMemberInvitation({ token: "invite-1" });
-    expect(membership).toMatchObject({ appId: APP, principal: { subject: "sub-1" } });
+    expect(membership).toEqual({ appId: APP });
 
     const capability = await client.mintManagedSpaceCapability({ appId: APP });
     expect(capability).toMatchObject({
@@ -379,7 +374,9 @@ describe("functional admin client", () => {
       { appId: APP },
       { emailConstraint: "alice@example.com" },
       { idempotencyKey: "invite-app-1" },
-    )).toMatchObject({ invitation: { appId: APP, status: "pending" } });
+    )).toEqual({ invitationId: "invite-1", expiresAt: 1000, acceptUrl: "https://admin.test/admin/invitations/invite-1", etag: '"1"' });
+    expect(await client.listAppMemberInvitations({ appId: APP }, { status: "pending", limit: 50 })).toMatchObject({ items: [{ invitationId: "invite-1" }], nextCursor: null });
+    expect(await client.revokeAppMemberInvitation({ appId: APP, invitationId: "invite-1" }, '"1"')).toEqual({ etag: '"2"' });
 
     expect(service.requests).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: "/admin/apps", search: "?limit=5&cursor=next" }),

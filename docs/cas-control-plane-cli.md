@@ -61,7 +61,7 @@ Alternatively, skip MCP entirely and have DSH run plain shell commands
 | --- | --- |
 | Read (`control:read`) | `principal`, `apps list/get`, `app-members list`, `app-oauth-issuer get`, `app-ref-domains list`, `app-audit control/root-domain-refs/root-domain-events` |
 | Write (`control:write`) | `apps create` (idempotency key), `apps update` (ETag) |
-| Security (`control:security`) | `app-members invite/remove`, `app-oauth-issuer inspect/activate` |
+| Security (`control:security`) | `app-members invite/remove/invitations/revoke-invitation`, `app-oauth-issuer inspect/activate` |
 
 V2 commands use `appId`, Principal `{ issuer, subject }`, and `--space-id`.
 They never return `stackId`, `tenantId`, or flattened identity/profile fields.
@@ -74,6 +74,13 @@ returns only `{ etag }`; use `apps get` for refreshed App data. A current
 same-value update succeeds without advancing revision, while stale ETags fail.
 Suspension requires current App membership and stops all Space traffic within
 the bounded authority-cache window; App recovery operations remain available.
+
+Invitation history uses `app-members invitations <appId> [--status S]
+[--limit N] [--cursor C]`. Revoke with `app-members revoke-invitation <appId>
+<invitationId> --etag E --confirm-invitation-id <invitationId>`, using the
+invitation's revision from the list. The result is only `{ etag }`. Creating
+an App invitation returns `invitationId`, `acceptUrl`, `expiresAt`, and `etag`,
+not a duplicate invitation resource; the URL is not recoverable from reads.
 
 ## Legacy v1 compatibility
 

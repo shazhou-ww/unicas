@@ -40,6 +40,8 @@ export function createControlPlaneOperations(
     deletePlaygroundFileRoot: admin.deletePlaygroundFileRoot.bind(admin),
     deleteMember: admin.deleteMember.bind(admin),
     createMemberInvitation: admin.createMemberInvitation.bind(admin),
+    listAppMemberInvitations: admin.listAppMemberInvitations.bind(admin),
+    revokeAppMemberInvitation: admin.revokeAppMemberInvitation.bind(admin),
     acceptMemberInvitation: admin.acceptMemberInvitation.bind(admin),
     getOAuthIssuer: admin.getOAuthIssuer.bind(admin),
     getManagedOAuthIssuer: admin.getManagedOAuthIssuer.bind(admin),

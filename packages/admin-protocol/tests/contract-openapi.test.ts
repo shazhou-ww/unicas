@@ -115,7 +115,7 @@ describe("CAS admin schemas", () => {
     expectTypeOf<MeResult["profile"]>().toEqualTypeOf<Profile>();
 
     expect(Object.keys(appAdminApiContract.apps)).toHaveLength(4);
-    expect(Object.keys(appAdminApiContract.members)).toHaveLength(4);
+    expect(Object.keys(appAdminApiContract.members)).toHaveLength(6);
   });
 
   test("defines issuer, capability, and audit resources for the complete App contract", () => {
@@ -173,7 +173,7 @@ describe("CAS admin schemas", () => {
     expect(SpaceRootRefBalanceSchema.safeParse(balance).success).toBe(true);
     const operationCount = Object.values(appAdminApiContract)
       .reduce((count, group) => count + Object.keys(group).length, 0);
-    expect(operationCount).toBe(23);
+    expect(operationCount).toBe(25);
   });
 });
 
@@ -199,8 +199,13 @@ describe("CAS admin OpenAPI", () => {
     const document = await generateAppAdminOpenApiDocument();
     const allOperations = operations(document);
     const serialized = JSON.stringify(document);
-    expect(Object.keys(document.paths ?? {})).toHaveLength(16);
-    expect(allOperations).toHaveLength(23);
+    expect(Object.keys(document.paths ?? {})).toHaveLength(17);
+    expect(allOperations).toHaveLength(25);
+    expect(document.paths?.["/admin/apps/{appId}/member-invitations"]?.get?.operationId).toBe("listAppMemberInvitations");
+    const revoke = document.paths?.["/admin/apps/{appId}/member-invitations/{invitationId}"]?.delete;
+    expect(revoke?.responses?.["204"]).toHaveProperty("headers.ETag.required", true);
+    expect(revoke?.responses?.["204"]).not.toHaveProperty("content");
+    expect(revoke?.responses).toHaveProperty("412");
     expect(document.paths?.["/admin/apps/{appId}"]?.get).toHaveProperty("operationId", "getApp");
     const patch = document.paths?.["/admin/apps/{appId}"]?.patch;
     expect(patch?.responses?.["204"]).toHaveProperty("headers.ETag.required", true);

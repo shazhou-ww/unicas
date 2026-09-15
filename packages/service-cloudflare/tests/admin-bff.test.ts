@@ -202,6 +202,16 @@ function fakeControlPlane(): ControlPlaneOperations {
     deleteMember: error as ControlPlaneOperations["deleteMember"],
     createMemberInvitation: error as ControlPlaneOperations["createMemberInvitation"],
     acceptMemberInvitation: error as ControlPlaneOperations["acceptMemberInvitation"],
+    listAppMemberInvitations: async (ctx, appId) => {
+      if (!requireStack(ctx, appId)) return { error: "STACK_MEMBERSHIP_REQUIRED" };
+      return { items: [{ appId, invitationId: "inv-test", status: "pending", emailConstraint: null, expiresAt: 4102444800000, createdAt: 1, revision: 7 }], nextCursor: null };
+    },
+    revokeAppMemberInvitation: async (ctx, appId, invitationId, mutation) => {
+      if (!requireStack(ctx, appId)) return { error: "STACK_MEMBERSHIP_REQUIRED" };
+      if (invitationId !== "inv-test") return { error: "NOT_FOUND" };
+      if (mutation.ifMatch !== '"7"') return { error: "REVISION_MISMATCH" };
+      return { revision: 8 };
+    },
     getOAuthIssuer: async (ctx, request) => {
       if (!requireStack(ctx, request.path.stackId)) return { error: "STACK_MEMBERSHIP_REQUIRED", message: "stack membership required" };
       return request.query?.optional ? null : { error: "NOT_FOUND", message: "OAuth issuer is not configured" };
@@ -861,6 +871,23 @@ describe("cas-admin-webui BFF", () => {
     expect(created.description).toBe("");
     expect(created.stackId).toMatch(/^cas_/);
     expect(ok.headers.get("ETag")).toBe('"1"');
+  });
+
+  test("App invitation list and revoke use strict filters, CSRF, and invitation ETags", async () => {
+    const provider = await createMockProvider();
+    const bff = await createBff(provider);
+    const { cookie, csrf } = await signIn(bff, provider);
+    const appId = await createStack(bff, cookie, csrf, "App");
+    const path = `/admin/apps/${appId}/member-invitations`;
+    const list = await authRequest(bff, `${path}?status=pending&limit=50`, cookie);
+    expect(list.status).toBe(200);
+    expect(await list.json()).toMatchObject({ items: [{ invitationId: "inv-test", revision: 7 }], nextCursor: null });
+    expect((await authRequest(bff, `${path}?status=unknown`, cookie)).status).toBe(400);
+    expect((await authRequest(bff, `${path}/inv-test`, cookie, { method: "DELETE", headers: { "If-Match": '"7"' } })).status).toBe(403);
+    const revoked = await authRequest(bff, `${path}/inv-test`, cookie, { method: "DELETE", headers: { "If-Match": '"7"', "X-CSRF-Token": csrf } });
+    expect(revoked.status).toBe(204);
+    expect(revoked.headers.get("ETag")).toBe('"8"');
+    expect(await revoked.text()).toBe("");
   });
 
   test("App status mutations enforce CSRF, strict input, and minimal responses", async () => {

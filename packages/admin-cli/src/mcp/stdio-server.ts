@@ -145,6 +145,19 @@ async function resolveEtag(
 
 /** Maps the remote tool contract to admin-client operations. */
 const TOOL_HANDLERS = {
+  async list_app_member_invitations(admin, args) {
+    const status = args.status;
+    if (status !== undefined && status !== "pending" && status !== "accepted" && status !== "expired" && status !== "revoked") {
+      throw new Error("invalid invitation status");
+    }
+    return admin.listAppMemberInvitations({ appId: str(args.appId) }, { ...pick(args, ["limit", "cursor"]), ...(status === undefined ? {} : { status }) });
+  },
+
+  async revoke_app_member_invitation(admin, args) {
+    requireMatch(args.confirmInvitationId, args.invitationId, "confirmInvitationId must exactly match invitationId");
+    return admin.revokeAppMemberInvitation({ appId: str(args.appId), invitationId: str(args.invitationId) }, str(args.etag));
+  },
+
   async whoami(admin) {
     return admin.me();
   },

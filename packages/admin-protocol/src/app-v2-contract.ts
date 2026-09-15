@@ -27,6 +27,7 @@ export const AppAdminApiErrorMap = {
   ADMIN_AUTH_REQUIRED: error(401, "Administrator authentication is required"),
   APP_MEMBERSHIP_REQUIRED: error(403, "App membership is required"),
   APP_SUSPENDED: error(403, "App is suspended"),
+  INVITATION_NOT_PENDING: error(409, "Invitation is accepted, expired, or revoked"),
   NOT_FOUND: error(404, "The requested control-plane resource was not found"),
   LAST_MEMBER: error(409, "The final App member cannot be removed"),
   RATE_LIMITED: error(429, "The control-plane request was rate limited"),
@@ -186,6 +187,7 @@ export const createAppMemberInvitationContract = appProcedure
     summary: "Create an App member invitation",
     description: "Creates a short-lived single-use invitation for equal App administrator membership.",
     inputStructure: "detailed",
+    outputStructure: "detailed",
     successStatus: 201,
     tags: ["Members"],
   })
@@ -195,9 +197,25 @@ export const createAppMemberInvitationContract = appProcedure
     body: z.object({ emailConstraint: z.string().optional() }).readonly().optional(),
   }).readonly())
   .output(z.object({
-    invitation: AppMemberInvitationSchema,
-    acceptUrl: z.url(),
+    headers: z.object({ ETag: z.string().regex(/^"(0|[1-9][0-9]*)"$/) }).readonly(),
+    body: z.object({ invitationId: z.string().min(1), acceptUrl: z.url(), expiresAt: z.number().int().nonnegative() }).readonly(),
   }).readonly().meta({ id: "AppAdminCreateMemberInvitationResponse" }));
+
+export const AppInvitationQuerySchema = z.object({
+  status: z.enum(["pending", "accepted", "expired", "revoked"]).optional(),
+  limit: z.number().int().min(1).max(1000).optional(),
+  cursor: z.string().min(1).optional(),
+}).strict().readonly();
+
+export const listAppMemberInvitationsContract = appProcedure
+  .route({ method: "GET", path: `${AppAdminApiBasePath}/{appId}/member-invitations`, operationId: "listAppMemberInvitations", summary: "List App member invitations", description: "Snapshot-bound invitation history with lifecycle filtering and no bearer data. Requires current App membership.", inputStructure: "detailed", tags: ["Members"] })
+  .input(z.object({ params: appParams, query: AppInvitationQuerySchema.optional() }).readonly())
+  .output(pageSchema(AppMemberInvitationSchema).meta({ id: "AppMemberInvitationPage" }));
+
+export const revokeAppMemberInvitationContract = appProcedure
+  .route({ method: "DELETE", path: `${AppAdminApiBasePath}/{appId}/member-invitations/{invitationId}`, operationId: "revokeAppMemberInvitation", summary: "Revoke an App member invitation", description: "Conditionally revokes pending unexpired invitations while retaining audit history. A current revoked ETag is a no-op; a stale ETag fails.", inputStructure: "detailed", outputStructure: "detailed", successStatus: 204, tags: ["Members"] })
+  .input(z.object({ params: appParams.unwrap().extend({ invitationId: z.string().min(1) }).readonly(), headers: mutationHeaders }).readonly())
+  .output(z.object({ headers: z.object({ ETag: z.string().regex(/^"(0|[1-9][0-9]*)"$/) }).readonly() }).readonly());
 
 export const acceptAppMemberInvitationContract = appProcedure
   .route({
@@ -212,7 +230,7 @@ export const acceptAppMemberInvitationContract = appProcedure
   .input(z.object({
     params: z.object({ token: z.string().min(1) }).readonly(),
   }).readonly())
-  .output(AppMembershipSchema);
+  .output(z.object({ appId: AppIdSchema }).readonly());
 
 export const listAppPlaygroundFileRootsContract = appProcedure
   .route({ method: "GET", path: `${AppAdminApiBasePath}/{appId}/playground/file-roots`, operationId: "listAppPlaygroundFileRoots", summary: "List Playground file roots", inputStructure: "detailed", tags: ["Playground"] })
@@ -297,6 +315,8 @@ export const appAdminApiContract = {
     remove: deleteAppMemberContract,
     invite: createAppMemberInvitationContract,
     accept: acceptAppMemberInvitationContract,
+    listInvitations: listAppMemberInvitationsContract,
+    revokeInvitation: revokeAppMemberInvitationContract,
   },
   playground: {
     list: listAppPlaygroundFileRootsContract,

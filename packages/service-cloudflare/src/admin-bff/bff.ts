@@ -14,6 +14,7 @@ import {
   matchAppAdminRoute,
   matchCasAdminRoute,
   PatchAppRequestSchema,
+  AppInvitationQuerySchema,
 } from "@unicas/admin-protocol";
 import type {
   CasAdminErrorResponse,
@@ -176,6 +177,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     }
     if (appRoute?.operation === "patchApp") {
       return handleAppPatch(request, appRoute.appId);
+    }
+    if (appRoute?.operation === "listMemberInvitations" || appRoute?.operation === "revokeMemberInvitation") {
+      return handleAppInvitations(request, appRoute.appId, appRoute.operation === "revokeMemberInvitation" ? appRoute.invitationId : undefined);
     }
     return json({ error: "Not Found" }, 404);
   };
@@ -646,6 +650,27 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         },
       },
     );
+  }
+
+  async function handleAppInvitations(request: Request, appId: string, invitationId?: string): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    const context = serviceContext(auth.payload, request);
+    if (invitationId !== undefined) {
+      if (!(await passCsrf(request, auth.payload))) return csrfRejected();
+      const result = await controlPlane.revokeAppMemberInvitation(context, appId, invitationId, {
+        ifMatch: request.headers.get("If-Match") ?? undefined,
+      });
+      if ("error" in result) return json(transformAppAdminError({ ...result }), result.error === "INVITATION_NOT_PENDING" ? 409 : casAdminErrorHttpStatus[result.error]);
+      return new Response(null, { status: 204, headers: { ETag: formatCasAdminETag(result.revision), "Cache-Control": "no-store" } });
+    }
+    const params = queryFromUrl(new URL(request.url));
+    const parsed = AppInvitationQuerySchema.safeParse({ ...params, ...(params.limit === undefined ? {} : { limit: Number(params.limit) }) });
+    if (!parsed.success) return invalidRequest("Invalid invitation filters or pagination");
+    const result = await controlPlane.listAppMemberInvitations(context, appId, parsed.data);
+    return "error" in result
+      ? json(transformAppAdminError({ ...result }), casAdminErrorHttpStatus[result.error])
+      : json(result, 200);
   }
 
   async function handleAppPatch(request: Request, appId: string): Promise<Response> {

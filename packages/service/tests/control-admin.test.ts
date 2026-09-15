@@ -736,12 +736,40 @@ class MemoryControlAdminRepository implements ControlPlaneAdminRepository {
     return Promise.resolve({ kind: index >= 0 ? "deleted" : "not-member" });
   }
 
+  async getMemberInvitation(stackId: string, invitationId: string): Promise<Omit<ControlMemberInvitationRecord, "tokenHash"> | null> {
+    const invitation = this.invitations.get(invitationId);
+    if (!invitation || invitation.stackId !== stackId) return null;
+    const { tokenHash: _tokenHash, ...view } = invitation;
+    return view;
+  }
+
+  async listMemberInvitations(input: Parameters<ControlPlaneAdminRepository["listMemberInvitations"]>[0]): Promise<readonly Omit<ControlMemberInvitationRecord, "tokenHash">[]> {
+    return [...this.invitations.values()]
+      .filter(invitation => invitation.stackId === input.stackId && invitation.invitationId > input.afterInvitationId
+        && (input.status === undefined || invitation.status === input.status)
+        && (input.expiresAtOrBefore === undefined || invitation.expiresAt <= input.expiresAtOrBefore))
+      .sort((left, right) => left.invitationId < right.invitationId ? -1 : left.invitationId > right.invitationId ? 1 : 0)
+      .slice(0, input.limit)
+      .map(({ tokenHash: _tokenHash, ...view }) => view);
+  }
+
+  async commitInvitationTransition(input: Parameters<ControlPlaneAdminRepository["commitInvitationTransition"]>[0]): Promise<"updated" | "unavailable"> {
+    const invitation = this.invitations.get(input.invitationId);
+    if (!invitation || invitation.stackId !== input.stackId || invitation.status !== "pending"
+      || invitation.revision !== input.expectedRevision
+      || (input.status === "expired" ? invitation.expiresAt > input.now : invitation.expiresAt <= input.now)) return "unavailable";
+    this.invitations.set(input.invitationId, { ...invitation, status: input.status, revision: invitation.revision + 1 });
+    this.audits.push(input.audit);
+    this.snapshot += 1;
+    return "updated";
+  }
+
   commitAcceptMemberInvitation(plan: ControlAcceptMemberInvitationPlan): Promise<ControlAcceptMemberInvitationCommitResult> {
     const invitation = this.invitations.get(plan.invitationId);
     if (!invitation || invitation.tokenHash !== plan.tokenHash || invitation.status !== "pending" || invitation.expiresAt <= plan.now) {
       return Promise.resolve({ kind: "unavailable" });
     }
-    this.invitations.set(plan.invitationId, { ...invitation, status: "accepted" });
+    this.invitations.set(plan.invitationId, { ...invitation, status: "accepted", revision: invitation.revision + 1 });
     this.identities.set(identityKey(plan.identity), plan.identity);
     if (!this.memberships.some((member) => member.stackId === plan.stackId && sameIdentity(member, plan.identity))) {
       this.memberships.push(plan.membership);
