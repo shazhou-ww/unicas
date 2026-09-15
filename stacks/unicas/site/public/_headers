@@ -1,0 +1,5 @@
+/.well-known/oauth-authorization-server/deploy-smoke
+  Content-Type: application/json
+
+/deploy-smoke/jwks.json
+  Content-Type: application/json

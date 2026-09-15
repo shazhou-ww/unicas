@@ -1,0 +1,8 @@
+{
+  "issuer": "https://unicas.work/deploy-smoke",
+  "authorization_endpoint": "https://unicas.work/deploy-smoke/authorize",
+  "token_endpoint": "https://unicas.work/deploy-smoke/token",
+  "jwks_uri": "https://unicas.work/deploy-smoke/jwks.json",
+  "scopes_supported": ["cas:read", "cas:write", "cas:manage"],
+  "code_challenge_methods_supported": ["S256"]
+}

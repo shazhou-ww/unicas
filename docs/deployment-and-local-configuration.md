@@ -260,6 +260,34 @@ managed-issuer keys, the audit-reader key, or any future Worker runtime secret
 into GitHub for routine deployment. Wrangler preserves those secrets when it
 publishes a new version.
 
+The production smoke App uses the dedicated external issuer
+`https://unicas.work/deploy-smoke`. The product-site Worker serves its OAuth
+metadata from `/.well-known/oauth-authorization-server/deploy-smoke` and its
+public JWKS from `/deploy-smoke/jwks.json`; both paths return JSON directly
+without redirects. Only public keys belong in those tracked assets. The
+matching private key is a separate deployment credential and must never be
+derived from, copied from, or replaced with
+`MANAGED_ISSUER_PRIVATE_KEY_PKCS8`.
+
+Initial provisioning is an explicit bootstrap operation:
+
+1. Generate an extractable ES256 key pair offline under the gitignored
+   `.wrangler/cas-deploy/` directory and choose a unique `kid`.
+2. Add only the public JWK to the product-site JWKS, validate
+   `pnpm deploy:site:plan`, and deploy the product-site Worker.
+3. Run `unicas app-oauth-issuer inspect <appId>
+   https://unicas.work/deploy-smoke` through a production control-plane
+   session. Sign its exact, expiring challenge as an ES256 compact JWS with
+   the new key and activate that inspection. Never pass the private key to the
+   control plane.
+4. Set the five `UNICAS_SMOKE_*` variables from the activated response, set
+   `UNICAS_SMOKE_SPACE_ID=deploy-smoke`, and stream the PKCS#8 PEM directly
+   into the `UNICAS_SMOKE_PRIVATE_KEY_PKCS8` GitHub environment secret without
+   printing it.
+5. Dispatch **CI** from `main` and retain the bootstrap key file only in the
+   approved operator credential store until rotation or recovery no longer
+   requires it.
+
 A normal release is a validated push to `main`. The protected job stops on the
 first failure. Its `unicas-production` concurrency group uses `queue: max` and
 does not cancel an in-progress release, so up to 100 validated revisions can

@@ -1,0 +1,14 @@
+{
+  "keys": [
+    {
+      "kty": "EC",
+      "x": "MZTdlWf4cu9g_g1cAJG0J1qDsqyxA_4K_hiDCtDXRHY",
+      "y": "YsNRHCaeAShBuUcl-M-nYLUI2Fk6R1f4Qh6D_IfxYQw",
+      "crv": "P-256",
+      "kid": "github-actions-2026-09",
+      "alg": "ES256",
+      "use": "sig",
+      "key_ops": ["verify"]
+    }
+  ]
+}

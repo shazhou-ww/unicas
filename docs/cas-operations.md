@@ -128,12 +128,15 @@ GitHub `Production` environment, complete a green manual run from `main`, then
 revoke the old token.
 
 To rotate the smoke signer, first publish the replacement public key through
-the smoke issuer while retaining the old key. During a deployment-free window,
-replace `UNICAS_SMOKE_PRIVATE_KEY_PKCS8` and `UNICAS_SMOKE_KID` in the same
-GitHub environment, then complete a green manual run before retiring the old
-public key after its token and verifier-cache overlap window. Rotate Worker
-runtime secrets separately with `wrangler secret put`; never copy them into
-GitHub deployment configuration.
+the tracked `https://unicas.work/deploy-smoke` JWKS while retaining the old
+key. Deploy the product-site Worker and wait for the verifier-cache overlap
+window. During a deployment-free window, replace
+`UNICAS_SMOKE_PRIVATE_KEY_PKCS8` and `UNICAS_SMOKE_KID` in the same GitHub
+environment, then complete a green manual run before removing the old public
+key in a later product-site deployment. The issuer URL and audience do not
+change during signer rotation, so no new control-plane activation is needed.
+Rotate Worker runtime secrets separately with `wrangler secret put`; never
+copy them into GitHub deployment configuration.
 
 ### Rollback
 

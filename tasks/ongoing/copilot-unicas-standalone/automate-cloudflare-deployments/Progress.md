@@ -15,9 +15,9 @@ The task is claimed by `copilot-unicas-standalone`. CI now has a serialized
 `Production` environment job for validated `main` pushes and manual `main`
 dispatches. It deploys service, product site, and documentation in order,
 cleans up the ephemeral smoke key, and checks all public origins. The next
-action is to push the clean-checkout task-directory fix, monitor the next
-protected production run, and address any remaining live-only failures before
-archiving.
+action is to finish bootstrapping the dedicated external smoke issuer, set the
+remaining GitHub environment values without exposing the private key, and run
+the protected production path again before archiving.
 
 ## Decisions
 
@@ -64,14 +64,25 @@ archiving.
   job was skipped before it could read environment values or contact
   Cloudflare. Adding `tasks/backlog/.gitkeep` restored the canonical directory,
   and the exact task-ledger check passed 10/10 locally.
+- GitHub Actions run `34938025424` passed validation and entered the protected
+  `Production` environment, then failed closed before any Wrangler command
+  because `UNICAS_SMOKE_PRIVATE_KEY_PKCS8` was unset. Environment inspection
+  confirmed only the Cloudflare token and account ID were present. The current
+  `Production Smoke` App has no external issuer, so its managed runtime key
+  cannot be reused without violating credential separation.
+- A dedicated ES256 smoke key was generated under the gitignored credential
+  boundary. Its public-only metadata/JWKS assets pass 21 deployment tests and
+  local Wrangler serves both discovery paths as direct `200 application/json`
+  responses.
 
 ## Blockers
 
 - A real GitHub Actions deployment is still required to prove environment
   protection, Cloudflare token permissions, smoke credentials, secret
-  preservation, and post-deploy behavior together. The operator reports that
-  the GitHub `Production` environment, required values, and main-only
-  deployment branch policy are configured.
+  preservation, and post-deploy behavior together. The operator confirmed the
+  GitHub `Production` environment and main-only deployment branch policy; the
+  dedicated smoke issuer and remaining environment values are being
+  bootstrapped after the first protected run exposed their absence.
 
 ## Outcome
 
