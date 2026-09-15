@@ -7,13 +7,13 @@ Updated: 2026-09-15
 - [x] Pin and configure `repoledger@0.1.0`.
 - [x] Delegate generic checks and retain focused UniCAS policy tests.
 - [x] Document `repoledger check` and local `repoledger doctor` usage.
-- [ ] Run acceptance validation and archive the completed task.
+- [x] Run acceptance validation and archive the completed task.
 
 ## Current state
 
-Implementation is published and passes all local Windows acceptance checks.
-The next action is to verify Linux CI run `34962857668`; after it succeeds,
-check the final acceptance item, clear the blocker, and archive the task.
+All acceptance criteria are satisfied. Implementation commit
+`96082d3ed835e9968b692d6e9d91b45e8feec77a` passed local Windows validation and
+GitHub Actions Linux CI; this task is ready for its final archive publication.
 
 ## Decisions
 
@@ -31,7 +31,7 @@ check the final acceptance item, clear the blocker, and archive the task.
 | --- | --- | --- |
 | Claim | `origin/main` commit `4b6c1a2e62129e8fa3bded15edad5eb3feb307bc`. | Published |
 | Implementation complete | `origin/main` commit `96082d3ed835e9968b692d6e9d91b45e8feec77a`. | Published |
-| Archive | Pending. | Pending |
+| Archive | `origin/main` archive commit containing this record. | Published |
 
 ## Validation
 
@@ -45,17 +45,19 @@ check the final acceptance item, clear the blocker, and archive the task.
 - `pnpm check:repo` passed 6 task policy tests and 114 other repository tests.
 - CI's task-ledger step uses `pnpm check:tasks` after checkout with
     `fetch-depth: 0`; `doctor` is not present in the workflow.
-- GitHub Actions CI run `34962857668` for implementation commit
-    `96082d3ed835e9968b692d6e9d91b45e8feec77a` started on Linux and progressed
-    beyond the repository task-ledger step; final completion is pending.
+- GitHub Actions CI run `34962857668` completed successfully on Linux for
+    implementation commit `96082d3ed835e9968b692d6e9d91b45e8feec77a`;
+    `validate` passed in 2m 2s. Its sole annotation concerns GitHub's Node 20
+    action runtime deprecation and is unrelated to this task.
 - Editor diagnostics and `git diff --check` reported no implementation errors
     or whitespace errors.
 
 ## Blockers
 
-- External: GitHub Actions CI run `34962857668` is still in progress. Verify
-    its final result before archiving; no local implementation work remains.
+- None.
 
 ## Outcome
 
-Pending.
+Completed. UniCAS now delegates reusable task-ledger validation to pinned
+`repoledger@0.1.0`, retains focused local policy tests, and keeps local identity
+readiness separate from identity-independent CI.

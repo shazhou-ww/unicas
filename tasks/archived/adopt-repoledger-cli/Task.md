@@ -67,7 +67,7 @@ logic without making the public tool responsible for UniCAS policy.
   commits.
 - [x] `repoledger doctor` succeeds in a correctly initialized UniCAS worktree
       and is documented for local use without becoming a CI prerequisite.
-- [ ] `pnpm check:tasks`, `pnpm check:repo`, and the narrow package/configuration
+- [x] `pnpm check:tasks`, `pnpm check:repo`, and the narrow package/configuration
       checks all pass with actionable output on Windows and CI's Linux runner.
 - [x] No unrelated UniCAS files or task history are changed by the adoption.
 
