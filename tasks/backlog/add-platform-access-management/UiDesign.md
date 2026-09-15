@@ -380,7 +380,7 @@ their accepted contracts rather than implementing security semantics in view
 code.
 
 - [App suspension boundary](/tasks/archived/enforce-app-suspension-boundary/Task.md)
-- [App member invitation management](/tasks/ongoing/scottwei-home-pc/manage-app-member-invitations/Task.md)
+- [App member invitation management](/tasks/archived/manage-app-member-invitations/Task.md)
 - [Active App OAuth issuer replacement](/tasks/backlog/replace-active-app-oauth-issuer/Task.md)
 
 ## Responsive behavior

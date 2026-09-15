@@ -96,7 +96,7 @@ customized for UniCAS, and makes the App list the primary navigation.
 ## Dependencies
 
 - [Enforce the App suspension boundary](/tasks/archived/enforce-app-suspension-boundary/Task.md)
-- [Manage App member invitations](/tasks/ongoing/scottwei-home-pc/manage-app-member-invitations/Task.md)
+- [Manage App member invitations](/tasks/archived/manage-app-member-invitations/Task.md)
 - [Replace an active App OAuth issuer](/tasks/backlog/replace-active-app-oauth-issuer/Task.md)
 
 ## Design decisions to settle

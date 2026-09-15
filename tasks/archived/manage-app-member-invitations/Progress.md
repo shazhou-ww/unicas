@@ -8,15 +8,15 @@ Updated: 2026-09-15
 - [x] Reconcile expiry and preserve immutable audit without bearer disclosure.
 - [x] Expose protocol, client, BFF, CLI, and MCP operations with minimal writes.
 - [x] Integrate the existing Console invitation view and verify responsive behavior.
-- [ ] Run acceptance gates and publish implementation before archival.
+- [x] Run acceptance gates and publish implementation before archival.
 
 ## Current state
 
 Claim `80d87f6caf37baa3e078ad7f9f91b25f77dc2576` is verified on `origin/main`.
 The service, D1 adapter, protocol, BFF, clients, CLI/MCP, and Console now expose
 invitation history and conditional revocation. All local acceptance gates
-passed. Next publish implementation, record its immutable shared-branch hash,
-and archive before claiming active issuer replacement.
+passed. Implementation `0b64041275941533711e45337a1cac00e2bd5855` is verified
+on `origin/main`. Next publish the archive move and claim active issuer replacement.
 
 ## Decisions
 
@@ -30,8 +30,8 @@ and archive before claiming active issuer replacement.
 | Milestone | Evidence | Status |
 | --- | --- | --- |
 | Claim | `origin/main` commit `80d87f6caf37baa3e078ad7f9f91b25f77dc2576`. | Published |
-| Implementation complete | Not yet completed. | Pending |
-| Archive | Not yet archived. | Pending |
+| Implementation complete | `origin/main` commit `0b64041275941533711e45337a1cac00e2bd5855`. | Published |
+| Archive | `origin/main` archive commit containing this record. | Published |
 
 ## Validation
 
@@ -64,4 +64,6 @@ and archive before claiming active issuer replacement.
 
 ## Outcome
 
-In progress.
+Completed. App invitation history, revocation, expiry, minimal receipts, and
+Console/CLI/MCP workflows satisfy the acceptance criteria. No production
+deployment was performed.
