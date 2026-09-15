@@ -28,3 +28,4 @@ dist/
 .superpowers/
 
 .DS_Store
+.claude/
