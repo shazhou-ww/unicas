@@ -76,7 +76,9 @@ into `release` is the normal release boundary. Its merged `release` revision
 runs the protected `deploy-production` job after CI validation. That job checks
 out and builds the exact validated commit, runs canonical smoke after the
 service publish, deploys the two static Workers, and verifies all four public
-origins.
+origins. A separate job then records a successful push deployment as an
+immutable `production-YYYYMMDD-<workflow-run-number>` annotated tag pointing
+to that exact revision; manual recovery runs do not create production tags.
 
 For a manual recovery attempt, dispatch the **CI** workflow from `release`. A
 dispatch from `main` or any other branch cannot enter the `Production`
@@ -114,6 +116,14 @@ untouched, although the service version may already be live. A product-site
 failure occurs after a successful service smoke. A documentation failure
 occurs after both earlier units succeed. A final HTTPS-check failure means the
 publishes completed but one public route did not return a successful response.
+
+A `tag-production` failure happens only after all deployment and verification
+steps passed, so production is live even though its audit marker is missing.
+Use **Re-run failed jobs** on that original workflow run; do not dispatch a new
+manual run or create a tag by hand. The retry is idempotent when the existing
+tag resolves to the deployed commit and fails without moving it on a conflict.
+Follow [Deployment and local configuration](deployment-and-local-configuration.md)
+for tag inspection, ruleset policy, and conflict escalation.
 
 For any failure after a Wrangler command starts, compare the affected Worker's
 `wrangler deployments list` output with the workflow commit and timestamps.

@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    branches:
+      - "**"
   pull_request:
   workflow_dispatch:
 
@@ -205,3 +207,28 @@ jobs:
             echo "::error::Documentation origin did not return the UniCAS docs site"
             exit 1
           fi
+
+  tag-production:
+    name: Tag verified production deployment
+    if: >-
+      success() &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/release'
+    needs: deploy-production
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Check out deployed revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Tag verified deployment
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/tag-production-deployment.mjs
