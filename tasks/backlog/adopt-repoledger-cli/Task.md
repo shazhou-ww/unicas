@@ -16,17 +16,17 @@ for agent instructions, installed-skill provenance, identity documentation,
 and finalized-documentation boundaries. It also checks that identity commands
 are documented rather than validating the actual local worktree binding.
 
-The shared skills repository plans to publish the reusable checks as the
-`repoledger` npm CLI. Adopting that package removes duplicated protocol logic
-without making the public tool responsible for UniCAS policy.
+The shared skills repository has published the reusable checks as
+`repoledger@0.1.0` on npm. Adopting that package removes duplicated protocol
+logic without making the public tool responsible for UniCAS policy.
 
 ## Scope
 
 - Add a pinned published `repoledger` development dependency and commit the
   resulting pnpm lockfile update.
 - Add UniCAS's language-neutral `repoledger.json` configuration for its task
-  directory, `origin/main` collaboration branch, link convention, and
-  validation-contract version.
+  directory and `origin/main` collaboration branch. Reference the pinned
+  package's schema; its GitHub `$id` is the versioned contract.
 - Keep `pnpm check:tasks` as the package-script and CI entry point, delegating
   reusable validation to `repoledger check` before running focused
   UniCAS-specific Vitest coverage.
@@ -62,8 +62,9 @@ without making the public tool responsible for UniCAS policy.
 - [ ] UniCAS-specific instruction, skill-lock, identity-documentation,
       documentation-boundary, and documentation-link assertions remain
       covered and fail for representative regressions.
-- [ ] Existing unversioned archived tasks pass under the CLI's documented
-      legacy behavior without content-only migration commits.
+- [ ] Existing archived tasks with legacy publication formats pass under the
+  CLI's documented compatibility behavior without content-only migration
+  commits.
 - [ ] `repoledger doctor` succeeds in a correctly initialized UniCAS worktree
       and is documented for local use without becoming a CI prerequisite.
 - [ ] `pnpm check:tasks`, `pnpm check:repo`, and the narrow package/configuration
@@ -72,8 +73,8 @@ without making the public tool responsible for UniCAS policy.
 
 ## Constraints
 
-- Start implementation only after the required public `repoledger` version is
-  published and its compatibility contract is known.
+- Use the published `repoledger@0.1.0` contract rather than an unpublished
+  local source build.
 - Preserve UniCAS's Node.js and pnpm version policy and deterministic frozen
   lockfile installs.
 - Keep the public validator free of UniCAS-specific behavior; retain local
@@ -85,4 +86,4 @@ without making the public tool responsible for UniCAS policy.
 
 - [Current task workflow test](../../../tests/task-workflow.test.mjs)
 - [UniCAS task profile](../../README.md)
-- [Source repoledger task](https://github.com/shazhou-ww/skills/blob/main/tasks/backlog/build-repoledger-cli/Task.md)
+- [Source repoledger task](https://github.com/shazhou-ww/skills/blob/main/tasks/archived/build-repoledger-cli/Task.md)
