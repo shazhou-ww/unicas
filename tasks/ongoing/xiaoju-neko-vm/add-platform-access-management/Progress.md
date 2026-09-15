@@ -83,6 +83,16 @@ Next: implement invitation-limited login and revocation for existing sessions.
   - `PATCH` without `If-Match` returns 428
   - Non-platform-admin (apps.create only) gets 403 on all platform routes
 
+## Console rebuild progress
+
+- [x] Milestone 1: Tailwind CSS 4 + shadcn/ui infrastructure — installed 17 shadcn components, `cn()` helper, `@/*` path alias, `@tailwindcss/vite` plugin, `/admin/platform` proxy bypass.
+- [x] Milestone 2: Sidebar shell + two-column layout + routing — `app-sidebar.tsx` (brand, Apps list, Platform Admin, profile footer), `app-detail-tabs.tsx` (shadcn Tabs), `parseAppRoute`/`parsePlatformRoute` in router, `app.tsx` rewritten with two-column flex layout, `user-menu.tsx` migrated to shadcn DropdownMenu + Avatar. All 52 tests pass.
+- [ ] Milestone 3: Port Overview view to shadcn.
+- [ ] Milestone 4: Port Members, Invitations, and Change Logs.
+- [ ] Milestone 5: Port Playground to shadcn.
+- [ ] Milestone 6: Platform Administration views.
+- [ ] Milestone 7: Cleanup old components, CSS, and tests.
+
 ## Blockers
 
 - None for implementation. Production bootstrap execution requires an operator

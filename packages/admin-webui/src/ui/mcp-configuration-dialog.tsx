@@ -28,7 +28,7 @@ Use Streamable HTTP. Authentication is handled with OAuth in the browser; no API
     if (!open) return;
     openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     document.body.classList.add("modal-open");
-    const focusTimer = window.setTimeout(() => closeButtonRef.current?.focus(), 0);
+    const focusTimer = window.setTimeout(() => closeButtonRef.current?.focus(), 50);
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         onClose();
