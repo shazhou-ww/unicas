@@ -40,6 +40,29 @@ const TENANT_TABLES = [
   "cas_nodes",
 ];
 
+export const SCOPED_INVENTORY_QUERIES = {
+  control: [
+    `SELECT 'cas_stacks' AS source, stack_id FROM cas_stacks GROUP BY stack_id
+     UNION ALL SELECT 'cas_stack_members', stack_id FROM cas_stack_members GROUP BY stack_id
+     UNION ALL SELECT 'cas_stack_member_invitations', stack_id FROM cas_stack_member_invitations GROUP BY stack_id
+     UNION ALL SELECT 'cas_playground_file_roots', stack_id FROM cas_playground_file_roots GROUP BY stack_id`,
+    `SELECT 'cas_stack_oauth_issuers' AS source, stack_id FROM cas_stack_oauth_issuers GROUP BY stack_id
+     UNION ALL SELECT 'cas_stack_managed_issuers', stack_id FROM cas_stack_managed_issuers GROUP BY stack_id
+     UNION ALL SELECT 'cas_oauth_issuer_inspections', stack_id FROM cas_oauth_issuer_inspections GROUP BY stack_id
+     UNION ALL SELECT 'cas_control_audit_events', stack_id FROM cas_control_audit_events WHERE stack_id IS NOT NULL GROUP BY stack_id`,
+  ],
+  data: [
+    `SELECT 'cas_nodes' AS source, stack_id, tenant_id FROM cas_nodes GROUP BY stack_id, tenant_id
+     UNION ALL SELECT 'cas_edges', stack_id, tenant_id FROM cas_edges GROUP BY stack_id, tenant_id
+     UNION ALL SELECT 'cas_root_ref_requests', stack_id, tenant_id FROM cas_root_ref_requests GROUP BY stack_id, tenant_id
+     UNION ALL SELECT 'cas_root_domain_events', stack_id, tenant_id FROM cas_root_domain_events GROUP BY stack_id, tenant_id`,
+    `SELECT 'cas_root_domain_refs' AS source, stack_id, tenant_id FROM cas_root_domain_refs GROUP BY stack_id, tenant_id
+     UNION ALL SELECT 'cas_root_domain_revisions', stack_id, NULL FROM cas_root_domain_revisions GROUP BY stack_id
+     UNION ALL SELECT 'cas_upload_reservations', stack_id, tenant_id FROM cas_upload_reservations GROUP BY stack_id, tenant_id
+     UNION ALL SELECT 'cas_direct_upload_sessions', stack_id, tenant_id FROM cas_direct_upload_sessions GROUP BY stack_id, tenant_id`,
+  ],
+};
+
 export function parseResetArgs(argv) {
   const options = { execute: false, expectedStackId: undefined, backupDir: undefined };
   for (let index = 0; index < argv.length; index++) {
@@ -74,6 +97,18 @@ export function validateResetInventory(inventory, expectedStackId) {
   ))) {
     throw new Error("remote tenant data is not limited to the deploy-smoke tenant");
   }
+  if (!Array.isArray(inventory.controlScopes) || !Array.isArray(inventory.dataScopes)) {
+    throw new Error("remote scoped-table inventory is incomplete");
+  }
+  if (inventory.controlScopes.some((row) => row.stack_id !== expectedStackId)) {
+    throw new Error("remote control data contains a stack outside the smoke target");
+  }
+  if (inventory.dataScopes.some((row) => (
+    row.stack_id !== expectedStackId
+    || (row.tenant_id !== null && row.tenant_id !== EXPECTED_TENANT_ID)
+  ))) {
+    throw new Error("remote tenant data contains a partition outside the smoke target");
+  }
   const objectPattern = new RegExp(
     `^stacks/${expectedStackId}/tenants/${EXPECTED_TENANT_ID}/nodes-v2/[a-f0-9]{64}$`,
   );
@@ -106,11 +141,11 @@ export function resetPlan(inventory) {
   }
   commands.push(wrangler(
     "d1", "execute", TENANT_DATABASE, "--remote", "--yes", "--command",
-    TENANT_TABLES.map((table) => `DELETE FROM ${table}`).join(";"),
+    TENANT_TABLES.map((table) => `DROP TABLE IF EXISTS ${table}`).join(";"),
   ));
   commands.push(wrangler(
     "d1", "execute", CONTROL_DATABASE, "--remote", "--yes", "--command",
-    CONTROL_TABLES.map((table) => `DELETE FROM ${table}`).join(";"),
+    CONTROL_TABLES.map((table) => `DROP TABLE IF EXISTS ${table}`).join(";"),
   ));
   return commands;
 }
@@ -175,6 +210,8 @@ function remoteInventory() {
     TENANT_DATABASE,
     "SELECT DISTINCT stack_id, tenant_id FROM cas_nodes ORDER BY stack_id, tenant_id",
   );
+  const controlScopes = SCOPED_INVENTORY_QUERIES.control.flatMap((sql) => query(CONTROL_DATABASE, sql));
+  const dataScopes = SCOPED_INVENTORY_QUERIES.data.flatMap((sql) => query(TENANT_DATABASE, sql));
   const objectKeys = query(
     TENANT_DATABASE,
     "SELECT 'stacks/' || stack_id || '/tenants/' || tenant_id || '/nodes-v2/' || hash AS object_key FROM cas_nodes ORDER BY stack_id, tenant_id, hash",
@@ -183,7 +220,7 @@ function remoteInventory() {
     wrangler("kv", "key", "list", "--binding", OAUTH_BINDING, "--remote"),
     true,
   )).map((entry) => entry.name);
-  return { stacks, managedIssuers, tenants, objectKeys, oauthKeys };
+  return { stacks, managedIssuers, tenants, controlScopes, dataScopes, objectKeys, oauthKeys };
 }
 
 function printPlan(commands) {

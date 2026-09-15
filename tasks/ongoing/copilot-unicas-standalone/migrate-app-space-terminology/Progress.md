@@ -79,9 +79,12 @@ use the same schema. The clean migration no longer alters, copies, or deletes
 legacy Stack tables. Data D1 uses `app_id`/`space_id`, canonical objects use
 `apps/{appId}/spaces/{spaceId}/nodes-v2/{hash}`, and the CAS Durable Object
 normalizes both v1 and v2 ingress to an App/Space scope before sending
-App/Space-only commands to the Root Ref domain object. Reset tooling and all
-production execution remain unchanged. The next concrete action is updating
-the reset guards and rendered plan for the clean physical model.
+App/Space-only commands to the Root Ref domain object. No production execution
+has occurred. The one-time pre-cutover reset now
+checks every scoped legacy table and drops the old schemas so the new Worker
+can create clean App/Space tables. The next concrete action is completing the
+remaining non-destructive build/dry-run gates, then repeating the production
+inventory and off-machine backups before seeking reset/deploy approval.
 
 ## Decisions
 
@@ -269,6 +272,12 @@ the reset guards and rendered plan for the clean physical model.
 - After the complete physical source cutover, the full
   `@unicas/service-cloudflare` suite passed 20 files and 202 tests again; its
   TypeScript project typecheck passed.
+- Reset/deployment validation passed 13 focused tests, including bounded
+  Cloudflare D1 compound queries, cross-table non-smoke rejection, and legacy
+  schema DROP commands; docs/task/deploy checks passed 3 files and 22 tests.
+- The live reset-plan command ran without `--execute`. It rejected the stale
+  explicit smoke ID, accepted the newly read target only after all scope and
+  issuer checks passed, and rendered commands without executing them.
 
 ## Blockers
 

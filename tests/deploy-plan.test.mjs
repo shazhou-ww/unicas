@@ -10,6 +10,7 @@ import {
 import {
   parseResetArgs,
   resetPlan,
+  SCOPED_INVENTORY_QUERIES,
   validateResetInventory,
 } from "../stacks/unicas/deploy/reset-smoke.mjs";
 import { normalizeSmokeBaseUrl } from "../scripts/smoke-target.mjs";
@@ -140,6 +141,14 @@ describe("standalone deployment plan", () => {
     const inventory = {
       stacks: [{ stack_id: stackId, display_name: "Production Smoke" }],
       tenants: [{ stack_id: stackId, tenant_id: "deploy-smoke" }],
+      controlScopes: [
+        { source: "cas_stacks", stack_id: stackId },
+        { source: "cas_stack_members", stack_id: stackId },
+      ],
+      dataScopes: [
+        { source: "cas_nodes", stack_id: stackId, tenant_id: "deploy-smoke" },
+        { source: "cas_root_domain_revisions", stack_id: stackId, tenant_id: null },
+      ],
       objectKeys: [`stacks/${stackId}/tenants/deploy-smoke/nodes-v2/${"a".repeat(64)}`],
       oauthKeys: ["client:example_1"],
       managedIssuers: [{
@@ -155,6 +164,14 @@ describe("standalone deployment plan", () => {
     }, stackId)).toThrow("not limited to the deploy-smoke tenant");
     expect(() => validateResetInventory({
       ...inventory,
+      controlScopes: [{ source: "cas_control_audit_events", stack_id: "cas_other" }],
+    }, stackId)).toThrow("control data contains a stack outside the smoke target");
+    expect(() => validateResetInventory({
+      ...inventory,
+      dataScopes: [{ source: "cas_edges", stack_id: stackId, tenant_id: "real-tenant" }],
+    }, stackId)).toThrow("tenant data contains a partition outside the smoke target");
+    expect(() => validateResetInventory({
+      ...inventory,
       objectKeys: ["stacks/cas_other/tenants/deploy-smoke/nodes-v2/bad"],
     }, stackId)).toThrow("outside the smoke prefix");
     expect(() => validateResetInventory({
@@ -163,6 +180,21 @@ describe("standalone deployment plan", () => {
     }, stackId)).toThrow("unsafe key name");
     expect(() => validateResetInventory(inventory, "cas_bad/id"))
       .toThrow("not a canonical UniCAS stack id");
+  });
+
+  test("the smoke reset bounds compound inventory queries for remote D1", () => {
+    const queries = [...SCOPED_INVENTORY_QUERIES.control, ...SCOPED_INVENTORY_QUERIES.data];
+    expect(queries).toHaveLength(4);
+    for (const query of queries) {
+      expect(query.match(/\bSELECT\b/g)).toHaveLength(4);
+    }
+    const catalog = queries.join("\n");
+    for (const table of [
+      "cas_stacks",
+      "cas_control_audit_events",
+      "cas_nodes",
+      "cas_direct_upload_sessions",
+    ]) expect(catalog).toContain(table);
   });
 
   test("the smoke reset plan targets only isolated resources", () => {
@@ -174,6 +206,9 @@ describe("standalone deployment plan", () => {
     expect(rendered).toContain("unicas-content/stacks/cas_smoke/tenants/deploy-smoke");
     expect(rendered).toContain("d1 execute unicas-control --remote");
     expect(rendered).toContain("d1 execute unicas-tenant --remote");
+    expect(rendered).toContain("DROP TABLE IF EXISTS cas_stacks");
+    expect(rendered).toContain("DROP TABLE IF EXISTS cas_nodes");
+    expect(rendered).not.toContain("DELETE FROM cas_stacks");
     expect(rendered).toContain("--binding OAUTH_KV --remote");
     expect(rendered).not.toContain("unicas.shazhou.work");
     expect(rendered).not.toContain("unidocs-cas");

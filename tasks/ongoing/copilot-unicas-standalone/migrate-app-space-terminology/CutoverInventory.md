@@ -92,3 +92,16 @@ before reset/deploy, repeat the aggregate checks, make fresh verified off-machin
 backups, review the rendered reset plan, and obtain explicit approval for the
 production deletion window. If any count or consumer changes, stop and retain
 the compatibility adapters pending a new online migration plan.
+
+## Subsequent guard check
+
+A later read-only reset-plan check on 2026-09-15 found that `Production Smoke`
+had been recreated with a different physical ID after this capture. The guard
+correctly rejected the stale explicit target, then accepted the newly queried
+target after checking every scoped control/data table, the managed issuer, and
+the D1-derived R2 keys. It rendered two R2 deletions and clean legacy-schema
+DROP commands; none were executed.
+
+This capture is therefore historical evidence, not an execution-time
+inventory. The maintenance gate still requires a new aggregate inventory and
+fresh verified off-machine backups immediately before approval.

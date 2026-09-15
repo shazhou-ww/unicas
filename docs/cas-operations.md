@@ -125,10 +125,18 @@ node stacks/unicas/deploy/reset-smoke.mjs --expected-stack-id <current-smoke-sta
 
 This is a physical pre-cutover tool: its Stack/Tenant flags and output match the
 current D1/R2 schema and are not v2 aliases. The command refuses inventories
-containing another physical partition, object-key shape, or a managed issuer
-not bound to `api.unicas.work`. After reviewing the
-printed R2, OAuth KV, and D1 commands, execute only with the same explicit
-physical Stack ID and the directory containing both non-empty exports:
+containing another physical partition in any scoped control or data table, an
+unexpected object-key shape, or a managed issuer not bound to
+`api.unicas.work`. The rendered D1 commands drop the legacy physical tables;
+they do not merely delete rows, because retained `stack_id`/`tenant_id` columns
+would block the new Worker from creating the clean App/Space schema.
+
+Run the destructive command only inside the approved maintenance window, then
+deploy the new Worker immediately so it can create the `app_id`/`space_id`
+tables. Do not reuse this one-time pre-cutover tool after the physical cutover.
+After reviewing the printed R2, OAuth KV, and D1 commands, execute only with
+the same explicit physical Stack ID and the directory containing both
+non-empty exports:
 
 ```powershell
 node stacks/unicas/deploy/reset-smoke.mjs --execute `
