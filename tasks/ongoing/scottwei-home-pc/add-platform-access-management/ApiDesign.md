@@ -6,8 +6,8 @@ Updated: 2026-09-15
 
 ## Design target
 
-Support the platform workflows in [ConsoleMock.html](/tasks/backlog/add-platform-access-management/ConsoleMock.html) and
-[UiDesign.md](/tasks/backlog/add-platform-access-management/UiDesign.md) without treating Google authentication, OAuth
+Support the platform workflows in [ConsoleMock.html](/tasks/ongoing/scottwei-home-pc/add-platform-access-management/ConsoleMock.html) and
+[UiDesign.md](/tasks/ongoing/scottwei-home-pc/add-platform-access-management/UiDesign.md) without treating Google authentication, OAuth
 scopes, App navigation visibility, or App membership as platform authority.
 
 The proposed model has three independent inputs to authorization:
@@ -103,8 +103,8 @@ regardless of current authorities or memberships.
 
 ### Shared wire conventions
 
-[PlatformAccess.openapi.json](/tasks/backlog/add-platform-access-management/PlatformAccess.openapi.json) is the executable
-proposal contract; [ApiReference.html](/tasks/backlog/add-platform-access-management/ApiReference.html) renders that file
+[PlatformAccess.openapi.json](/tasks/ongoing/scottwei-home-pc/add-platform-access-management/PlatformAccess.openapi.json) is the executable
+proposal contract; [ApiReference.html](/tasks/ongoing/scottwei-home-pc/add-platform-access-management/ApiReference.html) renders that file
 directly. These remain design artifacts, not a replacement for the generated
 administrator protocol. Existing clients and server contracts must migrate
 together when the affected prerequisite tasks are implemented.

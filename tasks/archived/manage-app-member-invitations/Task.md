@@ -74,8 +74,8 @@ the invitation lifecycle to be symmetric with Platform Administration.
 
 ## References
 
-- [Platform access API discussion](/tasks/backlog/add-platform-access-management/ApiDesign.md)
-- [Console UI discussion](/tasks/backlog/add-platform-access-management/UiDesign.md)
+- [Platform access API discussion](/tasks/ongoing/scottwei-home-pc/add-platform-access-management/ApiDesign.md)
+- [Console UI discussion](/tasks/ongoing/scottwei-home-pc/add-platform-access-management/UiDesign.md)
 - [App v2 contract](/packages/admin-protocol/src/app-v2-contract.ts)
 - [App member UI](/packages/admin-webui/src/ui/views/members.tsx)
 - [Control schema](/packages/service-cloudflare/src/control-schema.ts)
