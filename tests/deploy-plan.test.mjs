@@ -18,12 +18,35 @@ import {
   validateResetInventory,
 } from "../stacks/unicas/deploy/reset-smoke.mjs";
 import { normalizeSmokeBaseUrl } from "../scripts/smoke-target.mjs";
+import {
+  fetchWorkflowCreatedAt,
+  tagProductionDeployment,
+} from "../scripts/tag-production-deployment.mjs";
 
 const ROOT = join(import.meta.dirname, "..");
 const CI_WORKFLOW = readFileSync(join(ROOT, ".github/workflows/ci.yml"), "utf8");
+const DEPLOYMENT_GUIDE = readFileSync(
+  join(ROOT, "docs/deployment-and-local-configuration.md"),
+  "utf8",
+);
+const OPERATIONS_GUIDE = readFileSync(join(ROOT, "docs/cas-operations.md"), "utf8");
+
+function workflowTriggers() {
+  const end = CI_WORKFLOW.indexOf("jobs:");
+  expect(end).toBeGreaterThan(-1);
+  return CI_WORKFLOW.slice(0, end);
+}
 
 function productionJob() {
-  const marker = "  deploy-production:";
+  const start = CI_WORKFLOW.indexOf("  deploy-production:");
+  const end = CI_WORKFLOW.indexOf("  tag-production:");
+  expect(start).toBeGreaterThan(-1);
+  expect(end).toBeGreaterThan(start);
+  return CI_WORKFLOW.slice(start, end);
+}
+
+function productionTagJob() {
+  const marker = "  tag-production:";
   const offset = CI_WORKFLOW.indexOf(marker);
   expect(offset).toBeGreaterThan(-1);
   return CI_WORKFLOW.slice(offset);
@@ -35,6 +58,12 @@ function validationJob() {
   expect(start).toBeGreaterThan(-1);
   expect(end).toBeGreaterThan(start);
   return CI_WORKFLOW.slice(start, end);
+}
+
+function git(cwd, args) {
+  const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+  expect(result.status, result.stderr).toBe(0);
+  return result.stdout.trim();
 }
 
 describe("standalone deployment plan", () => {
@@ -67,6 +96,151 @@ describe("standalone deployment plan", () => {
     expect(job).toContain("queue: max");
     expect(job).toContain("cancel-in-progress: false");
     expect(job).toContain("ref: ${{ github.sha }}");
+    expect(job).not.toContain("contents: write");
+  });
+
+  test("does not run validation for tag pushes", () => {
+    const triggers = workflowTriggers();
+    expect(triggers).toMatch(/push:\r?\n\s+branches:\r?\n\s+- "\*\*"/);
+    expect(triggers).not.toContain("tags:");
+  });
+
+  test("tags only a successfully deployed release push with narrow write access", () => {
+    const job = productionTagJob();
+    expect(job).toContain("needs: deploy-production");
+    expect(job).toContain("success()");
+    expect(job).toContain("github.event_name == 'push'");
+    expect(job).toContain("github.ref == 'refs/heads/release'");
+    expect(job).toContain("actions: read");
+    expect(job).toContain("contents: write");
+    expect(job).toContain("ref: ${{ github.sha }}");
+    expect(job).toContain("persist-credentials: true");
+    expect(job).toContain("run: node scripts/tag-production-deployment.mjs");
+    expect(job).not.toContain("secrets.");
+  });
+
+  test("derives a stable tag from the workflow creation time", async () => {
+    let requestedUrl;
+    const createdAt = await fetchWorkflowCreatedAt({
+      apiUrl: "https://api.github.test",
+      repository: "shazhou-ww/unicas",
+      runId: "1234",
+      token: "test-token",
+      fetchImpl: async (url) => {
+        requestedUrl = url;
+        return {
+          ok: true,
+          json: async () => ({ created_at: "2026-09-15T23:59:59Z" }),
+        };
+      },
+    });
+
+    expect(requestedUrl).toBe("https://api.github.test/repos/shazhou-ww/unicas/actions/runs/1234");
+    expect(createdAt).toBe("2026-09-15T23:59:59Z");
+  });
+
+  test("creates one immutable annotated tag and accepts an idempotent rerun", () => {
+    const directory = mkdtempSync(join(tmpdir(), "unicas-production-tag-"));
+    const remote = join(directory, "remote.git");
+    const worktree = join(directory, "worktree");
+    const tagName = "production-20260915-42";
+    const runUrl = "https://github.com/shazhou-ww/unicas/actions/runs/1234";
+
+    try {
+      git(directory, ["init", "--bare", remote]);
+      git(directory, ["init", worktree]);
+      writeFileSync(join(worktree, "revision.txt"), "first\n");
+      git(worktree, ["add", "revision.txt"]);
+      git(worktree, [
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-m",
+        "first revision",
+      ]);
+      git(worktree, ["remote", "add", "origin", remote]);
+      const deployedSha = git(worktree, ["rev-parse", "HEAD"]);
+      const deployment = {
+        createdAt: "2026-09-15T23:59:59Z",
+        runNumber: "42",
+        deployedSha,
+        runUrl,
+        cwd: worktree,
+      };
+
+      expect(tagProductionDeployment(deployment)).toEqual({
+        status: "created",
+        tagName,
+      });
+      const originalTagObject = git(directory, [
+        "--git-dir",
+        remote,
+        "rev-parse",
+        `refs/tags/${tagName}`,
+      ]);
+      const metadata = git(directory, [
+        "--git-dir",
+        remote,
+        "cat-file",
+        "-p",
+        `refs/tags/${tagName}`,
+      ]);
+      expect(metadata).toContain(`object ${deployedSha}`);
+      expect(metadata).toContain("type commit");
+      expect(metadata).toContain(`Workflow run: ${runUrl}`);
+
+      expect(tagProductionDeployment(deployment)).toEqual({
+        status: "existing",
+        tagName,
+      });
+      expect(git(directory, [
+        "--git-dir",
+        remote,
+        "rev-parse",
+        `refs/tags/${tagName}`,
+      ])).toBe(originalTagObject);
+
+      writeFileSync(join(worktree, "revision.txt"), "second\n");
+      git(worktree, ["add", "revision.txt"]);
+      git(worktree, [
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-m",
+        "second revision",
+      ]);
+      expect(() => tagProductionDeployment({
+        ...deployment,
+        deployedSha: git(worktree, ["rev-parse", "HEAD"]),
+      })).toThrow("refusing to move it");
+      expect(git(directory, [
+        "--git-dir",
+        remote,
+        "rev-parse",
+        `refs/tags/${tagName}`,
+      ])).toBe(originalTagObject);
+    } finally {
+      rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  });
+
+  test("documents production tag policy and same-run recovery", () => {
+    for (const expected of [
+      "production-YYYYMMDD-<workflow-run-number>",
+      "Immutable production deployment tags",
+      "refs/tags/production-*",
+      "Restrict updates",
+      "Restrict deletions",
+      "Restrict creations",
+      "Re-run failed jobs",
+      "git ls-remote --tags",
+    ]) expect(DEPLOYMENT_GUIDE).toContain(expected);
+    expect(OPERATIONS_GUIDE).toContain("A `tag-production` failure happens only after");
+    expect(OPERATIONS_GUIDE).toContain("production is live even though its audit marker is missing");
   });
 
   test("deploys each production Worker in order with environment-scoped credentials", () => {

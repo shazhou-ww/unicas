@@ -230,6 +230,32 @@ publishing. Pull requests, fork workflows, `main` and other non-`release`
 pushes, and manual runs from another branch skip the deployment job before the
 protected environment is entered.
 
+After every successful `release` push, the separate `tag-production` job
+creates one annotated tag named
+`production-YYYYMMDD-<workflow-run-number>`. The date is the UTC date of the
+workflow run's original `created_at` value, not the time of a rerun, and the
+tag targets that run's exact `github.sha`. Its annotation records the workflow
+run URL and commit. Pull requests, other branch pushes, manual recovery runs,
+failed deployments, and failed public-origin checks do not create a tag. The
+workflow's push trigger selects branches only, so pushing the production tag
+does not start another validation run.
+
+The workflow and `deploy-production` job retain `contents: read` permission.
+Only `tag-production` receives `contents: write`, together with `actions: read`
+to retrieve the original workflow creation timestamp. It uses the ephemeral
+workflow `GITHUB_TOKEN`; do not configure a PAT or another repository-write
+secret. The job accepts an existing tag only when its peeled target equals the
+deployed commit, never force-pushes, and fails closed on a conflicting target.
+
+Create an active repository tag ruleset named
+**Immutable production deployment tags** targeting
+`refs/tags/production-*`. Enable **Restrict updates** and
+**Restrict deletions**, leave **Restrict creations** disabled, and configure
+no bypass actors. This allows the tagging job to create a new
+marker while preventing later pushes or deletions from changing its meaning.
+Do not use a legacy tag-protection rule for this namespace because it also
+blocks first creation.
+
 Create one GitHub environment named `Production`. Set its deployment branch
 policy to selected branches and tags, allowing only `release`; add required
 reviewers or a wait timer if the repository's release policy requires them.
@@ -313,6 +339,23 @@ job deploys in this order:
 4. HTTPS checks requiring the API health JSON, the console's same-origin
    `/admin/` redirect, and identifying HTML from the product and documentation
    origins. Redirects to another host or protocol do not pass.
+
+If `tag-production` alone fails, production has already passed every deploy,
+smoke, and public-origin step. Do not start a new manual workflow, because
+manual runs intentionally create no production tag. Open the original run and
+choose **Re-run failed jobs**; a rerun keeps its original `created_at`,
+`github.run_number`, and deterministic tag name. Before retrying, an operator
+can inspect both the direct tag object and its peeled commit with:
+
+```text
+git ls-remote --tags origin refs/tags/production-YYYYMMDD-RUN refs/tags/production-YYYYMMDD-RUN^{}
+```
+
+No output means the tag is absent and the same-run retry can create it. A
+peeled target equal to the run's `github.sha` is idempotent success. A different
+target is an audit-integrity incident: stop, preserve the failed run and
+ruleset history, and involve a repository owner. Never force-update, silently
+delete, or substitute a differently named tag for that workflow run.
 
 For a manual recovery run, open the **CI** workflow in GitHub Actions, choose
 **Run workflow**, and select `release`. The dispatch repeats validation and

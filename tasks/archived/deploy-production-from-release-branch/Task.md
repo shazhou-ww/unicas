@@ -45,19 +45,19 @@ development and release branches.
 
 ## Acceptance criteria
 
-- [ ] Pushes and pull requests on `main` and other non-`release` branches run
+- [x] Pushes and pull requests on `main` and other non-`release` branches run
       validation without entering the `Production` environment.
-- [ ] A push to `release` deploys only after validation succeeds and uses that
+- [x] A push to `release` deploys only after validation succeeds and uses that
       workflow run's exact commit.
-- [ ] Manual production recovery can run only when `release` is selected and
+- [x] Manual production recovery can run only when `release` is selected and
       follows the same validation and deployment path.
-- [ ] The GitHub `Production` environment allows only the `release` branch.
-- [ ] The remote `release` branch is created without rewriting history and has
+- [x] The GitHub `Production` environment allows only the `release` branch.
+- [x] The remote `release` branch is created without rewriting history and has
       an explicit documented promotion workflow from `main`.
-- [ ] Existing deployment serialization, credential isolation, smoke cleanup,
+- [x] Existing deployment serialization, credential isolation, smoke cleanup,
       Worker order, and public-origin checks remain covered by regression
       tests.
-- [ ] Repository checks and GitHub CI pass, including a skipped production job
+- [x] Repository checks and GitHub CI pass, including a skipped production job
       for the policy commit on `main` and a successful production job for the
       corresponding `release` revision.
 
@@ -73,7 +73,7 @@ development and release branches.
 
 ## References
 
-- [GitHub Actions workflow](../../../../.github/workflows/ci.yml)
-- [Deployment and local configuration](../../../../docs/deployment-and-local-configuration.md)
-- [Operations guide](../../../../docs/cas-operations.md)
-- [Deployment regression tests](../../../../tests/deploy-plan.test.mjs)
+- [GitHub Actions workflow](../../../.github/workflows/ci.yml)
+- [Deployment and local configuration](../../../docs/deployment-and-local-configuration.md)
+- [Operations guide](../../../docs/cas-operations.md)
+- [Deployment regression tests](../../../tests/deploy-plan.test.mjs)
