@@ -20,8 +20,105 @@ import {
 import { normalizeSmokeBaseUrl } from "../scripts/smoke-target.mjs";
 
 const ROOT = join(import.meta.dirname, "..");
+const CI_WORKFLOW = readFileSync(join(ROOT, ".github/workflows/ci.yml"), "utf8");
+
+function productionJob() {
+  const marker = "  deploy-production:";
+  const offset = CI_WORKFLOW.indexOf(marker);
+  expect(offset).toBeGreaterThan(-1);
+  return CI_WORKFLOW.slice(offset);
+}
+
+function validationJob() {
+  const start = CI_WORKFLOW.indexOf("  validate:");
+  const end = CI_WORKFLOW.indexOf("  deploy-production:");
+  expect(start).toBeGreaterThan(-1);
+  expect(end).toBeGreaterThan(start);
+  return CI_WORKFLOW.slice(start, end);
+}
 
 describe("standalone deployment plan", () => {
+  test("keeps production credentials and deployment commands out of validation", () => {
+    const job = validationJob();
+    expect(job).not.toContain("secrets.");
+    expect(job).not.toContain("vars.");
+    expect(job).not.toContain("pnpm deploy:production");
+    expect(job).not.toMatch(/^\s+run: pnpm deploy:site\r?$/m);
+    expect(job).not.toMatch(/^\s+run: pnpm deploy:docs\r?$/m);
+  });
+
+  test("builds every Worker upload bundle during unprivileged validation", () => {
+    const job = validationJob();
+    expect(job).toContain("wrangler deploy --dry-run");
+    expect(job).toContain("run: pnpm deploy:site:plan");
+    expect(job).toContain("run: pnpm deploy:docs:plan");
+  });
+
+  test("gates production deployment behind validation of a main revision", () => {
+    const job = productionJob();
+    expect(job).toContain("needs: validate");
+    expect(job).toContain("github.ref == 'refs/heads/main'");
+    expect(job).toContain("github.event_name == 'push'");
+    expect(job).toContain("github.event_name == 'workflow_dispatch'");
+    expect(job).toContain("environment: Production");
+    expect(job).toContain("contents: read");
+    expect(job).toContain("group: unicas-production");
+    expect(job).toContain("queue: max");
+    expect(job).toContain("cancel-in-progress: false");
+    expect(job).toContain("ref: ${{ github.sha }}");
+  });
+
+  test("deploys each production Worker in order with environment-scoped credentials", () => {
+    const job = productionJob();
+    const service = job.indexOf("run: pnpm deploy:production");
+    const site = job.indexOf("run: pnpm deploy:site");
+    const docs = job.indexOf("run: pnpm deploy:docs");
+    expect(service).toBeGreaterThan(-1);
+    expect(site).toBeGreaterThan(service);
+    expect(docs).toBeGreaterThan(site);
+
+    for (const binding of [
+      "CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}",
+      "CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+      "UNICAS_SMOKE_APP_ID: ${{ vars.UNICAS_SMOKE_APP_ID }}",
+      "UNICAS_SMOKE_ISSUER: ${{ vars.UNICAS_SMOKE_ISSUER }}",
+      "UNICAS_SMOKE_AUDIENCE: ${{ vars.UNICAS_SMOKE_AUDIENCE }}",
+      "UNICAS_SMOKE_KID: ${{ vars.UNICAS_SMOKE_KID }}",
+      "UNICAS_SMOKE_SPACE_ID: ${{ vars.UNICAS_SMOKE_SPACE_ID }}",
+    ]) expect(job).toContain(binding);
+  });
+
+  test("restricts the ephemeral smoke key and removes it after every outcome", () => {
+    const job = productionJob();
+    const service = job.indexOf("run: pnpm deploy:production");
+    const cleanup = job.indexOf("rm -f -- .wrangler/cas-deploy/github-actions-smoke-key.pem");
+    const site = job.indexOf("run: pnpm deploy:site");
+    expect(job).toContain("UNICAS_SMOKE_PRIVATE_KEY_PKCS8: ${{ secrets.UNICAS_SMOKE_PRIVATE_KEY_PKCS8 }}");
+    expect(job).toContain("install -d -m 700 .wrangler/cas-deploy");
+    expect(job).toContain("chmod 600 .wrangler/cas-deploy/github-actions-smoke-key.pem");
+    expect(job).toContain("UNICAS_SMOKE_KEY_FILE: github-actions-smoke-key.pem");
+    expect(job).toContain("if: ${{ always() }}");
+    expect(cleanup).toBeGreaterThan(service);
+    expect(cleanup).toBeLessThan(site);
+  });
+
+  test("checks every public production origin after all deployments", () => {
+    const job = productionJob();
+    const docs = job.indexOf("run: pnpm deploy:docs");
+    for (const target of [
+      "https://api.unicas.work/health",
+      "https://console.unicas.work/",
+      "https://unicas.work/",
+      "https://docs.unicas.work/",
+    ]) expect(job.indexOf(target)).toBeGreaterThan(docs);
+    expect(job).not.toContain("--location");
+    expect(job.match(/--proto '=https'/g)).toHaveLength(4);
+    expect(job).toContain("302 https://console.unicas.work/admin/");
+    expect(job).toContain('"service":"unicas"');
+    expect(job).toContain("UniCAS | Content-addressed storage infrastructure");
+    expect(job).toContain("Overview | UniCAS Docs");
+  });
+
   test("requires an environment name after --env", () => {
     expect(() => parseArgs(["--env"])).toThrow("--env requires a lowercase environment name");
   });

@@ -90,8 +90,13 @@ pnpm exec wrangler whoami
 ```
 
 Use a dedicated token per developer or CI environment. Scope it to the target
-account and zone with only the Worker, D1, R2, KV, Durable Object, and route
-permissions needed for deployment.
+account and zone. For GitHub Actions, start from Cloudflare's **Edit Cloudflare
+Workers** token template, include only the production account under Account
+Resources, and include only the `unicas.work` zone under Zone Resources. The
+deployment publishes Worker scripts, assets, routes, and Durable Object
+migrations that reference already-provisioned bindings. Do not add general
+DNS, account administration, Access, billing, or D1/R2/KV data-management
+permissions.
 
 The committed [Wrangler configuration](../packages/service-cloudflare/wrangler.toml)
 contains production resource IDs, route names, and the Google OAuth client ID.
@@ -214,3 +219,64 @@ set `UNICAS_SMOKE_APP_ID`, `UNICAS_SMOKE_ISSUER`, `UNICAS_SMOKE_AUDIENCE`,
 lease, read, metadata, Root Ref idempotency, usage, GC, cross-Space isolation,
 and bidirectional v1/v2 denial. `pnpm smoke:v1` retains the separate frozen v1
 flow. Never commit the key files or print their contents.
+
+## GitHub Actions production deployment
+
+The `deploy-production` job in [the CI workflow](../.github/workflows/ci.yml)
+runs only for a push to `main` or a manual workflow dispatch whose selected
+branch is `main`. It waits for the same workflow's `validate` job, checks out
+`github.sha` again, installs from the lockfile, and rebuilds before publishing.
+Pull requests, fork workflows, non-`main` pushes, and manual runs from another
+branch skip the deployment job before the protected environment is entered.
+
+Create one GitHub environment named `Production`. Set its deployment branch
+policy to selected branches and tags, allowing only `main`; add required
+reviewers or a wait timer if the repository's release policy requires them.
+Configure these values on that environment, not as unprotected repository
+secrets:
+
+| Kind | Name | Value |
+| --- | --- | --- |
+| Variable | `CLOUDFLARE_ACCOUNT_ID` | ID of the one production Cloudflare account |
+| Secret | `CLOUDFLARE_API_TOKEN` | Dedicated **Edit Cloudflare Workers** token scoped to that account and the `unicas.work` zone |
+| Variable | `UNICAS_SMOKE_APP_ID` | Provisioned production smoke App ID |
+| Variable | `UNICAS_SMOKE_ISSUER` | Issuer registered for the smoke App |
+| Variable | `UNICAS_SMOKE_AUDIENCE` | Audience registered for the smoke App |
+| Variable | `UNICAS_SMOKE_KID` | Key ID published by the smoke issuer |
+| Variable | `UNICAS_SMOKE_SPACE_ID` | Dedicated smoke Space, normally `deploy-smoke` |
+| Secret | `UNICAS_SMOKE_PRIVATE_KEY_PKCS8` | PEM-encoded PKCS#8 private key matching the smoke key ID |
+
+Do not create a GitHub value for `UNICAS_SMOKE_KEY_FILE`. The workflow assigns
+a fixed file name, writes the private key under the gitignored
+`.wrangler/cas-deploy/` boundary with owner-only directory and file modes, and
+deletes it immediately after the service deployment and smoke step, including
+when that step fails. It does not set `UNICAS_SMOKE_ALLOW_OTHER_ORIGIN` or
+`UNICAS_SMOKE_ENABLE_CONCURRENCY`; production smoke remains pinned to
+`https://api.unicas.work` with the Cloudflare-safe concurrency behavior.
+
+Worker runtime secrets remain provisioned only in Cloudflare. Do not copy
+`GOOGLE_OIDC_CLIENT_SECRET`, session or OAuth encryption keys, R2 credentials,
+managed-issuer keys, the audit-reader key, or any future Worker runtime secret
+into GitHub for routine deployment. Wrangler preserves those secrets when it
+publishes a new version.
+
+A normal release is a validated push to `main`. The protected job stops on the
+first failure. Its `unicas-production` concurrency group uses `queue: max` and
+does not cancel an in-progress release, so up to 100 validated revisions can
+wait for serialized deployment instead of replacing the current pending run.
+GitHub orders them by the time each deployment job starts waiting, which can
+differ from workflow dispatch order; every job still deploys its own validated
+`github.sha`. The job deploys in this order:
+
+1. `pnpm deploy:production` for the API/console service and canonical smoke.
+2. `pnpm deploy:site` for `unicas.work`.
+3. `pnpm deploy:docs` for `docs.unicas.work`.
+4. HTTPS checks requiring the API health JSON, the console's same-origin
+   `/admin/` redirect, and identifying HTML from the product and documentation
+   origins. Redirects to another host or protocol do not pass.
+
+For a manual recovery run, open the **CI** workflow in GitHub Actions, choose
+**Run workflow**, and select `main`. The dispatch repeats validation and the
+same protected deployment path; it is not a bypass around a failed check. See
+[CAS Middleware Operations](cas-operations.md) for failure diagnosis,
+credential rotation, and version-specific rollback.

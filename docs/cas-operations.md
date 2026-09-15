@@ -69,12 +69,26 @@ service request count + 5xx rate, Space 401/403 rate by error code
 
 ### Deploy
 
-UniCAS has one deployment unit. **Always rebuild first** because Wrangler
-uploads `dist/` and stale output silently deploys old code:
+The UniCAS service remains one application deployment unit, while a complete
+production release publishes three independently owned Workers: service,
+product site, then documentation site. A push to `main` normally runs the
+protected `deploy-production` job after CI validation. That job checks out and
+builds the exact validated commit, runs canonical smoke after the service
+publish, deploys the two static Workers, and verifies all four public origins.
+
+For a manual recovery attempt, dispatch the **CI** workflow from `main`. A
+dispatch from any other branch cannot enter the `production` environment or
+run a production command. The manual path repeats validation; it does not
+bypass it.
+
+Local emergency deployment remains explicit. **Always rebuild first** because
+Wrangler uploads `dist/` and stale output silently deploys old code:
 
 ```text
 pnpm deploy:plan
 pnpm deploy:production
+pnpm deploy:site
+pnpm deploy:docs
 pnpm smoke                    # App/Space v2; run twice 70s apart
 pnpm smoke:v1                 # explicit frozen v1 compatibility check only
 ```
@@ -88,18 +102,72 @@ buffers the request body; set `UNICAS_SMOKE_ENABLE_CONCURRENCY=1` only when the
 target preserves streaming ingress. Running smoke twice with a 70s gap also
 proves the authority-cache refresh path.
 
+#### Failure diagnosis
+
+Use the named failed step and its non-secret Wrangler output to identify the
+deployment unit. Validation failures publish nothing. A failure in the service
+publish or canonical smoke leaves the product and documentation Workers
+untouched, although the service version may already be live. A product-site
+failure occurs after a successful service smoke. A documentation failure
+occurs after both earlier units succeed. A final HTTPS-check failure means the
+publishes completed but one public route did not return a successful response.
+
+For any failure after a Wrangler command starts, compare the affected Worker's
+`wrangler deployments list` output with the workflow commit and timestamps.
+Do not print environment values or private-key files while diagnosing. The
+workflow's `always()` cleanup removes its ephemeral smoke key even when the
+service or smoke step fails. Fix a transient or configuration problem and use
+a manual `main` dispatch; use version rollback for a bad artifact.
+
+#### Credential rotation
+
+To rotate the Cloudflare deployment token, create a replacement from the
+**Edit Cloudflare Workers** template with the same single-account and
+`unicas.work` zone scope. Replace the `CLOUDFLARE_API_TOKEN` secret in the
+GitHub `Production` environment, complete a green manual run from `main`, then
+revoke the old token.
+
+To rotate the smoke signer, first publish the replacement public key through
+the smoke issuer while retaining the old key. During a deployment-free window,
+replace `UNICAS_SMOKE_PRIVATE_KEY_PKCS8` and `UNICAS_SMOKE_KID` in the same
+GitHub environment, then complete a green manual run before retiring the old
+public key after its token and verifier-cache overlap window. Rotate Worker
+runtime secrets separately with `wrangler secret put`; never copy them into
+GitHub deployment configuration.
+
 ### Rollback
 
-`wrangler` retains prior versions; reverse-order rollback is verified on the
-deployed middleware (admin drill 2026-08-26):
+Wrangler retains prior versions. Inspect each unit that may have changed and
+select the known-good version ID. If more than one unit changed, roll them back
+in reverse deployment order: documentation, product site, then service. Skip
+units that the failed workflow never reached.
+
+A Worker version rollback changes the code receiving traffic; it does not
+undo D1, R2, KV, Durable Object storage, or Worker secret changes. Inspect the
+target and failed versions for binding or Durable Object migration
+compatibility before rolling back. Routine releases in this workflow do not
+rewrite resources or runtime secrets, but a future migration can make an older
+service version unsafe to restore.
 
 ```text
-cd packages/service-cloudflare
-wrangler deployments list
-wrangler rollback            # move traffic to the retained prior version
-# verify the public service, then redeploy the current version if needed
-wrangler deploy
+pnpm --filter @unicas/service-cloudflare exec wrangler deployments list --config ../../stacks/unicas/docs-site/wrangler.jsonc
+pnpm --filter @unicas/service-cloudflare exec wrangler rollback <docs-version-id> --config ../../stacks/unicas/docs-site/wrangler.jsonc --yes --message "rollback failed production release"
+
+pnpm --filter @unicas/service-cloudflare exec wrangler deployments list --config ../../stacks/unicas/site/wrangler.jsonc
+pnpm --filter @unicas/service-cloudflare exec wrangler rollback <site-version-id> --config ../../stacks/unicas/site/wrangler.jsonc --yes --message "rollback failed production release"
+
+pnpm --filter @unicas/service-cloudflare exec wrangler deployments list
+pnpm --filter @unicas/service-cloudflare exec wrangler rollback <service-version-id> --yes --message "rollback failed production release"
 ```
+
+After rollback, rerun the canonical smoke with provisioned operator
+credentials and check `https://api.unicas.work/health`,
+`https://console.unicas.work/`, `https://unicas.work/`, and
+`https://docs.unicas.work/`. Do not use a source rebuild as a substitute for an
+explicit version rollback: rebuilding a moving branch does not identify the
+artifact receiving traffic. The service rollback procedure was verified in
+the admin drill on 2026-08-26; include the two static Workers in the next full
+rollback drill.
 
 ### Backup and restore
 
