@@ -1,7 +1,7 @@
 /**
- * Read-only D1-backed stack authority repository.
+ * Read-only D1-backed authority repository over the App registry.
  *
- * The registry is written exclusively by the control plane through the Stack
+ * The registry is written exclusively by the control plane through the App
  * OAuth discovery/activation flow. Signing keys are resolved from the
  * discovered jwks_uri, with refresh bounded by the verifier's cache policy.
  */
@@ -41,7 +41,7 @@ export class AppAuthorityRepository implements AppAuthorityResolver {
     const row = await readIssuer(this.#db, issuer);
     if (!row) return null;
     return {
-      appId: row.stack_id,
+      appId: row.app_id,
       issuer: row.issuer,
       audience: row.audience,
       jwksUri: row.jwks_uri,
@@ -52,7 +52,7 @@ export class AppAuthorityRepository implements AppAuthorityResolver {
 
 function toAuthority(row: IssuerRow): ResolvedStackAuthority {
   return {
-    stackId: row.stack_id,
+    stackId: row.app_id,
     issuer: row.issuer,
     audience: row.audience,
     jwksUri: row.jwks_uri,
@@ -63,11 +63,11 @@ function toAuthority(row: IssuerRow): ResolvedStackAuthority {
 function readIssuer(db: D1Database, issuer: string): Promise<IssuerRow | null> {
   return db
     .prepare(
-      `SELECT stack_id, issuer, audience, jwks_uri, capability_max_lifetime_seconds
-       FROM cas_stack_oauth_issuers WHERE issuer = ? AND status = 'active' AND mode = 'external'
+      `SELECT app_id, issuer, audience, jwks_uri, capability_max_lifetime_seconds
+       FROM cas_app_oauth_issuers WHERE issuer = ? AND status = 'active' AND mode = 'external'
        UNION ALL
-       SELECT stack_id, issuer, audience, jwks_uri, capability_max_lifetime_seconds
-       FROM cas_stack_managed_issuers WHERE issuer = ? AND status = 'active'
+       SELECT app_id, issuer, audience, jwks_uri, capability_max_lifetime_seconds
+       FROM cas_app_managed_issuers WHERE issuer = ? AND status = 'active'
        LIMIT 1`,
     )
     .bind(issuer, issuer)
@@ -75,7 +75,7 @@ function readIssuer(db: D1Database, issuer: string): Promise<IssuerRow | null> {
 }
 
 interface IssuerRow {
-  readonly stack_id: string;
+  readonly app_id: string;
   readonly issuer: string;
   readonly audience: string;
   readonly jwks_uri: string;

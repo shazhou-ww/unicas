@@ -85,7 +85,7 @@ describe("D1-backed control-plane service", () => {
   test("isolates Playground file roots per member and enforces root revisions", async () => {
     const { db, service } = await createService(() => 10_000);
     const stackId = await createStack(service);
-    await db.prepare("INSERT INTO cas_stack_members (stack_id, identity_issuer, subject, joined_at) VALUES (?, ?, ?, ?)")
+    await db.prepare("INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at) VALUES (?, ?, ?, ?)")
       .bind(stackId, bob.identityIssuer, bob.subject, 1)
       .run();
     const firstHash = "a".repeat(64);
@@ -197,10 +197,10 @@ describe("D1-backed control-plane service", () => {
       expect.objectContaining({ error: CasAdminErrorCodes.NOT_FOUND }),
     ]);
     expect(await db.prepare(
-      "SELECT COUNT(*) AS count FROM cas_stack_members WHERE stack_id = ? AND identity_issuer = ? AND subject = ?",
+      "SELECT COUNT(*) AS count FROM cas_app_members WHERE app_id = ? AND identity_issuer = ? AND subject = ?",
     ).bind(stackId, bob.identityIssuer, bob.subject).first()).toEqual({ count: 1 });
     expect(await db.prepare(
-      "SELECT COUNT(*) AS count FROM cas_control_audit_events WHERE stack_id = ? AND action = 'member.invitation.accepted'",
+      "SELECT COUNT(*) AS count FROM cas_control_audit_events WHERE app_id = ? AND action = 'member.invitation.accepted'",
     ).bind(stackId).first()).toEqual({ count: 1 });
   });
 
@@ -208,7 +208,7 @@ describe("D1-backed control-plane service", () => {
     const { db, service } = await createService();
     const stackId = await createStack(service);
     await db.prepare(
-      "INSERT INTO cas_stack_oauth_issuers (stack_id, issuer, audience, metadata_url, metadata_type, authorization_endpoint, token_endpoint, jwks_uri, registration_endpoint, scopes_supported, code_challenge_methods_supported, status, verified_at, last_refresh_at, last_refresh_error, jwks_digest, capability_max_lifetime_seconds, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO cas_app_oauth_issuers (app_id, issuer, audience, metadata_url, metadata_type, authorization_endpoint, token_endpoint, jwks_uri, registration_endpoint, scopes_supported, code_challenge_methods_supported, status, verified_at, last_refresh_at, last_refresh_error, jwks_digest, capability_max_lifetime_seconds, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     ).bind(
       stackId,
       "https://issuer.example/oauth",
@@ -294,7 +294,7 @@ describe("D1-backed control-plane service", () => {
       "SELECT kid, algorithm FROM cas_oauth_issuer_inspection_keys WHERE inspection_id = ?",
     ).bind(result.inspectionId).first()).toEqual({ kid: "key-1", algorithm: "ES256" });
     expect(await db.prepare(
-      "SELECT action FROM cas_control_audit_events WHERE stack_id = ? AND action = 'oauth_issuer.inspection.created'",
+      "SELECT action FROM cas_control_audit_events WHERE app_id = ? AND action = 'oauth_issuer.inspection.created'",
     ).bind(stackId).first()).toEqual({ action: "oauth_issuer.inspection.created" });
     const activationProof = await new CompactSign(new TextEncoder().encode(result.challenge))
       .setProtectedHeader({ alg: "ES256", kid: "key-1" })
@@ -307,10 +307,10 @@ describe("D1-backed control-plane service", () => {
       "SELECT used_at FROM cas_oauth_issuer_inspections WHERE inspection_id = ?",
     ).bind(result.inspectionId).first()).toEqual({ used_at: 1_000 });
     expect(await db.prepare(
-      "SELECT jwks_uri FROM cas_stack_oauth_issuers WHERE stack_id = ?",
+      "SELECT jwks_uri FROM cas_app_oauth_issuers WHERE app_id = ?",
     ).bind(stackId).first()).toEqual({ jwks_uri: "https://issuer.example/oauth/jwks" });
     expect(await db.prepare(
-      "SELECT action FROM cas_control_audit_events WHERE stack_id = ? AND action = 'oauth_issuer.activated'",
+      "SELECT action FROM cas_control_audit_events WHERE app_id = ? AND action = 'oauth_issuer.activated'",
     ).bind(stackId).first()).toEqual({ action: "oauth_issuer.activated" });
     expectError(await service.activateOAuthIssuer(ctx(alice), {
       path: { stackId },

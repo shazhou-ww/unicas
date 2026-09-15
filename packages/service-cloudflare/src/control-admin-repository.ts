@@ -61,7 +61,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
   async listMemberships(identity: CasOperatorIdentityKey): Promise<readonly ControlMembershipRecord[]> {
     const rows = await this.#db
       .prepare(
-        "SELECT m.stack_id, m.identity_issuer, m.subject, m.joined_at, i.display_name, i.email_for_display FROM cas_stack_members m LEFT JOIN cas_operator_identities i ON i.identity_issuer = m.identity_issuer AND i.subject = m.subject WHERE m.identity_issuer = ? AND m.subject = ? ORDER BY m.stack_id",
+        "SELECT m.app_id, m.identity_issuer, m.subject, m.joined_at, i.display_name, i.email_for_display FROM cas_app_members m LEFT JOIN cas_operator_identities i ON i.identity_issuer = m.identity_issuer AND i.subject = m.subject WHERE m.identity_issuer = ? AND m.subject = ? ORDER BY m.app_id",
       )
       .bind(identity.identityIssuer, identity.subject)
       .all<MembershipRow>();
@@ -75,7 +75,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
   }): Promise<readonly ControlMembershipRecord[]> {
     const rows = await this.#db
       .prepare(
-        "SELECT m.stack_id, m.identity_issuer, m.subject, m.joined_at, i.display_name, i.email_for_display FROM cas_stack_members m LEFT JOIN cas_operator_identities i ON i.identity_issuer = m.identity_issuer AND i.subject = m.subject WHERE m.stack_id = ? AND m.subject > ? ORDER BY m.subject LIMIT ?",
+        "SELECT m.app_id, m.identity_issuer, m.subject, m.joined_at, i.display_name, i.email_for_display FROM cas_app_members m LEFT JOIN cas_operator_identities i ON i.identity_issuer = m.identity_issuer AND i.subject = m.subject WHERE m.app_id = ? AND m.subject > ? ORDER BY m.subject LIMIT ?",
       )
       .bind(input.stackId, input.afterSubject, input.limit)
       .all<MembershipRow>();
@@ -84,7 +84,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
 
   async listPlaygroundFileRoots(stackId: string, ownerKey: string): Promise<readonly ControlPlaygroundFileRootRecord[]> {
     const rows = await this.#db
-      .prepare("SELECT stack_id, owner_key, root_id, name, manifest_hash, revision, created_at, updated_at FROM cas_playground_file_roots WHERE stack_id = ? AND owner_key = ? ORDER BY name, root_id")
+      .prepare("SELECT app_id, owner_key, root_id, name, manifest_hash, revision, created_at, updated_at FROM cas_playground_file_roots WHERE app_id = ? AND owner_key = ? ORDER BY name, root_id")
       .bind(stackId, ownerKey)
       .all<PlaygroundFileRootRow>();
     return (rows.results ?? []).map(toPlaygroundFileRoot);
@@ -92,7 +92,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
 
   async getPlaygroundFileRoot(stackId: string, ownerKey: string, rootId: string): Promise<ControlPlaygroundFileRootRecord | null> {
     const row = await this.#db
-      .prepare("SELECT stack_id, owner_key, root_id, name, manifest_hash, revision, created_at, updated_at FROM cas_playground_file_roots WHERE stack_id = ? AND owner_key = ? AND root_id = ?")
+      .prepare("SELECT app_id, owner_key, root_id, name, manifest_hash, revision, created_at, updated_at FROM cas_playground_file_roots WHERE app_id = ? AND owner_key = ? AND root_id = ?")
       .bind(stackId, ownerKey, rootId)
       .first<PlaygroundFileRootRow>();
     return row ? toPlaygroundFileRoot(row) : null;
@@ -101,7 +101,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
   async createPlaygroundFileRoot(record: ControlPlaygroundFileRootRecord): Promise<"created" | "conflict"> {
     try {
       await this.#db.prepare(
-        "INSERT INTO cas_playground_file_roots (stack_id, owner_key, root_id, name, manifest_hash, revision, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO cas_playground_file_roots (app_id, owner_key, root_id, name, manifest_hash, revision, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       ).bind(record.stackId, record.ownerKey, record.rootId, record.name, record.manifestHash, record.revision, record.createdAt, record.updatedAt).run();
       return "created";
     } catch (error) {
@@ -120,7 +120,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
     readonly updatedAt: number;
   }): Promise<"updated" | "not-found" | "revision-mismatch"> {
     const result = await this.#db.prepare(
-      "UPDATE cas_playground_file_roots SET name = ?, manifest_hash = ?, revision = revision + 1, updated_at = ? WHERE stack_id = ? AND owner_key = ? AND root_id = ? AND revision = ?",
+      "UPDATE cas_playground_file_roots SET name = ?, manifest_hash = ?, revision = revision + 1, updated_at = ? WHERE app_id = ? AND owner_key = ? AND root_id = ? AND revision = ?",
     ).bind(input.name, input.manifestHash, input.updatedAt, input.stackId, input.ownerKey, input.rootId, input.expectedRevision).run();
     if ((result.meta.changes ?? 0) === 1) return "updated";
     return await this.getPlaygroundFileRoot(input.stackId, input.ownerKey, input.rootId)
@@ -135,7 +135,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
     readonly expectedRevision: number;
   }): Promise<"deleted" | "not-found" | "revision-mismatch"> {
     const result = await this.#db.prepare(
-      "DELETE FROM cas_playground_file_roots WHERE stack_id = ? AND owner_key = ? AND root_id = ? AND revision = ?",
+      "DELETE FROM cas_playground_file_roots WHERE app_id = ? AND owner_key = ? AND root_id = ? AND revision = ?",
     ).bind(input.stackId, input.ownerKey, input.rootId, input.expectedRevision).run();
     if ((result.meta.changes ?? 0) === 1) return "deleted";
     return await this.getPlaygroundFileRoot(input.stackId, input.ownerKey, input.rootId)
@@ -158,7 +158,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
   }): Promise<readonly ControlStackRecord[]> {
     const rows = await this.#db
       .prepare(
-        "SELECT s.stack_id, s.display_name, s.description, s.status, s.created_at, s.revision FROM cas_stacks s JOIN cas_stack_members m ON m.stack_id = s.stack_id WHERE m.identity_issuer = ? AND m.subject = ? AND s.stack_id > ? ORDER BY s.stack_id LIMIT ?",
+        "SELECT s.app_id, s.display_name, s.description, s.status, s.created_at, s.revision FROM cas_apps s JOIN cas_app_members m ON m.app_id = s.app_id WHERE m.identity_issuer = ? AND m.subject = ? AND s.app_id > ? ORDER BY s.app_id LIMIT ?",
       )
       .bind(input.identity.identityIssuer, input.identity.subject, input.afterStackId, input.limit)
       .all<StackRow>();
@@ -167,7 +167,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
 
   async getStack(stackId: string): Promise<ControlStackRecord | null> {
     const row = await this.#db
-      .prepare("SELECT stack_id, display_name, description, status, created_at, revision FROM cas_stacks WHERE stack_id = ?")
+      .prepare("SELECT app_id, display_name, description, status, created_at, revision FROM cas_apps WHERE app_id = ?")
       .bind(stackId)
       .first<StackRow>();
     return row ? toStack(row) : null;
@@ -175,7 +175,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
 
   async hasMembership(identity: CasOperatorIdentityKey, stackId: string): Promise<boolean> {
     const row = await this.#db
-      .prepare("SELECT 1 AS ok FROM cas_stack_members WHERE stack_id = ? AND identity_issuer = ? AND subject = ?")
+      .prepare("SELECT 1 AS ok FROM cas_app_members WHERE app_id = ? AND identity_issuer = ? AND subject = ?")
       .bind(stackId, identity.identityIssuer, identity.subject)
       .first<{ ok: number }>();
     return row !== null;
@@ -200,7 +200,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
   async getInvitationByTokenHash(tokenHash: string): Promise<ControlMemberInvitationRecord | null> {
     const row = await this.#db
       .prepare(
-        "SELECT invitation_id, stack_id, status, email_constraint, token_hash, expires_at, created_at, revision FROM cas_stack_member_invitations WHERE token_hash = ?",
+        "SELECT invitation_id, app_id, status, email_constraint, token_hash, expires_at, created_at, revision FROM cas_app_member_invitations WHERE token_hash = ?",
       )
       .bind(tokenHash)
       .first<InvitationRow>();
@@ -210,15 +210,15 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
   async commitCreateStack(plan: ControlCreateStackPlan): Promise<ControlCreateStackCommitResult> {
     const statements = [
       ...this.#mutationStatements(plan.audit),
-      this.#db.prepare("INSERT INTO cas_stacks (stack_id, display_name, description, status, created_at, revision) VALUES (?, ?, ?, ?, ?, ?)")
+      this.#db.prepare("INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES (?, ?, ?, ?, ?, ?)")
         .bind(plan.stack.stackId, plan.stack.displayName, plan.stack.description, plan.stack.status, plan.stack.createdAt, plan.stack.revision),
-      this.#db.prepare("INSERT INTO cas_stack_members (stack_id, identity_issuer, subject, joined_at) VALUES (?, ?, ?, ?)")
+      this.#db.prepare("INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at) VALUES (?, ?, ?, ?)")
         .bind(plan.membership.stackId, plan.membership.identityIssuer, plan.membership.subject, plan.membership.joinedAt),
     ];
     if (plan.managedIssuer) {
       const issuer = plan.managedIssuer;
       statements.push(this.#db.prepare(
-        "INSERT INTO cas_stack_managed_issuers (stack_id, issuer, audience, metadata_url, authorization_endpoint, token_endpoint, jwks_uri, scopes_supported, code_challenge_methods_supported, status, verified_at, jwks_digest, capability_max_lifetime_seconds, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)",
+        "INSERT INTO cas_app_managed_issuers (app_id, issuer, audience, metadata_url, authorization_endpoint, token_endpoint, jwks_uri, scopes_supported, code_challenge_methods_supported, status, verified_at, jwks_digest, capability_max_lifetime_seconds, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)",
       ).bind(
         issuer.stackId,
         issuer.issuer,
@@ -256,7 +256,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
 
   async commitPatchStack(plan: ControlPatchStackPlan): Promise<ControlPatchStackCommitResult> {
     const update = this.#db
-      .prepare("UPDATE cas_stacks SET display_name = ?, description = ?, revision = ? WHERE stack_id = ? AND revision = ?")
+      .prepare("UPDATE cas_apps SET display_name = ?, description = ?, revision = ? WHERE app_id = ? AND revision = ?")
       .bind(plan.displayName, plan.description, plan.nextRevision, plan.stackId, plan.expectedRevision);
     const requireUpdated = this.#db.prepare(
       "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('invalid', '$') END AS updated",
@@ -277,7 +277,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
     const statements = [
       ...this.#mutationStatements(plan.audit),
       this.#db.prepare(
-        "INSERT INTO cas_stack_member_invitations (invitation_id, stack_id, status, email_constraint, token_hash, expires_at, created_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO cas_app_member_invitations (invitation_id, app_id, status, email_constraint, token_hash, expires_at, created_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       ).bind(
         plan.invitation.invitationId,
         plan.invitation.stackId,
@@ -310,10 +310,10 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
 
   async commitDeleteMember(plan: ControlDeleteMemberPlan): Promise<ControlDeleteMemberCommitResult> {
     const requirePreconditions = this.#db.prepare(
-      "SELECT CASE WHEN EXISTS (SELECT 1 FROM cas_stacks WHERE stack_id = ? AND revision = ?) AND (SELECT COUNT(*) FROM cas_stack_members WHERE stack_id = ?) > 1 THEN 1 ELSE json_extract('invalid', '$') END AS allowed",
+      "SELECT CASE WHEN EXISTS (SELECT 1 FROM cas_apps WHERE app_id = ? AND revision = ?) AND (SELECT COUNT(*) FROM cas_app_members WHERE app_id = ?) > 1 THEN 1 ELSE json_extract('invalid', '$') END AS allowed",
     ).bind(plan.stackId, plan.expectedRevision, plan.stackId);
     const remove = this.#db.prepare(
-      "DELETE FROM cas_stack_members WHERE stack_id = ? AND identity_issuer = ? AND subject = ?",
+      "DELETE FROM cas_app_members WHERE app_id = ? AND identity_issuer = ? AND subject = ?",
     ).bind(plan.stackId, plan.identity.identityIssuer, plan.identity.subject);
     try {
       await this.#db.batch([requirePreconditions, remove, ...this.#mutationStatements(plan.audit)]);
@@ -324,7 +324,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
       if (!stack) return { kind: "stack-not-found" };
       if (stack.revision !== plan.expectedRevision) return { kind: "revision-mismatch" };
       const row = await this.#db.prepare(
-        "SELECT COUNT(*) AS count FROM cas_stack_members WHERE stack_id = ?",
+        "SELECT COUNT(*) AS count FROM cas_app_members WHERE app_id = ?",
       ).bind(plan.stackId).first<{ count: number }>();
       return (row?.count ?? 0) <= 1 ? { kind: "last-member" } : { kind: "not-member" };
     }
@@ -334,7 +334,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
     plan: ControlAcceptMemberInvitationPlan,
   ): Promise<ControlAcceptMemberInvitationCommitResult> {
     const claim = this.#db.prepare(
-      "UPDATE cas_stack_member_invitations SET status = 'accepted' WHERE invitation_id = ? AND token_hash = ? AND status = 'pending' AND expires_at > ?",
+      "UPDATE cas_app_member_invitations SET status = 'accepted' WHERE invitation_id = ? AND token_hash = ? AND status = 'pending' AND expires_at > ?",
     ).bind(plan.invitationId, plan.tokenHash, plan.now);
     const requireClaimed = this.#db.prepare(
       "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('invalid', '$') END AS claimed",
@@ -349,7 +349,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
       plan.identity.createdAt,
     );
     const insertMember = this.#db.prepare(
-      "INSERT OR IGNORE INTO cas_stack_members (stack_id, identity_issuer, subject, joined_at) VALUES (?, ?, ?, ?)",
+      "INSERT OR IGNORE INTO cas_app_members (app_id, identity_issuer, subject, joined_at) VALUES (?, ?, ?, ?)",
     ).bind(
       plan.membership.stackId,
       plan.membership.identityIssuer,
@@ -378,7 +378,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
   async getOAuthIssuer(stackId: string): Promise<ControlOAuthIssuerRecord | null> {
     const row = await this.#db
       .prepare(
-        "SELECT stack_id, 'external' AS mode, issuer, audience, metadata_url, metadata_type, authorization_endpoint, token_endpoint, jwks_uri, registration_endpoint, scopes_supported, code_challenge_methods_supported, status, verified_at, last_refresh_at, last_refresh_error, jwks_digest, capability_max_lifetime_seconds, revision FROM cas_stack_oauth_issuers WHERE stack_id = ? AND mode = 'external'",
+        "SELECT app_id, 'external' AS mode, issuer, audience, metadata_url, metadata_type, authorization_endpoint, token_endpoint, jwks_uri, registration_endpoint, scopes_supported, code_challenge_methods_supported, status, verified_at, last_refresh_at, last_refresh_error, jwks_digest, capability_max_lifetime_seconds, revision FROM cas_app_oauth_issuers WHERE app_id = ? AND mode = 'external'",
       )
       .bind(stackId)
       .first<OAuthIssuerRow>();
@@ -387,7 +387,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
 
   async getManagedOAuthIssuer(stackId: string): Promise<ControlOAuthIssuerRecord | null> {
     const row = await this.#db.prepare(
-      "SELECT stack_id, 'managed' AS mode, issuer, audience, metadata_url, 'oauth' AS metadata_type, authorization_endpoint, token_endpoint, jwks_uri, NULL AS registration_endpoint, scopes_supported, code_challenge_methods_supported, status, verified_at, verified_at AS last_refresh_at, NULL AS last_refresh_error, jwks_digest, capability_max_lifetime_seconds, revision FROM cas_stack_managed_issuers WHERE stack_id = ?",
+      "SELECT app_id, 'managed' AS mode, issuer, audience, metadata_url, 'oauth' AS metadata_type, authorization_endpoint, token_endpoint, jwks_uri, NULL AS registration_endpoint, scopes_supported, code_challenge_methods_supported, status, verified_at, verified_at AS last_refresh_at, NULL AS last_refresh_error, jwks_digest, capability_max_lifetime_seconds, revision FROM cas_app_managed_issuers WHERE app_id = ?",
     ).bind(stackId).first<OAuthIssuerRow>();
     return row ? toOAuthIssuer(row) : null;
   }
@@ -400,7 +400,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
       try {
         await this.#db.batch([
           this.#db.prepare(
-            "INSERT INTO cas_stack_managed_issuers (stack_id, issuer, audience, metadata_url, authorization_endpoint, token_endpoint, jwks_uri, scopes_supported, code_challenge_methods_supported, status, verified_at, jwks_digest, capability_max_lifetime_seconds, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)",
+            "INSERT INTO cas_app_managed_issuers (app_id, issuer, audience, metadata_url, authorization_endpoint, token_endpoint, jwks_uri, scopes_supported, code_challenge_methods_supported, status, verified_at, jwks_digest, capability_max_lifetime_seconds, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)",
           ).bind(
             issuer.stackId, issuer.issuer, issuer.audience, issuer.metadataUrl,
             issuer.authorizationEndpoint, issuer.tokenEndpoint, issuer.jwksUri,
@@ -411,14 +411,14 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
         ]);
         return { kind: "created" };
       } catch (error) {
-        if (!isUniqueViolation(error, "cas_stack_managed_issuers")) throw error;
+        if (!isUniqueViolation(error, "cas_app_managed_issuers")) throw error;
         return await this.getManagedOAuthIssuer(plan.stackId)
           ? { kind: "revision-mismatch" }
           : { kind: "not-found" };
       }
     }
     const update = this.#db.prepare(
-      "UPDATE cas_stack_managed_issuers SET status = ?, revision = ? WHERE stack_id = ? AND revision = ?",
+      "UPDATE cas_app_managed_issuers SET status = ?, revision = ? WHERE app_id = ? AND revision = ?",
     ).bind(plan.enabled ? "active" : "disabled", plan.nextRevision, plan.stackId, plan.expectedRevision);
     const requireUpdated = this.#db.prepare(
       "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('invalid', '$') END AS updated",
@@ -436,7 +436,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
 
   async hasOAuthIssuerElsewhere(issuer: string, stackId: string): Promise<boolean> {
     const row = await this.#db
-      .prepare("SELECT 1 AS ok FROM cas_stack_oauth_issuers WHERE issuer = ? AND stack_id != ?")
+      .prepare("SELECT 1 AS ok FROM cas_app_oauth_issuers WHERE issuer = ? AND app_id != ?")
       .bind(issuer, stackId)
       .first<{ ok: number }>();
     return row !== null;
@@ -449,7 +449,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
     const inspection = plan.inspection;
     const issuerStatement = issuer.revision === 1
       ? this.#db.prepare(
-        "INSERT INTO cas_stack_oauth_issuers (stack_id, mode, issuer, audience, metadata_url, metadata_type, authorization_endpoint, token_endpoint, jwks_uri, registration_endpoint, scopes_supported, code_challenge_methods_supported, status, verified_at, last_refresh_at, last_refresh_error, jwks_digest, capability_max_lifetime_seconds, revision) VALUES (?, 'external', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NULL, ?, NULL, ?, ?, 1)",
+        "INSERT INTO cas_app_oauth_issuers (app_id, mode, issuer, audience, metadata_url, metadata_type, authorization_endpoint, token_endpoint, jwks_uri, registration_endpoint, scopes_supported, code_challenge_methods_supported, status, verified_at, last_refresh_at, last_refresh_error, jwks_digest, capability_max_lifetime_seconds, revision) VALUES (?, 'external', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NULL, ?, NULL, ?, ?, 1)",
       ).bind(
         issuer.stackId,
         issuer.issuer,
@@ -467,7 +467,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
         issuer.capabilityMaxLifetimeSeconds,
       )
       : this.#db.prepare(
-        "UPDATE cas_stack_oauth_issuers SET mode = 'external', issuer = ?, audience = ?, metadata_url = ?, metadata_type = ?, authorization_endpoint = ?, token_endpoint = ?, jwks_uri = ?, registration_endpoint = ?, scopes_supported = ?, code_challenge_methods_supported = ?, status = 'pending', verified_at = NULL, last_refresh_at = ?, last_refresh_error = NULL, jwks_digest = ?, capability_max_lifetime_seconds = ?, revision = revision + 1 WHERE stack_id = ? AND revision = ? AND status != 'active'",
+        "UPDATE cas_app_oauth_issuers SET mode = 'external', issuer = ?, audience = ?, metadata_url = ?, metadata_type = ?, authorization_endpoint = ?, token_endpoint = ?, jwks_uri = ?, registration_endpoint = ?, scopes_supported = ?, code_challenge_methods_supported = ?, status = 'pending', verified_at = NULL, last_refresh_at = ?, last_refresh_error = NULL, jwks_digest = ?, capability_max_lifetime_seconds = ?, revision = revision + 1 WHERE app_id = ? AND revision = ? AND status != 'active'",
       ).bind(
         issuer.issuer,
         issuer.audience,
@@ -491,7 +491,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
         "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('invalid', '$') END AS updated",
       )];
     const insertInspection = this.#db.prepare(
-      "INSERT INTO cas_oauth_issuer_inspections (inspection_id, stack_id, issuer, audience, metadata_url, metadata_type, authorization_endpoint, token_endpoint, jwks_uri, registration_endpoint, scopes_supported, code_challenge_methods_supported, metadata_digest, jwks_digest, challenge_hash, capability_max_lifetime_seconds, created_at, expires_at, used_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)",
+      "INSERT INTO cas_oauth_issuer_inspections (inspection_id, app_id, issuer, audience, metadata_url, metadata_type, authorization_endpoint, token_endpoint, jwks_uri, registration_endpoint, scopes_supported, code_challenge_methods_supported, metadata_digest, jwks_digest, challenge_hash, capability_max_lifetime_seconds, created_at, expires_at, used_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)",
     ).bind(
       inspection.inspectionId,
       inspection.stackId,
@@ -531,7 +531,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
           ? { kind: "revision-mismatch" }
           : { kind: "issuer-conflict" };
       }
-      if (isUniqueViolation(error, "cas_stack_oauth_issuers.stack_id")) {
+      if (isUniqueViolation(error, "cas_app_oauth_issuers.app_id")) {
         return { kind: "revision-mismatch" };
       }
       if (isJsonFailure(error)) return { kind: "revision-mismatch" };
@@ -561,13 +561,13 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
     plan: ControlActivateOAuthIssuerPlan,
   ): Promise<ControlActivateOAuthIssuerCommitResult> {
     const activateIssuer = this.#db.prepare(
-      "UPDATE cas_stack_oauth_issuers SET status = 'active', verified_at = ?, revision = revision + 1 WHERE stack_id = ? AND revision = ? AND status = 'pending' AND mode = 'external'",
+      "UPDATE cas_app_oauth_issuers SET status = 'active', verified_at = ?, revision = revision + 1 WHERE app_id = ? AND revision = ? AND status = 'pending' AND mode = 'external'",
     ).bind(plan.activatedAt, plan.stackId, plan.expectedIssuerRevision);
     const requireIssuer = this.#db.prepare(
       "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('invalid', '$') END AS updated",
     );
     const consumeInspection = this.#db.prepare(
-      "UPDATE cas_oauth_issuer_inspections SET used_at = ?, revision = revision + 1 WHERE inspection_id = ? AND stack_id = ? AND used_at IS NULL AND expires_at > ?",
+      "UPDATE cas_oauth_issuer_inspections SET used_at = ?, revision = revision + 1 WHERE inspection_id = ? AND app_id = ? AND used_at IS NULL AND expires_at > ?",
     ).bind(plan.activatedAt, plan.inspectionId, plan.stackId, plan.activatedAt);
     const requireInspection = this.#db.prepare(
       "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('unavailable', '$') END AS consumed",
@@ -595,7 +595,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
 
   async getAuditEventCreatedAt(stackId: string, eventId: string): Promise<number | null> {
     const row = await this.#db
-      .prepare("SELECT created_at FROM cas_control_audit_events WHERE event_id = ? AND stack_id = ?")
+      .prepare("SELECT created_at FROM cas_control_audit_events WHERE event_id = ? AND app_id = ?")
       .bind(eventId, stackId)
       .first<{ created_at: number }>();
     return row?.created_at ?? null;
@@ -609,7 +609,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
   }): Promise<readonly ControlAuditRecord[]> {
     const rows = await this.#db
       .prepare(
-        "SELECT event_id, stack_id, identity_issuer, subject, action, target, request_id, trace_id, caller_channel, oauth_client_handle, tool_name, created_at FROM cas_control_audit_events WHERE stack_id = ? AND (created_at > ? OR (created_at = ? AND event_id > ?)) ORDER BY created_at, event_id LIMIT ?",
+        "SELECT event_id, app_id, identity_issuer, subject, action, target, request_id, trace_id, caller_channel, oauth_client_handle, tool_name, created_at FROM cas_control_audit_events WHERE app_id = ? AND (created_at > ? OR (created_at = ? AND event_id > ?)) ORDER BY created_at, event_id LIMIT ?",
       )
       .bind(input.stackId, input.afterCreatedAt, input.afterCreatedAt, input.afterEventId, input.limit)
       .all<AuditEventRow>();
@@ -626,7 +626,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
 
   #auditStatement(record: ControlAuditRecord): D1PreparedStatement {
     return this.#db.prepare(
-      "INSERT INTO cas_control_audit_events (event_id, stack_id, identity_issuer, subject, action, target, request_id, trace_id, caller_channel, oauth_client_handle, tool_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO cas_control_audit_events (event_id, app_id, identity_issuer, subject, action, target, request_id, trace_id, caller_channel, oauth_client_handle, tool_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     ).bind(
       record.eventId,
       record.stackId,
@@ -669,7 +669,7 @@ interface IdentityRow {
 }
 
 interface StackRow {
-  readonly stack_id: string;
+  readonly app_id: string;
   readonly display_name: string;
   readonly description: string;
   readonly status: string;
@@ -678,7 +678,7 @@ interface StackRow {
 }
 
 interface MembershipRow {
-  readonly stack_id: string;
+  readonly app_id: string;
   readonly identity_issuer: string;
   readonly subject: string;
   readonly display_name: string | null;
@@ -687,7 +687,7 @@ interface MembershipRow {
 }
 
 interface PlaygroundFileRootRow {
-  readonly stack_id: string;
+  readonly app_id: string;
   readonly owner_key: string;
   readonly root_id: string;
   readonly name: string;
@@ -710,7 +710,7 @@ interface IdempotencyRow {
 }
 
 interface OAuthIssuerRow {
-  readonly stack_id: string;
+  readonly app_id: string;
   readonly mode: string;
   readonly issuer: string;
   readonly audience: string;
@@ -733,7 +733,7 @@ interface OAuthIssuerRow {
 
 interface OAuthIssuerInspectionRow {
   readonly inspection_id: string;
-  readonly stack_id: string;
+  readonly app_id: string;
   readonly issuer: string;
   readonly audience: string;
   readonly metadata_url: string;
@@ -762,7 +762,7 @@ interface OAuthIssuerInspectionKeyRow {
 
 interface AuditEventRow {
   readonly event_id: string;
-  readonly stack_id: string | null;
+  readonly app_id: string | null;
   readonly identity_issuer: string;
   readonly subject: string;
   readonly action: string;
@@ -777,7 +777,7 @@ interface AuditEventRow {
 
 interface InvitationRow {
   readonly invitation_id: string;
-  readonly stack_id: string;
+  readonly app_id: string;
   readonly status: string;
   readonly email_constraint: string | null;
   readonly token_hash: string;
@@ -798,7 +798,7 @@ function toIdentity(row: IdentityRow): ControlIdentityRecord {
 
 function toStack(row: StackRow): ControlStackRecord {
   return {
-    stackId: row.stack_id,
+    stackId: row.app_id,
     displayName: row.display_name,
     description: row.description,
     status: row.status === "suspended" ? "suspended" : "active",
@@ -809,7 +809,7 @@ function toStack(row: StackRow): ControlStackRecord {
 
 function toOAuthIssuer(row: OAuthIssuerRow): ControlOAuthIssuerRecord {
   return {
-    stackId: row.stack_id,
+    stackId: row.app_id,
     mode: row.mode === "managed" ? "managed" : "external",
     issuer: row.issuer,
     audience: row.audience,
@@ -834,7 +834,7 @@ function toOAuthIssuer(row: OAuthIssuerRow): ControlOAuthIssuerRecord {
 function toOAuthIssuerInspection(row: OAuthIssuerInspectionRow): ControlOAuthIssuerInspectionRecord {
   return {
     inspectionId: row.inspection_id,
-    stackId: row.stack_id,
+    stackId: row.app_id,
     issuer: row.issuer,
     audience: row.audience,
     metadataUrl: row.metadata_url,
@@ -859,7 +859,7 @@ function toOAuthIssuerInspection(row: OAuthIssuerInspectionRow): ControlOAuthIss
 function toAuditRecord(row: AuditEventRow): ControlAuditRecord {
   return {
     eventId: row.event_id,
-    stackId: row.stack_id,
+    stackId: row.app_id,
     identityIssuer: row.identity_issuer,
     subject: row.subject,
     action: row.action as ControlAuditRecord["action"],
@@ -877,7 +877,7 @@ function toAuditRecord(row: AuditEventRow): ControlAuditRecord {
 
 function toMembership(row: MembershipRow): ControlMembershipRecord {
   return {
-    stackId: row.stack_id,
+    stackId: row.app_id,
     identityIssuer: row.identity_issuer,
     subject: row.subject,
     displayName: row.display_name,
@@ -888,7 +888,7 @@ function toMembership(row: MembershipRow): ControlMembershipRecord {
 
 function toPlaygroundFileRoot(row: PlaygroundFileRootRow): ControlPlaygroundFileRootRecord {
   return {
-    stackId: row.stack_id,
+    stackId: row.app_id,
     ownerKey: row.owner_key,
     rootId: row.root_id,
     name: row.name,
@@ -916,7 +916,7 @@ function toIdempotency<T>(row: IdempotencyRow): ControlIdempotencyRecord<T> {
 function toInvitation(row: InvitationRow): ControlMemberInvitationRecord {
   return {
     invitationId: row.invitation_id,
-    stackId: row.stack_id,
+    stackId: row.app_id,
     status: row.status as ControlMemberInvitationRecord["status"],
     emailConstraint: row.email_constraint,
     tokenHash: row.token_hash,
@@ -940,7 +940,7 @@ function isOAuthIssuerConflict(error: unknown): boolean {
   return error instanceof Error
     && ((error.message.includes("UNIQUE constraint failed")
       && (error.message.includes("cas_oauth_issuer_by_issuer")
-        || error.message.includes("cas_stack_oauth_issuers.issuer")))
+        || error.message.includes("cas_app_oauth_issuers.issuer")))
       || error.message.includes("issuer conflict"));
 }
 

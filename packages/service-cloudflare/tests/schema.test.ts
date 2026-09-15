@@ -64,34 +64,59 @@ describe("stack-scoped tenant schema", () => {
 });
 
 describe("control schema", () => {
-  test("creates the Playground business root catalog", async () => {
+  test("creates App-scoped control tables idempotently", async () => {
     const database = await createDb();
     await migrateControlSchema(database);
-    const table = await database.prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'cas_playground_file_roots'",
-    ).first<{ name: string }>();
-    expect(table?.name).toBe("cas_playground_file_roots");
+    await migrateControlSchema(database);
+
+    const tables = await database.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
+    ).all<{ name: string }>();
+    const names = new Set(tables.results!.map((row) => row.name));
+    for (const expected of [
+      "cas_apps",
+      "cas_app_members",
+      "cas_app_member_invitations",
+      "cas_app_oauth_issuers",
+      "cas_app_managed_issuers",
+      "cas_playground_file_roots",
+    ]) expect(names.has(expected), `missing table ${expected}`).toBe(true);
+    for (const legacy of [
+      "cas_stacks",
+      "cas_stack_members",
+      "cas_stack_member_invitations",
+      "cas_stack_oauth_issuers",
+      "cas_stack_managed_issuers",
+    ]) expect(names.has(legacy), `unexpected table ${legacy}`).toBe(false);
+
+    for (const table of [
+      "cas_apps",
+      "cas_app_members",
+      "cas_app_member_invitations",
+      "cas_app_oauth_issuers",
+      "cas_app_managed_issuers",
+      "cas_playground_file_roots",
+      "cas_oauth_issuer_inspections",
+      "cas_control_audit_events",
+    ]) {
+      const columns = await database.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
+      expect(columns.results!.map((column) => column.name), table).toContain("app_id");
+      expect(columns.results!.map((column) => column.name), table).not.toContain("stack_id");
+    }
   });
 
-  test("upgrades only legacy managed capability lifetimes", async () => {
+  test("preserves configured managed capability lifetimes", async () => {
     const database = await createDb();
     await migrateControlSchema(database);
-    const insert = `INSERT INTO cas_stack_managed_issuers
-      (stack_id, issuer, audience, metadata_url, authorization_endpoint, token_endpoint, jwks_uri, status, verified_at, jwks_digest, capability_max_lifetime_seconds)
+    const insert = `INSERT INTO cas_app_managed_issuers
+      (app_id, issuer, audience, metadata_url, authorization_endpoint, token_endpoint, jwks_uri, status, verified_at, jwks_digest, capability_max_lifetime_seconds)
       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 1, 'digest', ?)`;
-    await database.batch([
-      database.prepare(insert).bind("cas_legacy", "https://issuer.example/legacy", "https://cas.example/legacy", "https://issuer.example/legacy/metadata", "https://issuer.example/legacy/authorize", "https://issuer.example/legacy/token", "https://issuer.example/legacy/jwks", 120),
-      database.prepare(insert).bind("cas_custom", "https://issuer.example/custom", "https://cas.example/custom", "https://issuer.example/custom/metadata", "https://issuer.example/custom/authorize", "https://issuer.example/custom/token", "https://issuer.example/custom/jwks", 600),
-    ]);
+    await database.prepare(insert).bind("cas_custom", "https://issuer.example/custom", "https://cas.example/custom", "https://issuer.example/custom/metadata", "https://issuer.example/custom/authorize", "https://issuer.example/custom/token", "https://issuer.example/custom/jwks", 600).run();
 
     await migrateControlSchema(database);
 
-    const rows = await database.prepare(
-      "SELECT stack_id, capability_max_lifetime_seconds, revision FROM cas_stack_managed_issuers ORDER BY stack_id",
-    ).all<{ stack_id: string; capability_max_lifetime_seconds: number; revision: number }>();
-    expect(rows.results).toEqual([
-      { stack_id: "cas_custom", capability_max_lifetime_seconds: 600, revision: 1 },
-      { stack_id: "cas_legacy", capability_max_lifetime_seconds: 3600, revision: 2 },
-    ]);
+    expect(await database.prepare(
+      "SELECT app_id, capability_max_lifetime_seconds, revision FROM cas_app_managed_issuers",
+    ).first()).toEqual({ app_id: "cas_custom", capability_max_lifetime_seconds: 600, revision: 1 });
   });
 });

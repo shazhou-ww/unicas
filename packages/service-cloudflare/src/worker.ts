@@ -249,11 +249,11 @@ function matchStackProtectedResourcePath(pathname: string): string | null {
 
 async function stackProtectedResourceMetadata(env: Env, stackId: string): Promise<Response> {
   const result = await env.CAS_CONTROL_DB.prepare(
-    `SELECT issuer, 0 AS priority FROM cas_stack_oauth_issuers
-     WHERE stack_id = ? AND status = 'active' AND mode = 'external'
+    `SELECT issuer, 0 AS priority FROM cas_app_oauth_issuers
+     WHERE app_id = ? AND status = 'active' AND mode = 'external'
      UNION ALL
-     SELECT issuer, 1 AS priority FROM cas_stack_managed_issuers
-     WHERE stack_id = ? AND status = 'active'
+     SELECT issuer, 1 AS priority FROM cas_app_managed_issuers
+     WHERE app_id = ? AND status = 'active'
      ORDER BY priority`,
   ).bind(stackId, stackId).all<{ issuer: string; priority: number }>();
   const issuers = (result.results ?? []).map((row) => row.issuer);
@@ -304,7 +304,7 @@ async function managedIssuerDocument(env: Env, route: ManagedIssuerDocumentRoute
   const authority = managedIssuerFor(env);
   if (!authority) return Response.json({ error: "MANAGED_ISSUER_NOT_CONFIGURED" }, { status: 503 });
   const binding = await env.CAS_CONTROL_DB.prepare(
-    "SELECT issuer FROM cas_stack_managed_issuers WHERE stack_id = ? AND status = 'active'",
+    "SELECT issuer FROM cas_app_managed_issuers WHERE app_id = ? AND status = 'active'",
   ).bind(route.stackId).first<{ issuer: string }>();
   if (!binding || binding.issuer !== authority.issuer(route.stackId)) {
     return Response.json({ error: "MANAGED_ISSUER_NOT_ACTIVE" }, { status: 404 });

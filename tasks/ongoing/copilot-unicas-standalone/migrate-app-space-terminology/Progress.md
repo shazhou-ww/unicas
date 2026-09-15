@@ -38,8 +38,8 @@ The compatibility matrix, v2 contracts, generated OpenAPI artifacts, verifier,
 Worker ingress, physical compatibility adapter, and managed Space capability
 issuance are implemented. V2 requests are authorized by issuer-derived App
 authority and exact Space scope, while v1 remains a separate frozen contract.
-Milestone commits `c94a818`, `7818640`, and `21549ff` record the contract
-foundation completed before the current uncommitted implementation slice.
+Milestone commits through `83e502e` record the contract foundation and the
+completed public App/Space surfaces before the physical storage slices.
 
 The new environment returns App-shaped responses for the shared `/admin/me` and
 invitation-accept paths. Admin client, CLI, remote/stdio MCP, and WebUI control
@@ -71,6 +71,14 @@ then update the reset plan and tests. `CutoverInventory.md` proves the current
 environment is smoke-only and selects a clean rebuild. Production reset/deploy
 was not executed and still requires fresh off-machine backups, repeated
 inventory, rendered plan review, and explicit approval.
+
+The clean physical source cutover has started. Control D1 now creates
+`cas_apps`, `cas_app_members`, and related App tables with `app_id`; its
+repository, authority resolver, Worker issuer lookups, and direct D1 fixtures
+use the same schema. The clean migration no longer alters, copies, or deletes
+legacy Stack tables. Data D1, Durable Object names, R2 keys, reset tooling, and
+all production execution remain unchanged. The next concrete action is the
+data D1 `app_id`/`space_id` slice.
 
 ## Decisions
 
@@ -240,6 +248,14 @@ inventory, rendered plan review, and explicit approval.
   D1, preview R2 and OAuth KV are empty, and the DO classes have no persistent
   local storage. The non-executing reset validator passed; no destructive or
   deployment operation ran.
+- Control D1 schema tests passed: 1 file and 4 tests, including idempotent clean
+  App table creation, absence of Stack tables, `app_id` columns, and preserved
+  managed issuer lifetime configuration.
+- D1-backed control-plane integration passed all 12 tests after the repository
+  and authority resolver moved to the App physical schema.
+- Authority and Worker issuer lookup tests passed: 2 files and 20 tests.
+- The complete `@unicas/service-cloudflare` suite passed: 20 files and 202
+  tests; its TypeScript project typecheck passed.
 
 ## Blockers
 
