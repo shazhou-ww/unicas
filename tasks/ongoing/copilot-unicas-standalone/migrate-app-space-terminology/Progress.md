@@ -84,9 +84,9 @@ are registered, and all local build, test, typecheck, dry-run, and secret-scan
 gates pass. Destructive execution now also requires both D1 exports and every
 D1-derived R2 object to be present in a fresh backup directory; canonical R2
 objects are verified against their SHA-256 keys before a manifest is written.
-The next concrete action is to obtain an off-machine backup directory and
-explicit reset/deploy approval, then repeat the production inventory and
-render the final plan immediately before execution.
+Explicit reset/deploy approval is recorded. The next concrete action is to
+obtain a writable off-machine backup directory, then repeat the production
+inventory and render the final plan immediately before execution.
 
 ## Decisions
 
@@ -114,6 +114,10 @@ render the final plan immediately before execution.
 - Track implementation dependencies in `RemainingWork.md` and documentation in
   `Documentation.md`; keep stable docs for accepted consensus and task-specific
   inventories and execution state inside this task folder.
+- Keep the one-time manual App/Space cutover in this task. Leave
+  `automate-cloudflare-deployments` in backlog until the cutover is complete so
+  the two tasks do not concurrently change the deployment scripts or release
+  assumptions.
 
 ## Validation
 
@@ -302,12 +306,18 @@ render the final plan immediately before execution.
   docs/task/deployment run passed 3 files and 26 tests. A live no-execute plan
   placed both R2 downloads before the corresponding deletes and all D1 drops;
   no backup file or cloud resource was changed.
+- The repository task-ledger identity check passed: worktree configuration is
+  enabled, `task-ledger.identity` is worktree-scoped as
+  `copilot-unicas-standalone`, and its reserved lane exists on `origin/main`.
+  The only adjacent backlog task is production deployment automation, which is
+  sequenced after this one-time cutover rather than claimed concurrently.
 
 ## Blockers
 
-- Production reset/deploy requires fresh off-machine backups, a repeated
-  aggregate inventory, rendered reset-plan review, and explicit approval for
-  the destructive maintenance window.
+- Production reset/deploy is blocked on a writable off-machine backup
+  directory. Immediately before execution, repeat the aggregate inventory,
+  create and verify the backups, and review the rendered reset plan against the
+  already approved destructive scope.
 
 ## Outcome
 
