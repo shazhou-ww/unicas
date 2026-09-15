@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import { s256Challenge } from "@unicas/control-auth";
+import { effectivePlatformAccess } from "@unicas/admin-protocol";
 import type {
   ControlPlaneCallContext,
   ControlPlaneOperations,
@@ -318,6 +319,20 @@ class MemoryPlatformAccessRepository implements PlatformAccessRepository {
     });
   }
 
+  /** Bootstrap: mark a principal as active with platform.admin authority. */
+  grantAdmin(issuer: string, subject: string): void {
+    const k = this.key({ issuer, subject });
+    this.states.set(k, {
+      principalRef: k,
+      principal: { issuer, subject },
+      status: "active",
+      authorities: ["platform.admin", "apps.create"],
+      revision: 1,
+      createdAt: 0,
+      updatedAt: 0,
+    });
+  }
+
   /** Mark a granted principal as having App membership (passes via hasMembership). */
   grantViaMembership(issuer: string, subject: string): void {
     const k = this.key({ issuer, subject });
@@ -340,15 +355,65 @@ class MemoryPlatformAccessRepository implements PlatformAccessRepository {
     return this.members.has(this.key(principal));
   }
 
-  async getPrincipal(_principalRef: string): Promise<PlatformPrincipal | null> {
-    return null;
+  async getPrincipal(principalRef: string): Promise<PlatformPrincipal | null> {
+    const state = this.states.get(principalRef);
+    if (!state) return null;
+    const hasMember = this.members.has(principalRef);
+    return {
+      ...state,
+      profile: { displayName: `User ${state.principal.subject}`, emailForDisplay: `${state.principal.subject}@example.com` },
+      appMembershipCount: hasMember ? 1 : 0,
+      effectiveAccess: effectivePlatformAccess(state, hasMember),
+    };
   }
 
-  async listPrincipals(_input: { readonly after: string; readonly limit: number }): Promise<readonly PlatformPrincipal[]> {
-    return [];
+  async listPrincipals(input: { readonly after: string; readonly limit: number }): Promise<readonly PlatformPrincipal[]> {
+    const all = [...this.states.entries()]
+      .filter(([ref]) => ref > input.after)
+      .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
+      .slice(0, input.limit);
+    return all.map(([ref, state]) => {
+      const hasMember = this.members.has(ref);
+      return {
+        ...state,
+        profile: { displayName: `User ${state.principal.subject}`, emailForDisplay: `${state.principal.subject}@example.com` },
+        appMembershipCount: hasMember ? 1 : 0,
+        effectiveAccess: effectivePlatformAccess(state, hasMember),
+      };
+    });
   }
 
-  async patchAccess(_input: Parameters<PlatformAccessRepository["patchAccess"]>[0]): Promise<"updated" | "revision-mismatch" | "last-admin" | "forbidden"> {
+  async getAccessSummary(): Promise<{ activePrincipalCount: number; platformAdminCount: number; appCreatorCount: number; blockedPrincipalCount: number }> {
+    let activePrincipalCount = 0;
+    let platformAdminCount = 0;
+    let appCreatorCount = 0;
+    let blockedPrincipalCount = 0;
+    for (const state of this.states.values()) {
+      if (state.status === "active") {
+        activePrincipalCount++;
+        if (state.authorities.includes("platform.admin")) platformAdminCount++;
+        if (state.authorities.includes("apps.create")) appCreatorCount++;
+      } else {
+        blockedPrincipalCount++;
+      }
+    }
+    return { activePrincipalCount, platformAdminCount, appCreatorCount, blockedPrincipalCount };
+  }
+
+  async patchAccess(input: Parameters<PlatformAccessRepository["patchAccess"]>[0]): Promise<"updated" | "revision-mismatch" | "last-admin" | "forbidden"> {
+    const actorState = this.states.get(this.key(input.actor));
+    if (!actorState || actorState.status !== "active" || !actorState.authorities.includes("platform.admin")) {
+      return "forbidden";
+    }
+    if (input.current.revision !== (this.states.get(input.current.principalRef)?.revision ?? -1)) {
+      return "revision-mismatch";
+    }
+    this.states.set(input.current.principalRef, {
+      ...input.current,
+      status: input.status,
+      authorities: input.authorities,
+      revision: input.current.revision + 1,
+    });
     return "updated";
   }
 
@@ -1474,6 +1539,180 @@ describe("cas-admin-webui BFF", () => {
     expect(me.status).toBe(401);
     expect(await me.json()).toMatchObject({ error: "ADMIN_AUTH_REQUIRED" });
   });
+
+  // ------------------------------------------------------------------
+  // Platform Admin API tests
+  // ------------------------------------------------------------------
+
+  async function signInWithAdmin(
+    provider: MockProvider,
+    repo: MemoryPlatformAccessRepository,
+    subject = "platform-admin-user",
+  ): Promise<{ bff: (req: Request) => Promise<Response>; cookie: string; csrf: string }> {
+    repo.grantAdmin(ISSUER, subject);
+    const bff = await createBff(provider, undefined, {}, repo);
+
+    const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/oidc?returnTo=/admin/`));
+    const preLoginCookie = cookieFrom(login)!;
+    const location = new URL(login.headers.get("Location")!);
+    const state = location.searchParams.get("state")!;
+    const nonce = location.searchParams.get("nonce")!;
+    provider.pendingClaims = {
+      iss: ISSUER,
+      sub: subject,
+      aud: CLIENT_ID,
+      nonce,
+      email: `${subject}@example.com`,
+      email_verified: true,
+      name: subject,
+    };
+    const callback = await bff(new Request(
+      `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(state)}`,
+      { headers: { Cookie: preLoginCookie } },
+    ));
+    const cookie = cookieFrom(callback)!;
+    const shell = await authRequest(bff, "/admin/", cookie);
+    const html = await shell.text();
+    const match = /<meta name="x-csrf-token" content="([^"]+)"/.exec(html);
+    return { bff, cookie, csrf: match![1]! };
+  }
+
+  test("platform admin: access summary returns correct counts", async () => {
+    const provider = await createMockProvider();
+    const repo = new MemoryPlatformAccessRepository();
+    const { bff, cookie } = await signInWithAdmin(provider, repo, "admin-user");
+
+    // Add a few extra principals.
+    repo.grantAdmin(ISSUER, "admin-two");
+    repo.grant(ISSUER, "creator-only");
+    repo.grant(ISSUER, "to-block");
+    repo.block(ISSUER, "to-block");
+
+    const response = await authRequest(bff, "/admin/platform/access-summary", cookie);
+    expect(response.status).toBe(200);
+    const body = await response.json() as Record<string, unknown>;
+    expect(body.activePrincipalCount).toBe(3); // admin-user, admin-two, creator-only
+    expect(body.platformAdminCount).toBe(2);   // admin-user, admin-two
+    expect(body.appCreatorCount).toBe(3);       // active principals with apps.create
+    expect(body.blockedPrincipalCount).toBe(1);
+    expect(typeof body.generatedAt).toBe("number");
+  }, 10_000);
+
+  test("platform admin: list principals returns paginated results", async () => {
+    const provider = await createMockProvider();
+    const repo = new MemoryPlatformAccessRepository();
+    const { bff, cookie } = await signInWithAdmin(provider, repo, "admin-user");
+
+    // Add another principal.
+    repo.grant(ISSUER, "another-user");
+
+    const response = await authRequest(bff, "/admin/platform/principals?limit=10", cookie);
+    expect(response.status).toBe(200);
+    const body = await response.json() as { items: unknown[]; nextCursor: string | null };
+    expect(Array.isArray(body.items)).toBe(true);
+    expect(body.items.length).toBeGreaterThanOrEqual(1);
+    expect(body.nextCursor).toBeNull();
+  }, 10_000);
+
+  test("platform admin: get principal returns detail", async () => {
+    const provider = await createMockProvider();
+    const repo = new MemoryPlatformAccessRepository();
+    const { bff, cookie } = await signInWithAdmin(provider, repo, "admin-user");
+
+    const principalRef = `${ISSUER}\0admin-user`;
+    const response = await authRequest(bff, `/admin/platform/principals/${encodeURIComponent(principalRef)}`, cookie);
+    expect(response.status).toBe(200);
+    const body = await response.json() as Record<string, unknown>;
+    expect(body.principalRef).toBe(principalRef);
+    expect(body.status).toBe("active");
+    expect(Array.isArray(body.authorities)).toBe(true);
+  }, 10_000);
+
+  test("platform admin: get principal returns 404 for unknown ref", async () => {
+    const provider = await createMockProvider();
+    const repo = new MemoryPlatformAccessRepository();
+    const { bff, cookie } = await signInWithAdmin(provider, repo, "admin-user");
+
+    const response = await authRequest(bff, `/admin/platform/principals/unknown-ref`, cookie);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ error: "NOT_FOUND" });
+  }, 10_000);
+
+  test("platform admin: patch principal access delegates to PlatformAccessService", async () => {
+    const provider = await createMockProvider();
+    const repo = new MemoryPlatformAccessRepository();
+    const { bff, cookie, csrf } = await signInWithAdmin(provider, repo, "admin-user");
+
+    // Add target principal.
+    repo.grant(ISSUER, "target-user");
+    const principalRef = `${ISSUER}\0target-user`;
+
+    const response = await authRequest(bff, `/admin/platform/principals/${encodeURIComponent(principalRef)}/access`, cookie, {
+      method: "PATCH",
+      headers: {
+        "X-CSRF-Token": csrf,
+        "Content-Type": "application/json",
+        "If-Match": '"1"',
+      },
+      body: JSON.stringify({ status: "blocked" }),
+    });
+    expect(response.status).toBe(204);
+    expect(response.headers.get("ETag")).toBe('"2"');
+  }, 10_000);
+
+  test("platform admin: patch without If-Match returns 428", async () => {
+    const provider = await createMockProvider();
+    const repo = new MemoryPlatformAccessRepository();
+    const { bff, cookie, csrf } = await signInWithAdmin(provider, repo, "admin-user");
+
+    repo.grant(ISSUER, "target-user");
+    const principalRef = `${ISSUER}\0target-user`;
+
+    const response = await authRequest(bff, `/admin/platform/principals/${encodeURIComponent(principalRef)}/access`, cookie, {
+      method: "PATCH",
+      headers: {
+        "X-CSRF-Token": csrf,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ authorities: ["apps.create"] }),
+    });
+    expect(response.status).toBe(428);
+    expect(await response.json()).toMatchObject({ error: "PRECONDITION_REQUIRED" });
+  }, 10_000);
+
+  test("platform admin: non-platform-admin gets 403 on platform routes", async () => {
+    const provider = await createMockProvider();
+    const repo = new MemoryPlatformAccessRepository();
+    // Grant apps.create only, NOT platform.admin.
+    repo.grant(ISSUER, "non-admin-user");
+    const bff = await createBff(provider, undefined, {}, repo);
+
+    const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/oidc?returnTo=/admin/`));
+    const preLoginCookie = cookieFrom(login)!;
+    const location = new URL(login.headers.get("Location")!);
+    const state = location.searchParams.get("state")!;
+    provider.pendingClaims = {
+      iss: ISSUER, sub: "non-admin-user", aud: CLIENT_ID,
+      nonce: location.searchParams.get("nonce")!, email: "nonadmin@example.com",
+      email_verified: true, name: "Non Admin",
+    };
+    const callback = await bff(new Request(
+      `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(state)}`,
+      { headers: { Cookie: preLoginCookie } },
+    ));
+    const cookie = cookieFrom(callback)!;
+
+    for (const path of [
+      "/admin/platform/access-summary",
+      "/admin/platform/principals",
+      `/admin/platform/principals/${encodeURIComponent(`${ISSUER}\0non-admin-user`)}`,
+    ]) {
+      const response = await authRequest(bff, path, cookie);
+      expect(response.status).toBe(403);
+      const body = await response.json() as Record<string, unknown>;
+      expect(body.error).toBe("PLATFORM_ADMIN_REQUIRED");
+    }
+  }, 10_000);
 });
 
 async function createStack(

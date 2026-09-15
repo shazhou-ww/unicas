@@ -21,7 +21,11 @@ export type CasAdminRoute =
   | { operation: "listRefDomains"; stackId: string }
   | { operation: "listControlAuditEvents"; stackId: string }
   | { operation: "listRootDomainRefs"; stackId: string; refDomain: string }
-  | { operation: "listRootDomainEvents"; stackId: string; refDomain: string };
+  | { operation: "listRootDomainEvents"; stackId: string; refDomain: string }
+  | { operation: "accessSummary" }
+  | { operation: "listPlatformPrincipals" }
+  | { operation: "getPlatformPrincipal"; principalRef: string }
+  | { operation: "patchPlatformAccess"; principalRef: string };
 
 export type AppAdminRoute =
   | { operation: "me" }
@@ -48,7 +52,11 @@ export type AppAdminRoute =
   | { operation: "listRefDomains"; appId: string }
   | { operation: "listControlAuditEvents"; appId: string }
   | { operation: "listRootDomainRefs"; appId: string; refDomain: string }
-  | { operation: "listRootDomainEvents"; appId: string; refDomain: string };
+  | { operation: "listRootDomainEvents"; appId: string; refDomain: string }
+  | { operation: "accessSummary" }
+  | { operation: "listPlatformPrincipals" }
+  | { operation: "getPlatformPrincipal"; principalRef: string }
+  | { operation: "patchPlatformAccess"; principalRef: string };
 
 function segment(value: string): string {
   return encodeURIComponent(value);
@@ -93,6 +101,12 @@ export const casAdminRoutes = {
     `/admin/stacks/${segment(stackId)}/root-ref-domains/${segment(refDomain)}/refs`,
   rootDomainEvents: ({ stackId, refDomain }: { stackId: string; refDomain: string }) =>
     `/admin/stacks/${segment(stackId)}/root-ref-domains/${segment(refDomain)}/events`,
+  accessSummary: () => "/admin/platform/access-summary",
+  platformPrincipals: () => "/admin/platform/principals",
+  platformPrincipal: ({ principalRef }: { principalRef: string }) =>
+    `/admin/platform/principals/${segment(principalRef)}`,
+  platformPrincipalAccess: ({ principalRef }: { principalRef: string }) =>
+    `/admin/platform/principals/${segment(principalRef)}/access`,
 } as const;
 
 export const appAdminRoutes = {
@@ -128,6 +142,12 @@ export const appAdminRoutes = {
     `/admin/apps/${segment(appId)}/root-ref-domains/${segment(refDomain)}/refs`,
   rootDomainEvents: ({ appId, refDomain }: { appId: string; refDomain: string }) =>
     `/admin/apps/${segment(appId)}/root-ref-domains/${segment(refDomain)}/events`,
+  accessSummary: () => "/admin/platform/access-summary",
+  platformPrincipals: () => "/admin/platform/principals",
+  platformPrincipal: ({ principalRef }: { principalRef: string }) =>
+    `/admin/platform/principals/${segment(principalRef)}`,
+  platformPrincipalAccess: ({ principalRef }: { principalRef: string }) =>
+    `/admin/platform/principals/${segment(principalRef)}/access`,
 } as const;
 
 /**
@@ -140,6 +160,11 @@ export function matchCasAdminRoute(
 ): CasAdminRoute | null {
   const parts = pathname.split("/").filter(Boolean);
   if (parts[0] !== "admin") return null;
+
+  if (parts[1] === "platform") {
+    const platformRoute = matchPlatformAdminRoute(method, pathname);
+    return platformRoute as CasAdminRoute | null;
+  }
 
   if (parts.length === 2 && parts[1] === "me" && method === "GET") {
     return { operation: "me" };
@@ -253,6 +278,10 @@ export function matchAppAdminRoute(
   const parts = pathname.split("/").filter(Boolean);
   if (parts[0] !== "admin") return null;
 
+  if (parts[1] === "platform") {
+    return matchPlatformAdminRoute(method, pathname);
+  }
+
   if (parts.length === 2 && parts[1] === "me" && method === "GET") {
     return { operation: "me" };
   }
@@ -358,6 +387,44 @@ export function matchAppAdminRoute(
       return { operation: "listRootDomainRefs", appId, refDomain };
     }
     return { operation: "listRootDomainEvents", appId, refDomain };
+  }
+
+  return null;
+}
+
+export function matchPlatformAdminRoute(
+  method: string,
+  pathname: string,
+): AppAdminRoute | null {
+  const parts = pathname.split("/").filter(Boolean);
+  if (parts[0] !== "admin" || parts[1] !== "platform") return null;
+
+  if (parts.length === 3 && parts[2] === "access-summary" && method === "GET") {
+    return { operation: "accessSummary" };
+  }
+
+  if (parts.length === 3 && parts[2] === "principals") {
+    if (method === "GET") return { operation: "listPlatformPrincipals" };
+    return null;
+  }
+
+  if (parts.length === 4 && parts[2] === "principals" && parts[3]) {
+    const principalRef = decodeSegment(parts[3]!);
+    if (principalRef === null) return null;
+    if (method === "GET") return { operation: "getPlatformPrincipal", principalRef };
+    return null;
+  }
+
+  if (
+    parts.length === 5
+    && parts[2] === "principals"
+    && parts[3]
+    && parts[4] === "access"
+    && method === "PATCH"
+  ) {
+    const principalRef = decodeSegment(parts[3]!);
+    if (principalRef === null) return null;
+    return { operation: "patchPlatformAccess", principalRef };
   }
 
   return null;

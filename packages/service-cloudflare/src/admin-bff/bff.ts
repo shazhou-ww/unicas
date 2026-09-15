@@ -13,12 +13,15 @@ import {
   formatCasAdminETag,
   matchAppAdminRoute,
   matchCasAdminRoute,
+  matchPlatformAdminRoute,
   PatchAppRequestSchema,
+  PatchPlatformAccessSchema,
   AppInvitationQuerySchema,
   InspectAppIssuerRequestSchema,
   ActivateAppIssuerRequestSchema,
 } from "@unicas/admin-protocol";
 import type {
+  AppAdminRoute,
   CasAdminErrorResponse,
   CasAdminRoute,
 } from "@unicas/admin-protocol";
@@ -177,6 +180,11 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     if (pathname.startsWith("/admin/assets/")) {
       const asset = await assets(pathname.slice("/admin".length));
       return asset ?? new Response("Not Found", { status: 404 });
+    }
+
+    const platformRoute = matchPlatformAdminRoute(method, pathname);
+    if (platformRoute) {
+      return handlePlatformAdminApi(request, url, platformRoute);
     }
 
     const route = matchCasAdminRoute(method, pathname);
@@ -934,6 +942,8 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       case "listRootDomainEvents": {
         return handleAuditRead(request, route, ctx, query);
       }
+      default:
+        return json({ error: "Not Found" }, 404);
     }
   }
 
@@ -950,6 +960,67 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       : json(result, 201);
     response.headers.set("Cache-Control", "no-store");
     return response;
+  }
+
+  // ------------------------------------------------------------------
+  // Platform Admin API
+  // ------------------------------------------------------------------
+
+  async function handlePlatformAdminApi(
+    request: Request,
+    url: URL,
+    route: AppAdminRoute,
+  ): Promise<Response> {
+    if (platformAccess === null) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "platform access service is not configured");
+    }
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (isMutating(request.method) && !(await passCsrf(request, auth.payload))) return csrfRejected();
+
+    const actor = { issuer: auth.payload.identityIssuer, subject: auth.payload.subject };
+
+    try {
+      switch (route.operation) {
+        case "accessSummary": {
+          const summary = await platformAccess.getAccessSummary(actor);
+          return json(summary, 200);
+        }
+        case "listPlatformPrincipals": {
+          const query = queryFromUrl(url);
+          const limitRaw = query.limit !== undefined ? Number(query.limit) : 50;
+          if (!Number.isInteger(limitRaw) || limitRaw < 1 || limitRaw > 1000) {
+            return invalidRequest("limit must be an integer between 1 and 1000");
+          }
+          const after = query.cursor ?? "";
+          const items = await platformAccess.listPrincipals(actor, { after, limit: limitRaw });
+          const nextCursor = items.length === limitRaw ? (items[items.length - 1]?.principalRef ?? null) : null;
+          return json({ items, nextCursor }, 200);
+        }
+        case "getPlatformPrincipal": {
+          const principal = await platformAccess.getPrincipal(actor, route.principalRef);
+          return json(principal, 200);
+        }
+        case "patchPlatformAccess": {
+          const ifMatch = request.headers.get("If-Match") ?? undefined;
+          const body = await readJsonBody<unknown>(request);
+          if (body === null) return invalidRequest("JSON body is required");
+          const { revision } = await platformAccess.patchAccess(actor, route.principalRef, body, ifMatch);
+          return new Response(null, {
+            status: 204,
+            headers: { ETag: formatCasAdminETag(revision), "Cache-Control": "no-store" },
+          });
+        }
+        default:
+          return json({ error: "Not Found" }, 404);
+      }
+    } catch (error) {
+      if (error instanceof PlatformAccessError) {
+        const body: CasAdminErrorResponse = { error: error.code as CasAdminErrorResponse["error"] };
+        return json(body, error.status);
+      }
+      throw error;
+    }
   }
 
   /** Root Ref audit reads: membership first, then the private reader RPC. */

@@ -7,7 +7,7 @@ Updated: 2026-09-16
 - [x] Complete and publish all three prerequisite tasks independently.
 - [x] Settle core authorization and bootstrap policy with the user.
 - [x] Implement persistent deny-by-default admission, authorities, and audit.
-- [ ] Implement protected platform APIs, clients, CLI, and MCP.
+- [x] Implement protected platform APIs (list principals, get principal, patch access, access summary).
 - [ ] Implement invitation-limited login and revocation for existing sessions.
 - [ ] Rebuild Console with source-owned shadcn primitives and two-column navigation.
 - [ ] Validate bootstrap/migration, workflows, accessibility, and repository gates.
@@ -17,24 +17,24 @@ Updated: 2026-09-16
 
 Claim `ff3c87e0318d4c30b76111d8cf96302a0b354fba` is verified on `origin/main`.
 The shared platform authorization model, service guards, D1 tables, and atomic
-access mutation repository are implemented and pass focused tests. The admission
-guard is now integrated into the BFF authentication paths:
+access mutation repository are implemented. The admission guard is integrated
+into the BFF authentication paths. Protected platform API endpoints are now
+implemented and pass tests:
 
-- **Login flow**: After emailAllowlist check (first gate), `PlatformAccessService.requireAccess`
-  is called. A principal without a grant or App membership is denied with
-  `302 /admin/auth/login?error=access-denied`; no access-state record is created.
-  CLI login path redirects to the loopback with `error=access_denied`.
-- **Authenticated request path**: `requireAuthenticated` calls
-  `PlatformAccessService.assertNotBlocked` after reading the session payload.
-  A blocked principal's session is deleted and the request is rejected with 401.
-- **Worker wiring**: `D1PlatformAccessRepository` is injected into `createAdminBff`
-  in `worker.ts`.
+- **Login flow**: `PlatformAccessService.requireAccess` enforced; no-access principals denied.
+- **Authenticated request path**: `assertNotBlocked` enforced on every request.
+- **Platform Admin API** (all require `platform.admin` authority):
+  - `GET /admin/platform/access-summary` → aggregate counts via `D1PlatformAccessRepository.getAccessSummary`
+  - `GET /admin/platform/principals` → paginated list via `PlatformAccessService.listPrincipals`
+  - `GET /admin/platform/principals/{ref}` → single principal detail via `PlatformAccessService.getPrincipal`
+  - `PATCH /admin/platform/principals/{ref}/access` → conditional write via `PlatformAccessService.patchAccess` with ETag
+- **Types added** to `@unicas/admin-protocol`: `PlatformPrincipalListItem`, `PlatformPrincipalDetail`, `PlatformPrincipalPage`, `PlatformAccessSummary`
+- **Routes added**: `matchPlatformAdminRoute` (shared between `AppAdminRoute` and `CasAdminRoute`); route builders for `accessSummary`, `platformPrincipals`, `platformPrincipal`, `platformPrincipalAccess`
+- **Service expanded**: `PlatformAccessService.listPrincipals`, `getPrincipal`, `getAccessSummary`; `PlatformAccessRepository.getAccessSummary` interface + D1 implementation
 
-All 219 tests pass (`pnpm --filter @unicas/service-cloudflare test`), including
-4 new BFF platform access integration tests.
+All 226 tests pass (`pnpm --filter @unicas/service-cloudflare test`). `pnpm run build` passes.
 
-Next: implement protected platform APIs (list principals, grant/revoke authority)
-and wire the CLI/MCP paths.
+Next: implement invitation-limited login and revocation for existing sessions.
 
 ## Decisions
 
@@ -71,12 +71,17 @@ and wire the CLI/MCP paths.
   self-block rejection, revision conflicts, and durable audit writes.
 - `pnpm --filter @unicas/service-cloudflare typecheck` passed with the new
   authorization repository and its protocol/service dependencies.
-- On 2026-09-16, BFF admission guard integration: `pnpm --filter @unicas/service-cloudflare test`
-  passed all 219 tests (37 BFF tests + 182 others). New BFF tests cover:
-  - Login denied when principal has no grant or membership
-  - Login allowed when principal has explicit grant with authority
-  - Authenticated request denied and session cleared for a blocked principal
-  - emailAllowlist remains first gate (denied before platform access check)
+- On 2026-09-16, BFF admission guard integration: all 219 tests passed.
+  New BFF tests covered login denied/allowed and blocked principal handling.
+- On 2026-09-16, Platform Admin API: `pnpm --filter @unicas/service-cloudflare test`
+  passed all 226 tests (226 = prior 219 + 7 new platform admin BFF tests). New tests cover:
+  - `GET /admin/platform/access-summary` returns correct aggregate counts
+  - `GET /admin/platform/principals` returns paginated principal list
+  - `GET /admin/platform/principals/{ref}` returns principal detail
+  - `GET /admin/platform/principals/{ref}` returns 404 for unknown ref
+  - `PATCH /admin/platform/principals/{ref}/access` delegates to service and returns ETag
+  - `PATCH` without `If-Match` returns 428
+  - Non-platform-admin (apps.create only) gets 403 on all platform routes
 
 ## Blockers
 

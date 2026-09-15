@@ -7,6 +7,7 @@ function fixture() {
   const repository: PlatformAccessRepository = {
     getAccess: vi.fn(async () => null), hasMembership: vi.fn(async () => false),
     getPrincipal: vi.fn(async () => null), listPrincipals: vi.fn(async () => []),
+    getAccessSummary: vi.fn(async () => ({ activePrincipalCount: 0, platformAdminCount: 0, appCreatorCount: 0, blockedPrincipalCount: 0 })),
     patchAccess: vi.fn(async () => "updated"), appendAudit: vi.fn(async () => undefined),
   };
   return { repository, service: new PlatformAccessService(repository, () => 1000) };
