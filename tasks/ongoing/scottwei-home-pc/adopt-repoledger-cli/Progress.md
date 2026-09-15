@@ -11,9 +11,9 @@ Updated: 2026-09-15
 
 ## Current state
 
-Implementation is complete and passes all local Windows acceptance checks. The
-next action is to publish the implementation commit, record its immutable hash,
-and verify the resulting Linux CI run before archiving the task.
+Implementation is published and passes all local Windows acceptance checks.
+The next action is to verify Linux CI run `34962857668`; after it succeeds,
+check the final acceptance item, clear the blocker, and archive the task.
 
 ## Decisions
 
@@ -45,12 +45,16 @@ and verify the resulting Linux CI run before archiving the task.
 - `pnpm check:repo` passed 6 task policy tests and 114 other repository tests.
 - CI's task-ledger step uses `pnpm check:tasks` after checkout with
     `fetch-depth: 0`; `doctor` is not present in the workflow.
+- GitHub Actions CI run `34962857668` for implementation commit
+    `96082d3ed835e9968b692d6e9d91b45e8feec77a` started on Linux and progressed
+    beyond the repository task-ledger step; final completion is pending.
 - Editor diagnostics and `git diff --check` reported no implementation errors
     or whitespace errors.
 
 ## Blockers
 
-- None.
+- External: GitHub Actions CI run `34962857668` is still in progress. Verify
+    its final result before archiving; no local implementation work remains.
 
 ## Outcome
 
