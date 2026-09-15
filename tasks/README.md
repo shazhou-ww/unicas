@@ -59,6 +59,8 @@ convention.
 - Each worktree should normally use one stable identity.
 - The local pointer is the worktree-scoped Git key `task-ledger.identity`; do
   not store it in `.env` or ordinary repository-local Git config.
+- The optional device-global `task-ledger.defaultIdentity` may suggest an
+  identity during setup. It never replaces the explicit worktree binding.
 - Before task work, require `extensions.worktreeConfig=true`, read the identity
   with `git config --worktree --get task-ledger.identity`, and verify its lane
   exists on `origin/main`. Do not infer a missing value.
@@ -72,6 +74,8 @@ convention.
   `git config --worktree task-ledger.identity <identity>`. Follow the shared
   skill's `core.worktree` and `core.bare` safety checks before first enabling
   `extensions.worktreeConfig` in a repository.
+- To reuse the setup suggestion on this device, set it separately with
+  `git config --global task-ledger.defaultIdentity <identity>`.
 - Publish task claims to the shared `main` history before substantial
   implementation. All worktree branches ultimately integrate into `main`.
 - Keep `.gitkeep` after the lane becomes empty so the identity name remains
@@ -120,4 +124,12 @@ data, or local machine credentials in either location.
 ## Validation
 
 Run `pnpm check:tasks` after changing task files, repository instructions, the
-installed skill, or `skills-lock.json`.
+installed skill, or `skills-lock.json`. It runs the pinned `repoledger check`
+for reusable ledger validation, then focused UniCAS policy tests. The root
+`repoledger.json` references the schema shipped by the pinned package; that
+schema's versioned GitHub `$id` is the configuration contract.
+
+Before claiming or resuming task work, run `pnpm exec repoledger doctor`
+locally to fetch the collaboration branch and validate the actual
+worktree-scoped identity and its remote lane. Do not run `doctor` in CI; CI
+remains identity-independent and uses `pnpm check:tasks`.

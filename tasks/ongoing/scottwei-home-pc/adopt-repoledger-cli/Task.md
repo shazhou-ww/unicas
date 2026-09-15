@@ -52,24 +52,24 @@ logic without making the public tool responsible for UniCAS policy.
 
 ## Acceptance criteria
 
-- [ ] UniCAS pins a published `repoledger` version in `package.json` and the
+- [x] UniCAS pins a published `repoledger` version in `package.json` and the
       pnpm lockfile rather than executing an unversioned latest package in CI.
-- [ ] `pnpm check:tasks` runs `repoledger check` plus focused UniCAS policy
+- [x] `pnpm check:tasks` runs `repoledger check` plus focused UniCAS policy
       tests and remains the command used by `check:repo`, `test`, and CI.
-- [ ] Generic task layout, naming, uniqueness, state, task-link, acceptance,
+- [x] Generic task layout, naming, uniqueness, state, task-link, acceptance,
       publication, and history validation is owned by `repoledger` rather than
       duplicated in UniCAS test helpers.
-- [ ] UniCAS-specific instruction, skill-lock, identity-documentation,
+- [x] UniCAS-specific instruction, skill-lock, identity-documentation,
       documentation-boundary, and documentation-link assertions remain
       covered and fail for representative regressions.
-- [ ] Existing archived tasks with legacy publication formats pass under the
+- [x] Existing archived tasks with legacy publication formats pass under the
   CLI's documented compatibility behavior without content-only migration
   commits.
-- [ ] `repoledger doctor` succeeds in a correctly initialized UniCAS worktree
+- [x] `repoledger doctor` succeeds in a correctly initialized UniCAS worktree
       and is documented for local use without becoming a CI prerequisite.
 - [ ] `pnpm check:tasks`, `pnpm check:repo`, and the narrow package/configuration
       checks all pass with actionable output on Windows and CI's Linux runner.
-- [ ] No unrelated UniCAS files or task history are changed by the adoption.
+- [x] No unrelated UniCAS files or task history are changed by the adoption.
 
 ## Constraints
 
@@ -84,6 +84,6 @@ logic without making the public tool responsible for UniCAS policy.
 
 ## References
 
-- [Current task workflow test](/tests/task-workflow.test.mjs)
+- [UniCAS task policy test](/tests/task-policy.test.mjs)
 - [UniCAS task profile](/tasks/README.md)
 - [Source repoledger task](https://github.com/shazhou-ww/skills/blob/main/tasks/archived/build-repoledger-cli/Task.md)

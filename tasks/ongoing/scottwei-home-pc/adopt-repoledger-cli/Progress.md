@@ -4,25 +4,49 @@ Updated: 2026-09-15
 
 ## Checklist
 
-- [ ] Pin and configure `repoledger@0.1.0`.
-- [ ] Delegate generic checks and retain focused UniCAS policy tests.
-- [ ] Document `repoledger check` and local `repoledger doctor` usage.
+- [x] Pin and configure `repoledger@0.1.0`.
+- [x] Delegate generic checks and retain focused UniCAS policy tests.
+- [x] Document `repoledger check` and local `repoledger doctor` usage.
 - [ ] Run acceptance validation and archive the completed task.
 
 ## Current state
 
-Claimed by `scottwei-home-pc` after publishing the worktree identity lane. The
-next action is to inspect the package scripts, existing workflow tests, and the
-published CLI contract before making the smallest implementation change.
+Implementation is complete and passes all local Windows acceptance checks. The
+next action is to publish the implementation commit, record its immutable hash,
+and verify the resulting Linux CI run before archiving the task.
 
 ## Decisions
 
 - Keep `pnpm check:tasks` as the stable entry point and keep `doctor` local-only,
   matching the accepted task boundaries.
+- Let `repoledger check` own generic ledger and history validation; retain only
+    UniCAS instruction, provenance, configuration, documentation-boundary, and
+    finalized-documentation link policy in Vitest.
+- Treat device-global `task-ledger.defaultIdentity` as a setup suggestion while
+    preserving `task-ledger.identity` as the authoritative worktree binding.
+
+## Publication milestones
+
+| Milestone | Evidence | Status |
+| --- | --- | --- |
+| Claim | `origin/main` commit `4b6c1a2e62129e8fa3bded15edad5eb3feb307bc`. | Published |
+| Implementation complete | Pending. | Pending |
+| Archive | Pending. | Pending |
 
 ## Validation
 
 - `pnpm check:tasks` passed all 10 existing tests after identity registration.
+- `pnpm install --frozen-lockfile` completed with the pinned lockfile unchanged.
+- `pnpm check:tasks` passed `repoledger check` for 10 tasks with 9 legacy archive
+    informational diagnostics, followed by all 6 focused policy tests.
+- `pnpm exec repoledger doctor` passed with full history and the published
+    `scottwei-home-pc` lane; the device-global default and worktree binding both
+    resolve to that identity from their intended scopes.
+- `pnpm check:repo` passed 6 task policy tests and 114 other repository tests.
+- CI's task-ledger step uses `pnpm check:tasks` after checkout with
+    `fetch-depth: 0`; `doctor` is not present in the workflow.
+- Editor diagnostics and `git diff --check` reported no implementation errors
+    or whitespace errors.
 
 ## Blockers
 
