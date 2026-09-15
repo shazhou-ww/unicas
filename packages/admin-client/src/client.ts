@@ -211,6 +211,7 @@ export interface AdminClient {
 
 export function createAdminClient(config: AdminClientConfig): AdminClient {
   const baseUrl = config.baseUrl.replace(/\/$/, "");
+  const baseOrigin = new URL(baseUrl).origin;
   const fetcher: AdminHttpFetcher = config.fetcher ?? globalThis.fetch.bind(globalThis);
 
   let session: AdminClientSession | null = null;
@@ -225,6 +226,7 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
     headers.set("Cookie", current.cookie);
     const method = (init.method ?? "GET").toUpperCase();
     if (method !== "GET" && method !== "HEAD") {
+      headers.set("Origin", baseOrigin);
       headers.set("X-CSRF-Token", current.csrfToken);
     }
     const response = await fetcher(`${baseUrl}${route}`, { ...init, headers });

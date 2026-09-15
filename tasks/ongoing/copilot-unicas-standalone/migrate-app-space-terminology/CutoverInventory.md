@@ -105,3 +105,35 @@ DROP commands; none were executed.
 This capture is therefore historical evidence, not an execution-time
 inventory. The maintenance gate still requires a new aggregate inventory and
 fresh verified off-machine backups immediately before approval.
+
+## Production cutover
+
+The approved cutover executed on 2026-09-15 after a fresh inventory again
+showed one `Production Smoke` App, one `deploy-smoke` data scope, two canonical
+R2 objects totaling 237 bytes, and no OAuth KV keys.
+
+Fresh data-only D1 exports were written to a private OneDrive-managed cutover
+directory and hashed before reset:
+
+| Export | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `unicas-control.sql` | 15,526 | `3c024e3b0825510abe6875ff03db4cad46ca569b2a78398e23ef47b30684b63a` |
+| `unicas-tenant.sql` | 3,780 | `745017ba9d5bc014b756de0fd7367d33d2ac9119d22579f358a3d2651998ca2e` |
+
+The reset downloaded both R2 objects, verified each SHA-256 against its
+canonical key, wrote the backup manifest, deleted those two objects, and
+dropped the eight legacy data tables and thirteen legacy control tables. The
+new Worker then created only the App/Space schemas. `Production Smoke` was
+recreated with one Principal membership and one active managed issuer.
+
+The production App/Space smoke passed lease, read, metadata, Root Ref
+idempotency and cleanup, usage, GC, cross-Space isolation, and bidirectional
+v1/v2 denial. Post-cutover inventory contains one App, two nodes, one edge, two
+Root Ref events, no pending uploads, and two R2 objects totaling 237 bytes. All
+four current origins and the frozen legacy health endpoint returned 200.
+
+Rollback readiness was verified without changing production: the exact prior
+Worker version remains inspectable, every manifest artifact rehashed
+successfully, and both data-only D1 exports restored into temporary databases
+built from the pre-cutover schema with the expected counts. The temporary
+databases were deleted after the drill.

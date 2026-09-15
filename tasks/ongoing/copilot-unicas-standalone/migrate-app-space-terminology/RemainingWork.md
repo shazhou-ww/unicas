@@ -130,8 +130,8 @@ After the gate is reviewed and passed:
 - [x] Require verified D1 and R2 backups before any destructive reset command.
 - [x] Coordinate `api.unicas.work`, `console.unicas.work`, the product site, and docs.
 - [x] Register and verify the required Google OAuth callbacks.
-- [ ] Run Wrangler dry-runs, deploy, recreate Production Smoke, and run v2 smoke.
-- [ ] Verify rollback before removing transitional aliases from the new environment.
+- [x] Run Wrangler dry-runs, deploy, recreate Production Smoke, and run v2 smoke.
+- [x] Verify rollback before removing transitional aliases from the new environment.
 - [ ] Run build, typecheck, tests, smoke, dry-run, gitleaks, and CI.
 
 ## Completion rule

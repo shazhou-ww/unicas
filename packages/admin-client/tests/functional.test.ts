@@ -9,7 +9,7 @@ const APP = "cas_app_a";
 
 /** Minimal in-memory fake of the /admin BFF API. */
 class MockAdminService {
-  readonly requests: { path: string; search: string; method: string; cookie: string | null; csrf: string | null; ifMatch: string | null; idempotencyKey: string | null; body?: string }[] = [];
+  readonly requests: { path: string; search: string; method: string; cookie: string | null; origin: string | null; csrf: string | null; ifMatch: string | null; idempotencyKey: string | null; body?: string }[] = [];
   readonly stack = {
     stackId: STACK,
     displayName: "Ops",
@@ -48,6 +48,7 @@ class MockAdminService {
       search: url.search,
       method: request.method,
       cookie,
+      origin: request.headers.get("Origin"),
       csrf,
       ifMatch: request.headers.get("If-Match"),
       idempotencyKey: request.headers.get("Idempotency-Key"),
@@ -57,7 +58,7 @@ class MockAdminService {
       return Response.json({ error: "ADMIN_AUTH_REQUIRED", message: "session required" }, { status: 401 });
     }
     const mutating = request.method !== "GET" && request.method !== "HEAD";
-    if (mutating && csrf !== "csrf-1") {
+    if (mutating && (request.headers.get("Origin") !== "https://admin.test" || csrf !== "csrf-1")) {
       return Response.json({ error: "CSRF_REJECTED" }, { status: 403 });
     }
     const path = url.pathname;
@@ -382,7 +383,7 @@ describe("functional admin client", () => {
 
     expect(service.requests).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: "/admin/apps", search: "?limit=5&cursor=next" }),
-      expect.objectContaining({ path: "/admin/apps", method: "POST", csrf: "csrf-1", idempotencyKey: "create-app-1" }),
+      expect.objectContaining({ path: "/admin/apps", method: "POST", origin: "https://admin.test", csrf: "csrf-1", idempotencyKey: "create-app-1" }),
       expect.objectContaining({ path: `/admin/apps/${APP}`, method: "PATCH", ifMatch: '"3"' }),
       expect.objectContaining({
         path: `/admin/apps/${APP}/members`,

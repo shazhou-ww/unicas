@@ -30,7 +30,7 @@ Updated: 2026-09-15
 - [x] Complete the documentation tracker.
 - [x] Clear the physical inventory and strategy gate.
 - [x] Implement the clean physical App/Space schema and key source changes.
-- [ ] Execute the approved production reset, deploy, smoke, and rollback validation.
+- [x] Execute the approved production reset, deploy, smoke, and rollback validation.
 
 ## Current state
 
@@ -84,9 +84,17 @@ are registered, and all local build, test, typecheck, dry-run, and secret-scan
 gates pass. Destructive execution now also requires both D1 exports and every
 D1-derived R2 object to be present in a fresh backup directory; canonical R2
 objects are verified against their SHA-256 keys before a manifest is written.
-Explicit reset/deploy approval is recorded. The next concrete action is to
-obtain a writable off-machine backup directory, then repeat the production
-inventory and render the final plan immediately before execution.
+The approved production cutover is complete. Fresh D1 and R2 backups were
+verified in a private OneDrive-managed directory, the legacy physical schemas
+were removed, the App/Space Worker was deployed, and `Production Smoke` was
+recreated. The complete v2 smoke and offline rollback drill passed. A live
+failure also exposed that Node admin-client mutations omitted the required
+same-origin `Origin` header; the client and regression test now enforce both
+Origin and CSRF.
+
+The next concrete action is to commit the final client/docs/task changes, run
+the tracked-source secret scan, push, and require final GitHub CI before
+archiving this task.
 
 ## Decisions
 
@@ -118,6 +126,12 @@ inventory and render the final plan immediately before execution.
   `automate-cloudflare-deployments` in backlog until the cutover is complete so
   the two tasks do not concurrently change the deployment scripts or release
   assumptions.
+- Node admin clients must send the configured admin origin on mutations in
+  addition to the session CSRF token; browser-origin behavior cannot be assumed
+  for CLI fetch requests.
+- Retained v1 routes and schemas are frozen, version-distinct contracts needed
+  for explicit cross-version denial and the legacy deployment; they are not v2
+  aliases.
 
 ## Validation
 
@@ -311,13 +325,30 @@ inventory and render the final plan immediately before execution.
   `copilot-unicas-standalone`, and its reserved lane exists on `origin/main`.
   The only adjacent backlog task is production deployment automation, which is
   sequenced after this one-time cutover rather than claimed concurrently.
+- Fresh production exports and R2 backups passed manifest hash verification;
+  the guarded reset removed two old canonical objects and the legacy physical
+  schemas only after backup completion.
+- Worker version `5f2c27d0-fcd0-4362-9e89-fc7a1548abf8` deployed with the
+  App/Space schema. Remote checks found no legacy Stack control tables and
+  confirmed `cas_nodes(app_id, space_id)`.
+- The recreated `Production Smoke` App has one Principal membership and one
+  active managed issuer whose cache-busted JWKS matches the protected local
+  smoke key.
+- Production App/Space smoke passed the complete canonical flow, cross-Space
+  isolation, and bidirectional cross-version rejection. Post-cutover control,
+  data, R2, and origin probes matched the expected smoke-only state; the frozen
+  legacy health endpoint remained 200.
+- Rollback validation confirmed the prior Worker version remains available and
+  restored both data-only D1 exports into temporary pre-cutover schemas with
+  the expected counts. All manifest D1/R2 hashes matched.
+- The live CLI create initially exposed a missing Node `Origin` header. The
+  admin-client fix passed 14 functional tests, the admin CLI passed 42 tests,
+  and the full workspace build, typecheck, and serialized package suites pass.
 
 ## Blockers
 
-- Production reset/deploy is blocked on a writable off-machine backup
-  directory. Immediately before execution, repeat the aggregate inventory,
-  create and verify the backups, and review the rendered reset plan against the
-  already approved destructive scope.
+- Final GitHub CI must pass on the source fix and completed cutover records
+  before the task is archived.
 
 ## Outcome
 

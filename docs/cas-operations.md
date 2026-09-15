@@ -149,7 +149,7 @@ non-empty exports:
 ```powershell
 node stacks/unicas/deploy/reset-smoke.mjs --execute `
    --expected-stack-id <current-smoke-stack-id> `
-   --backup-dir .wrangler/cas-deploy/backups/<cutover>
+   --backup-dir <off-machine-cutover-directory>
 ```
 
 This tool targets only the isolated `unicas-*` resources committed in this
@@ -160,14 +160,16 @@ Restore (disaster drill; destructive — clears target tables first):
 
 ```text
 wrangler d1 execute unicas-control --remote --command "<clear tables>"
-wrangler d1 execute unicas-control --remote --file=backup-cas-control.sql
+wrangler d1 execute unicas-control --remote --file=unicas-control.sql
 wrangler d1 execute unicas-tenant --remote --command "<clear tables>"
-wrangler d1 execute unicas-tenant --remote --file=backup-cas-tenant.sql
+wrangler d1 execute unicas-tenant --remote --file=unicas-tenant.sql
 ```
 
-Backups were verified 2026-08-26 (control 4.1 KB, physical data D1 2.0 KB, content
-inspected). Restore was not executed against production (destructive); a
-throwaway-D1 restore drill is a pending ops item.
+The 2026-09-15 App/Space cutover verified both data-only exports by rebuilding
+the pre-cutover schemas in temporary SQLite databases, importing the exports,
+and checking the expected control/data counts. Every R2 backup was also
+rehashed against its canonical key. Production restore remains a destructive
+incident action and was not executed as part of the drill.
 
 ### App OAuth issuer key rotation
 

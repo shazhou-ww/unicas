@@ -35,15 +35,15 @@ and names the top-level application/trust boundary App.
 
 ## Acceptance criteria
 
-- [ ] New public routes and JSON use `appId` and `spaceId` consistently.
-- [ ] Capability v2 uses `spaceId` and `spaces:` permissions.
-- [ ] V1 and v2 routes/tokens cannot cross-authorize.
-- [ ] Principal is keyed only by issuer and subject; Profile is non-authoritative.
-- [ ] Every data-plane operation remains scoped by both App and Space.
-- [ ] CLI, MCP, WebUI, OpenAPI, audit, and docs use the same vocabulary.
-- [ ] “Space” is never used to mean free or available storage capacity.
-- [ ] Cross-App and cross-Space isolation tests pass.
-- [ ] Legacy v1 remains unchanged and operational.
+- [x] New public routes and JSON use `appId` and `spaceId` consistently.
+- [x] Capability v2 uses `spaceId` and `spaces:` permissions.
+- [x] V1 and v2 routes/tokens cannot cross-authorize.
+- [x] Principal is keyed only by issuer and subject; Profile is non-authoritative.
+- [x] Every data-plane operation remains scoped by both App and Space.
+- [x] CLI, MCP, WebUI, OpenAPI, audit, and docs use the same vocabulary.
+- [x] “Space” is never used to mean free or available storage capacity.
+- [x] Cross-App and cross-Space isolation tests pass.
+- [x] Legacy v1 remains unchanged and operational.
 - [ ] Full build, typecheck, tests, smoke, dry-run, gitleaks, and CI pass.
 
 ## Constraints
