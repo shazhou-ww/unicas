@@ -1,12 +1,12 @@
 /**
  * Root Ref domain Durable Object — the single writer for one
- * `(stackId, refDomain)` event log.
+ * `(appId, refDomain)` event log.
  *
- * Serializes writes from different tenants in the same domain and executes the
+ * Serializes writes from different Spaces in the same domain and executes the
  * atomic D1 transaction (idempotency, revision allocation, aggregate updates,
  * event append, projection update, idempotency insert). Receives ONLY the
- * canonical command forwarded by a tenant DO; never accepts identity headers
- * from an external caller. Domain DOs never call tenant DOs, so lock ordering
+ * canonical command forwarded by the CAS DO; never accepts identity headers
+ * from an external caller. Domain DOs never call CAS DOs, so lock ordering
  * cannot cycle.
  */
 
@@ -29,13 +29,13 @@ export class RootRefDomainDurableObject {
   }
 
   async fetch(request: Request): Promise<Response> {
-    let stackId: string;
-    let tenantId: string;
+    let appId: string;
+    let spaceId: string;
     let refDomain: string;
     let body: { requestId?: unknown; changes?: unknown };
     try {
-      stackId = requireHeader(request, "X-CAS-Stack-Id");
-      tenantId = requireHeader(request, "X-CAS-Tenant-Id");
+      appId = requireHeader(request, "X-CAS-App-Id");
+      spaceId = requireHeader(request, "X-CAS-Space-Id");
       refDomain = requireHeader(request, "X-CAS-Ref-Domain");
       body = (await request.json()) as { requestId?: unknown; changes?: unknown };
     } catch (error) {
@@ -54,8 +54,8 @@ export class RootRefDomainDurableObject {
         () => executeDomainUpdate({
           db: this.#env.CAS_DB,
           bucket: this.#env.CAS_R2,
-          stackId,
-          tenantId,
+          stackId: appId,
+          tenantId: spaceId,
           refDomain,
           canonical,
         }),

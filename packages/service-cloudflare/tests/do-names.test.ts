@@ -1,16 +1,16 @@
 import { describe, expect, test } from "vitest";
-import { canonicalComposite, decodeComposite, stackCanonicalNodeKey } from "../src/do-names.js";
+import { canonicalComposite, decodeComposite, appCanonicalNodeKey } from "../src/do-names.js";
 
 describe("canonical DO name partitioning", () => {
-  test("round-trips stack + tenant and stack + refDomain", () => {
-    for (const [stackId, component] of [
-      ["cas_stack_a", "tenant-1"],
-      ["cas_stack_a", "doc"],
-      ["stack/with:slashes", "tenant/with:colons"],
-      ["cas_栈", "租户"],
+  test("round-trips App + Space and App + refDomain", () => {
+    for (const [appId, component] of [
+      ["cas_app_a", "space-1"],
+      ["cas_app_a", "doc"],
+      ["app/with:slashes", "space/with:colons"],
+      ["cas_应用", "空间"],
     ]) {
-      const name = canonicalComposite(stackId, component);
-      expect(decodeComposite(name)).toEqual({ stackId, component });
+      const name = canonicalComposite(appId, component);
+      expect(decodeComposite(name)).toEqual({ appId, component });
     }
   });
 
@@ -18,8 +18,8 @@ describe("canonical DO name partitioning", () => {
     const a = canonicalComposite("s", "a|b");
     const b = canonicalComposite("s|a", "b");
     expect(a).not.toBe(b);
-    expect(decodeComposite(a)).toEqual({ stackId: "s", component: "a|b" });
-    expect(decodeComposite(b)).toEqual({ stackId: "s|a", component: "b" });
+    expect(decodeComposite(a)).toEqual({ appId: "s", component: "a|b" });
+    expect(decodeComposite(b)).toEqual({ appId: "s|a", component: "b" });
   });
 
   test("rejects empty parts and malformed composites", () => {
@@ -31,8 +31,8 @@ describe("canonical DO name partitioning", () => {
     expect(decodeComposite("%zz|x")).toBeNull();
   });
 
-  test("R2 stack node keys are unambiguous", () => {
-    expect(stackCanonicalNodeKey("cas_s", "tenant-1", "a".repeat(64)))
-      .toBe(`stacks/cas_s/tenants/tenant-1/nodes-v2/${"a".repeat(64)}`);
+  test("R2 App/Space node keys are unambiguous", () => {
+    expect(appCanonicalNodeKey("cas_app", "space-1", "a".repeat(64)))
+      .toBe(`apps/cas_app/spaces/space-1/nodes-v2/${"a".repeat(64)}`);
   });
 });

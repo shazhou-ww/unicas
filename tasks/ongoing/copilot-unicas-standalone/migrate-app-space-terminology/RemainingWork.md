@@ -124,8 +124,8 @@ Gate before any destructive operation:
 After the gate is reviewed and passed:
 
 - [x] Replace control D1 Stack tables and `stack_id` columns with App tables and `app_id`.
-- [ ] Replace data D1 `stack_id`/`tenant_id` dimensions with `app_id`/`space_id`.
-- [ ] Replace Durable Object names and R2 keys with App/Space scopes.
+- [x] Replace data D1 `stack_id`/`tenant_id` dimensions with `app_id`/`space_id`.
+- [x] Replace Durable Object names and R2 keys with App/Space scopes.
 - [ ] Update reset guards to the approved physical model.
 - [ ] Coordinate `api.unicas.work`, `console.unicas.work`, the product site, and docs.
 - [ ] Register and verify the required Google OAuth callbacks.

@@ -37,13 +37,13 @@ import {
   RootRefDomainDurableObject,
   type RootRefDomainDoEnv,
 } from "./domain-do.js";
-import { migrateStackTenantSchema } from "./schema.js";
-import { CasDurableObject, type TenantCasDoEnv } from "./tenant-do.js";
+import { migrateAppSpaceSchema } from "./schema.js";
+import { CasDurableObject, type SpaceCasDoEnv } from "./tenant-do.js";
 import { ServerTiming, type TimingSink } from "./timing.js";
 
 export { CasDurableObject, RootRefDomainDurableObject };
 
-export interface TenantEnv extends TenantCasDoEnv, RootRefDomainDoEnv {
+export interface TenantEnv extends SpaceCasDoEnv, RootRefDomainDoEnv {
   CAS_CONTROL_DB: D1Database;
   CAS_DO: DurableObjectNamespace;
   CAS_AUDIT_READER_KEY?: string;
@@ -331,7 +331,7 @@ function ensureTenantSchema(env: Pick<Env, "CAS_DB">): Promise<void> {
   const key = env.CAS_DB as object;
   let initialization = tenantSchemaInitializations.get(key);
   if (!initialization) {
-    initialization = migrateStackTenantSchema(env.CAS_DB);
+    initialization = migrateAppSpaceSchema(env.CAS_DB);
     tenantSchemaInitializations.set(key, initialization);
     void initialization.catch(() => tenantSchemaInitializations.delete(key));
   }
@@ -609,9 +609,9 @@ function stripMcpBrowserHeaders(request: Request): Request {
 export { StackCapabilityVerifier, permissionFor } from "@unicas/service";
 export type { StackAuthEvent, VerifiedStackCall } from "@unicas/service";
 
-export { migrateStackTenantSchema } from "./schema.js";
+export { migrateAppSpaceSchema } from "./schema.js";
 
-export { canonicalComposite, decodeComposite, stackCanonicalNodeKey } from "./do-names.js";
+export { appCanonicalNodeKey, canonicalComposite, decodeComposite } from "./do-names.js";
 
 export type {
   CanonicalRootRefsUpdate,

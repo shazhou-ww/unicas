@@ -78,12 +78,12 @@ export async function listRootDomains(input: {
 }): Promise<readonly RootDomainSummary[]> {
   const rows = await input.db
     .prepare(
-      "SELECT stack_id, ref_domain, revision FROM cas_root_domain_revisions WHERE stack_id = ? ORDER BY ref_domain",
+      "SELECT app_id, ref_domain, revision FROM cas_root_domain_revisions WHERE app_id = ? ORDER BY ref_domain",
     )
     .bind(input.stackId)
-    .all<{ stack_id: string; ref_domain: string; revision: number }>();
+    .all<{ app_id: string; ref_domain: string; revision: number }>();
   return (rows.results ?? []).map((row) => ({
-    stackId: row.stack_id,
+    stackId: row.app_id,
     refDomain: row.ref_domain,
     revision: row.revision,
   }));
@@ -200,11 +200,11 @@ export async function listRootDomainRefs(input: {
     }
     const rows = await input.db
       .prepare(
-        `SELECT tenant_id, hash, ref_count FROM cas_root_domain_refs
-         WHERE stack_id = ? AND ref_domain = ?
-           ${tenantFilter === null ? "" : "AND tenant_id = ?"}
-           AND (tenant_id, hash) > (?, ?)
-         ORDER BY tenant_id, hash LIMIT ?`,
+        `SELECT space_id, hash, ref_count FROM cas_root_domain_refs
+         WHERE app_id = ? AND ref_domain = ?
+           ${tenantFilter === null ? "" : "AND space_id = ?"}
+           AND (space_id, hash) > (?, ?)
+         ORDER BY space_id, hash LIMIT ?`,
       )
       .bind(
         input.stackId,
@@ -214,12 +214,12 @@ export async function listRootDomainRefs(input: {
         cursor?.lastHash ?? "",
         limit + 1,
       )
-      .all<{ tenant_id: string; hash: string; ref_count: number }>();
+      .all<{ space_id: string; hash: string; ref_count: number }>();
     const afterRevision = await readDomainRevision(input.db, input.stackId, input.refDomain);
     if (afterRevision === revision) {
       const results = rows.results ?? [];
       const refs = results.slice(0, limit).map((row) => ({
-        tenantId: row.tenant_id,
+        tenantId: row.space_id,
         hash: row.hash,
         count: row.ref_count,
       }));
@@ -271,9 +271,9 @@ export async function listRootDomainEvents(input: {
   const latestRevision = await readDomainRevision(input.db, input.stackId, input.refDomain);
   const rows = await input.db
     .prepare(
-      `SELECT revision, tenant_id, request_id, changes_json, applied_at FROM cas_root_domain_events
-       WHERE stack_id = ? AND ref_domain = ? AND revision > ?
-         ${tenantFilter === null ? "" : "AND tenant_id = ?"}
+      `SELECT revision, space_id, request_id, changes_json, applied_at FROM cas_root_domain_events
+       WHERE app_id = ? AND ref_domain = ? AND revision > ?
+         ${tenantFilter === null ? "" : "AND space_id = ?"}
        ORDER BY revision LIMIT ?`,
     )
     .bind(
@@ -283,12 +283,12 @@ export async function listRootDomainEvents(input: {
       ...(tenantFilter === null ? [] : [tenantFilter]),
       limit + 1,
     )
-    .all<{ revision: number; tenant_id: string; request_id: string; changes_json: string; applied_at: number }>();
+    .all<{ revision: number; space_id: string; request_id: string; changes_json: string; applied_at: number }>();
 
   const results = rows.results ?? [];
   const events = results.slice(0, limit).map((row) => ({
     revision: row.revision,
-    tenantId: row.tenant_id,
+    tenantId: row.space_id,
     requestId: row.request_id,
     changes: JSON.parse(row.changes_json) as Record<string, number>,
     appliedAt: row.applied_at,
@@ -302,7 +302,7 @@ export async function listRootDomainEvents(input: {
 
 async function readDomainRevision(db: D1Database, stackId: string, refDomain: string): Promise<number> {
   const row = await db
-    .prepare("SELECT revision FROM cas_root_domain_revisions WHERE stack_id = ? AND ref_domain = ?")
+    .prepare("SELECT revision FROM cas_root_domain_revisions WHERE app_id = ? AND ref_domain = ?")
     .bind(stackId, refDomain)
     .first<{ revision: number }>();
   return row?.revision ?? 0;

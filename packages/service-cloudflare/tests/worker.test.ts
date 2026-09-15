@@ -31,7 +31,7 @@ const handlers = vi.hoisted(() => ({
 }));
 
 vi.mock("../src/schema.js", () => ({
-  migrateStackTenantSchema: handlers.migrate,
+  migrateAppSpaceSchema: handlers.migrate,
 }));
 vi.mock("../src/control-schema.js", () => ({
   migrateControlSchema: handlers.migrateControl,

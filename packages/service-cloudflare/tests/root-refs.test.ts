@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
-import { migrateStackTenantSchema } from "../src/schema.js";
+import { migrateAppSpaceSchema } from "../src/schema.js";
 import {
   canonicalizeRootRefsUpdate,
   executeDomainUpdate,
@@ -12,7 +12,7 @@ import {
   RootRefsRetryableError,
   RootRefsValidationError,
 } from "../src/root-refs.js";
-import { stackCanonicalNodeKey } from "../src/do-names.js";
+import { appCanonicalNodeKey } from "../src/do-names.js";
 
 let miniflare: Miniflare | undefined;
 let db: D1Database | undefined;
@@ -39,7 +39,7 @@ async function createStore(): Promise<void> {
   await miniflare.ready;
   db = await miniflare.getD1Database("DB", "root-refs-test");
   bucket = await miniflare.getR2Bucket("BUCKET", "root-refs-test");
-  await migrateStackTenantSchema(db);
+  await migrateAppSpaceSchema(db);
 }
 
 const STACK = "cas_stack_a";
@@ -51,10 +51,10 @@ const H3 = "c".repeat(64);
 
 async function seedNode(hash: string, rootRefCount = 0, ready = true): Promise<void> {
   await db!.prepare(
-    "INSERT INTO cas_nodes (stack_id, tenant_id, hash, content_size, content_type, lease_started_at, lease_expires_at, child_ref_count, root_ref_count) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)",
+    "INSERT INTO cas_nodes (app_id, space_id, hash, content_size, content_type, lease_started_at, lease_expires_at, child_ref_count, root_ref_count) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)",
   ).bind(STACK, TENANT, hash, 10, "text/plain", ready ? 1 : 0, ready ? 1 : 0, rootRefCount).run();
   if (ready) {
-    await bucket!.put(stackCanonicalNodeKey(STACK, TENANT, hash), new TextEncoder().encode("content"));
+    await bucket!.put(appCanonicalNodeKey(STACK, TENANT, hash), new TextEncoder().encode("content"));
   }
 }
 
@@ -89,14 +89,14 @@ async function runUpdate(input: {
 
 async function eventCount(): Promise<number> {
   const row = await db!.prepare(
-    "SELECT COUNT(*) AS count FROM cas_root_domain_events WHERE stack_id = ? AND ref_domain = ?",
+    "SELECT COUNT(*) AS count FROM cas_root_domain_events WHERE app_id = ? AND ref_domain = ?",
   ).bind(STACK, DOMAIN).first<{ count: number }>();
   return row?.count ?? 0;
 }
 
 async function aggregate(hash: string): Promise<number> {
   const row = await db!.prepare(
-    "SELECT root_ref_count FROM cas_nodes WHERE stack_id = ? AND tenant_id = ? AND hash = ?",
+    "SELECT root_ref_count FROM cas_nodes WHERE app_id = ? AND space_id = ? AND hash = ?",
   ).bind(STACK, TENANT, hash).first<{ root_ref_count: number }>();
   return row?.root_ref_count ?? -1;
 }
@@ -108,7 +108,7 @@ describe("atomic Root Refs update", () => {
     await seedNode(H2);
     await runUpdate({ requestId: "r1", changes: { [H1]: 1, [H2]: 2 } });
     await db!.prepare(
-      "INSERT INTO cas_root_domain_refs (stack_id, ref_domain, tenant_id, hash, ref_count) VALUES (?, ?, ?, ?, ?)",
+      "INSERT INTO cas_root_domain_refs (app_id, ref_domain, space_id, hash, ref_count) VALUES (?, ?, ?, ?, ?)",
     ).bind(STACK, "other", TENANT, H3, 9).run();
 
     const first = await listTenantRootRefs({
@@ -143,7 +143,7 @@ describe("atomic Root Refs update", () => {
     expect(await aggregate(H2)).toBe(0);
     expect(await eventCount()).toBe(1);
     const projection = await db!.prepare(
-      "SELECT hash, ref_count FROM cas_root_domain_refs WHERE stack_id = ? AND ref_domain = ? AND tenant_id = ? ORDER BY hash",
+      "SELECT hash, ref_count FROM cas_root_domain_refs WHERE app_id = ? AND ref_domain = ? AND space_id = ? ORDER BY hash",
     ).bind(STACK, DOMAIN, TENANT).all<{ hash: string; ref_count: number }>();
     // The projection starts at zero (pre-existing aggregates have no domain
     // attribution): H1 +1 -> 1, H2 -1 -> -1 (negative balances kept).
@@ -152,7 +152,7 @@ describe("atomic Root Refs update", () => {
       { hash: H2, ref_count: -1 },
     ]);
     const idem = await db!.prepare(
-      "SELECT revision, payload_hash FROM cas_root_ref_requests WHERE stack_id = ? AND tenant_id = ? AND ref_domain = ? AND request_id = ?",
+      "SELECT revision, payload_hash FROM cas_root_ref_requests WHERE app_id = ? AND space_id = ? AND ref_domain = ? AND request_id = ?",
     ).bind(STACK, TENANT, DOMAIN, "session:s1:commit:1").first<{ revision: number; payload_hash: string }>();
     expect(idem?.revision).toBe(1);
     expect(idem?.payload_hash).toHaveLength(64);
@@ -232,7 +232,7 @@ describe("atomic Root Refs update", () => {
     expect(release.status).toBe(200);
     expect(await aggregate(H2)).toBe(1); // 8 - 7
     const projection = await db!.prepare(
-      "SELECT ref_count FROM cas_root_domain_refs WHERE stack_id = ? AND ref_domain = ? AND tenant_id = ? AND hash = ?",
+      "SELECT ref_count FROM cas_root_domain_refs WHERE app_id = ? AND ref_domain = ? AND space_id = ? AND hash = ?",
     ).bind(STACK, DOMAIN, TENANT, H2).first<{ ref_count: number }>();
     expect(projection?.ref_count).toBe(-4); // domain balance went negative (3 - 7)
   });
@@ -242,9 +242,9 @@ describe("atomic Root Refs update", () => {
     await seedNode(H1, 0);
     await seedNode(H2, 0);
     await db!.prepare(
-      "INSERT INTO cas_nodes (stack_id, tenant_id, hash, content_size, content_type, lease_started_at, lease_expires_at, child_ref_count, root_ref_count) VALUES (?, 'tenant-2', ?, 10, 'text/plain', 1, 1, 0, 0)",
+      "INSERT INTO cas_nodes (app_id, space_id, hash, content_size, content_type, lease_started_at, lease_expires_at, child_ref_count, root_ref_count) VALUES (?, 'tenant-2', ?, 10, 'text/plain', 1, 1, 0, 0)",
     ).bind(STACK, H1).run();
-    await bucket!.put(stackCanonicalNodeKey(STACK, "tenant-2", H1), new TextEncoder().encode("content"));
+    await bucket!.put(appCanonicalNodeKey(STACK, "tenant-2", H1), new TextEncoder().encode("content"));
 
     // tenant-1 then tenant-2 in the same domain: revisions 1, 2.
     const a = await runUpdate({ requestId: "a", changes: { [H1]: 1 } });

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
-import { migrateStackTenantSchema } from "../src/schema.js";
+import { migrateAppSpaceSchema } from "../src/schema.js";
 import { canonicalizeRootRefsUpdate, executeDomainUpdate } from "../src/root-refs.js";
 
 vi.mock("../src/control-authority.js", () => ({
@@ -44,7 +44,7 @@ vi.mock("../src/mcp/worker.js", () => ({
 
 import worker from "../src/worker.js";
 import type { Env } from "../src/worker.js";
-import { stackCanonicalNodeKey } from "../src/do-names.js";
+import { appCanonicalNodeKey } from "../src/do-names.js";
 
 let miniflare: Miniflare | undefined;
 let db: D1Database | undefined;
@@ -76,12 +76,12 @@ async function createEnv(): Promise<Env> {
   await miniflare.ready;
   db = await miniflare.getD1Database("DB", "audit-rpc-test");
   bucket = await miniflare.getR2Bucket("BUCKET", "audit-rpc-test");
-  await migrateStackTenantSchema(db);
+  await migrateAppSpaceSchema(db);
 
   await db.prepare(
-    "INSERT INTO cas_nodes (stack_id, tenant_id, hash, content_size, content_type, lease_started_at, lease_expires_at, child_ref_count, root_ref_count) VALUES (?, 'tenant-a', ?, 10, 'text/plain', 1, 1, 0, 0)",
+    "INSERT INTO cas_nodes (app_id, space_id, hash, content_size, content_type, lease_started_at, lease_expires_at, child_ref_count, root_ref_count) VALUES (?, 'tenant-a', ?, 10, 'text/plain', 1, 1, 0, 0)",
   ).bind(STACK, H1).run();
-  await bucket.put(stackCanonicalNodeKey(STACK, "tenant-a", H1), new TextEncoder().encode("content"));
+  await bucket.put(appCanonicalNodeKey(STACK, "tenant-a", H1), new TextEncoder().encode("content"));
   const canonical = await canonicalizeRootRefsUpdate({ requestId: "r1", changes: { [H1]: 1 }, refDomain: DOMAIN });
   await executeDomainUpdate({
     db,

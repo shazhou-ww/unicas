@@ -1,11 +1,11 @@
 /**
- * Tenant CAS Durable Object — per-`(stackId, tenantId)` mutation coordinator.
+ * CAS Durable Object — per-`(appId, spaceId)` mutation coordinator.
  *
  * Short begin/finalize, Root Ref, and GC mutations use an explicit in-instance
  * gate. Canonical request bodies stream to R2 outside that gate, so unrelated
  * uploads and reads do not queue behind a slow body. An upload reservation is
  * the durable GC fence across that unlocked interval. Root Ref commands flow
- * ONE way to the `(stackId, refDomain)` domain DO, so lock ordering cannot
+ * ONE way to the `(appId, refDomain)` domain DO, so lock ordering cannot
  * cycle.
  */
 
@@ -41,9 +41,9 @@ import { canonicalizeRootRefsUpdate, listTenantRootRefs, parseRootRefsBody } fro
 import { RootRefsErrorCodes, RootRefsValidationError } from "./root-refs.js";
 import { ServerTiming } from "./timing.js";
 import { R2UploadPresigner } from "./r2-upload-presigner.js";
-import { stackCanonicalNodeKey } from "./do-names.js";
+import { appCanonicalNodeKey } from "./do-names.js";
 
-export interface TenantCasDoEnv {
+export interface SpaceCasDoEnv {
   CAS_DB: D1Database;
   CAS_R2: R2Bucket;
   /** Root Ref domain DO namespace (one-way calls only). */
@@ -65,14 +65,14 @@ interface ActiveUpload {
 }
 
 export class CasDurableObject {
-  readonly #env: TenantCasDoEnv;
+  readonly #env: SpaceCasDoEnv;
   #mutationTail: Promise<void> = Promise.resolve();
   readonly #activeUploads = new Map<string, ActiveUpload>();
   /** Positive node-ready cache (hash -> expiry) shared by every repository
    *  built in this DO, so child-ready checks and renewals skip the R2 HEAD. */
   readonly #readyCache = new Map<string, number>();
 
-  constructor(_state: DurableObjectState, env: TenantCasDoEnv) {
+  constructor(_state: DurableObjectState, env: SpaceCasDoEnv) {
     this.#env = env;
   }
 
@@ -82,12 +82,12 @@ export class CasDurableObject {
     const url = new URL(request.url);
     const scope = physicalScope(request);
     if (scope instanceof Response) return timing.decorate(scope);
-    const { stackId, tenantId } = scope;
+    const { appId, spaceId } = scope;
     const store = {
       db: this.#env.CAS_DB,
       bucket: this.#env.CAS_R2,
-      stackId,
-      tenantId,
+      stackId: appId,
+      tenantId: spaceId,
       timing,
       readyCache: this.#readyCache,
     };
@@ -95,14 +95,14 @@ export class CasDurableObject {
     try {
       let response: Response;
       if (url.pathname === "/updateRootRefs" && request.method === "POST") {
-        response = await this.#withMutation(() => this.#forwardRootRefs(request, stackId, tenantId));
+        response = await this.#withMutation(() => this.#forwardRootRefs(request, appId, spaceId));
       } else if (url.pathname === "/rootRefs" && request.method === "GET") {
         const limit = parseRootRefsLimit(url.searchParams.get("limit"));
         const cursor = parseRootRefsCursor(url.searchParams.get("cursor"));
         response = jsonResponse(await listTenantRootRefs({
           db: store.db,
-          stackId,
-          tenantId,
+          stackId: appId,
+          tenantId: spaceId,
           refDomain: requireHeader(request, "X-CAS-Ref-Domain"),
           limit,
           cursor,
@@ -332,7 +332,7 @@ export class CasDurableObject {
     }
     const [uploadStream, parseStream] = (temporary.body as unknown as ReadableStream<Uint8Array>).tee();
     const parsing = parseUploadedBody(parseStream, session.storedBytes, store.limits);
-    const finalKey = stackCanonicalNodeKey(store.stackId, store.tenantId, session.hash);
+    const finalKey = appCanonicalNodeKey(store.stackId, store.tenantId, session.hash);
     const uploading = store.bucket.put(
       finalKey,
       uploadStream as unknown as Parameters<R2Bucket["put"]>[1],
@@ -470,8 +470,8 @@ export class CasDurableObject {
   /** Canonicalize the caller update and forward one command to the domain DO. */
   async #forwardRootRefs(
     request: Request,
-    stackId: string,
-    tenantId: string,
+    appId: string,
+    spaceId: string,
   ): Promise<Response> {
     let refDomain: string;
     let canonical;
@@ -489,13 +489,13 @@ export class CasDurableObject {
         { status: 400 },
       );
     }
-    const domainId = this.#env.CAS_DOMAIN_DO.idFromName(canonicalComposite(stackId, refDomain));
+    const domainId = this.#env.CAS_DOMAIN_DO.idFromName(canonicalComposite(appId, refDomain));
     const stub = this.#env.CAS_DOMAIN_DO.get(domainId);
     const response = await stub.fetch("https://domain.internal/update", {
       method: "POST",
       headers: {
-        "X-CAS-Stack-Id": stackId,
-        "X-CAS-Tenant-Id": tenantId,
+        "X-CAS-App-Id": appId,
+        "X-CAS-Space-Id": spaceId,
         "X-CAS-Ref-Domain": refDomain,
       },
       body: JSON.stringify({
@@ -588,7 +588,7 @@ function requireHeader(request: Request, name: string): string {
   return value;
 }
 
-function physicalScope(request: Request): { stackId: string; tenantId: string } | Response {
+function physicalScope(request: Request): { appId: string; spaceId: string } | Response {
   const stackId = request.headers.get("X-CAS-Stack-Id");
   const tenantId = request.headers.get("X-CAS-Tenant-Id");
   const appId = request.headers.get("X-CAS-App-Id");
@@ -602,8 +602,8 @@ function physicalScope(request: Request): { stackId: string; tenantId: string } 
       { status: 400 },
     );
   }
-  if (hasV1 && stackId && tenantId) return { stackId, tenantId };
-  if (hasV2 && appId && spaceId) return { stackId: appId, tenantId: spaceId };
+  if (hasV1 && stackId && tenantId) return { appId: stackId, spaceId: tenantId };
+  if (hasV2 && appId && spaceId) return { appId, spaceId };
   return Response.json(
     { error: "INVALID_SCOPE_HEADERS", message: "one complete scope header family is required" },
     { status: 400 },

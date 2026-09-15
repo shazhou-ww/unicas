@@ -15,12 +15,12 @@ import {
   hexToHash,
   sha256,
 } from "@unicas/codec";
-import { migrateStackTenantSchema } from "../src/schema.js";
-import { canonicalComposite, stackCanonicalNodeKey } from "../src/do-names.js";
+import { migrateAppSpaceSchema } from "../src/schema.js";
+import { appCanonicalNodeKey, canonicalComposite } from "../src/do-names.js";
 import { RootRefDomainDurableObject } from "../src/domain-do.js";
 import type { RootRefDomainDoEnv } from "../src/domain-do.js";
 import { CasDurableObject } from "../src/tenant-do.js";
-import type { TenantCasDoEnv } from "../src/tenant-do.js";
+import type { SpaceCasDoEnv } from "../src/tenant-do.js";
 import { RootRefsErrorCodes } from "../src/root-refs.js";
 import { NodeOpErrorCodes, leaseCanonicalNode } from "../src/nodes.js";
 import type { NodeStore } from "../src/nodes.js";
@@ -62,7 +62,7 @@ async function createStore(): Promise<void> {
   await miniflare.ready;
   db = await miniflare.getD1Database("DB", "do-test");
   bucket = await miniflare.getR2Bucket("BUCKET", "do-test") as unknown as R2Bucket;
-  await migrateStackTenantSchema(db);
+  await migrateAppSpaceSchema(db);
 }
 
 const STACK = "cas_stack_a";
@@ -72,9 +72,9 @@ const H1 = "a".repeat(64);
 
 async function seedNode(hash: string): Promise<void> {
   await db!.prepare(
-    "INSERT INTO cas_nodes (stack_id, tenant_id, hash, content_size, content_type, lease_started_at, lease_expires_at, child_ref_count, root_ref_count) VALUES (?, ?, ?, 10, 'text/plain', 1, 1, 0, 1)",
+    "INSERT INTO cas_nodes (app_id, space_id, hash, content_size, content_type, lease_started_at, lease_expires_at, child_ref_count, root_ref_count) VALUES (?, ?, ?, 10, 'text/plain', 1, 1, 0, 1)",
   ).bind(STACK, TENANT, hash).run();
-  await bucket!.put(stackCanonicalNodeKey(STACK, TENANT, hash), new TextEncoder().encode("content"));
+  await bucket!.put(appCanonicalNodeKey(STACK, TENANT, hash), new TextEncoder().encode("content"));
 }
 
 async function leaseNode(store: NodeStore, input: {
@@ -103,8 +103,8 @@ function domainCommand(requestId: string, changes: Record<string, number>): Requ
   return new Request("https://domain.internal/update", {
     method: "POST",
     headers: {
-      "X-CAS-Stack-Id": STACK,
-      "X-CAS-Tenant-Id": TENANT,
+      "X-CAS-App-Id": STACK,
+      "X-CAS-Space-Id": TENANT,
       "X-CAS-Ref-Domain": DOMAIN,
     },
     body: JSON.stringify({ requestId, changes }),
@@ -154,7 +154,7 @@ describe("CasDurableObject (tenant DO)", () => {
     await createStore();
     const doInstance = new CasDurableObject(
       {} as DurableObjectState,
-      { CAS_DB: db!, CAS_R2: bucket!, CAS_DOMAIN_DO: {} as TenantCasDoEnv["CAS_DOMAIN_DO"] },
+      { CAS_DB: db!, CAS_R2: bucket!, CAS_DOMAIN_DO: {} as SpaceCasDoEnv["CAS_DOMAIN_DO"] },
     );
     const v2 = await doInstance.fetch(new Request("https://tenant.internal/usage", {
       headers: { "X-CAS-App-Id": STACK, "X-CAS-Space-Id": TENANT },
@@ -193,7 +193,7 @@ describe("CasDurableObject (tenant DO)", () => {
     };
     const doInstance = new CasDurableObject(
       {} as DurableObjectState,
-      { CAS_DB: db!, CAS_R2: bucket!, CAS_DOMAIN_DO: stubNamespace as unknown as TenantCasDoEnv["CAS_DOMAIN_DO"] },
+      { CAS_DB: db!, CAS_R2: bucket!, CAS_DOMAIN_DO: stubNamespace as unknown as SpaceCasDoEnv["CAS_DOMAIN_DO"] },
     );
     const response = await doInstance.fetch(new Request("https://tenant.internal/updateRootRefs", {
       method: "POST",
@@ -207,8 +207,10 @@ describe("CasDurableObject (tenant DO)", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ success: true, idempotent: false, revision: 7 });
     expect(forwarded?.name).toBe(canonicalComposite(STACK, DOMAIN));
-    expect(forwarded?.headers.get("X-CAS-Stack-Id")).toBe(STACK);
-    expect(forwarded?.headers.get("X-CAS-Tenant-Id")).toBe(TENANT);
+    expect(forwarded?.headers.get("X-CAS-App-Id")).toBe(STACK);
+    expect(forwarded?.headers.get("X-CAS-Space-Id")).toBe(TENANT);
+    expect(forwarded?.headers.has("X-CAS-Stack-Id")).toBe(false);
+    expect(forwarded?.headers.has("X-CAS-Tenant-Id")).toBe(false);
     expect(forwarded?.headers.get("X-CAS-Ref-Domain")).toBe(DOMAIN);
     const body = JSON.parse(forwarded!.body) as { requestId: string; changes: Record<string, number> };
     expect(body).toEqual({ requestId: "r1", changes: { [H1]: 1 } });
@@ -228,7 +230,7 @@ describe("CasDurableObject (tenant DO)", () => {
     };
     const doInstance = new CasDurableObject(
       {} as DurableObjectState,
-      { CAS_DB: db!, CAS_R2: bucket!, CAS_DOMAIN_DO: stubNamespace as unknown as TenantCasDoEnv["CAS_DOMAIN_DO"] },
+      { CAS_DB: db!, CAS_R2: bucket!, CAS_DOMAIN_DO: stubNamespace as unknown as SpaceCasDoEnv["CAS_DOMAIN_DO"] },
     );
     const body = `{"requestId":"r","changes":{"${H1}":1,"${H1}":2}}`;
     const response = await doInstance.fetch(new Request("https://tenant.internal/updateRootRefs", {
@@ -256,7 +258,7 @@ describe("CasDurableObject (tenant DO)", () => {
     };
     const doInstance = new CasDurableObject(
       {} as DurableObjectState,
-      { CAS_DB: db!, CAS_R2: bucket!, CAS_DOMAIN_DO: stubNamespace as unknown as TenantCasDoEnv["CAS_DOMAIN_DO"] },
+      { CAS_DB: db!, CAS_R2: bucket!, CAS_DOMAIN_DO: stubNamespace as unknown as SpaceCasDoEnv["CAS_DOMAIN_DO"] },
     );
     const mutation = doInstance.fetch(new Request("https://tenant.internal/updateRootRefs", {
       method: "POST",
@@ -296,7 +298,7 @@ function tenantDo(bucketOverride: R2Bucket = bucket!): CasDurableObject {
     {
       CAS_DB: db!,
       CAS_R2: bucketOverride,
-      CAS_DOMAIN_DO: {} as TenantCasDoEnv["CAS_DOMAIN_DO"],
+      CAS_DOMAIN_DO: {} as SpaceCasDoEnv["CAS_DOMAIN_DO"],
       CAS_R2_ACCOUNT_ID: "account-id",
       CAS_R2_BUCKET_NAME: "do-test-bucket",
       CAS_R2_ACCESS_KEY_ID: "access-key-id",
@@ -435,7 +437,7 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
       },
     });
     const session = await db!.prepare(
-      "SELECT temporary_object_key FROM cas_direct_upload_sessions WHERE stack_id = ? AND tenant_id = ? AND hash = ?",
+      "SELECT temporary_object_key FROM cas_direct_upload_sessions WHERE app_id = ? AND space_id = ? AND hash = ?",
     ).bind(STACK, TENANT, hash).first<{ temporary_object_key: string }>();
     expect(session).not.toBeNull();
     await bucket!.put(session!.temporary_object_key, canonical);
@@ -448,9 +450,9 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
     expect(await finalized.json()).toMatchObject({ hash, ready: true });
     expect(await bucket!.head(session!.temporary_object_key)).toBeNull();
     expect(await db!.prepare(
-      "SELECT 1 FROM cas_direct_upload_sessions WHERE stack_id = ? AND tenant_id = ? AND hash = ?",
+      "SELECT 1 FROM cas_direct_upload_sessions WHERE app_id = ? AND space_id = ? AND hash = ?",
     ).bind(STACK, TENANT, hash).first()).toBeNull();
-    expect(new Uint8Array(await (await bucket!.get(stackCanonicalNodeKey(STACK, TENANT, hash)))!.arrayBuffer()))
+    expect(new Uint8Array(await (await bucket!.get(appCanonicalNodeKey(STACK, TENANT, hash)))!.arrayBuffer()))
       .toEqual(canonical);
   });
 
@@ -472,12 +474,12 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
     expect(finalized.status).toBe(412);
     expect(await finalized.json()).toMatchObject({ error: NodeOpErrorCodes.UPLOAD_INCOMPLETE });
     expect(await db!.prepare(
-      "SELECT 1 FROM cas_direct_upload_sessions WHERE stack_id = ? AND tenant_id = ? AND hash = ?",
+      "SELECT 1 FROM cas_direct_upload_sessions WHERE app_id = ? AND space_id = ? AND hash = ?",
     ).bind(STACK, TENANT, hash).first()).toBeNull();
     expect(await db!.prepare(
-      "SELECT 1 FROM cas_upload_reservations WHERE stack_id = ? AND tenant_id = ? AND hash = ?",
+      "SELECT 1 FROM cas_upload_reservations WHERE app_id = ? AND space_id = ? AND hash = ?",
     ).bind(STACK, TENANT, hash).first()).toBeNull();
-    expect(await bucket!.head(stackCanonicalNodeKey(STACK, TENANT, hash))).toBeNull();
+    expect(await bucket!.head(appCanonicalNodeKey(STACK, TENANT, hash))).toBeNull();
   });
 
   test("rejects a direct upload with the wrong digest and removes all upload state", async () => {
@@ -498,7 +500,7 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
     }));
     const prepared = await preparedResponse.json<{ uploadId: string }>();
     const session = await db!.prepare(
-      "SELECT temporary_object_key FROM cas_direct_upload_sessions WHERE stack_id = ? AND tenant_id = ? AND hash = ?",
+      "SELECT temporary_object_key FROM cas_direct_upload_sessions WHERE app_id = ? AND space_id = ? AND hash = ?",
     ).bind(STACK, TENANT, hash).first<{ temporary_object_key: string }>();
     await bucket!.put(session!.temporary_object_key, canonical);
 
@@ -510,12 +512,12 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
     expect(finalized.status).toBe(422);
     expect(await finalized.json()).toMatchObject({ error: NodeOpErrorCodes.DIGEST_MISMATCH });
     expect(await bucket!.head(session!.temporary_object_key)).toBeNull();
-    expect(await bucket!.head(stackCanonicalNodeKey(STACK, TENANT, hash))).toBeNull();
+    expect(await bucket!.head(appCanonicalNodeKey(STACK, TENANT, hash))).toBeNull();
     expect(await db!.prepare(
-      "SELECT 1 FROM cas_direct_upload_sessions WHERE stack_id = ? AND tenant_id = ? AND hash = ?",
+      "SELECT 1 FROM cas_direct_upload_sessions WHERE app_id = ? AND space_id = ? AND hash = ?",
     ).bind(STACK, TENANT, hash).first()).toBeNull();
     expect(await db!.prepare(
-      "SELECT 1 FROM cas_upload_reservations WHERE stack_id = ? AND tenant_id = ? AND hash = ?",
+      "SELECT 1 FROM cas_upload_reservations WHERE app_id = ? AND space_id = ? AND hash = ?",
     ).bind(STACK, TENANT, hash).first()).toBeNull();
   });
 
@@ -553,7 +555,7 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
     expect(lease.status, leaseText).toBe(200);
     expect(JSON.parse(leaseText)).toMatchObject({ hash, ready: true });
 
-    const stored = await bucket!.get(stackCanonicalNodeKey(STACK, TENANT, hash));
+    const stored = await bucket!.get(appCanonicalNodeKey(STACK, TENANT, hash));
     expect(new Uint8Array(await stored!.arrayBuffer())).toEqual(canonical);
     const read = await doInstance.fetch(tenantRequest("/read", "GET", { "X-CAS-Hash": hash }));
     expect(new Uint8Array(await read.arrayBuffer())).toEqual(content);
@@ -620,9 +622,9 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
       "Content-Length": String(canonical.length),
     }, canonical));
     expect(response.status).toBe(400);
-    expect(await bucket!.head(stackCanonicalNodeKey(STACK, TENANT, H1))).toBeNull();
+    expect(await bucket!.head(appCanonicalNodeKey(STACK, TENANT, H1))).toBeNull();
     const reservation = await db!.prepare(
-      "SELECT COUNT(*) AS count FROM cas_upload_reservations WHERE stack_id = ? AND tenant_id = ? AND hash = ?",
+      "SELECT COUNT(*) AS count FROM cas_upload_reservations WHERE app_id = ? AND space_id = ? AND hash = ?",
     ).bind(STACK, TENANT, H1).first<{ count: number }>();
     expect(reservation?.count).toBe(1);
   });
@@ -695,7 +697,7 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
     expect((await first).status).toBe(200);
     expect((await second).status).toBe(200);
     const rows = await db!.prepare(
-      "SELECT COUNT(*) AS count FROM cas_nodes WHERE stack_id = ? AND tenant_id = ? AND hash = ?",
+      "SELECT COUNT(*) AS count FROM cas_nodes WHERE app_id = ? AND space_id = ? AND hash = ?",
     ).bind(STACK, TENANT, hash).first<{ count: number }>();
     expect(rows?.count).toBe(1);
   });
@@ -711,14 +713,14 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
       content,
     );
     const hash = hashToHex(await sha256(canonical));
-    await bucket!.put(stackCanonicalNodeKey(STACK, TENANT, hash), canonical, { sha256: hash });
+    await bucket!.put(appCanonicalNodeKey(STACK, TENANT, hash), canonical, { sha256: hash });
 
     const response = await tenantDo().fetch(tenantRequest("/lease", "POST", {
       "X-CAS-Hash": hash,
     }));
     expect(response.status).toBe(200);
     const row = await db!.prepare(
-      "SELECT content_size FROM cas_nodes WHERE stack_id = ? AND tenant_id = ? AND hash = ?",
+      "SELECT content_size FROM cas_nodes WHERE app_id = ? AND space_id = ? AND hash = ?",
     ).bind(STACK, TENANT, hash).first<{ content_size: number }>();
     expect(row).toEqual({ content_size: content.length });
   });
@@ -754,7 +756,7 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
     expect(lease.status).toBe(200);
     const leaseBody = await lease.json();
     expect(leaseBody).toMatchObject({ hash, ready: true });
-    expect((await bucket!.head(stackCanonicalNodeKey(STACK, TENANT, hash)))?.size).toBe(canonical.length);
+    expect((await bucket!.head(appCanonicalNodeKey(STACK, TENANT, hash)))?.size).toBe(canonical.length);
 
     const read = await doInstance.fetch(tenantRequest("/read", "GET", { "X-CAS-Hash": hash }));
     expect(read.status).toBe(200);
@@ -892,19 +894,19 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
     // Unreferenced node with an expired lease (root_ref_count 0, lease in the past).
     const dead = "d".repeat(64);
     await db!.prepare(
-      "INSERT INTO cas_nodes (stack_id, tenant_id, hash, content_size, content_type, lease_started_at, lease_expires_at, child_ref_count, root_ref_count) VALUES (?, ?, ?, 5, 'text/plain', 1, 1, 0, 0)",
+      "INSERT INTO cas_nodes (app_id, space_id, hash, content_size, content_type, lease_started_at, lease_expires_at, child_ref_count, root_ref_count) VALUES (?, ?, ?, 5, 'text/plain', 1, 1, 0, 0)",
     ).bind(STACK, TENANT, dead).run();
-    await bucket!.put(stackCanonicalNodeKey(STACK, TENANT, dead), new TextEncoder().encode("dead!"));
+    await bucket!.put(appCanonicalNodeKey(STACK, TENANT, dead), new TextEncoder().encode("dead!"));
 
     const doInstance = tenantDo(nodeHostedStreamBucket());
     const gc = await doInstance.fetch(tenantRequest("/gc", "POST", {}, new TextEncoder().encode("{}")));
     expect(gc.status).toBe(200);
     await expect(gc.json()).resolves.toMatchObject({ examined: 1, deleted: 1, reclaimedContentBytes: 5 });
 
-    expect(await bucket!.get(stackCanonicalNodeKey(STACK, TENANT, dead))).toBeNull();
+    expect(await bucket!.get(appCanonicalNodeKey(STACK, TENANT, dead))).toBeNull();
     for (const content of ["keep", "held"]) {
       const hash = await digestOf(content);
-      expect(await bucket!.get(stackCanonicalNodeKey(STACK, TENANT, hash))).not.toBeNull();
+      expect(await bucket!.get(appCanonicalNodeKey(STACK, TENANT, hash))).not.toBeNull();
     }
   });
 
@@ -913,21 +915,21 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
     const hash = "d".repeat(64);
     await db!.batch([
       db!.prepare(
-        "INSERT INTO cas_nodes (stack_id, tenant_id, hash, content_size, content_type, lease_started_at, lease_expires_at, child_ref_count, root_ref_count) VALUES (?, ?, ?, 5, 'text/plain', 1, 1, 0, 0)",
+        "INSERT INTO cas_nodes (app_id, space_id, hash, content_size, content_type, lease_started_at, lease_expires_at, child_ref_count, root_ref_count) VALUES (?, ?, ?, 5, 'text/plain', 1, 1, 0, 0)",
       ).bind(STACK, TENANT, hash),
       db!.prepare(
-        "INSERT INTO cas_upload_reservations (stack_id, tenant_id, hash, stored_bytes, created_at, expires_at) VALUES (?, ?, ?, 5, 1, ?)",
+        "INSERT INTO cas_upload_reservations (app_id, space_id, hash, stored_bytes, created_at, expires_at) VALUES (?, ?, ?, 5, 1, ?)",
       ).bind(STACK, TENANT, hash, Date.now() + 60_000),
     ]);
-    await bucket!.put(stackCanonicalNodeKey(STACK, TENANT, hash), new TextEncoder().encode("node!"));
+    await bucket!.put(appCanonicalNodeKey(STACK, TENANT, hash), new TextEncoder().encode("node!"));
     const doInstance = tenantDo(nodeHostedStreamBucket());
 
     const fenced = await doInstance.fetch(tenantRequest("/gc", "POST", {}, new TextEncoder().encode("{}")));
     await expect(fenced.json()).resolves.toEqual({ examined: 0, deleted: 0, reclaimedContentBytes: 0 });
-    expect(await bucket!.head(stackCanonicalNodeKey(STACK, TENANT, hash))).not.toBeNull();
+    expect(await bucket!.head(appCanonicalNodeKey(STACK, TENANT, hash))).not.toBeNull();
 
     await db!.prepare(
-      "UPDATE cas_upload_reservations SET expires_at = 1 WHERE stack_id = ? AND tenant_id = ? AND hash = ?",
+      "UPDATE cas_upload_reservations SET expires_at = 1 WHERE app_id = ? AND space_id = ? AND hash = ?",
     ).bind(STACK, TENANT, hash).run();
     const expired = await doInstance.fetch(tenantRequest("/gc", "POST", {}, new TextEncoder().encode("{}")));
     await expect(expired.json()).resolves.toMatchObject({ examined: 1, deleted: 1 });
@@ -939,19 +941,19 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
     const child = "e".repeat(64);
     for (const [hash, childRefCount] of [[parent, 0], [child, 2]] as const) {
       await db!.prepare(
-        "INSERT INTO cas_nodes (stack_id, tenant_id, hash, content_size, content_type, lease_started_at, lease_expires_at, child_ref_count, root_ref_count) VALUES (?, ?, ?, 5, 'text/plain', 1, 1, ?, 0)",
+        "INSERT INTO cas_nodes (app_id, space_id, hash, content_size, content_type, lease_started_at, lease_expires_at, child_ref_count, root_ref_count) VALUES (?, ?, ?, 5, 'text/plain', 1, 1, ?, 0)",
       ).bind(STACK, TENANT, hash, childRefCount).run();
       await bucket!.put(
-        stackCanonicalNodeKey(STACK, TENANT, hash),
+        appCanonicalNodeKey(STACK, TENANT, hash),
         new TextEncoder().encode("node!"),
       );
     }
     await db!.batch([
       db!.prepare(
-        "INSERT INTO cas_edges (stack_id, tenant_id, parent_hash, ordinal, child_hash) VALUES (?, ?, ?, 0, ?)",
+        "INSERT INTO cas_edges (app_id, space_id, parent_hash, ordinal, child_hash) VALUES (?, ?, ?, 0, ?)",
       ).bind(STACK, TENANT, parent, child),
       db!.prepare(
-        "INSERT INTO cas_edges (stack_id, tenant_id, parent_hash, ordinal, child_hash) VALUES (?, ?, ?, 1, ?)",
+        "INSERT INTO cas_edges (app_id, space_id, parent_hash, ordinal, child_hash) VALUES (?, ?, ?, 1, ?)",
       ).bind(STACK, TENANT, parent, child),
     ]);
 
@@ -964,7 +966,7 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
     ));
     await expect(first.json()).resolves.toMatchObject({ examined: 1, deleted: 1 });
     const childRow = await db!.prepare(
-      "SELECT child_ref_count FROM cas_nodes WHERE stack_id = ? AND tenant_id = ? AND hash = ?",
+      "SELECT child_ref_count FROM cas_nodes WHERE app_id = ? AND space_id = ? AND hash = ?",
     ).bind(STACK, TENANT, child).first<{ child_ref_count: number }>();
     expect(childRow?.child_ref_count).toBe(0);
 
@@ -975,7 +977,7 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
       new TextEncoder().encode('{"maxNodes":1}'),
     ));
     await expect(second.json()).resolves.toMatchObject({ examined: 1, deleted: 1 });
-    expect(await bucket!.get(stackCanonicalNodeKey(STACK, TENANT, child))).toBeNull();
+    expect(await bucket!.get(appCanonicalNodeKey(STACK, TENANT, child))).toBeNull();
   });
 
   test("nodes, leases, usage, and GC are isolated per stack for the same tenant id", async () => {
@@ -995,7 +997,7 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
     // Same tenant id under another stack: the node is invisible.
     const otherDo = new CasDurableObject(
       {} as DurableObjectState,
-      { CAS_DB: db!, CAS_R2: bucket!, CAS_DOMAIN_DO: {} as TenantCasDoEnv["CAS_DOMAIN_DO"] },
+      { CAS_DB: db!, CAS_R2: bucket!, CAS_DOMAIN_DO: {} as SpaceCasDoEnv["CAS_DOMAIN_DO"] },
     );
     const otherRead = await otherDo.fetch(new Request("https://tenant.internal/read", {
       method: "GET",
@@ -1014,7 +1016,7 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
 
     // GC in the other stack must not delete this stack's unreferenced nodes.
     await db!.prepare(
-      "INSERT INTO cas_nodes (stack_id, tenant_id, hash, content_size, content_type, lease_started_at, lease_expires_at, child_ref_count, root_ref_count) VALUES (?, ?, ?, 5, 'text/plain', 1, 1, 0, 0)",
+      "INSERT INTO cas_nodes (app_id, space_id, hash, content_size, content_type, lease_started_at, lease_expires_at, child_ref_count, root_ref_count) VALUES (?, ?, ?, 5, 'text/plain', 1, 1, 0, 0)",
     ).bind(otherStack, TENANT, "e".repeat(64)).run();
     const gcB = await otherDo.fetch(new Request("https://tenant.internal/gc", {
       method: "POST",
@@ -1022,6 +1024,6 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
       body: "{}",
     }));
     expect(gcB.status).toBe(200);
-    expect(await bucket!.get(stackCanonicalNodeKey(STACK, TENANT, hash))).not.toBeNull();
+    expect(await bucket!.get(appCanonicalNodeKey(STACK, TENANT, hash))).not.toBeNull();
   });
 });

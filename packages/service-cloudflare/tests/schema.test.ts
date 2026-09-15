@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import type { D1Database } from "@cloudflare/workers-types";
 import { migrateControlSchema } from "../src/control-schema.js";
-import { migrateStackTenantSchema } from "../src/schema.js";
+import { migrateAppSpaceSchema } from "../src/schema.js";
 
 let miniflare: Miniflare | undefined;
 let db: D1Database | undefined;
@@ -25,14 +25,14 @@ async function createDb(): Promise<D1Database> {
   }));
   await miniflare.ready;
   db = await miniflare.getD1Database("DB", "task5-test");
-  await migrateStackTenantSchema(db);
+  await migrateAppSpaceSchema(db);
   return db;
 }
 
-describe("stack-scoped tenant schema", () => {
-  test("creates stack-aware authoritative and audit tables, idempotently", async () => {
+describe("App-scoped Space schema", () => {
+  test("creates App-aware authoritative and audit tables, idempotently", async () => {
     const database = await createDb();
-    await migrateStackTenantSchema(database); // rerun must be a no-op
+    await migrateAppSpaceSchema(database); // rerun must be a no-op
 
     const tables = await database.prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
@@ -54,11 +54,11 @@ describe("stack-scoped tenant schema", () => {
     expect(names.has("cas_r2_migration_manifest")).toBe(false);
   });
 
-  test("nodes are keyed by (stack_id, tenant_id, hash)", async () => {
+  test("nodes are keyed by (app_id, space_id, hash)", async () => {
     const database = await createDb();
     const columns = await database.prepare("PRAGMA table_info(cas_nodes)").all<{ name: string; pk: number; dflt_value: string | null }>();
     const pk = columns.results!.filter((column) => column.pk > 0).map((column) => column.name);
-    expect(pk).toEqual(["stack_id", "tenant_id", "hash"]);
+    expect(pk).toEqual(["app_id", "space_id", "hash"]);
     expect(columns.results!.some((column) => column.name === "object_format")).toBe(false);
   });
 });

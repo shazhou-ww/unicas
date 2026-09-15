@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
-import { migrateStackTenantSchema } from "../src/schema.js";
+import { migrateAppSpaceSchema } from "../src/schema.js";
 import { canonicalizeRootRefsUpdate, executeDomainUpdate } from "../src/root-refs.js";
 import {
   listRootDomainEvents,
@@ -9,7 +9,7 @@ import {
   listRootDomains,
   AuditReadError,
 } from "../src/audit-reads.js";
-import { stackCanonicalNodeKey } from "../src/do-names.js";
+import { appCanonicalNodeKey } from "../src/do-names.js";
 
 let miniflare: Miniflare | undefined;
 let db: D1Database | undefined;
@@ -36,7 +36,7 @@ async function createStore(): Promise<void> {
   await miniflare.ready;
   db = await miniflare.getD1Database("DB", "audit-reads-test");
   bucket = await miniflare.getR2Bucket("BUCKET", "audit-reads-test");
-  await migrateStackTenantSchema(db);
+  await migrateAppSpaceSchema(db);
 }
 
 const STACK = "cas_stack_a";
@@ -51,21 +51,21 @@ async function seedProjection(
   rows: { tenantId: string; hash: string; count: number }[],
 ): Promise<void> {
   await db!.prepare(
-    "INSERT INTO cas_root_domain_revisions (stack_id, ref_domain, revision) VALUES (?, ?, ?) ON CONFLICT(stack_id, ref_domain) DO UPDATE SET revision = MAX(revision, excluded.revision)",
+    "INSERT INTO cas_root_domain_revisions (app_id, ref_domain, revision) VALUES (?, ?, ?) ON CONFLICT(app_id, ref_domain) DO UPDATE SET revision = MAX(revision, excluded.revision)",
   ).bind(STACK, DOMAIN, revision).run();
   for (const row of rows) {
     await db!.prepare(
-      "INSERT INTO cas_root_domain_refs (stack_id, ref_domain, tenant_id, hash, ref_count) VALUES (?, ?, ?, ?, ?) ON CONFLICT(stack_id, ref_domain, tenant_id, hash) DO UPDATE SET ref_count = excluded.ref_count",
+      "INSERT INTO cas_root_domain_refs (app_id, ref_domain, space_id, hash, ref_count) VALUES (?, ?, ?, ?, ?) ON CONFLICT(app_id, ref_domain, space_id, hash) DO UPDATE SET ref_count = excluded.ref_count",
     ).bind(STACK, DOMAIN, row.tenantId, row.hash, row.count).run();
   }
 }
 
 async function seedEvent(revision: number, tenantId: string, requestId: string, changes: Record<string, number>): Promise<void> {
   await db!.prepare(
-    "INSERT INTO cas_root_domain_revisions (stack_id, ref_domain, revision) VALUES (?, ?, ?) ON CONFLICT(stack_id, ref_domain) DO UPDATE SET revision = MAX(revision, excluded.revision)",
+    "INSERT INTO cas_root_domain_revisions (app_id, ref_domain, revision) VALUES (?, ?, ?) ON CONFLICT(app_id, ref_domain) DO UPDATE SET revision = MAX(revision, excluded.revision)",
   ).bind(STACK, DOMAIN, revision).run();
   await db!.prepare(
-    "INSERT INTO cas_root_domain_events (stack_id, ref_domain, revision, tenant_id, request_id, payload_hash, changes_json, applied_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO cas_root_domain_events (app_id, ref_domain, revision, space_id, request_id, payload_hash, changes_json, applied_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
   ).bind(STACK, DOMAIN, revision, tenantId, requestId, "p".repeat(64), JSON.stringify(changes), revision * 1000).run();
 }
 
@@ -74,10 +74,10 @@ describe("listRootDomains", () => {
     await createStore();
     await seedProjection(3, []);
     await db!.prepare(
-      "INSERT INTO cas_root_domain_revisions (stack_id, ref_domain, revision) VALUES (?, ?, ?)",
+      "INSERT INTO cas_root_domain_revisions (app_id, ref_domain, revision) VALUES (?, ?, ?)",
     ).bind(STACK, "asset", 2).run();
     await db!.prepare(
-      "INSERT INTO cas_root_domain_revisions (stack_id, ref_domain, revision) VALUES (?, ?, ?)",
+      "INSERT INTO cas_root_domain_revisions (app_id, ref_domain, revision) VALUES (?, ?, ?)",
     ).bind("cas_other", "other", 9).run();
 
     expect(await listRootDomains({ db: db!, stackId: STACK })).toEqual([
@@ -204,9 +204,9 @@ describe("listRootDomainEvents", () => {
   test("idempotent retries never duplicate events", async () => {
     await createStore();
     await db!.prepare(
-      "INSERT INTO cas_nodes (stack_id, tenant_id, hash, content_size, content_type, lease_started_at, lease_expires_at, child_ref_count, root_ref_count) VALUES (?, ?, ?, 10, 'text/plain', 1, 1, 0, 0)",
+      "INSERT INTO cas_nodes (app_id, space_id, hash, content_size, content_type, lease_started_at, lease_expires_at, child_ref_count, root_ref_count) VALUES (?, ?, ?, 10, 'text/plain', 1, 1, 0, 0)",
     ).bind(STACK, "tenant-a", H1).run();
-    await bucket!.put(stackCanonicalNodeKey(STACK, "tenant-a", H1), new TextEncoder().encode("content"));
+    await bucket!.put(appCanonicalNodeKey(STACK, "tenant-a", H1), new TextEncoder().encode("content"));
     const canonical = await canonicalizeRootRefsUpdate({ requestId: "dup", changes: { [H1]: 1 }, refDomain: DOMAIN });
     for (let i = 0; i < 2; i += 1) {
       await executeDomainUpdate({

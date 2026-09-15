@@ -29,7 +29,7 @@ Updated: 2026-09-15
 - [x] Add App/Space smoke coverage while retaining frozen v1 smoke.
 - [x] Complete the documentation tracker.
 - [x] Clear the physical inventory and strategy gate.
-- [ ] Implement the clean physical App/Space schema and key source changes.
+- [x] Implement the clean physical App/Space schema and key source changes.
 - [ ] Execute the approved production reset, deploy, smoke, and rollback validation.
 
 ## Current state
@@ -72,13 +72,16 @@ environment is smoke-only and selects a clean rebuild. Production reset/deploy
 was not executed and still requires fresh off-machine backups, repeated
 inventory, rendered plan review, and explicit approval.
 
-The clean physical source cutover has started. Control D1 now creates
+The clean physical source cutover is complete. Control D1 now creates
 `cas_apps`, `cas_app_members`, and related App tables with `app_id`; its
 repository, authority resolver, Worker issuer lookups, and direct D1 fixtures
 use the same schema. The clean migration no longer alters, copies, or deletes
-legacy Stack tables. Data D1, Durable Object names, R2 keys, reset tooling, and
-all production execution remain unchanged. The next concrete action is the
-data D1 `app_id`/`space_id` slice.
+legacy Stack tables. Data D1 uses `app_id`/`space_id`, canonical objects use
+`apps/{appId}/spaces/{spaceId}/nodes-v2/{hash}`, and the CAS Durable Object
+normalizes both v1 and v2 ingress to an App/Space scope before sending
+App/Space-only commands to the Root Ref domain object. Reset tooling and all
+production execution remain unchanged. The next concrete action is updating
+the reset guards and rendered plan for the clean physical model.
 
 ## Decisions
 
@@ -256,6 +259,16 @@ data D1 `app_id`/`space_id` slice.
 - Authority and Worker issuer lookup tests passed: 2 files and 20 tests.
 - The complete `@unicas/service-cloudflare` suite passed: 20 files and 202
   tests; its TypeScript project typecheck passed.
+- Data schema tests passed with `(app_id, space_id, hash)` as the node primary
+  key and idempotent App/Space table creation.
+- Node, Root Ref, audit reader, and Durable Object focused validation passed:
+  26 DO tests, 14 Root Ref tests, 11 audit-read tests, and 7 audit-RPC tests.
+- R2 key tests passed all 4 cases for the exact
+  `apps/{appId}/spaces/{spaceId}/nodes-v2/{hash}` path and collision-safe App
+  composite names.
+- After the complete physical source cutover, the full
+  `@unicas/service-cloudflare` suite passed 20 files and 202 tests again; its
+  TypeScript project typecheck passed.
 
 ## Blockers
 
