@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
@@ -9,8 +11,10 @@ import {
 } from "../stacks/unicas/deploy/deploy.mjs";
 import {
   parseResetArgs,
+  r2BackupPlan,
   resetPlan,
   SCOPED_INVENTORY_QUERIES,
+  validateR2BackupFiles,
   validateResetInventory,
 } from "../stacks/unicas/deploy/reset-smoke.mjs";
 import { normalizeSmokeBaseUrl } from "../scripts/smoke-target.mjs";
@@ -212,6 +216,35 @@ describe("standalone deployment plan", () => {
     expect(rendered).toContain("--binding OAUTH_KV --remote");
     expect(rendered).not.toContain("unicas.shazhou.work");
     expect(rendered).not.toContain("unidocs-cas");
+  });
+
+  test("the smoke reset backs up and verifies every R2 object before deletion", () => {
+    const backupDir = mkdtempSync(join(tmpdir(), "unicas-reset-backup-"));
+    try {
+      const content = Buffer.from("canonical smoke node");
+      const hash = createHash("sha256").update(content).digest("hex");
+      const objectKey = `stacks/cas_smoke/tenants/deploy-smoke/nodes-v2/${hash}`;
+      const commands = r2BackupPlan({ objectKeys: [objectKey] }, backupDir);
+      const rendered = commands[0].join(" ");
+      expect(rendered).toContain(`r2 object get unicas-content/${objectKey}`);
+      expect(rendered).toContain(`--file ${join(backupDir, "r2", `${hash}.bin`)}`);
+      expect(rendered).toContain("--remote");
+
+      mkdirSync(join(backupDir, "r2"));
+      writeFileSync(join(backupDir, "r2", `${hash}.bin`), content);
+      expect(validateR2BackupFiles([objectKey], backupDir)).toEqual([{
+        objectKey,
+        file: `r2/${hash}.bin`,
+        bytes: content.length,
+        sha256: hash,
+      }]);
+
+      writeFileSync(join(backupDir, "r2", `${hash}.bin`), "corrupt");
+      expect(() => validateR2BackupFiles([objectKey], backupDir))
+        .toThrow("R2 backup digest does not match its canonical key");
+    } finally {
+      rmSync(backupDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    }
   });
 
   test("assigns product and service origins to separate Workers", () => {

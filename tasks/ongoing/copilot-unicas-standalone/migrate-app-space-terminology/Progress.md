@@ -81,9 +81,12 @@ has occurred. The one-time pre-cutover reset now checks every scoped legacy
 table and drops the old schemas so the new Worker can create clean App/Space
 tables. The four public origins are live, both split-origin Google callbacks
 are registered, and all local build, test, typecheck, dry-run, and secret-scan
-gates pass. The next concrete action is to repeat the production inventory,
-create fresh verified off-machine backups, review the current rendered reset
-plan, and seek explicit reset/deploy approval.
+gates pass. Destructive execution now also requires both D1 exports and every
+D1-derived R2 object to be present in a fresh backup directory; canonical R2
+objects are verified against their SHA-256 keys before a manifest is written.
+The next concrete action is to obtain an off-machine backup directory and
+explicit reset/deploy approval, then repeat the production inventory and
+render the final plan immediately before execution.
 
 ## Decisions
 
@@ -295,6 +298,10 @@ plan, and seek explicit reset/deploy approval.
   leaks. GitHub Actions run `34927496846` passed for published head `3a3671b`.
 - After adopting the shared task-ledger workflow, `pnpm check:tasks` passed all
   9 checks with this task under the `copilot-unicas-standalone` identity.
+- Reset backup validation passed 14 focused deployment tests and the combined
+  docs/task/deployment run passed 3 files and 26 tests. A live no-execute plan
+  placed both R2 downloads before the corresponding deletes and all D1 drops;
+  no backup file or cloud resource was changed.
 
 ## Blockers
 

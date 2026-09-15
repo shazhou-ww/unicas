@@ -106,8 +106,8 @@ wrangler deploy
 Backup (manual or scheduled; daily target):
 
 ```text
-wrangler d1 export unicas-control --remote --no-schema --output backup-cas-control.sql
-wrangler d1 export unicas-tenant --remote --no-schema --output backup-cas-tenant.sql
+wrangler d1 export unicas-control --remote --no-schema --output <cutover>/unicas-control.sql
+wrangler d1 export unicas-tenant --remote --no-schema --output <cutover>/unicas-tenant.sql
 ```
 
 `--remote` is mandatory (without it wrangler exports an empty local DB).
@@ -120,7 +120,9 @@ For the split-origin smoke-only cutover, review the live reset plan after both
 exports complete:
 
 ```powershell
-node stacks/unicas/deploy/reset-smoke.mjs --expected-stack-id <current-smoke-stack-id>
+node stacks/unicas/deploy/reset-smoke.mjs `
+   --expected-stack-id <current-smoke-stack-id> `
+   --backup-dir <off-machine-cutover-directory>
 ```
 
 This is a physical pre-cutover tool: its Stack/Tenant flags and output match the
@@ -130,6 +132,12 @@ unexpected object-key shape, or a managed issuer not bound to
 `api.unicas.work`. The rendered D1 commands drop the legacy physical tables;
 they do not merely delete rows, because retained `stack_id`/`tenant_id` columns
 would block the new Worker from creating the clean App/Space schema.
+
+With `--backup-dir`, the rendered plan downloads every D1-derived canonical R2
+object before showing its delete. Execution verifies each downloaded object's
+SHA-256 against its canonical key and writes `backup-manifest.json` containing
+the D1 and R2 sizes and hashes. A missing, empty, stale, or mismatched backup
+aborts before any R2 delete or D1 drop.
 
 Run the destructive command only inside the approved maintenance window, then
 deploy the new Worker immediately so it can create the `app_id`/`space_id`

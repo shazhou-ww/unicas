@@ -1,4 +1,5 @@
-import { existsSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
@@ -150,13 +151,70 @@ export function resetPlan(inventory) {
   return commands;
 }
 
-function validateBackups(backupDir) {
+export function r2BackupPlan(inventory, backupDir) {
+  return inventory.objectKeys.map((key) => wrangler(
+    "r2", "object", "get", `${CONTENT_BUCKET}/${key}`,
+    "--file", r2BackupFilePath(backupDir, key), "--remote",
+  ));
+}
+
+export function validateR2BackupFiles(objectKeys, backupDir) {
+  return objectKeys.map((objectKey) => {
+    const expectedHash = canonicalHashFromKey(objectKey);
+    const path = r2BackupFilePath(backupDir, objectKey);
+    if (!existsSync(path) || statSync(path).size === 0) {
+      throw new Error(`required non-empty R2 backup is missing: ${path}`);
+    }
+    const actualHash = createHash("sha256").update(readFileSync(path)).digest("hex");
+    if (actualHash !== expectedHash) {
+      throw new Error(`R2 backup digest does not match its canonical key: ${objectKey}`);
+    }
+    return {
+      objectKey,
+      file: `r2/${expectedHash}.bin`,
+      bytes: statSync(path).size,
+      sha256: actualHash,
+    };
+  });
+}
+
+function validateD1Backups(backupDir) {
+  const records = [];
   for (const name of ["unicas-control.sql", "unicas-tenant.sql"]) {
-    const path = `${backupDir}/${name}`;
+    const path = resolve(backupDir, name);
     if (!existsSync(path) || statSync(path).size === 0) {
       throw new Error(`required non-empty backup is missing: ${path}`);
     }
+    records.push({
+      file: name,
+      bytes: statSync(path).size,
+      sha256: createHash("sha256").update(readFileSync(path)).digest("hex"),
+    });
   }
+  return records;
+}
+
+function canonicalHashFromKey(objectKey) {
+  const match = /\/([a-f0-9]{64})$/.exec(objectKey);
+  if (!match) throw new Error(`R2 object key is not canonical: ${objectKey}`);
+  return match[1];
+}
+
+function r2BackupFilePath(backupDir, objectKey) {
+  return resolve(backupDir, "r2", `${canonicalHashFromKey(objectKey)}.bin`);
+}
+
+function executeR2Backups(inventory, backupDir) {
+  const manifestPath = resolve(backupDir, "backup-manifest.json");
+  if (existsSync(manifestPath)) {
+    throw new Error(`backup manifest already exists; use a fresh backup directory: ${manifestPath}`);
+  }
+  const paths = inventory.objectKeys.map((key) => r2BackupFilePath(backupDir, key));
+  const existing = paths.find((path) => existsSync(path));
+  if (existing) throw new Error(`R2 backup file already exists; use a fresh backup directory: ${existing}`);
+  mkdirSync(resolve(backupDir, "r2"), { recursive: true });
+  for (const command of r2BackupPlan(inventory, backupDir)) run(command);
+  return validateR2BackupFiles(inventory.objectKeys, backupDir);
 }
 
 function wrangler(...args) {
@@ -234,12 +292,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       console.log("No-op. Pass --expected-stack-id to print a live reset plan; add --execute and --backup-dir only after review.");
       process.exit(0);
     }
-    if (options.execute) validateBackups(options.backupDir);
     const inventory = remoteInventory();
     validateResetInventory(inventory, options.expectedStackId);
+    const backupCommands = options.backupDir ? r2BackupPlan(inventory, options.backupDir) : [];
     const commands = resetPlan(inventory);
-    printPlan(commands);
+    printPlan([...backupCommands, ...commands]);
     if (options.execute) {
+      const d1 = validateD1Backups(options.backupDir);
+      const r2 = executeR2Backups(inventory, options.backupDir);
+      writeFileSync(resolve(options.backupDir, "backup-manifest.json"), `${JSON.stringify({ d1, r2 }, null, 2)}\n`, { flag: "wx" });
       for (const command of commands) run(command);
     }
   } catch (error) {
