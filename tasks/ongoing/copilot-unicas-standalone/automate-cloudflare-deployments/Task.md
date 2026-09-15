@@ -103,8 +103,8 @@ GitHub deployment identity and smoke credentials.
 
 ## References
 
-- [Current GitHub Actions workflow](../../../.github/workflows/ci.yml)
-- [Deployment and local configuration](../../../docs/deployment-and-local-configuration.md)
-- [Operations guide](../../../docs/cas-operations.md)
-- [UniCAS stack deployment boundary](../../../stacks/unicas/README.md)
-- [Production deployment orchestrator](../../../stacks/unicas/deploy/deploy.mjs)
+- [Current GitHub Actions workflow](../../../../.github/workflows/ci.yml)
+- [Deployment and local configuration](../../../../docs/deployment-and-local-configuration.md)
+- [Operations guide](../../../../docs/cas-operations.md)
+- [UniCAS stack deployment boundary](../../../../stacks/unicas/README.md)
+- [Production deployment orchestrator](../../../../stacks/unicas/deploy/deploy.mjs)
