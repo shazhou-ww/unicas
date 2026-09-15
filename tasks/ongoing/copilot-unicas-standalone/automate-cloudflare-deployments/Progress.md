@@ -15,8 +15,9 @@ The task is claimed by `copilot-unicas-standalone`. CI now has a serialized
 `Production` environment job for validated `main` pushes and manual `main`
 dispatches. It deploys service, product site, and documentation in order,
 cleans up the ephemeral smoke key, and checks all public origins. The next
-action is to push the locally validated implementation, monitor the first
-protected production run, and address any live-only failures before archiving.
+action is to push the clean-checkout task-directory fix, monitor the next
+protected production run, and address any remaining live-only failures before
+archiving.
 
 ## Decisions
 
@@ -58,6 +59,11 @@ protected production run, and address any live-only failures before archiving.
 - VS Code diagnostics and `git diff --check`: no errors.
 - GitHub's current concurrency documentation confirms that `queue: max` keeps
   up to 100 pending runs and is valid with `cancel-in-progress: false`.
+- GitHub Actions run `34937857808` stopped in validation because claiming the
+  only backlog task left no tracked file under `tasks/backlog/`; the production
+  job was skipped before it could read environment values or contact
+  Cloudflare. Adding `tasks/backlog/.gitkeep` restored the canonical directory,
+  and the exact task-ledger check passed 10/10 locally.
 
 ## Blockers
 
