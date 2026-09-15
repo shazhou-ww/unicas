@@ -6,7 +6,7 @@ Updated: 2026-09-16
 
 - [x] Complete and publish all three prerequisite tasks independently.
 - [x] Settle core authorization and bootstrap policy with the user.
-- [ ] Implement persistent deny-by-default admission, authorities, and audit.
+- [x] Implement persistent deny-by-default admission, authorities, and audit.
 - [ ] Implement protected platform APIs, clients, CLI, and MCP.
 - [ ] Implement invitation-limited login and revocation for existing sessions.
 - [ ] Rebuild Console with source-owned shadcn primitives and two-column navigation.
@@ -17,17 +17,24 @@ Updated: 2026-09-16
 
 Claim `ff3c87e0318d4c30b76111d8cf96302a0b354fba` is verified on `origin/main`.
 The shared platform authorization model, service guards, D1 tables, and atomic
-access mutation repository are implemented locally and pass focused tests.
-These guards are not yet wired into production login, BFF, or MCP request paths;
-the platform APIs and Console rebuild are not implemented. This record
-accompanies a local checkpoint of the authorization foundations, not a complete
-implementation or published completion milestone. No production deployment
-has been performed.
+access mutation repository are implemented and pass focused tests. The admission
+guard is now integrated into the BFF authentication paths:
 
-Next integrate the shared admission guard into authenticated BFF operations
-and test that an existing Google session without a grant or App membership is
-denied without implicitly creating an access-state record. Preserve the
-explicit invitation-limited continuation boundary as that integration proceeds.
+- **Login flow**: After emailAllowlist check (first gate), `PlatformAccessService.requireAccess`
+  is called. A principal without a grant or App membership is denied with
+  `302 /admin/auth/login?error=access-denied`; no access-state record is created.
+  CLI login path redirects to the loopback with `error=access_denied`.
+- **Authenticated request path**: `requireAuthenticated` calls
+  `PlatformAccessService.assertNotBlocked` after reading the session payload.
+  A blocked principal's session is deleted and the request is rejected with 401.
+- **Worker wiring**: `D1PlatformAccessRepository` is injected into `createAdminBff`
+  in `worker.ts`.
+
+All 219 tests pass (`pnpm --filter @unicas/service-cloudflare test`), including
+4 new BFF platform access integration tests.
+
+Next: implement protected platform APIs (list principals, grant/revoke authority)
+and wire the CLI/MCP paths.
 
 ## Decisions
 
@@ -42,6 +49,7 @@ explicit invitation-limited continuation boundary as that integration proceeds.
   delegated operation classes and do not substitute for current authority.
 - All three prerequisite implementations and archives are published on main;
   preserve their accepted minimal write contracts and legacy boundaries.
+- emailAllowlist remains the first gate; platform access is the second gate.
 
 ## Publication milestones
 
@@ -63,6 +71,12 @@ explicit invitation-limited continuation boundary as that integration proceeds.
   self-block rejection, revision conflicts, and durable audit writes.
 - `pnpm --filter @unicas/service-cloudflare typecheck` passed with the new
   authorization repository and its protocol/service dependencies.
+- On 2026-09-16, BFF admission guard integration: `pnpm --filter @unicas/service-cloudflare test`
+  passed all 219 tests (37 BFF tests + 182 others). New BFF tests cover:
+  - Login denied when principal has no grant or membership
+  - Login allowed when principal has explicit grant with authority
+  - Authenticated request denied and session cleared for a blocked principal
+  - emailAllowlist remains first gate (denied before platform access check)
 
 ## Blockers
 
