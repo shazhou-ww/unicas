@@ -32,14 +32,14 @@ and could encourage agents to inspect secret-bearing files.
 
 ## Acceptance criteria
 
-- [ ] The shared skill distinguishes remote identity registration from the
+- [x] The shared skill distinguishes remote identity registration from the
   local worktree binding.
-- [ ] Initialization reserves `.gitkeep` on `main` before setting the local
+- [x] Initialization reserves `.gitkeep` on `main` before setting the local
   `task-ledger.identity` value.
-- [ ] Agents have deterministic commands to read and validate the binding.
-- [ ] Missing, invalid, or unregistered bindings stop task claims until fixed.
-- [ ] The shared skill update is published and restored into UniCAS.
-- [ ] UniCAS task validation passes with the updated skill and lock file.
+- [x] Agents have deterministic commands to read and validate the binding.
+- [x] Missing, invalid, or unregistered bindings stop task claims until fixed.
+- [x] The shared skill update is published and restored into UniCAS.
+- [x] UniCAS task validation passes with the updated skill and lock file.
 
 ## Constraints
 

@@ -17,9 +17,10 @@ participants follow the same convention.
 
 1. Read the repository's agent instructions and `tasks/README.md`, if present.
 2. Treat project-specific rules as authoritative where they refine this skill.
-3. Inspect `tasks/backlog/` and every identity below `tasks/ongoing/` before
+3. Resolve and validate the current worktree identity as described below.
+4. Inspect `tasks/backlog/` and every identity below `tasks/ongoing/` before
    creating or claiming related work.
-4. Preserve unrelated worktree changes. Never move, rewrite, or archive another
+5. Preserve unrelated worktree changes. Never move, rewrite, or archive another
    identity's task merely to clear a conflict.
 
 ## Separate Intake From Execution
@@ -47,16 +48,80 @@ Each worktree should normally use one stable identity. An identity may name a
 person, an agent, a team, or another actor chosen under the team's convention.
 The workflow does not require identities to represent humans.
 
+Identity uses two records with different scopes:
+
+- `tasks/ongoing/<identity>/.gitkeep` on the shared `main` branch registers and
+  reserves the identity for collaboration.
+- `task-ledger.identity` in Git's worktree-scoped config identifies which
+  registered identity the current worktree uses.
+
+Do not store the local binding in `.env`, an environment variable, a tracked
+file, or ordinary repository-local Git config. Application environment files
+have the wrong ownership and may contain secrets; ordinary local Git config is
+shared by linked worktrees.
+
+### Resolve An Existing Binding
+
+Before task work, run:
+
+```sh
+git config --local --get extensions.worktreeConfig
+git config --worktree --get task-ledger.identity
+```
+
+The first command must return `true`. The second must return one lowercase
+kebab-case identity. Fetch the shared `main` branch and verify that
+`tasks/ongoing/<identity>/.gitkeep` exists there. If the extension, value, or
+remote registration is missing or invalid, stop before claiming or resuming a
+task. Do not infer the identity from the worktree path, branch name, operating
+system user, agent name, or the only visible identity lane.
+
+To inspect where Git read the value from, use:
+
+```sh
+git config --show-origin --show-scope --get task-ledger.identity
+```
+
+It must report worktree-scoped configuration. A new clone or worktree must
+establish its own binding; the value intentionally does not travel with Git
+history.
+
+### Initialize A New Binding
+
 Before using a new identity:
 
-1. Fetch the shared `main` branch and inspect the identity directories already
+1. Inspect `core.worktree` and `core.bare` before enabling worktree config:
+
+   ```sh
+   git config --local --get core.worktree
+   git config --local --type=bool --get core.bare
+   ```
+
+   For an ordinary non-bare repository, `core.worktree` is absent and
+   `core.bare` is absent or `false`. If `core.worktree` is present or
+   `core.bare` is `true`, stop and follow Git's `extensions.worktreeConfig`
+   migration requirements before continuing.
+2. Enable worktree-specific configuration once for the repository:
+
+   ```sh
+   git config --local extensions.worktreeConfig true
+   ```
+
+3. Fetch the shared `main` branch and inspect the identity directories already
    present under `tasks/ongoing/` on that branch.
-2. Choose a short lowercase kebab-case name that is not already registered.
-3. Add `tasks/ongoing/<identity>/.gitkeep` in a clean coordination change.
-4. Commit only that reservation and push it directly to `main` before using the
+4. Choose a short lowercase kebab-case name that is not already registered.
+5. Add `tasks/ongoing/<identity>/.gitkeep` in a clean coordination change.
+6. Commit only that reservation and push it directly to `main` before using the
    identity for work.
-5. If the push is rejected or the name appeared after the fetch, do not force
+7. If the push is rejected or the name appeared after the fetch, do not force
    the push. Fetch again, choose another identity, and retry.
+8. Only after the reservation succeeds, bind the current worktree and verify
+   the value and its origin:
+
+   ```sh
+   git config --worktree task-ledger.identity <identity>
+   git config --show-origin --show-scope --get task-ledger.identity
+   ```
 
 The `.gitkeep` preserves the identity lane when it has no active task and
 reserves the name against accidental reuse. Keep the identity stable for the

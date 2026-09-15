@@ -6,6 +6,9 @@ For Issue triage and all planned or multi-step work, load and follow the
 [`repository-task-ledger` skill](.agents/skills/repository-task-ledger/SKILL.md).
 Then apply the UniCAS-specific profile in [`tasks/README.md`](tasks/README.md).
 
+- Resolve the current identity from the worktree-scoped Git key
+  `task-ledger.identity` and verify its lane exists on `origin/main`; never
+  infer it from the path, branch, user, or agent.
 - Inspect `tasks/ongoing/<identity>/` and `tasks/backlog/` before creating or
   claiming related work.
 - Create accepted new work under `tasks/backlog/<task-name>/Task.md`.

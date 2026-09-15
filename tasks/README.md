@@ -57,12 +57,21 @@ convention.
 ## Identity coordination
 
 - Each worktree should normally use one stable identity.
+- The local pointer is the worktree-scoped Git key `task-ledger.identity`; do
+  not store it in `.env` or ordinary repository-local Git config.
+- Before task work, require `extensions.worktreeConfig=true`, read the identity
+  with `git config --worktree --get task-ledger.identity`, and verify its lane
+  exists on `origin/main`. Do not infer a missing value.
 - Identity and task names use lowercase kebab-case.
 - Before choosing a new identity, fetch and inspect identity names already on
   `origin/main`.
 - Reserve a new name by adding `tasks/ongoing/<identity>/.gitkeep` in its own
   commit and pushing that commit directly to `main`. Never force through a
   competing reservation.
+- After that push succeeds, bind the current worktree with
+  `git config --worktree task-ledger.identity <identity>`. Follow the shared
+  skill's `core.worktree` and `core.bare` safety checks before first enabling
+  `extensions.worktreeConfig` in a repository.
 - Publish task claims to the shared `main` history before substantial
   implementation. All worktree branches ultimately integrate into `main`.
 - Keep `.gitkeep` after the lane becomes empty so the identity name remains

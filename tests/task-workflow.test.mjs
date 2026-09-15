@@ -6,6 +6,7 @@ const ROOT = join(import.meta.dirname, "..");
 const TASKS = join(ROOT, "tasks");
 const DOCS = join(ROOT, "docs");
 const AGENT_INSTRUCTIONS = join(ROOT, "AGENTS.md");
+const TASK_PROFILE = join(TASKS, "README.md");
 const TASK_SKILL = join(
   ROOT,
   ".agents",
@@ -76,6 +77,7 @@ describe("repository task workflow", () => {
       "tasks/README.md",
       "tasks/backlog/",
       "tasks/ongoing/<identity>/",
+      "task-ledger.identity",
       "Progress.md",
       "tasks/archived/",
       "Reserve `docs/`",
@@ -89,6 +91,8 @@ describe("repository task workflow", () => {
     expect(existsSync(TASK_SKILL)).toBe(true);
     const skill = readFileSync(TASK_SKILL, "utf8");
     expect(skill).toContain("name: repository-task-ledger");
+    expect(skill).toContain("extensions.worktreeConfig");
+    expect(skill).toContain("task-ledger.identity");
 
     expect(existsSync(SKILLS_LOCK)).toBe(true);
     const lock = JSON.parse(readFileSync(SKILLS_LOCK, "utf8"));
@@ -97,6 +101,18 @@ describe("repository task workflow", () => {
       sourceType: "github",
       skillPath: "skills/repository-task-ledger/SKILL.md",
     });
+  });
+
+  test("documents the worktree-local identity binding", () => {
+    const profile = readFileSync(TASK_PROFILE, "utf8").replace(/\s+/g, " ");
+    for (const required of [
+      "extensions.worktreeConfig",
+      "git config --worktree --get task-ledger.identity",
+      "git config --worktree task-ledger.identity <identity>",
+      "do not store it in `.env`",
+    ]) {
+      expect(profile).toContain(required);
+    }
   });
 
   test("uses the three canonical status directories", () => {
