@@ -242,7 +242,7 @@
     .tab-trigger.active::after { position: absolute; inset: auto 0 -1px; height: 2px; content: ""; background: var(--teal); }
 
     .grid { display: grid; gap: 1rem; }
-    .grid.two { grid-template-columns: minmax(0, 1.25fr) minmax(280px, .75fr); }
+    .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .card { min-width: 0; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 1px 2px rgba(20,25,28,.025); }
     .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.8rem; padding: 1rem 1rem 0.65rem; }
@@ -254,7 +254,7 @@
     .metric-value { display: block; margin-top: 0.35rem; font-size: 1.42rem; font-weight: 700; }
     .metric-note { display: block; margin-top: 0.2rem; color: var(--muted-foreground); font-size: 0.67rem; }
     .definition-list { display: grid; margin: 0; }
-    .definition-row { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 1rem; padding: 0.7rem 0; border-bottom: 1px solid var(--border); }
+    .definition-row { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 1rem; padding: 0.7rem 0; border-bottom: 1px solid var(--border); }
     .definition-row:last-child { border-bottom: 0; }
     .definition-row dt { color: var(--muted-foreground); font-size: 0.72rem; }
     .definition-row dd { margin: 0; font-size: 0.75rem; overflow-wrap: anywhere; }
