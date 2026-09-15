@@ -94,9 +94,10 @@ pnpm smoke:v1                 # explicit frozen v1 compatibility check only
 ```
 
 The v2 smoke script uses one dedicated `deploy-smoke` Space, per-run node hashes,
-and per-run request IDs. It releases the parent Root Ref after assertions, so
-subsequent runs do not accumulate positive Root Refs. It also checks an empty
-isolation Space and rejects both token/route version mismatches.
+and per-run request IDs. After acquiring the parent Root Ref, it releases that
+ref in a `finally` path even when a later assertion fails, so subsequent runs
+do not accumulate positive Root Refs. It also checks an empty isolation Space
+and rejects both token/route version mismatches.
 HTTPS targets skip the paused-body concurrency probe because Cloudflare ingress
 buffers the request body; set `UNICAS_SMOKE_ENABLE_CONCURRENCY=1` only when the
 target preserves streaming ingress. Running smoke twice with a 70s gap also

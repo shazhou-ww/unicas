@@ -133,57 +133,77 @@ async function main() {
   const metadata = await client.readMetadata(parent.hash);
   assert(metadata.hash === parent.hash && metadata.refs[0] === child.hash, "metadata preserves child reference");
 
-  const firstRootUpdate = await client.updateRootRefs({
-    requestId: `${RUN}:roots:1`,
-    changes: { [parent.hash]: 1 },
-  });
-  assert(firstRootUpdate.success === true && typeof firstRootUpdate.revision === "number", "Root Ref update succeeds");
-  const retry = await client.updateRootRefs({
-    requestId: `${RUN}:roots:1`,
-    changes: { [parent.hash]: 1 },
-  });
-  assert(retry.idempotent === true && retry.revision === firstRootUpdate.revision, "Root Ref retry is idempotent");
-  const roots = await client.listRootRefs({ limit: 100 });
-  assert(roots.items.some((item) => item.hash === parent.hash && item.refCount > 0), "Root Ref list contains parent");
+  let rootRetained = false;
+  let smokeFailure;
+  try {
+    const firstRootUpdate = await client.updateRootRefs({
+      requestId: `${RUN}:roots:1`,
+      changes: { [parent.hash]: 1 },
+    });
+    rootRetained = firstRootUpdate.success === true;
+    assert(rootRetained && typeof firstRootUpdate.revision === "number", "Root Ref update succeeds");
+    const retry = await client.updateRootRefs({
+      requestId: `${RUN}:roots:1`,
+      changes: { [parent.hash]: 1 },
+    });
+    assert(retry.idempotent === true && retry.revision === firstRootUpdate.revision, "Root Ref retry is idempotent");
+    const roots = await client.listRootRefs({ limit: 100 });
+    assert(roots.items.some((item) => item.hash === parent.hash && item.refCount > 0), "Root Ref list contains parent");
 
-  const usage = await client.usage();
-  assert(usage.nodeCount >= 2, `Space usage nodeCount -> ${usage.nodeCount}`);
-  const gc = await client.gc({ maxNodes: 100 });
-  assert(gc.deleted === 0, "GC keeps leased nodes");
+    const usage = await client.usage();
+    assert(usage.nodeCount >= 2, `Space usage nodeCount -> ${usage.nodeCount}`);
+    const gc = await client.gc({ maxNodes: 100 });
+    const retainedParent = await client.readMetadata(parent.hash);
+    const retainedChild = await client.readMetadata(child.hash);
+    assert(
+      retainedParent.hash === parent.hash && retainedChild.hash === child.hash,
+      `GC keeps current leased nodes (deleted ${gc.deleted} stale nodes)`,
+    );
 
-  const prefix = `/v2/apps/${encodeURIComponent(APP_ID)}/spaces/${encodeURIComponent(SPACE_ID)}`;
-  const isolationToken = await issueSpace(ISOLATION_SPACE_ID);
-  let response = await fetch(`${BASE}${prefix}/cas/nodes/${parent.hash}/content`, {
-    headers: { Authorization: `Bearer ${isolationToken}` },
-  });
-  assert(response.status === 403, `cross-Space read -> ${response.status} (403)`);
-  const isolationClient = createSpaceCasClient({
-    baseUrl: BASE,
-    appId: APP_ID,
-    spaceId: ISOLATION_SPACE_ID,
-    getToken: async () => isolationToken,
-  });
-  assert((await isolationClient.usage()).nodeCount === 0, "isolation Space remains empty");
+    const prefix = `/v2/apps/${encodeURIComponent(APP_ID)}/spaces/${encodeURIComponent(SPACE_ID)}`;
+    const isolationToken = await issueSpace(ISOLATION_SPACE_ID);
+    let response = await fetch(`${BASE}${prefix}/cas/nodes/${parent.hash}/content`, {
+      headers: { Authorization: `Bearer ${isolationToken}` },
+    });
+    assert(response.status === 403, `cross-Space read -> ${response.status} (403)`);
+    const isolationClient = createSpaceCasClient({
+      baseUrl: BASE,
+      appId: APP_ID,
+      spaceId: ISOLATION_SPACE_ID,
+      getToken: async () => isolationToken,
+    });
+    assert((await isolationClient.usage()).nodeCount === 0, "isolation Space remains empty");
 
-  const v1Token = await sign({
-    ver: CapabilityVersion,
-    tenantId: SPACE_ID,
-    permissions: [casManagePermission(SPACE_ID)],
-  });
-  response = await fetch(`${BASE}${prefix}/cas/usage`, {
-    headers: { Authorization: `Bearer ${v1Token}` },
-  });
-  assert(response.status === 401, `v1 token on v2 route -> ${response.status} (401)`);
-  response = await fetch(`${BASE}/stacks/${encodeURIComponent(APP_ID)}/tenants/${encodeURIComponent(SPACE_ID)}/cas/usage`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  assert(response.status === 401, `v2 token on v1 route -> ${response.status} (401)`);
-
-  const cleanup = await client.updateRootRefs({
-    requestId: `${RUN}:roots:cleanup`,
-    changes: { [parent.hash]: -1 },
-  });
-  assert(cleanup.success === true, "Root Ref cleanup releases parent");
+    const v1Token = await sign({
+      ver: CapabilityVersion,
+      tenantId: SPACE_ID,
+      permissions: [casManagePermission(SPACE_ID)],
+    });
+    response = await fetch(`${BASE}${prefix}/cas/usage`, {
+      headers: { Authorization: `Bearer ${v1Token}` },
+    });
+    assert(response.status === 401, `v1 token on v2 route -> ${response.status} (401)`);
+    response = await fetch(`${BASE}/stacks/${encodeURIComponent(APP_ID)}/tenants/${encodeURIComponent(SPACE_ID)}/cas/usage`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert(response.status === 401, `v2 token on v1 route -> ${response.status} (401)`);
+  } catch (error) {
+    smokeFailure = error;
+    throw error;
+  } finally {
+    if (rootRetained) {
+      try {
+        const cleanup = await client.updateRootRefs({
+          requestId: `${RUN}:roots:cleanup`,
+          changes: { [parent.hash]: -1 },
+        });
+        assert(cleanup.success === true, "Root Ref cleanup releases parent");
+      } catch (cleanupError) {
+        if (smokeFailure) console.error("Root Ref cleanup also failed", cleanupError);
+        else throw cleanupError;
+      }
+    }
+  }
   console.log("\nAPP/SPACE SMOKE PASS");
 }
 

@@ -15,9 +15,8 @@ The task is claimed by `copilot-unicas-standalone`. CI now has a serialized
 `Production` environment job for validated `main` pushes and manual `main`
 dispatches. It deploys service, product site, and documentation in order,
 cleans up the ephemeral smoke key, and checks all public origins. The next
-action is to finish bootstrapping the dedicated external smoke issuer, set the
-remaining GitHub environment values without exposing the private key, and run
-the protected production path again before archiving.
+action is to push the validated bootstrap and smoke-cleanup changes, monitor
+the protected production path again, and archive after all live checks pass.
 
 ## Decisions
 
@@ -36,6 +35,12 @@ the protected production path again before archiving.
   them while another release is running.
 - Verify explicit status, same-origin redirect, and identifying response
   content instead of following arbitrary redirects during post-deploy checks.
+- Use a dedicated external issuer whose tracked product-site assets contain
+  only public metadata/JWKS; keep its PKCS#8 private key separate from every
+  Worker runtime secret and stream it directly into the GitHub environment.
+- Verify the current run's leased nodes after whole-Space GC instead of
+  requiring zero stale-node deletions, and release acquired smoke Root Refs in
+  a `finally` path.
 
 ## Validation
 
@@ -74,6 +79,18 @@ the protected production path again before archiving.
   boundary. Its public-only metadata/JWKS assets pass 21 deployment tests and
   local Wrangler serves both discovery paths as direct `200 application/json`
   responses.
+- Product-site bootstrap version `5769764e-3e4b-4d93-ada9-f07507fb5336`
+  published the public issuer assets. Live metadata, JWKS, and product-root
+  checks returned direct 200 responses with the expected content types.
+- The production control plane activated `https://unicas.work/deploy-smoke`
+  for the sole `Production Smoke` App using its discovered ES256 public key.
+  All five smoke variables and the dedicated PKCS#8 secret were then written
+  to the GitHub `Production` environment without printing the private key.
+- The first external-issuer smoke reached GC but exposed an over-strict
+  zero-deletion assertion and left one Root Ref after aborting. The revised
+  smoke passed every canonical assertion, including one legitimate stale-node
+  collection and `finally` cleanup. The one audited failed-run Root Ref was
+  explicitly released; a follow-up control-plane read returned no refs.
 
 ## Blockers
 
