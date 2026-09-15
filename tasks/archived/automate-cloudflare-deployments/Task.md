@@ -25,7 +25,7 @@ GitHub deployment identity and smoke credentials.
 - Extend GitHub Actions with a production deployment path that runs only for a
   validated commit on `main`, plus an explicit manual recovery trigger limited
   to `main`.
-- Use one GitHub `production` environment for deployment policy and secret
+- Use one GitHub `Production` environment for deployment policy and secret
   access, and document every required GitHub variable or secret by name.
 - Authenticate Wrangler with a dedicated, least-privilege Cloudflare API token
   and account ID scoped to the production account and required zone.
@@ -56,32 +56,32 @@ GitHub deployment identity and smoke credentials.
 
 ## Acceptance criteria
 
-- [ ] Pull requests and non-`main` pushes run CI without receiving production
+- [x] Pull requests and non-`main` pushes run CI without receiving production
       secrets and cannot invoke a production Wrangler deployment.
-- [ ] A push to `main` deploys only after the existing validation job succeeds,
+- [x] A push to `main` deploys only after the existing validation job succeeds,
       and the deployed artifacts are built from that workflow's exact commit.
-- [ ] A manual production run is available from `main` and follows the same
+- [x] A manual production run is available from `main` and follows the same
       validation, environment, deployment, and verification path.
-- [ ] Production runs use minimal GitHub token permissions, a GitHub
-      `production` environment, and a deployment concurrency group that does
+- [x] Production runs use minimal GitHub token permissions, a GitHub
+  `Production` environment, and a deployment concurrency group that does
       not interrupt an in-progress release.
-- [ ] The dedicated Cloudflare token can perform the required deployments but
+- [x] The dedicated Cloudflare token can perform the required deployments but
       is not granted unrelated account or zone permissions.
-- [ ] The API/console Worker, product-site Worker, and documentation Worker are
+- [x] The API/console Worker, product-site Worker, and documentation Worker are
       deployed through their repository-owned commands in a documented,
       deterministic order, stopping on the first failure.
-- [ ] The production smoke flow passes against `https://api.unicas.work` using
+- [x] The production smoke flow passes against `https://api.unicas.work` using
       environment-scoped credentials, without logging or retaining the private
       signing key.
-- [ ] Post-deploy checks confirm the expected HTTPS behavior at
+- [x] Post-deploy checks confirm the expected HTTPS behavior at
       `api.unicas.work`, `console.unicas.work`, `unicas.work`, and
       `docs.unicas.work`.
-- [ ] Worker runtime secrets remain stored only in Cloudflare and are neither
+- [x] Worker runtime secrets remain stored only in Cloudflare and are neither
       copied into GitHub nor rewritten on routine deployments.
-- [ ] A failed validation, deployment, or post-deploy check leaves a failed
+- [x] A failed validation, deployment, or post-deploy check leaves a failed
       GitHub Actions run with enough non-secret context to identify the failed
       deployment unit.
-- [ ] Workflow regression tests, repository checks, build, typecheck, package
+- [x] Workflow regression tests, repository checks, build, typecheck, package
       tests, all Wrangler dry-runs, and GitHub CI pass.
 
 ## Constraints
@@ -103,8 +103,8 @@ GitHub deployment identity and smoke credentials.
 
 ## References
 
-- [Current GitHub Actions workflow](../../../../.github/workflows/ci.yml)
-- [Deployment and local configuration](../../../../docs/deployment-and-local-configuration.md)
-- [Operations guide](../../../../docs/cas-operations.md)
-- [UniCAS stack deployment boundary](../../../../stacks/unicas/README.md)
-- [Production deployment orchestrator](../../../../stacks/unicas/deploy/deploy.mjs)
+- [Current GitHub Actions workflow](../../../.github/workflows/ci.yml)
+- [Deployment and local configuration](../../../docs/deployment-and-local-configuration.md)
+- [Operations guide](../../../docs/cas-operations.md)
+- [UniCAS stack deployment boundary](../../../stacks/unicas/README.md)
+- [Production deployment orchestrator](../../../stacks/unicas/deploy/deploy.mjs)

@@ -7,16 +7,15 @@ Updated: 2026-09-15
 - [x] Verify the worktree identity and check for overlapping active work.
 - [x] Add the protected production deployment path and regression coverage.
 - [x] Document production setup, release, recovery, rotation, and rollback.
-- [ ] Run the full acceptance validation and archive the completed task.
+- [x] Run the full acceptance validation and archive the completed task.
 
 ## Current state
 
-The task is claimed by `copilot-unicas-standalone`. CI now has a serialized
-`Production` environment job for validated `main` pushes and manual `main`
-dispatches. It deploys service, product site, and documentation in order,
-cleans up the ephemeral smoke key, and checks all public origins. The next
-action is to push the validated bootstrap and smoke-cleanup changes, monitor
-the protected production path again, and archive after all live checks pass.
+GitHub Actions run `34939626249` validated commit `2770def`, deployed all three
+production Workers in order, passed canonical App/Space smoke, removed the
+ephemeral signing key, and passed all four public-origin checks. The task is
+complete and has moved to the repository archive. The remaining publication
+check is the CI run triggered by the archive commit itself.
 
 ## Decisions
 
@@ -91,16 +90,24 @@ the protected production path again, and archive after all live checks pass.
   smoke passed every canonical assertion, including one legitimate stale-node
   collection and `finally` cleanup. The one audited failed-run Root Ref was
   explicitly released; a follow-up control-plane read returned no refs.
+- GitHub Actions run `34939626249` passed. Validation completed in 1m51s and
+  production deployment in 1m13s. It deployed service version
+  `9cbb663a-750c-4b9e-b632-f18b5f3990f0`, product-site version
+  `633a381d-d1e4-4bf8-8564-eede2658ce26`, and documentation version
+  `e469eb72-8745-4c49-b48d-3180d886bd9b`. The log masked the signing key,
+  canonical smoke passed, the cleanup step succeeded, and every HTTPS probe
+  passed.
+- The first archive commit staged only the directory move because its command
+  also named the now-absent ongoing path. The follow-up stages the completed
+  Task and Progress content from their actual archived path; task validation
+  prevents the incomplete intermediate archive from deploying.
 
 ## Blockers
 
-- A real GitHub Actions deployment is still required to prove environment
-  protection, Cloudflare token permissions, smoke credentials, secret
-  preservation, and post-deploy behavior together. The operator confirmed the
-  GitHub `Production` environment and main-only deployment branch policy; the
-  dedicated smoke issuer and remaining environment values are being
-  bootstrapped after the first protected run exposed their absence.
+- None.
 
 ## Outcome
 
-In progress.
+Completed. Validated `main` revisions now deploy through the protected,
+serialized `Production` environment and verify the service, product site, and
+documentation site without a developer machine.
