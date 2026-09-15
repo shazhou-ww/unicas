@@ -8,16 +8,17 @@ Updated: 2026-09-15
 - [x] Expose conditional status mutations with audit and minimal responses.
 - [x] Apply suspension to metadata and managed issuer surfaces while preserving recovery.
 - [x] Update protocol, clients, CLI/MCP, and operations documentation.
-- [ ] Validate acceptance criteria, publish implementation, and archive.
+- [x] Validate acceptance criteria and publish implementation.
 
 ## Current state
 
 Claim commit `7f7a9e16cb01ed4be3360db3acb32802a31422c3` is verified on
 `origin/main`. Suspension is implemented through versioned App mutations,
 authority resolution, the Space verifier, discovery, managed issuance, CLI,
-and both MCP transports. The next concrete action is to regenerate v2 OpenAPI,
-publish the validated implementation, record its immutable shared-branch
-evidence, and archive the task before claiming member invitation management.
+and both MCP transports. Implementation commit
+`9501150605ac75b0d94bda465e2f13007d38d998` is verified on `origin/main`.
+The next concrete action is to publish the archive move and claim member
+invitation management as the next authorized prerequisite.
 
 ## Decisions
 
@@ -33,8 +34,8 @@ evidence, and archive the task before claiming member invitation management.
 | Milestone | Evidence | Status |
 | --- | --- | --- |
 | Claim | `origin/main` commit `7f7a9e16cb01ed4be3360db3acb32802a31422c3`. | Published |
-| Implementation complete | Not yet completed. | Pending |
-| Archive | Not yet archived. | Pending |
+| Implementation complete | `origin/main` commit `9501150605ac75b0d94bda465e2f13007d38d998`. | Published |
+| Archive | `origin/main` archive commit containing this record. | Published |
 
 ## Validation
 
@@ -69,4 +70,6 @@ evidence, and archive the task before claiming member invitation management.
 
 ## Outcome
 
-In progress.
+Completed. App suspension enforces the bounded data-plane stop across issuer
+modes while preserving control-plane recovery; all required local gates pass.
+No production deployment was performed.
