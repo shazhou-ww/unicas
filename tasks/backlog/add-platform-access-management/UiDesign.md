@@ -379,7 +379,7 @@ zero-downtime replacement of an active custom issuer. The Console consumes
 their accepted contracts rather than implementing security semantics in view
 code.
 
-- [App suspension boundary](/tasks/backlog/enforce-app-suspension-boundary/Task.md)
+- [App suspension boundary](/tasks/ongoing/scottwei-home-pc/enforce-app-suspension-boundary/Task.md)
 - [App member invitation management](/tasks/backlog/manage-app-member-invitations/Task.md)
 - [Active App OAuth issuer replacement](/tasks/backlog/replace-active-app-oauth-issuer/Task.md)
 

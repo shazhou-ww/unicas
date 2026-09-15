@@ -489,7 +489,7 @@ These contracts are required by the refined Console but are separate from
 platform access authorization. They should be implemented as independent
 backlog tasks and consumed by the Console rewrite.
 
-- [App suspension boundary](/tasks/backlog/enforce-app-suspension-boundary/Task.md)
+- [App suspension boundary](/tasks/ongoing/scottwei-home-pc/enforce-app-suspension-boundary/Task.md)
 - [App member invitation management](/tasks/backlog/manage-app-member-invitations/Task.md)
 - [Active App OAuth issuer replacement](/tasks/backlog/replace-active-app-oauth-issuer/Task.md)
 
