@@ -292,7 +292,7 @@ plan, and seek explicit reset/deploy approval.
   Cloudflare, 42 CLI, and 49 WebUI tests.
 - Wrangler dry-runs passed for the service, product site, and 18-page docs
   site. Checksum-verified gitleaks 8.28.0 scanned 332 commits and found no
-  leaks. GitHub Actions remains pending until these commits are published.
+  leaks. GitHub Actions run `34927496846` passed for published head `3a3671b`.
 - After adopting the shared task-ledger workflow, `pnpm check:tasks` passed all
   9 checks with this task under the `copilot-unicas-standalone` identity.
 
