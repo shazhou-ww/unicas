@@ -116,13 +116,17 @@ Provision secrets with Wrangler so values never appear in shell history:
 pnpm --filter @unicas/service-cloudflare exec wrangler secret put GOOGLE_OIDC_CLIENT_SECRET
 pnpm --filter @unicas/service-cloudflare exec wrangler secret put SESSION_ENCRYPTION_KEYS
 pnpm --filter @unicas/service-cloudflare exec wrangler secret put OAUTH_STATE_ENCRYPTION_KEY
-pnpm --filter @unicas/service-cloudflare exec wrangler secret put ADMIN_EMAIL_ALLOWLIST
 ```
 
 `SESSION_ENCRYPTION_KEYS` is a non-empty JSON object mapping key IDs to
 base64url keys, for example `{"2026-09":"<base64url-32-byte-key>"}`. Keep old
-entries during session-key rotation until sessions sealed with them have
-expired.
+entries during rotation until sessions and pending platform-invitation replay
+receipts sealed with them have expired.
+
+`ADMIN_EMAIL_ALLOWLIST` is optional only for rollback to a pre-Platform-Access
+Worker. It is not an authorization source after the no-gap bootstrap in
+[CAS Middleware Operations](cas-operations.md#platform-access-bootstrap-and-migration).
+Keep it through the rollback window, then remove it deliberately.
 
 Additional features require these secrets:
 

@@ -1,6 +1,7 @@
 import { oc } from "@orpc/contract";
 import { z } from "zod";
 import { AppIdSchema } from "@unicas/tenant-protocol";
+import { AppPeopleQuerySchema, PlatformPeopleQuerySchema } from "./people.js";
 import {
   AppControlAuditEventSchema,
   AppMemberInvitationSchema,
@@ -17,7 +18,15 @@ import {
   SpaceRootRefBalanceSchema,
   SpaceRootRefEventSchema,
 } from "./schemas.js";
-import { PlatformAuthoritySchema } from "./platform-access.js";
+import {
+  CreatePlatformInvitationSchema,
+  PlatformAuditActionSchema,
+  PlatformAuditQuerySchema,
+  PlatformAuthoritySchema,
+  PlatformInvitationQuerySchema,
+  PlatformPrincipalQuerySchema,
+  PatchPlatformAccessSchema,
+} from "./platform-access.js";
 
 export const AppAdminApiBasePath = "/admin/apps";
 
@@ -326,6 +335,148 @@ export const listSpaceRootDomainEventsContract = appProcedure
   .input(z.object({ params: rootDomainParams, query: z.object({ spaceId: z.string().optional(), after: RevisionSchema.optional(), limit: z.number().int().positive().optional() }).readonly().optional() }).readonly())
   .output(z.object({ events: z.array(SpaceRootRefEventSchema).readonly(), latestRevision: RevisionSchema, nextAfter: RevisionSchema }).readonly());
 
+const PlatformInvitationSchema = z.object({
+  invitationId: z.string().min(1),
+  emailConstraint: z.email().max(254),
+  authorities: z.array(PlatformAuthoritySchema).min(1).readonly(),
+  status: z.enum(["pending", "accepted", "expired", "revoked"]),
+  expiresAt: z.number().int().nonnegative(),
+  createdAt: z.number().int().nonnegative(),
+  createdBy: PrincipalSchema,
+  revision: RevisionSchema,
+}).readonly();
+
+const platformAccessStateShape = {
+  principalRef: z.string().min(1),
+  principal: PrincipalSchema,
+  status: z.enum(["active", "blocked"]),
+  authorities: z.array(PlatformAuthoritySchema).readonly(),
+  revision: RevisionSchema,
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+};
+const PlatformAccessStateSchema = z.object(platformAccessStateShape).readonly();
+
+const platformPrincipalListItemShape = {
+  ...platformAccessStateShape,
+  profile: ProfileSchema,
+  effectiveAccess: z.enum(["active", "blocked", "no_access"]),
+  appMembershipCount: z.number().int().nonnegative(),
+  lastActiveAt: z.number().int().nonnegative().nullable(),
+};
+const PlatformPrincipalListItemSchema = z.object(platformPrincipalListItemShape).readonly();
+
+export const listAppPeopleContract = appProcedure
+  .route({ method: "GET", path: "/admin/apps/{appId}/people", operationId: "listAppPeople", summary: "Search App members and invitations", inputStructure: "detailed", tags: ["Members"] })
+  .input(z.object({ params: appParams, query: AppPeopleQuerySchema.optional() }).readonly())
+  .output(pageSchema(z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("member"), membership: AppMembershipSchema, joinedAt: z.number().int().nonnegative() }).strict(),
+    z.object({ kind: z.literal("invitation"), invitation: AppMemberInvitationSchema }).strict(),
+  ])).meta({ id: "AppPeoplePage" }));
+
+export const listPlatformPeopleContract = appProcedure
+  .route({ method: "GET", path: "/admin/platform/people", operationId: "listPlatformPeople", summary: "Search platform Principals and invitations", inputStructure: "detailed", tags: ["Platform Access"] })
+  .input(z.object({ query: PlatformPeopleQuerySchema.optional() }).readonly())
+  .output(pageSchema(z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("principal"), principal: PlatformPrincipalListItemSchema }).strict(),
+    z.object({ kind: z.literal("invitation"), invitation: PlatformInvitationSchema }).strict(),
+  ])).meta({ id: "PlatformPeoplePage" }));
+
+const PlatformPrincipalDetailSchema = z.object({
+  ...platformPrincipalListItemShape,
+  memberships: z.array(AppMembershipSchema).readonly(),
+}).readonly();
+
+export const getPlatformAccessSummaryContract = appProcedure
+  .route({ method: "GET", path: "/admin/platform/access-summary", operationId: "getPlatformAccessSummary", summary: "Read platform access counts", inputStructure: "detailed", tags: ["Platform Access"] })
+  .input(z.object({}).readonly())
+  .output(z.object({
+    activePrincipalCount: z.number().int().nonnegative(),
+    platformAdminCount: z.number().int().nonnegative(),
+    appCreatorCount: z.number().int().nonnegative(),
+    blockedPrincipalCount: z.number().int().nonnegative(),
+    generatedAt: z.number().int().nonnegative(),
+  }).readonly());
+
+export const listPlatformPrincipalsContract = appProcedure
+  .route({ method: "GET", path: "/admin/platform/principals", operationId: "listPlatformPrincipals", summary: "List platform Principals", inputStructure: "detailed", tags: ["Platform Access"] })
+  .input(z.object({ query: PlatformPrincipalQuerySchema.optional() }).readonly())
+  .output(pageSchema(PlatformPrincipalListItemSchema).meta({ id: "PlatformPrincipalPage" }));
+
+export const getPlatformPrincipalContract = appProcedure
+  .route({ method: "GET", path: "/admin/platform/principals/{principalRef}", operationId: "getPlatformPrincipal", summary: "Read one platform Principal", inputStructure: "detailed", tags: ["Platform Access"] })
+  .input(z.object({ params: z.object({ principalRef: z.string().min(1) }).readonly() }).readonly())
+  .output(PlatformPrincipalDetailSchema);
+
+export const getPlatformPrincipalAccessContract = appProcedure
+  .route({ method: "GET", path: "/admin/platform/principals/{principalRef}/access", operationId: "getPlatformPrincipalAccess", summary: "Read versioned platform access", inputStructure: "detailed", outputStructure: "detailed", tags: ["Platform Access"] })
+  .input(z.object({ params: z.object({ principalRef: z.string().min(1) }).readonly() }).readonly())
+  .output(z.object({
+    headers: z.object({ ETag: z.string().regex(/^"(0|[1-9][0-9]*)"$/) }).readonly(),
+    body: PlatformAccessStateSchema,
+  }).readonly());
+
+export const patchPlatformPrincipalAccessContract = appProcedure
+  .route({ method: "PATCH", path: "/admin/platform/principals/{principalRef}/access", operationId: "patchPlatformPrincipalAccess", summary: "Change platform access", inputStructure: "detailed", outputStructure: "detailed", successStatus: 204, tags: ["Platform Access"] })
+  .input(z.object({
+    params: z.object({ principalRef: z.string().min(1) }).readonly(),
+    headers: mutationHeaders,
+    body: PatchPlatformAccessSchema,
+  }).readonly())
+  .output(z.object({ headers: z.object({ ETag: z.string().regex(/^"(0|[1-9][0-9]*)"$/) }).readonly() }).readonly());
+
+export const listPlatformInvitationsContract = appProcedure
+  .route({ method: "GET", path: "/admin/platform/invitations", operationId: "listPlatformInvitations", summary: "List platform invitations", inputStructure: "detailed", tags: ["Platform Invitations"] })
+  .input(z.object({ query: PlatformInvitationQuerySchema.optional() }).readonly())
+  .output(pageSchema(PlatformInvitationSchema).meta({ id: "PlatformInvitationPage" }));
+
+export const createPlatformInvitationContract = appProcedure
+  .route({ method: "POST", path: "/admin/platform/invitations", operationId: "createPlatformInvitation", summary: "Create a platform invitation", inputStructure: "detailed", outputStructure: "detailed", successStatus: 201, tags: ["Platform Invitations"] })
+  .input(z.object({
+    headers: z.object({ "idempotency-key": z.string().min(1).max(200) }).readonly(),
+    body: CreatePlatformInvitationSchema,
+  }).readonly())
+  .output(z.object({
+    headers: z.object({ ETag: z.string().regex(/^"(0|[1-9][0-9]*)"$/) }).readonly(),
+    body: z.object({
+      invitationId: z.string().min(1),
+      acceptUrl: z.url(),
+      expiresAt: z.number().int().nonnegative(),
+    }).readonly(),
+  }).readonly().meta({ id: "CreatePlatformInvitationResponse" }));
+
+export const revokePlatformInvitationContract = appProcedure
+  .route({ method: "DELETE", path: "/admin/platform/invitations/{invitationId}", operationId: "revokePlatformInvitation", summary: "Revoke a platform invitation", inputStructure: "detailed", outputStructure: "detailed", successStatus: 204, tags: ["Platform Invitations"] })
+  .input(z.object({
+    params: z.object({ invitationId: z.string().min(1) }).readonly(),
+    headers: mutationHeaders,
+  }).readonly())
+  .output(z.object({ headers: z.object({ ETag: z.string().regex(/^"(0|[1-9][0-9]*)"$/) }).readonly() }).readonly());
+
+export const acceptPlatformInvitationContract = appProcedure
+  .route({ method: "POST", path: "/admin/platform-invitations/{token}/accept", operationId: "acceptPlatformInvitation", summary: "Accept a platform invitation", inputStructure: "detailed", successStatus: 204, tags: ["Platform Invitations"] })
+  .input(z.object({ params: z.object({ token: z.string().min(1) }).readonly() }).readonly())
+  .output(z.void());
+
+const PlatformAuditEventSchema = z.object({
+  eventId: z.string().min(1),
+  action: PlatformAuditActionSchema,
+  actorPrincipalRef: z.string().min(1).nullable(),
+  actorPrincipal: PrincipalSchema,
+  targetPrincipalRef: z.string().min(1).nullable(),
+  targetPrincipal: PrincipalSchema.nullable(),
+  targetInvitationId: z.string().min(1).nullable(),
+  result: z.enum(["succeeded", "denied"]),
+  requestId: z.string().min(1).nullable(),
+  createdAt: z.number().int().nonnegative(),
+  details: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
+}).readonly();
+
+export const listPlatformAuditEventsContract = appProcedure
+  .route({ method: "GET", path: "/admin/platform/audit-events", operationId: "listPlatformAuditEvents", summary: "List platform authorization audit events", inputStructure: "detailed", tags: ["Platform Audit"] })
+  .input(z.object({ query: PlatformAuditQuerySchema.optional() }).readonly())
+  .output(pageSchema(PlatformAuditEventSchema).meta({ id: "PlatformAuditPage" }));
+
 export const appAdminApiContract = {
   identity: { me: appMeContract },
   apps: {
@@ -340,6 +491,7 @@ export const appAdminApiContract = {
     invite: createAppMemberInvitationContract,
     accept: acceptAppMemberInvitationContract,
     listInvitations: listAppMemberInvitationsContract,
+    listPeople: listAppPeopleContract,
     revokeInvitation: revokeAppMemberInvitationContract,
   },
   playground: {
@@ -361,6 +513,19 @@ export const appAdminApiContract = {
     listControlEvents: listAppControlAuditEventsContract,
     listRootRefs: listSpaceRootDomainRefsContract,
     listRootEvents: listSpaceRootDomainEventsContract,
+  },
+  platform: {
+    accessSummary: getPlatformAccessSummaryContract,
+    listPeople: listPlatformPeopleContract,
+    listPrincipals: listPlatformPrincipalsContract,
+    getPrincipal: getPlatformPrincipalContract,
+    getPrincipalAccess: getPlatformPrincipalAccessContract,
+    patchPrincipalAccess: patchPlatformPrincipalAccessContract,
+    listInvitations: listPlatformInvitationsContract,
+    createInvitation: createPlatformInvitationContract,
+    revokeInvitation: revokePlatformInvitationContract,
+    acceptInvitation: acceptPlatformInvitationContract,
+    listAuditEvents: listPlatformAuditEventsContract,
   },
 };
 

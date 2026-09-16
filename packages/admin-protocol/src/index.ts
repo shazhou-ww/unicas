@@ -1,3 +1,5 @@
+export { AppPeopleQuerySchema, PlatformPeopleQuerySchema } from "./people.js";
+export type { AppPeopleQuery, PlatformPeopleQuery, AppPerson, PlatformPerson, PeoplePage } from "./people.js";
 export type {
   App,
   AppAdminMeResponse,
@@ -93,8 +95,8 @@ export {
 export type { AppAdminApiContract } from "./app-v2-contract.js";
 
 export { APP_ADMIN_MCP_TOOLS, APP_ADMIN_MCP_TOOL_LIST } from "./app-mcp-catalog.js";
-export { PlatformAuthoritySchema, PatchPlatformAccessSchema, effectivePlatformAccess, hasPlatformAuthority } from "./platform-access.js";
-export type { PlatformAuthority, PlatformAccessStatus, EffectivePlatformAccess, PlatformAccessState, CurrentPlatformAccess, PlatformPrincipal, PlatformPrincipalListItem, PlatformPrincipalDetail, PlatformPrincipalPage, PlatformAccessSummary } from "./platform-access.js";
+export { PlatformAuthoritySchema, PlatformPrincipalQuerySchema, PlatformAuditActionSchema, PlatformAuditQuerySchema, CreatePlatformInvitationSchema, PlatformInvitationQuerySchema, PatchPlatformAccessSchema, effectivePlatformAccess, hasPlatformAuthority } from "./platform-access.js";
+export type { PlatformAuthority, PlatformAccessStatus, EffectivePlatformAccess, PlatformAccessState, CurrentPlatformAccess, PlatformPrincipal, PlatformPrincipalListItem, PlatformPrincipalDetail, PlatformPrincipalPage, PlatformAccessSummary, PlatformInvitationStatus, PlatformInvitation, PlatformInvitationPage, PlatformAuditAction, PlatformAuditEvent, PlatformAuditPage } from "./platform-access.js";
 export type { AppAdminMcpToolDefinition, AppAdminMcpToolName, AppAdminMcpToolScope } from "./app-mcp-catalog.js";
 
 export {

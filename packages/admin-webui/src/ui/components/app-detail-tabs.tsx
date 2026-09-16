@@ -4,8 +4,6 @@ import type { AppSection } from "../router.js";
 const APP_TABS: readonly { id: AppSection; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "members", label: "Members" },
-  { id: "invitations", label: "Invitations" },
-  { id: "playground", label: "Playground" },
   { id: "change-logs", label: "Change Logs" },
 ];
 
@@ -17,11 +15,13 @@ export function AppDetailTabs({
   appId,
   displayName,
   activeSection,
+  playgroundEnabled,
   onTabChange,
 }: {
   appId: string;
   displayName: string;
   activeSection: AppSection;
+  playgroundEnabled: boolean;
   onTabChange: (section: AppSection) => void;
 }) {
   return (
@@ -36,6 +36,14 @@ export function AppDetailTabs({
               {tab.label}
             </TabsTrigger>
           ))}
+          <TabsTrigger
+            value="playground"
+            className="console-playground-tab"
+            disabled={!playgroundEnabled}
+            title={playgroundEnabled ? "Playground" : "Enable the managed issuer to use Playground"}
+          >
+            Playground
+          </TabsTrigger>
         </TabsList>
       </Tabs>
     </div>

@@ -136,18 +136,19 @@ async function finishGoogleAuthentication(
       idToken: exchanged.idToken,
       nonce: transaction.oidcNonce,
     });
-    if (!identity.emailVerified || !emailAllowed(identity.email, env.ADMIN_EMAIL_ALLOWLIST)) {
+    if (options.authorizePrincipal) {
+      const admission = await options.authorizePrincipal(env, {
+        issuer: env.OIDC_ISSUER ?? "https://accounts.google.com",
+        subject: identity.sub,
+      });
+      if (admission === "denied") {
+        return authFailure("This Google account is not allowed to access the UniCAS control plane", 403);
+      }
+      if (admission === "unavailable") {
+        return authFailure("Platform access could not be verified", 503);
+      }
+    } else if (!identity.emailVerified || !emailAllowed(identity.email, env.ADMIN_EMAIL_ALLOWLIST)) {
       return authFailure("This Google account is not allowed to access the UniCAS control plane", 403);
-    }
-    const admission = await options.authorizePrincipal?.(env, {
-      issuer: env.OIDC_ISSUER ?? "https://accounts.google.com",
-      subject: identity.sub,
-    });
-    if (admission === "denied") {
-      return authFailure("This Google account is not allowed to access the UniCAS control plane", 403);
-    }
-    if (admission === "unavailable") {
-      return authFailure("Platform access could not be verified", 503);
     }
     const client = await oauthProvider(env).lookupClient(transaction.oauthRequest.clientId);
     if (!client) return authFailure("OAuth client is no longer registered");

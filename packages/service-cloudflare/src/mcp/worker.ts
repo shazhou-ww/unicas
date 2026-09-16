@@ -5,14 +5,16 @@ import { createMcpHandler } from "agents/mcp/server";
 import {
   PlatformAccessError,
   PlatformAccessService,
+  PlatformAuditService,
+  PlatformInvitationService,
   type ControlPlaneOperations,
 } from "@unicas/service";
 import { D1PlatformAccessRepository } from "../platform-access-repository.js";
+import { InvitationTokenCrypto, parseInvitationEncryptionKeys } from "../invitation-token-crypto.js";
 import { createOAuthAuthorizationHandler } from "./auth.js";
 import {
   CONTROL_PLANE_MCP_PATH,
   CONTROL_PLANE_MCP_SCOPES,
-  emailAllowed,
   mcpConfigFromEnv,
 } from "./config.js";
 import type { ControlPlaneMcpEnvConfig } from "./config.js";
@@ -82,15 +84,14 @@ export function createControlPlaneMcpWorker(
           { error: "MCP_AUTH_CONTEXT_MISSING" },
           { status: 500 },
         );
-      if (!emailAllowed(props.emailForDisplay, env.ADMIN_EMAIL_ALLOWLIST)) {
-        return Response.json(
-          { error: "MCP_ACCESS_NOT_ALLOWED" },
-          { status: 403 },
-        );
-      }
-      const platformAccess = new PlatformAccessService(
-        new D1PlatformAccessRepository(env.CAS_CONTROL_DB),
+      const platformRepository = new D1PlatformAccessRepository(env.CAS_CONTROL_DB);
+      const platformAccess = new PlatformAccessService(platformRepository);
+      const platformInvitations = new PlatformInvitationService(
+        platformRepository,
+        platformAccess,
+        new InvitationTokenCrypto(parseInvitationEncryptionKeys(env.SESSION_ENCRYPTION_KEYS)),
       );
+      const platformAudit = new PlatformAuditService(platformRepository, platformAccess);
       const accessError = await checkMcpPlatformAccess(platformAccess, props);
       if (accessError) return accessError;
       attachVerifiedOAuthContext(request, ctx, props, requestConfig.resource);
@@ -101,6 +102,9 @@ export function createControlPlaneMcpWorker(
             auditReaderKey: env.CAS_AUDIT_READER_KEY,
             publicOrigin: requestConfig.publicOrigin,
             mutationsEnabled: env.MCP_MUTATIONS_ENABLED === "true",
+            platformInvitations,
+            platformAudit,
+            platformAccess,
             authorizePlatformOperation: (grant, authority) =>
               authorizeMcpPlatformOperation(
                 platformAccess,

@@ -3,10 +3,22 @@ import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import { s256Challenge } from "@unicas/control-auth";
 import { effectivePlatformAccess } from "@unicas/admin-protocol";
 import type {
+  PlatformAccessState,
+  PlatformAuthority,
+  PlatformPrincipalDetail,
+  PlatformPrincipalListItem,
+  Principal,
+} from "@unicas/admin-protocol";
+import type {
   ControlPlaneCallContext,
   ControlPlaneOperations,
   ControlSessionRepository,
+  PeopleRepository,
   PlatformAccessRepository,
+  PlatformAuditRepository,
+  PlatformInvitationIdempotencyRecord,
+  PlatformInvitationRepository,
+  StoredPlatformInvitation,
   StoredSession,
 } from "@unicas/service";
 import { sha256Hex } from "@unicas/service";
@@ -290,15 +302,11 @@ interface MockProvider {
 }
 
 import type {
-  PlatformAccessState,
-  PlatformAuthority,
-  PlatformPrincipal,
-  Principal,
   PlatformAuditRecord,
 } from "@unicas/service";
 
 /** Minimal in-memory PlatformAccessRepository for BFF integration tests. */
-class MemoryPlatformAccessRepository implements PlatformAccessRepository {
+class MemoryPlatformAccessRepository implements PlatformAccessRepository, PlatformInvitationRepository, PlatformAuditRepository {
   private readonly states = new Map<string, PlatformAccessState>();
   private readonly members = new Set<string>();
   private readonly invitations = new Map<string, {
@@ -308,6 +316,11 @@ class MemoryPlatformAccessRepository implements PlatformAccessRepository {
     emailConstraint: string | null;
     expiresAt: number;
   }>();
+  private readonly platformInvitations = new Map<string, StoredPlatformInvitation>();
+  private readonly platformInvitationIdempotency = new Map<string, PlatformInvitationIdempotencyRecord>();
+  private readonly platformAudits: PlatformAuditRecord[] = [];
+
+  async readSnapshot(): Promise<number> { return 0; }
 
   private key(p: Principal): string {
     return `${p.issuer}\0${p.subject}`;
@@ -400,7 +413,106 @@ class MemoryPlatformAccessRepository implements PlatformAccessRepository {
     return this.invitations.get(tokenHash) ?? null;
   }
 
-  async getPrincipal(principalRef: string): Promise<PlatformPrincipal | null> {
+  async getInvitation(invitationId: string, now: number) {
+    const invitation = this.platformInvitations.get(invitationId) ?? null;
+    return invitation?.status === "pending" && invitation.expiresAt <= now
+      ? { ...invitation, status: "expired" as const }
+      : invitation;
+  }
+
+  async getInvitationByTokenHash(tokenHash: string, now: number) {
+    const invitation = [...this.platformInvitations.values()].find(value => value.tokenHash === tokenHash) ?? null;
+    return invitation?.status === "pending" && invitation.expiresAt <= now
+      ? { ...invitation, status: "expired" as const }
+      : invitation;
+  }
+
+  async listInvitations(input: Parameters<PlatformInvitationRepository["listInvitations"]>[0]) {
+    const rows: StoredPlatformInvitation[] = [];
+    for (const invitation of this.platformInvitations.values()) {
+      const projected = invitation.status === "pending" && invitation.expiresAt <= input.now
+        ? { ...invitation, status: "expired" as const }
+        : invitation;
+      if (projected.invitationId <= input.afterInvitationId) continue;
+      if (input.query !== undefined && !projected.emailConstraint.includes(input.query)) continue;
+      if (input.status !== undefined && projected.status !== input.status) continue;
+      rows.push(projected);
+    }
+    return rows.sort((left, right) => left.invitationId.localeCompare(right.invitationId)).slice(0, input.limit);
+  }
+
+  async getInvitationIdempotency(input: Parameters<PlatformInvitationRepository["getInvitationIdempotency"]>[0]) {
+    const record = this.platformInvitationIdempotency.get(`${this.key(input.actor)}\0${input.key}`) ?? null;
+    return record && record.expiresAt > input.now ? record : null;
+  }
+
+  async commitCreateInvitation(input: Parameters<PlatformInvitationRepository["commitCreateInvitation"]>[0]) {
+    const actor = this.states.get(this.key(input.actor));
+    if (!actor?.authorities.includes("platform.admin") || actor.status !== "active") return "forbidden" as const;
+    const idempotencyKey = `${this.key(input.actor)}\0${input.idempotency.key}`;
+    if (this.platformInvitationIdempotency.has(idempotencyKey)) return "idempotency-conflict" as const;
+    this.platformInvitations.set(input.invitation.invitationId, input.invitation);
+    this.platformInvitationIdempotency.set(idempotencyKey, input.idempotency);
+    this.platformAudits.push(input.audit);
+    return "created" as const;
+  }
+
+  async commitRevokeInvitation(input: Parameters<PlatformInvitationRepository["commitRevokeInvitation"]>[0]) {
+    const actor = this.states.get(this.key(input.actor));
+    if (!actor?.authorities.includes("platform.admin") || actor.status !== "active") return "forbidden" as const;
+    const invitation = this.platformInvitations.get(input.invitationId);
+    if (!invitation) return "not-found" as const;
+    if (invitation.revision !== input.expectedRevision) return "revision-mismatch" as const;
+    if (invitation.status !== "pending" || invitation.expiresAt <= input.now) return "not-pending" as const;
+    this.platformInvitations.set(input.invitationId, { ...invitation, status: "revoked", revision: invitation.revision + 1 });
+    this.platformAudits.push(input.audit);
+    return "updated" as const;
+  }
+
+  async commitAcceptInvitation(input: Parameters<PlatformInvitationRepository["commitAcceptInvitation"]>[0]) {
+    const invitation = this.platformInvitations.get(input.invitation.invitationId);
+    if (!invitation || invitation.status !== "pending" || invitation.tokenHash !== input.tokenHash || invitation.expiresAt <= input.now) {
+      return "not-pending" as const;
+    }
+    const principalKey = this.key(input.principal);
+    const current = this.states.get(principalKey);
+    if (current?.status === "blocked") return "blocked" as const;
+    const authorities = (["platform.admin", "apps.create"] as const)
+      .filter(authority => current?.authorities.includes(authority) || invitation.authorities.includes(authority));
+    this.states.set(principalKey, current
+      ? { ...current, authorities, revision: current.revision + 1 }
+      : { principalRef: input.principalRef, principal: input.principal, status: "active", authorities, revision: 1, createdAt: input.now, updatedAt: input.now });
+    this.platformInvitations.set(invitation.invitationId, { ...invitation, status: "accepted", revision: invitation.revision + 1 });
+    this.platformAudits.push(input.audit);
+    return "accepted" as const;
+  }
+
+  async listAuditEvents(input: Parameters<PlatformAuditRepository["listAuditEvents"]>[0]) {
+    return this.platformAudits
+      .map(event => ({
+        eventId: event.eventId,
+        action: event.action as "platform_invitation.created" | "platform_invitation.revoked" | "platform_invitation.accepted" | "platform_access.authority_changed" | "platform_access.blocked" | "platform_access.restored" | "platform_access.change_denied" | "app.create_denied",
+        actorPrincipalRef: this.states.get(this.key(event.actorPrincipal))?.principalRef ?? null,
+        actorPrincipal: event.actorPrincipal,
+        targetPrincipalRef: event.targetPrincipal ? this.states.get(this.key(event.targetPrincipal))?.principalRef ?? null : null,
+        targetPrincipal: event.targetPrincipal,
+        targetInvitationId: event.targetInvitationId ?? null,
+        result: event.result,
+        requestId: event.requestId ?? null,
+        createdAt: event.createdAt,
+        details: event.details ?? {},
+      }))
+      .filter(event => input.action === undefined || event.action === input.action)
+      .filter(event => input.actorPrincipalRef === undefined || event.actorPrincipalRef === input.actorPrincipalRef)
+      .filter(event => input.targetPrincipalRef === undefined || event.targetPrincipalRef === input.targetPrincipalRef)
+      .filter(event => input.createdAfter === undefined || event.createdAt > input.createdAfter)
+      .filter(event => input.beforeCreatedAt === undefined || event.createdAt < input.beforeCreatedAt
+        || (event.createdAt === input.beforeCreatedAt && event.eventId < input.beforeEventId!))
+      .sort((left, right) => right.createdAt - left.createdAt || right.eventId.localeCompare(left.eventId))
+      .slice(0, input.limit);
+  }
+
+  async getPrincipal(principalRef: string): Promise<PlatformPrincipalDetail | null> {
     const state = this.states.get(principalRef);
     if (!state) return null;
     const hasMember = this.members.has(principalRef);
@@ -409,12 +521,22 @@ class MemoryPlatformAccessRepository implements PlatformAccessRepository {
       profile: { displayName: `User ${state.principal.subject}`, emailForDisplay: `${state.principal.subject}@example.com` },
       appMembershipCount: hasMember ? 1 : 0,
       effectiveAccess: effectivePlatformAccess(state, hasMember),
+      lastActiveAt: null,
+      memberships: [],
     };
   }
 
-  async listPrincipals(input: { readonly after: string; readonly limit: number }): Promise<readonly PlatformPrincipal[]> {
+  async listPrincipals(input: Parameters<PlatformAccessRepository["listPrincipals"]>[0]): Promise<readonly PlatformPrincipalListItem[]> {
     const all = [...this.states.entries()]
       .filter(([ref]) => ref > input.after)
+      .filter(([, state]) => input.query === undefined
+        || state.principal.subject.toLowerCase().includes(input.query)
+        || `${state.principal.subject}@example.com`.includes(input.query))
+      .filter(([ref, state]) => input.effectiveAccess === undefined
+        || effectivePlatformAccess(state, this.members.has(ref)) === input.effectiveAccess)
+      .filter(([, state]) => input.authority === undefined
+        || input.authority === "none" && state.authorities.length === 0
+        || input.authority !== "none" && state.authorities.includes(input.authority))
       .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
       .slice(0, input.limit);
     return all.map(([ref, state]) => {
@@ -424,6 +546,7 @@ class MemoryPlatformAccessRepository implements PlatformAccessRepository {
         profile: { displayName: `User ${state.principal.subject}`, emailForDisplay: `${state.principal.subject}@example.com` },
         appMembershipCount: hasMember ? 1 : 0,
         effectiveAccess: effectivePlatformAccess(state, hasMember),
+        lastActiveAt: null,
       };
     });
   }
@@ -459,10 +582,11 @@ class MemoryPlatformAccessRepository implements PlatformAccessRepository {
       authorities: input.authorities,
       revision: input.current.revision + 1,
     });
+    this.platformAudits.push(input.audit);
     return "updated";
   }
 
-  async appendAudit(_event: PlatformAuditRecord): Promise<void> { }
+  async appendAudit(event: PlatformAuditRecord): Promise<void> { this.platformAudits.push(event); }
 }
 
 async function createMockProvider(): Promise<MockProvider> {
@@ -488,6 +612,9 @@ async function createBff(
   configOverrides: Partial<AdminBffConfig> = {},
   platformAccessRepository?: PlatformAccessRepository,
   controlPlane: ControlPlaneOperations = fakeControlPlane(),
+  platformInvitationRepository?: PlatformInvitationRepository,
+  platformAuditRepository?: PlatformAuditRepository,
+  peopleRepository?: PeopleRepository,
 ): Promise<(request: Request) => Promise<Response>> {
   const providerFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? new URL(input) : input instanceof URL ? input : new URL(input.url);
@@ -539,6 +666,9 @@ async function createBff(
     oidc,
     auditReader,
     platformAccessRepository,
+    platformInvitationRepository,
+    platformAuditRepository,
+    peopleRepository,
   });
 }
 
@@ -1105,11 +1235,10 @@ describe("cas-admin-webui BFF", () => {
     expect(fakeStacks.size).toBe(0);
   }, 10_000);
 
-  test("email allowlist is still the first gate; denied by allowlist before platform access check", async () => {
+  test("current App membership permits later login outside the legacy email allowlist", async () => {
     const provider = await createMockProvider();
     const repo = new MemoryPlatformAccessRepository();
-    // Even if we granted access in repo, the email allowlist should deny first.
-    repo.grant(ISSUER, "google-user-123");
+    repo.grantViaMembership(ISSUER, "google-user-123");
     const bff = await createBff(provider, undefined, { emailAllowlist: ["allowed@example.com"] }, repo);
 
     const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/oidc`));
@@ -1123,7 +1252,7 @@ describe("cas-admin-webui BFF", () => {
       nonce: location.searchParams.get("nonce")!,
       email: "notallowed@example.com",
       email_verified: true,
-      name: "Not Allowed",
+      name: "External Member",
     };
 
     const callback = await bff(new Request(
@@ -1131,7 +1260,11 @@ describe("cas-admin-webui BFF", () => {
       { headers: { Cookie: cookie } },
     ));
     expect(callback.status).toBe(302);
-    expect(callback.headers.get("Location")).toBe("/admin/auth/login?error=not-allowed");
+    expect(callback.headers.get("Location")).toBe("/admin/");
+    const sessionCookie = cookieFrom(callback)!;
+    const me = await authRequest(bff, "/admin/me", sessionCookie);
+    expect(me.status).toBe(200);
+    expect(await me.json()).toMatchObject({ identity: { subject: "google-user-123" } });
   }, 10_000);
 
   test("configured test account bypasses OIDC and creates a normal admin session", async () => {
@@ -1749,9 +1882,11 @@ describe("cas-admin-webui BFF", () => {
     provider: MockProvider,
     repo: MemoryPlatformAccessRepository,
     subject = "platform-admin-user",
+    peopleRepository?: PeopleRepository,
+    controlPlane?: ControlPlaneOperations,
   ): Promise<{ bff: (req: Request) => Promise<Response>; cookie: string; csrf: string }> {
     repo.grantAdmin(ISSUER, subject);
-    const bff = await createBff(provider, undefined, {}, repo);
+    const bff = await createBff(provider, undefined, {}, repo, controlPlane, repo, repo, peopleRepository);
 
     const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/oidc?returnTo=/admin/`));
     const preLoginCookie = cookieFrom(login)!;
@@ -1777,6 +1912,28 @@ describe("cas-admin-webui BFF", () => {
     const match = /<meta name="x-csrf-token" content="([^"]+)"/.exec(html);
     return { bff, cookie, csrf: match![1]! };
   }
+
+  test("unified people reads recheck separate App membership and Platform Admin authority", async () => {
+    const provider = await createMockProvider();
+    const repo = new MemoryPlatformAccessRepository();
+    const people: PeopleRepository = { readSnapshot: async () => 1, nextExpiry: async () => null, list: vi.fn(async () => []) };
+    const control = fakeControlPlane();
+    control.listAppMemberInvitations = vi.fn(async () => ({ error: "STACK_MEMBERSHIP_REQUIRED" as const }));
+    const { bff, cookie } = await signInWithAdmin(provider, repo, "people-admin", people, control);
+    expect((await bff(new Request(`${PUBLIC_ORIGIN}/admin/platform/people`))).status).toBe(401);
+    const platform = await authRequest(bff, "/admin/platform/people", cookie);
+    expect(platform.status).toBe(200);
+    expect(await platform.json()).toEqual({ items: [], nextCursor: null });
+    const appDenied = await authRequest(bff, "/admin/apps/cas_one/people", cookie);
+    expect(appDenied.status).toBe(403);
+    expect(await appDenied.json()).toEqual({ error: "APP_MEMBERSHIP_REQUIRED" });
+    control.listAppMemberInvitations = vi.fn(async () => ({ items: [], nextCursor: null }));
+    expect((await authRequest(bff, "/admin/apps/cas_one/people", cookie)).status).toBe(200);
+    expect((await authRequest(bff, "/admin/apps/cas_one/people?authority=platform.admin", cookie)).status).toBe(400);
+    repo.grant(ISSUER, "people-admin");
+    expect((await authRequest(bff, "/admin/platform/people", cookie)).status).toBe(403);
+    expect((await authRequest(bff, "/admin/apps/cas_one/people", cookie)).status).toBe(200);
+  }, 10000);
 
   test("platform admin: access summary returns correct counts", async () => {
     const provider = await createMockProvider();
@@ -1815,6 +1972,28 @@ describe("cas-admin-webui BFF", () => {
     expect(body.nextCursor).toBeNull();
   }, 10_000);
 
+  test("platform admin: Principal filters and opaque cursors are server-bound", async () => {
+    const provider = await createMockProvider();
+    const repo = new MemoryPlatformAccessRepository();
+    const { bff, cookie } = await signInWithAdmin(provider, repo, "admin-user");
+    repo.grant(ISSUER, "creator-one");
+    repo.grant(ISSUER, "creator-two");
+
+    const filtered = await authRequest(bff, "/admin/platform/principals?query=creator-one&authority=apps.create", cookie);
+    expect(filtered.status).toBe(200);
+    expect(await filtered.json()).toMatchObject({ items: [{ principal: { subject: "creator-one" } }] });
+
+    const first = await authRequest(bff, "/admin/platform/principals?authority=apps.create&limit=1", cookie);
+    const firstPage = await first.json() as { nextCursor: string | null };
+    expect(firstPage.nextCursor).toEqual(expect.any(String));
+    expect(firstPage.nextCursor).not.toContain(ISSUER);
+    const next = await authRequest(bff, `/admin/platform/principals?authority=apps.create&limit=1&cursor=${encodeURIComponent(firstPage.nextCursor!)}`, cookie);
+    expect(next.status).toBe(200);
+    const mismatched = await authRequest(bff, `/admin/platform/principals?authority=none&limit=1&cursor=${encodeURIComponent(firstPage.nextCursor!)}`, cookie);
+    expect(mismatched.status).toBe(400);
+    expect(await mismatched.json()).toMatchObject({ error: "INVALID_CURSOR" });
+  }, 10_000);
+
   test("platform admin: get principal returns detail", async () => {
     const provider = await createMockProvider();
     const repo = new MemoryPlatformAccessRepository();
@@ -1827,6 +2006,11 @@ describe("cas-admin-webui BFF", () => {
     expect(body.principalRef).toBe(principalRef);
     expect(body.status).toBe("active");
     expect(Array.isArray(body.authorities)).toBe(true);
+
+    const access = await authRequest(bff, `/admin/platform/principals/${encodeURIComponent(principalRef)}/access`, cookie);
+    expect(access.status).toBe(200);
+    expect(access.headers.get("ETag")).toBe('"1"');
+    expect(await access.json()).toMatchObject({ principalRef, authorities: ["platform.admin", "apps.create"] });
   }, 10_000);
 
   test("platform admin: get principal returns 404 for unknown ref", async () => {
@@ -1881,12 +2065,177 @@ describe("cas-admin-webui BFF", () => {
     expect(await response.json()).toMatchObject({ error: "PRECONDITION_REQUIRED" });
   }, 10_000);
 
+  test("platform admin: creates, lists, and conditionally revokes platform invitations", async () => {
+    const provider = await createMockProvider();
+    const repo = new MemoryPlatformAccessRepository();
+    const { bff, cookie, csrf } = await signInWithAdmin(provider, repo, "admin-user");
+    const path = "/admin/platform/invitations";
+
+    const missingIdempotency = await authRequest(bff, path, cookie, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+      body: JSON.stringify({ emailConstraint: "developer@example.com", authorities: ["apps.create"] }),
+    });
+    expect(missingIdempotency.status).toBe(400);
+
+    const created = await authRequest(bff, path, cookie, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrf,
+        "Idempotency-Key": "platform-invitation-1",
+        "X-Request-Id": "request-create",
+      },
+      body: JSON.stringify({ emailConstraint: " Developer@Example.com ", authorities: ["apps.create"] }),
+    });
+    expect(created.status).toBe(201);
+    expect(created.headers.get("ETag")).toBe('"1"');
+    const receipt = await created.json() as { invitationId: string; acceptUrl: string; expiresAt: number };
+    expect(receipt.acceptUrl).toMatch(/^https:\/\/cas\.example\/admin\/platform-invitations\/[A-Za-z0-9_-]{32}$/);
+    expect(receipt).not.toHaveProperty("emailConstraint");
+    expect(receipt).not.toHaveProperty("authorities");
+
+    const list = await authRequest(bff, `${path}?status=pending&limit=10`, cookie);
+    expect(list.status).toBe(200);
+    const page = await list.json() as { items: Array<Record<string, unknown>> };
+    expect(page.items).toEqual([expect.objectContaining({
+      invitationId: receipt.invitationId,
+      emailConstraint: "developer@example.com",
+      authorities: ["apps.create"],
+      status: "pending",
+    })]);
+    expect(JSON.stringify(page)).not.toMatch(/acceptUrl|tokenHash|sealedToken/);
+
+    const missingIfMatch = await authRequest(bff, `${path}/${receipt.invitationId}`, cookie, {
+      method: "DELETE",
+      headers: { "X-CSRF-Token": csrf },
+    });
+    expect(missingIfMatch.status).toBe(428);
+
+    const revoked = await authRequest(bff, `${path}/${receipt.invitationId}`, cookie, {
+      method: "DELETE",
+      headers: { "X-CSRF-Token": csrf, "If-Match": '"1"' },
+    });
+    expect(revoked.status).toBe(204);
+    expect(revoked.headers.get("ETag")).toBe('"2"');
+
+    const replay = await authRequest(bff, path, cookie, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrf,
+        "Idempotency-Key": "platform-invitation-1",
+      },
+      body: JSON.stringify({ emailConstraint: "developer@example.com", authorities: ["apps.create"] }),
+    });
+    expect(replay.status).toBe(409);
+    expect(await replay.json()).toMatchObject({ error: "INVITATION_NOT_PENDING" });
+  }, 10_000);
+
+  test("platform invitation: matching OIDC session accepts and rotates into invited authority", async () => {
+    const provider = await createMockProvider();
+    const repo = new MemoryPlatformAccessRepository();
+    const { bff, cookie: adminCookie, csrf: adminCsrf } = await signInWithAdmin(provider, repo, "admin-user");
+    const created = await authRequest(bff, "/admin/platform/invitations", adminCookie, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": adminCsrf,
+        "Idempotency-Key": "platform-invitation-login",
+      },
+      body: JSON.stringify({ emailConstraint: "external@example.com", authorities: ["apps.create"] }),
+    });
+    const receipt = await created.json() as { invitationId: string; acceptUrl: string };
+    const entry = new URL(receipt.acceptUrl);
+    const token = entry.pathname.split("/").pop()!;
+
+    const start = await bff(new Request(entry));
+    expect(start.status).toBe(302);
+    const authorization = new URL(start.headers.get("Location")!);
+    expect(authorization.origin).toBe(ISSUER);
+    expect(authorization.href).not.toContain(token);
+    provider.pendingClaims = {
+      iss: ISSUER,
+      sub: "external-user",
+      aud: CLIENT_ID,
+      nonce: authorization.searchParams.get("nonce")!,
+      email: "external@example.com",
+      email_verified: true,
+      name: "External User",
+    };
+    const callback = await bff(new Request(
+      `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(authorization.searchParams.get("state")!)}`,
+      { headers: { Cookie: cookieFrom(start)! } },
+    ));
+    expect(callback.headers.get("Location")).toBe(`/admin/#/platform-invitations/${token}`);
+    const limitedCookie = cookieFrom(callback)!;
+    const shell = await authRequest(bff, "/admin/", limitedCookie);
+    const csrf = /<meta name="x-csrf-token" content="([^"]+)"/.exec(await shell.text())![1]!;
+    expect((await authRequest(bff, "/admin/me", limitedCookie)).status).toBe(403);
+
+    const wrongKind = await authRequest(bff, `/admin/member-invitations/${token}/accept`, limitedCookie, {
+      method: "POST",
+      headers: { "X-CSRF-Token": csrf },
+    });
+    expect(wrongKind.status).toBe(403);
+    expect(await wrongKind.json()).toMatchObject({ error: "INVITATION_SESSION_REQUIRED" });
+
+    const accepted = await authRequest(bff, `/admin/platform-invitations/${token}/accept`, limitedCookie, {
+      method: "POST",
+      headers: { "X-CSRF-Token": csrf, "X-Request-Id": "request-accept" },
+    });
+    expect(accepted.status).toBe(204);
+    const fullCookie = cookieFrom(accepted)!;
+    expect(fullCookie).not.toBe(limitedCookie);
+    expect((await authRequest(bff, "/admin/me", limitedCookie)).status).toBe(401);
+    const me = await authRequest(bff, "/admin/me", fullCookie);
+    expect(me.status).toBe(200);
+    expect(await me.json()).toMatchObject({
+      identity: { subject: "external-user" },
+      platformAccess: { status: "active", authorities: ["apps.create"] },
+    });
+    await expect(repo.getInvitation(receipt.invitationId, Date.now())).resolves.toMatchObject({ status: "accepted" });
+  }, 10_000);
+
+  test("platform admin: lists filtered durable platform audit events", async () => {
+    const provider = await createMockProvider();
+    const repo = new MemoryPlatformAccessRepository();
+    const { bff, cookie, csrf } = await signInWithAdmin(provider, repo, "admin-user");
+    await authRequest(bff, "/admin/platform/invitations", cookie, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrf,
+        "Idempotency-Key": "audit-invitation",
+        "X-Request-Id": "request-audit",
+      },
+      body: JSON.stringify({ emailConstraint: "audit@example.com", authorities: ["apps.create"] }),
+    });
+
+    const response = await authRequest(
+      bff,
+      "/admin/platform/audit-events?action=platform_invitation.created&limit=10",
+      cookie,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      items: [{
+        action: "platform_invitation.created",
+        actorPrincipalRef: expect.any(String),
+        targetInvitationId: expect.any(String),
+        requestId: "request-audit",
+        details: {},
+      }],
+      nextCursor: null,
+    });
+  }, 10_000);
+
   test("platform admin: non-platform-admin gets 403 on platform routes", async () => {
     const provider = await createMockProvider();
     const repo = new MemoryPlatformAccessRepository();
     // Grant apps.create only, NOT platform.admin.
     repo.grant(ISSUER, "non-admin-user");
-    const bff = await createBff(provider, undefined, {}, repo);
+    const bff = await createBff(provider, undefined, {}, repo, undefined, repo, repo);
 
     const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/oidc?returnTo=/admin/`));
     const preLoginCookie = cookieFrom(login)!;
@@ -1906,6 +2255,8 @@ describe("cas-admin-webui BFF", () => {
     for (const path of [
       "/admin/platform/access-summary",
       "/admin/platform/principals",
+      "/admin/platform/invitations",
+      "/admin/platform/audit-events",
       `/admin/platform/principals/${encodeURIComponent(`${ISSUER}\0non-admin-user`)}`,
     ]) {
       const response = await authRequest(bff, path, cookie);

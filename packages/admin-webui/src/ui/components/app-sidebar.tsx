@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { Cable, Plus, ShieldCheck, BookOpenText, LogOut } from "lucide-react";
+import { Menu, Plus, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet.js";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet.js";
 import type { App, AppAdminMeResponse } from "@unicas/admin-client";
 import { UserMenu } from "../user-menu.js";
 
@@ -81,9 +81,8 @@ export function AppSidebar({
                 <a
                   key={app.appId}
                   href={`#/apps/${app.appId}/overview`}
-                  className={`console-sidebar-app-item ${
-                    isSelected ? "console-sidebar-app-item-selected" : ""
-                  }`}
+                  className={`console-sidebar-app-item ${isSelected ? "console-sidebar-app-item-selected" : ""
+                    }`}
                 >
                   {isSelected && <div className="console-sidebar-selected-indicator" />}
                   <div className="console-sidebar-app-mark">
@@ -108,7 +107,7 @@ export function AppSidebar({
               <span className="console-sidebar-section-title">Administration</span>
             </div>
             <a
-              href="#/platform/principals"
+              href="#/platform/people"
               className="console-sidebar-admin-item"
             >
               <ShieldCheck className="h-4 w-4" />
@@ -139,15 +138,13 @@ export function AppSidebar({
             variant="ghost"
             size="icon"
             className="console-mobile-sidebar-trigger"
+            aria-label="Open navigation"
           >
-            <div className="h-5 w-5 flex flex-col justify-center items-center gap-1">
-              <span className="w-5 h-0.5 bg-current"></span>
-              <span className="w-5 h-0.5 bg-current"></span>
-              <span className="w-5 h-0.5 bg-current"></span>
-            </div>
+            <Menu className="h-5 w-5" />
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="p-0 w-[17rem]">
+        <SheetContent side="right" className="p-0 w-[17rem]">
+          <SheetTitle className="sr-only">Navigation</SheetTitle>
           {sidebarContent}
         </SheetContent>
       </Sheet>

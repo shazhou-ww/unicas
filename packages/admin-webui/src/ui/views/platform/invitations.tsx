@@ -1,16 +1,5 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.js";
+import { PeopleView } from "../people.js";
 
 export function PlatformInvitationsView() {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Platform Invitations</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-muted-foreground">
-          Platform invitation management will be available after the invitation-limited login prerequisite is implemented.
-        </p>
-      </CardContent>
-    </Card>
-  );
+  return <PeopleView scope={{ platform: true }} initialFilter="pending" />;
 }

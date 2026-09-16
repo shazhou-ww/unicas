@@ -127,7 +127,7 @@ describe("CAS admin schemas", () => {
     expectTypeOf<MeResult["profile"]>().toEqualTypeOf<Profile>();
 
     expect(Object.keys(appAdminApiContract.apps)).toHaveLength(4);
-    expect(Object.keys(appAdminApiContract.members)).toHaveLength(6);
+    expect(Object.keys(appAdminApiContract.members)).toHaveLength(7);
   });
 
   test("defines issuer, capability, and audit resources for the complete App contract", () => {
@@ -185,7 +185,7 @@ describe("CAS admin schemas", () => {
     expect(SpaceRootRefBalanceSchema.safeParse(balance).success).toBe(true);
     const operationCount = Object.values(appAdminApiContract)
       .reduce((count, group) => count + Object.keys(group).length, 0);
-    expect(operationCount).toBe(25);
+    expect(operationCount).toBe(37);
   });
 });
 
@@ -211,8 +211,20 @@ describe("CAS admin OpenAPI", () => {
     const document = await generateAppAdminOpenApiDocument();
     const allOperations = operations(document);
     const serialized = JSON.stringify(document);
-    expect(Object.keys(document.paths ?? {})).toHaveLength(17);
-    expect(allOperations).toHaveLength(25);
+    expect(Object.keys(document.paths ?? {})).toHaveLength(27);
+    expect(allOperations).toHaveLength(37);
+    expect(document.paths?.["/admin/apps/{appId}/people"]?.get).toBeDefined();
+    expect(document.paths?.["/admin/platform/people"]?.get).toBeDefined();
+    expect(document.paths?.["/admin/platform/access-summary"]?.get).toBeDefined();
+    expect(document.paths?.["/admin/platform/principals"]?.get).toBeDefined();
+    expect(document.paths?.["/admin/platform/principals/{principalRef}"]?.get).toBeDefined();
+    expect(document.paths?.["/admin/platform/principals/{principalRef}/access"]?.get).toBeDefined();
+    expect(document.paths?.["/admin/platform/principals/{principalRef}/access"]?.patch).toBeDefined();
+    expect(document.paths?.["/admin/platform/invitations"]?.get).toBeDefined();
+    expect(document.paths?.["/admin/platform/invitations"]?.post).toBeDefined();
+    expect(document.paths?.["/admin/platform/invitations/{invitationId}"]?.delete).toBeDefined();
+    expect(document.paths?.["/admin/platform-invitations/{token}/accept"]?.post).toBeDefined();
+    expect(document.paths?.["/admin/platform/audit-events"]?.get).toBeDefined();
     expect(document.paths?.["/admin/apps/{appId}/member-invitations"]?.get?.operationId).toBe("listAppMemberInvitations");
     const revoke = document.paths?.["/admin/apps/{appId}/member-invitations/{invitationId}"]?.delete;
     expect(revoke?.responses?.["204"]).toHaveProperty("headers.ETag.required", true);

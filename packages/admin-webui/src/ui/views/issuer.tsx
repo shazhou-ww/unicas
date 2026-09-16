@@ -15,11 +15,11 @@ import { formatErrorSafe } from "./view-helpers.js";
  * keys: activation proves control of a key the issuer currently advertises,
  * and Space verification reads the issuer's discovered jwks_uri.
  */
-export function IssuerView(props: { appId: string; focusManagedIssuer?: boolean }) {
+export function IssuerView(props: { appId: string; focusManagedIssuer?: boolean; onManagedIssuerChanged?: (issuer: AppOAuthIssuer) => void }) {
   return <IssuerPanel key={props.appId} {...props} />;
 }
 
-function IssuerPanel({ appId, focusManagedIssuer = false }: { appId: string; focusManagedIssuer?: boolean }) {
+function IssuerPanel({ appId, focusManagedIssuer = false, onManagedIssuerChanged }: { appId: string; focusManagedIssuer?: boolean; onManagedIssuerChanged?: (issuer: AppOAuthIssuer) => void }) {
   const managedSettingsRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -130,11 +130,13 @@ function IssuerPanel({ appId, focusManagedIssuer = false }: { appId: string; foc
     setError(null);
     try {
       const enabled = managedIssuer.status !== "active";
-      setManagedIssuer(await api<AppOAuthIssuer>(`/admin/apps/${encodeURIComponent(appId)}/managed-issuer`, {
+      const updated = await api<AppOAuthIssuer>(`/admin/apps/${encodeURIComponent(appId)}/managed-issuer`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", ...ifMatch(managedIssuer.revision) },
         body: JSON.stringify({ enabled }),
-      }));
+      });
+      setManagedIssuer(updated);
+      onManagedIssuerChanged?.(updated);
     } catch (caught) {
       setError(formatErrorSafe(caught));
     } finally {

@@ -19,6 +19,11 @@ import {
 } from "@unicas/admin-protocol";
 import type {
   CasAdminCreateHeaders,
+  AppPeopleQuery,
+  PlatformPeopleQuery,
+  AppPerson,
+  PlatformPerson,
+  PeoplePage,
   CasAdminMutationPreconditions,
   CasAdminPage,
   CasAdminPageQuery,
@@ -48,6 +53,15 @@ import type {
   CasStackOAuthIssuer,
   CasManagedCapability,
   ManagedSpaceCapability,
+  PlatformAccessSummary,
+  PlatformAccessState,
+  PlatformAuditAction,
+  PlatformAuditPage,
+  PlatformAuthority,
+  PlatformInvitation,
+  PlatformInvitationPage,
+  PlatformPrincipalDetail,
+  PlatformPrincipalPage,
   Principal,
   SpaceRootRefBalance,
   SpaceRootRefEvent,
@@ -61,6 +75,8 @@ import type {
 } from "./types.js";
 
 export interface AdminClient {
+  listAppPeople(path: { readonly appId: AppId }, query?: AppPeopleQuery): Promise<PeoplePage<AppPerson>>;
+  listPlatformPeople(query?: PlatformPeopleQuery): Promise<PeoplePage<PlatformPerson>>;
   me(): Promise<{ readonly identity: CasOperatorIdentity; readonly memberships: readonly CasStackMember[] }>;
   getCurrentPrincipal(): Promise<AppAdminMeResponse>;
   listApps(query?: CasAdminPageQuery): Promise<CasAdminPage<App>>;
@@ -97,6 +113,41 @@ export interface AdminClient {
     path: { readonly appId: AppId; readonly invitationId: string },
     ifMatch: string,
   ): Promise<{ readonly etag: string }>;
+  getPlatformAccessSummary(): Promise<PlatformAccessSummary>;
+  listPlatformPrincipals(query?: {
+    readonly query?: string;
+    readonly effectiveAccess?: "active" | "blocked" | "no_access";
+    readonly authority?: PlatformAuthority | "none";
+    readonly limit?: number;
+    readonly cursor?: string;
+  }): Promise<PlatformPrincipalPage>;
+  getPlatformPrincipal(path: { readonly principalRef: string }): Promise<PlatformPrincipalDetail>;
+  getPlatformAccess(path: { readonly principalRef: string }): Promise<AdminClientRead<PlatformAccessState>>;
+  patchPlatformAccess(
+    path: { readonly principalRef: string },
+    body: { readonly status?: "active" | "blocked"; readonly authorities?: readonly PlatformAuthority[] },
+    ifMatch: string,
+  ): Promise<{ readonly etag: string }>;
+  listPlatformInvitations(query?: {
+    readonly query?: string;
+    readonly status?: PlatformInvitation["status"];
+    readonly limit?: number;
+    readonly cursor?: string;
+  }): Promise<PlatformInvitationPage>;
+  createPlatformInvitation(
+    body: { readonly emailConstraint: string; readonly authorities: readonly PlatformAuthority[] },
+    idempotencyKey: string,
+  ): Promise<{ readonly invitationId: string; readonly acceptUrl: string; readonly expiresAt: number; readonly etag: string }>;
+  revokePlatformInvitation(path: { readonly invitationId: string }, ifMatch: string): Promise<{ readonly etag: string }>;
+  acceptPlatformInvitation(path: { readonly token: string }): Promise<void>;
+  listPlatformAuditEvents(query?: {
+    readonly action?: PlatformAuditAction;
+    readonly actorPrincipalRef?: string;
+    readonly targetPrincipalRef?: string;
+    readonly createdAfter?: number;
+    readonly limit?: number;
+    readonly cursor?: string;
+  }): Promise<PlatformAuditPage>;
   listAppPlaygroundFileRoots(path: { readonly appId: AppId }): Promise<{ readonly items: readonly CasPlaygroundFileRoot[] }>;
   createAppPlaygroundFileRoot(
     path: { readonly appId: AppId },
@@ -298,7 +349,12 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
         "getCurrentPrincipal",
       );
       const body: unknown = await response.json();
-      if (!isRecord(body) || !isRecord(body.principal) || !isRecord(body.profile) || !Array.isArray(body.memberships)) {
+      if (!isRecord(body)
+        || !isRecord(body.principal)
+        || !isRecord(body.profile)
+        || !isRecord(body.platformAccess)
+        || !Array.isArray(body.platformAccess.authorities)
+        || !Array.isArray(body.memberships)) {
         throw new AdminClientError(502, "ADMIN_CONTRACT_MISMATCH", "App administrator identity response was not returned");
       }
       return body as unknown as AppAdminMeResponse;
@@ -349,6 +405,16 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
       return response.json();
     },
 
+    async listAppPeople(path, query) {
+      const response = await requireOk(await request(`${appAdminRoutes.people(path)}${queryString(query)}`), "listAppPeople");
+      return response.json();
+    },
+
+    async listPlatformPeople(query) {
+      const response = await requireOk(await request(`${appAdminRoutes.platformPeople()}${queryString(query)}`), "listPlatformPeople");
+      return response.json();
+    },
+
     async revokeAppMemberInvitation(path, ifMatch) {
       const response = await requireOk(await request(appAdminRoutes.memberInvitation(path), {
         method: "DELETE", headers: ifMatchHeader(ifMatch),
@@ -395,6 +461,94 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
       const response = await requireOk(
         await request(appAdminRoutes.acceptMemberInvitation(path), { method: "POST" }),
         "acceptAppMemberInvitation",
+      );
+      return response.json();
+    },
+
+    async getPlatformAccessSummary() {
+      const response = await requireOk(await request(appAdminRoutes.accessSummary()), "getPlatformAccessSummary");
+      return response.json();
+    },
+
+    async listPlatformPrincipals(query) {
+      const response = await requireOk(
+        await request(`${appAdminRoutes.platformPrincipals()}${queryString(query)}`),
+        "listPlatformPrincipals",
+      );
+      return response.json();
+    },
+
+    async getPlatformPrincipal(path) {
+      const response = await requireOk(
+        await request(appAdminRoutes.platformPrincipal(path)),
+        "getPlatformPrincipal",
+      );
+      return response.json();
+    },
+
+    async getPlatformAccess(path) {
+      const response = await requireOk(
+        await request(appAdminRoutes.platformPrincipalAccess(path)),
+        "getPlatformAccess",
+      );
+      return { value: await response.json(), etag: readEtag(response) };
+    },
+
+    async patchPlatformAccess(path, body, ifMatch) {
+      const response = await requireOk(
+        await request(appAdminRoutes.platformPrincipalAccess(path), {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", ...ifMatchHeader(ifMatch) },
+          body: JSON.stringify(body),
+        }),
+        "patchPlatformAccess",
+      );
+      return { etag: readEtag(response) };
+    },
+
+    async listPlatformInvitations(query) {
+      const response = await requireOk(
+        await request(`${appAdminRoutes.platformInvitations()}${queryString(query)}`),
+        "listPlatformInvitations",
+      );
+      return response.json();
+    },
+
+    async createPlatformInvitation(body, idempotencyKey) {
+      const response = await requireOk(
+        await request(appAdminRoutes.platformInvitations(), {
+          method: "POST",
+          headers: { "Content-Type": "application/json", [CasAdminIdempotencyKeyHeader]: idempotencyKey },
+          body: JSON.stringify(body),
+        }),
+        "createPlatformInvitation",
+      );
+      const receipt: { invitationId: string; acceptUrl: string; expiresAt: number } = await response.json();
+      return { ...receipt, etag: readEtag(response) };
+    },
+
+    async revokePlatformInvitation(path, ifMatch) {
+      const response = await requireOk(
+        await request(appAdminRoutes.platformInvitation(path), {
+          method: "DELETE",
+          headers: ifMatchHeader(ifMatch),
+        }),
+        "revokePlatformInvitation",
+      );
+      return { etag: readEtag(response) };
+    },
+
+    async acceptPlatformInvitation(path) {
+      await requireOk(
+        await request(appAdminRoutes.acceptPlatformInvitation(path), { method: "POST" }),
+        "acceptPlatformInvitation",
+      );
+    },
+
+    async listPlatformAuditEvents(query) {
+      const response = await requireOk(
+        await request(`${appAdminRoutes.platformAuditEvents()}${queryString(query)}`),
+        "listPlatformAuditEvents",
       );
       return response.json();
     },

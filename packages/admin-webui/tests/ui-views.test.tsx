@@ -10,6 +10,10 @@ import {
   UsageView,
   PlaygroundView,
 } from "../src/ui/index.js";
+import { PlatformInvitationAcceptanceView } from "../src/ui/views/platform-invitation-acceptance.js";
+import { PlatformInvitationsView } from "../src/ui/views/platform/invitations.js";
+import { PlatformPrincipalsView } from "../src/ui/views/platform/principals.js";
+import { PlatformAuditView } from "../src/ui/views/platform/audit.js";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -36,6 +40,188 @@ describe("InvitationView", () => {
       "/admin/member-invitations/invite%2F1/accept",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+});
+
+describe("PlatformInvitationAcceptanceView", () => {
+  test("accepts platform access and hands control to a full-session reload", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const onAccepted = vi.fn();
+    const user = userEvent.setup();
+    render(<PlatformInvitationAcceptanceView token="platform/1" onAccepted={onAccepted} />);
+
+    await user.click(screen.getByRole("button", { name: "Accept platform access" }));
+
+    await waitFor(() => expect(onAccepted).toHaveBeenCalledOnce());
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/admin/platform-invitations/platform%2F1/accept",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+});
+
+describe("PlatformInvitationsView", () => {
+  test("creates and conditionally revokes platform invitations", async () => {
+    const invitation = {
+      invitationId: "platform-invite-1",
+      emailConstraint: "developer@example.com",
+      authorities: ["apps.create"],
+      status: "pending",
+      expiresAt: 4102444800000,
+      createdAt: 1,
+      createdBy: { issuer: "https://accounts.example", subject: "admin" },
+      revision: 1,
+    };
+    fetchMock.mockImplementation(async (input, init) => {
+      if (init?.method === "POST") return json({ invitationId: invitation.invitationId, acceptUrl: "https://console.example/admin/platform-invitations/secret-token", expiresAt: invitation.expiresAt }, 201);
+      if (init?.method === "DELETE") return new Response(null, { status: 204 });
+      if (String(input).endsWith("access-summary")) return json({ activePrincipalCount: 1, platformAdminCount: 1, appCreatorCount: 0, blockedPrincipalCount: 0, generatedAt: 1 });
+      return json({ items: [{ kind: "invitation", invitation }], nextCursor: null });
+    });
+    const user = userEvent.setup();
+    render(<PlatformInvitationsView />);
+
+    expect(await screen.findByText("developer@example.com")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Invite", exact: true }));
+    await user.type(screen.getByLabelText("Email"), "new@example.com");
+    await user.click(screen.getByLabelText("App creation"));
+    await user.click(screen.getByRole("button", { name: "Create invitation" }));
+
+    expect(await screen.findByText("https://console.example/admin/platform-invitations/secret-token")).toBeVisible();
+    const createCall = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");
+    expect(createCall?.[0]).toBe("/admin/platform/invitations");
+    expect((createCall?.[1]?.headers as Headers).get("Idempotency-Key")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Done" }));
+
+    await user.click(screen.getByTitle("Revoke invitation"));
+    await user.click(screen.getByRole("button", { name: "Confirm revoke" }));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(true));
+    const revokeCall = fetchMock.mock.calls.find(([, init]) => init?.method === "DELETE");
+    expect((revokeCall?.[1]?.headers as Headers).get("If-Match")).toBe('"1"');
+  });
+});
+
+describe("PlatformPrincipalsView", () => {
+  test("uses cursor pagination and renders App memberships in Principal detail", async () => {
+    const principal = {
+      principalRef: "principal-1",
+      principal: { issuer: "https://accounts.example", subject: "developer" },
+      profile: { displayName: "Developer", emailForDisplay: "developer@example.com" },
+      status: "active",
+      authorities: ["apps.create"],
+      revision: 1,
+      createdAt: 1,
+      updatedAt: 1,
+      effectiveAccess: "active",
+      appMembershipCount: 1,
+      lastActiveAt: 1,
+    };
+    let page = 0;
+    fetchMock.mockImplementation(async input => {
+      const path = String(input);
+      if (path === "/admin/platform/access-summary") {
+        return json({ activePrincipalCount: 1, platformAdminCount: 1, appCreatorCount: 1, blockedPrincipalCount: 0, generatedAt: 1 });
+      }
+      if (path.startsWith("/admin/platform/people?")) {
+        page += 1;
+        return page === 1
+          ? json({ items: [{ kind: "principal", principal }], nextCursor: "next-page" })
+          : json({ items: [], nextCursor: null });
+      }
+      if (path === "/admin/platform/principals/principal-1") {
+        return json({ ...principal, memberships: [{ appId: "app-1", principal: principal.principal, profile: principal.profile }] });
+      }
+      return new Response(null, { status: 404 });
+    });
+    const user = userEvent.setup();
+    render(<PlatformPrincipalsView />);
+
+    const openPrincipal = await screen.findByRole("button", { name: "Open Principal details for Developer" });
+    openPrincipal.focus();
+    await user.keyboard("{Enter}");
+    expect(await screen.findByText("app-1")).toBeInTheDocument();
+    await user.click(within(screen.getByRole("dialog", { name: "Principal Details" })).getByRole("button", { name: "Close" }));
+    await user.click(screen.getByRole("button", { name: "Load more" }));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => String(path).includes("cursor=next-page"))).toBe(true));
+    expect(fetchMock.mock.calls.some(([path]) => String(path).includes("after=next-page"))).toBe(false);
+    await user.type(screen.getByLabelText("Search people"), "developer");
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => String(path).includes("query=developer"))).toBe(true));
+  });
+
+  test("confirms authority changes before issuing the conditional PATCH", async () => {
+    const principal = {
+      principalRef: "principal-1",
+      principal: { issuer: "https://accounts.example", subject: "developer" },
+      profile: { displayName: "Developer", emailForDisplay: "developer@example.com" },
+      status: "active",
+      authorities: ["apps.create"],
+      revision: 3,
+      createdAt: 1,
+      updatedAt: 1,
+      effectiveAccess: "active",
+      appMembershipCount: 0,
+      lastActiveAt: null,
+      memberships: [],
+    };
+    fetchMock.mockImplementation(async (input, init) => {
+      const path = String(input);
+      if (path === "/admin/platform/access-summary") return json({ activePrincipalCount: 1, platformAdminCount: 1, appCreatorCount: 1, blockedPrincipalCount: 0, generatedAt: 1 });
+      if (path.startsWith("/admin/platform/people?")) return json({ items: [{ kind: "principal", principal }], nextCursor: null });
+      if (path === "/admin/platform/principals/principal-1" && init?.method !== "PATCH") return json(principal);
+      if (path === "/admin/platform/principals/principal-1/access" && init?.method === "PATCH") return new Response(null, { status: 204 });
+      return new Response(null, { status: 404 });
+    });
+    const user = userEvent.setup();
+    render(<PlatformPrincipalsView />);
+
+    await user.click(await screen.findByRole("button", { name: "Open Principal details for Developer" }));
+    await user.click(await screen.findByLabelText("apps.create"));
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(await screen.findByRole("dialog", { name: "Confirm Platform Access changes" })).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "PATCH")).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "PATCH")).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await user.click(screen.getByRole("button", { name: "Confirm changes" }));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => init?.method === "PATCH")).toBe(true));
+    const patch = fetchMock.mock.calls.find(([, init]) => init?.method === "PATCH");
+    expect((patch?.[1]?.headers as Headers).get("If-Match")).toBe('"3"');
+  });
+});
+
+describe("PlatformAuditView", () => {
+  test("applies Principal filters and preserves them across cursor pagination", async () => {
+    const event = {
+      eventId: "event-1",
+      action: "platform_invitation.created",
+      actorPrincipalRef: "actor-ref",
+      actorPrincipal: { issuer: "https://accounts.example", subject: "admin" },
+      targetPrincipalRef: null,
+      targetPrincipal: null,
+      targetInvitationId: "invitation-1",
+      result: "succeeded",
+      requestId: "request-1",
+      createdAt: 1,
+      details: {},
+    };
+    fetchMock
+      .mockResolvedValueOnce(json({ items: [], nextCursor: null }))
+      .mockResolvedValueOnce(json({ items: [event], nextCursor: "audit-next" }))
+      .mockResolvedValueOnce(json({ items: [], nextCursor: null }));
+    const user = userEvent.setup();
+    render(<PlatformAuditView />);
+
+    await screen.findByText("No events.");
+    await user.type(screen.getByLabelText("Actor Principal ref"), "actor-ref");
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+    expect(await screen.findByText("platform_invitation.created")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Load more" }));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => String(path).includes("cursor=audit-next"))).toBe(true));
+    const pagedPath = String(fetchMock.mock.calls.at(-1)?.[0]);
+    expect(pagedPath).toContain("actorPrincipalRef=actor-ref");
+    expect(pagedPath).toContain("cursor=audit-next");
   });
 });
 
@@ -255,29 +441,31 @@ describe("MembersView", () => {
   test("filters and pages invitations and revokes using the invitation revision", async () => {
     const invitation = { appId: STACK, invitationId: "inv/1", status: "pending", emailConstraint: "invitee@example.test", expiresAt: 4102444800000, createdAt: 1, revision: 7 };
     fetchMock
-      .mockResolvedValueOnce(json({ items: [] }))
-      .mockResolvedValueOnce(json({ items: [invitation], nextCursor: "page-2" }))
-      .mockResolvedValueOnce(json({ items: [{ ...invitation, invitationId: "inv_2", emailConstraint: "second@example.test" }], nextCursor: null }))
+      .mockResolvedValueOnce(json({ items: [{ kind: "invitation", invitation }], nextCursor: "page-2" }))
+      .mockResolvedValueOnce(json({ items: [{ kind: "invitation", invitation: { ...invitation, invitationId: "inv_2", emailConstraint: "second@example.test" } }], nextCursor: null }))
       .mockResolvedValueOnce(new Response(null, { status: 204, headers: { ETag: '"8"' } }))
-      .mockResolvedValueOnce(json({ items: [{ ...invitation, status: "revoked", revision: 8 }], nextCursor: null }))
+      .mockResolvedValueOnce(json({ items: [{ kind: "invitation", invitation: { ...invitation, status: "revoked", revision: 8 } }], nextCursor: null }))
       .mockResolvedValueOnce(json({ items: [], nextCursor: null }));
     const user = userEvent.setup();
     render(<MembersView appId={STACK} appRevision={99} onChanged={() => undefined} />);
-    await user.click(screen.getByRole("tab", { name: "Invitations" }));
     expect(await screen.findByText("invitee@example.test")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Load more invitations" }));
+    await user.click(screen.getByRole("button", { name: "Load more" }));
     expect(await screen.findByText("second@example.test")).toBeInTheDocument();
-    await user.click(screen.getAllByRole("button", { name: "Revoke" })[0]!);
-    expect(screen.getByRole("dialog", { name: "Revoke Invitation" })).toBeInTheDocument();
+    await user.click(screen.getAllByTitle("Revoke invitation")[0]!);
+    expect(screen.getByRole("dialog", { name: "Revoke invitation" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Confirm revoke" }));
-    expect(await screen.findByRole("cell", { name: "revoked" })).toBeInTheDocument();
+    expect(await screen.findByText("revoked")).toBeInTheDocument();
     const deletion = fetchMock.mock.calls.find(([, init]) => init?.method === "DELETE");
     expect(deletion?.[0]).toBe(`/admin/apps/${STACK}/member-invitations/inv%2F1`);
     expect(new Headers(deletion?.[1]?.headers).get("If-Match")).toBe('"7"');
-    expect(fetchMock.mock.calls[2][0]).toContain("cursor=page-2");
-    await user.selectOptions(screen.getByRole("combobox", { name: "Status" }), "expired");
-    expect(await screen.findByText("No invitations.")).toBeInTheDocument();
-    expect(fetchMock.mock.calls.at(-1)?.[0]).toContain("status=expired");
+    expect(fetchMock.mock.calls[1][0]).toContain("cursor=page-2");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    screen.getByRole("combobox", { name: "People filter" }).focus();
+    await user.keyboard("{Enter}");
+    await user.click(await screen.findByRole("option", { name: "Invitation history" }));
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+    expect(await screen.findByText("No people found.")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.at(-1)?.[0]).toContain("filter=history");
   });
 
   test("clears one-time invitation URLs when switching Apps", async () => {
@@ -287,13 +475,12 @@ describe("MembersView", () => {
       .mockResolvedValueOnce(json({ items: [] }));
     const user = userEvent.setup();
     const { rerender } = render(<MembersView appId={STACK} appRevision={1} onChanged={() => undefined} />);
+    await user.click(screen.getByRole("button", { name: "Invite", exact: true }));
     await user.click(screen.getByRole("button", { name: "Create invitation" }));
     expect(await screen.findByText("https://console.example.test/synthetic-once")).toBeInTheDocument();
     rerender(<MembersView appId="other-app" appRevision={1} onChanged={() => undefined} />);
     expect(screen.queryByText("https://console.example.test/synthetic-once")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: "Administrators" }));
-    await user.keyboard("{ArrowRight}");
-    expect(screen.getByRole("tab", { name: "Invitations" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   test("lists members and creates an invitation with a copyable URL", async () => {
@@ -301,9 +488,11 @@ describe("MembersView", () => {
       .mockResolvedValueOnce(json({
         items: [
           {
-            appId: STACK,
-            principal: { issuer: "iss", subject: "alice" },
-            profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+            kind: "member", joinedAt: 1, membership: {
+              appId: STACK,
+              principal: { issuer: "iss", subject: "alice" },
+              profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+            },
           },
         ]
       }))
@@ -313,9 +502,10 @@ describe("MembersView", () => {
       }));
     const user = userEvent.setup();
     render(<MembersView appId={STACK} appRevision={1} onChanged={() => undefined} />);
-    await waitFor(() => expect(screen.getByText("alice")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Invite", exact: true }));
     await user.click(screen.getByRole("button", { name: "Create invitation" }));
-    await waitFor(() => expect(screen.getByText(/Share this URL once/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Share this one-time URL/)).toBeInTheDocument());
     expect(screen.getByText("https://cas.example/admin/invitations/token-xyz")).toBeInTheDocument();
   });
 
@@ -324,9 +514,11 @@ describe("MembersView", () => {
       .mockResolvedValueOnce(json({
         items: [
           {
-            appId: STACK,
-            principal: { issuer: "iss", subject: "alice" },
-            profile: { displayName: null, emailForDisplay: null },
+            kind: "member", joinedAt: 1, membership: {
+              appId: STACK,
+              principal: { issuer: "iss", subject: "alice" },
+              profile: { displayName: null, emailForDisplay: null },
+            },
           },
         ]
       }))
@@ -334,9 +526,10 @@ describe("MembersView", () => {
       .mockResolvedValueOnce(json({ items: [] }));
     const user = userEvent.setup();
     render(<MembersView appId={STACK} appRevision={3} onChanged={() => undefined} />);
-    await waitFor(() => expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: "Remove" }));
-    await waitFor(() => expect(screen.getByText("No members.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTitle("Remove member")).toBeInTheDocument());
+    await user.click(screen.getByTitle("Remove member"));
+    await user.click(screen.getByRole("button", { name: "Confirm removal" }));
+    await waitFor(() => expect(screen.getByText("No people found.")).toBeInTheDocument());
     const deleteCall = fetchMock.mock.calls.find((call) => call[1]?.method === "DELETE");
     expect(deleteCall).toBeDefined();
     expect(new Headers(deleteCall![1]!.headers).get("If-Match")).toBe('"3"');

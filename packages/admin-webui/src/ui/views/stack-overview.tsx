@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Copy, Save } from "lucide-react";
+import { Save } from "lucide-react";
 import type { App } from "@unicas/admin-client";
 import { api, ifMatch } from "../api.js";
 import { formatErrorSafe } from "./view-helpers.js";
@@ -8,8 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import { CopyBubble } from "../components/copy-bubble.js";
 
 export function AppOverviewView({ app, onChanged }: {
   app: App;
@@ -20,7 +19,6 @@ export function AppOverviewView({ app, onChanged }: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   async function save() {
     setSaving(true);
@@ -45,16 +43,6 @@ export function AppOverviewView({ app, onChanged }: {
     }
   }
 
-  async function copyAppId() {
-    try {
-      await navigator.clipboard.writeText(app.appId);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // Silently fail if clipboard API not available
-    }
-  }
-
   const statusVariant = app.status === "active" ? "default" : "destructive";
 
   return (
@@ -64,46 +52,28 @@ export function AppOverviewView({ app, onChanged }: {
           <CardTitle>App Identity</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* App ID */}
-          <div className="space-y-2">
-            <Label>App ID</Label>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 rounded-md bg-muted px-3 py-2 text-sm font-mono">
-                {app.appId}
-              </code>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void copyAppId()}
-              >
-                <Copy className="h-4 w-4" />
-                {copied ? "Copied!" : "Copy"}
-              </Button>
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
+            <div className="min-w-0">
+              <dt className="text-muted-foreground">App ID</dt>
+              <dd className="mt-2 flex min-h-8 items-center">
+                <CopyBubble value={app.appId} label="App ID" />
+              </dd>
             </div>
-          </div>
-
-          {/* Status */}
-          <div className="space-y-2">
-            <Label>Status</Label>
-            <div>
-              <Badge variant={statusVariant}>
-                {app.status}
-              </Badge>
+            <div className="min-w-0">
+              <dt className="text-muted-foreground">Status</dt>
+              <dd className="mt-2 flex min-h-8 items-center">
+                <Badge variant={statusVariant}>{app.status}</Badge>
+              </dd>
             </div>
-          </div>
-
-          {/* Read-only metadata */}
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <Label className="text-muted-foreground">Revision</Label>
-              <p className="font-medium">{app.revision}</p>
+            <div className="min-w-0">
+              <dt className="text-muted-foreground">Revision</dt>
+              <dd className="mt-2 flex min-h-8 items-center font-medium">{app.revision}</dd>
             </div>
-            <div>
-              <Label className="text-muted-foreground">Created</Label>
-              <p className="font-medium">{new Date(app.createdAt).toLocaleString()}</p>
+            <div className="min-w-0">
+              <dt className="text-muted-foreground">Created</dt>
+              <dd className="mt-2 flex min-h-8 items-center break-words font-medium">{new Date(app.createdAt).toLocaleString()}</dd>
             </div>
-          </div>
+          </dl>
 
           {/* Editable fields */}
           <div className="space-y-2">
@@ -156,22 +126,6 @@ export function AppOverviewView({ app, onChanged }: {
             {saving ? "Saving…" : "Save Changes"}
           </Button>
         </CardFooter>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>OAuth Issuers</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center justify-center py-8 text-center">
-            <p className="text-sm text-muted-foreground mb-4">
-              OAuth issuer configuration
-            </p>
-            <Button variant="outline" size="sm">
-              Configure issuers
-            </Button>
-          </div>
-        </CardContent>
       </Card>
     </div>
   );

@@ -55,7 +55,11 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
         .bind(plan.identity.identityIssuer, plan.identity.subject, plan.identity.displayName, plan.identity.emailForDisplay, plan.identity.createdAt)
       : this.#db.prepare("UPDATE cas_operator_identities SET display_name = ?, email_for_display = ? WHERE identity_issuer = ? AND subject = ?")
         .bind(plan.identity.displayName, plan.identity.emailForDisplay, plan.identity.identityIssuer, plan.identity.subject);
-    await this.#db.batch([statement, this.#auditStatement(plan.audit)]);
+    const profileSnapshot = this.#db.prepare(`INSERT INTO cas_control_meta (key, value)
+      SELECT 'snapshot', 1 WHERE NOT EXISTS (SELECT 1 FROM cas_operator_identities WHERE identity_issuer = ? AND subject = ? AND display_name IS ? AND email_for_display IS ?)
+      ON CONFLICT(key) DO UPDATE SET value = value + 1`)
+      .bind(plan.identity.identityIssuer, plan.identity.subject, plan.identity.displayName, plan.identity.emailForDisplay);
+    await this.#db.batch([profileSnapshot, statement, this.#auditStatement(plan.audit)]);
   }
 
   async listMemberships(identity: CasOperatorIdentityKey): Promise<readonly ControlMembershipRecord[]> {

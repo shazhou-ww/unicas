@@ -432,15 +432,28 @@ cannot be refreshed.
 Root Refs writers carry signed `refDomain`; callers cannot provide or override
 it through path, query, header, or body.
 
-Top-level `/admin` routes use a Google OIDC-backed BFF session and App
-membership. MVP members have equal administrator authority. Space JWTs are
-never accepted by admin routes even if they contain admin-looking scopes, and
-OIDC admin sessions are never accepted by Space routes. The
+Top-level `/admin` routes use a Google OIDC-backed BFF session plus current
+deny-by-default Platform Access. Active platform authority or App membership
+admits a Principal; `blocked` overrides both. MVP App members retain equal
+App-local administrator authority, but membership never grants `apps.create`
+or `platform.admin`. Browser and CLI requests recheck admission on every
+operation. Remote MCP checks admission on OAuth grant issuance and every
+request; delegated OAuth scopes never substitute for current authority.
+Space JWTs are never accepted by admin routes even if they contain
+admin-looking scopes, and OIDC admin sessions are never accepted by Space routes. The
 `@unicas/service-cloudflare` worker owns the admin BFF (src/admin-bff): OIDC
 callback, secure session, CSRF boundary, and admin BFF routes; the
 `@unicas/admin-webui` package is the browser UI only. Browser code receives
 only short-lived managed Space capabilities for Playground; it never receives
 OIDC client secrets, or storage bindings.
+
+An email-bound pending App or platform invitation may start a special OIDC
+continuation for a Principal without full admission. Its encrypted pre-login
+state holds the bearer token; the resulting session retains only invitation ID
+and token hash and may call only the matching acceptance route plus logout.
+Successful acceptance rotates the session before authority or membership can
+be used. General login and subsequent sessions use immutable Principal state,
+not email allowlisting.
 
 HTTP upload is a lease that carries content. The same /lease route without a body extends a ready node (bodyless lease).
 

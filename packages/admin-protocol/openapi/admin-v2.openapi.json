@@ -3367,6 +3367,506 @@
         }
       }
     },
+    "/admin/apps/{appId}/people": {
+      "get": {
+        "operationId": "listAppPeople",
+        "summary": "Search App members and invitations",
+        "tags": [
+          "Members"
+        ],
+        "parameters": [
+          {
+            "name": "appId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Opaque UniCAS-generated App identifier."
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "filter",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "current",
+                "members",
+                "pending",
+                "history"
+              ],
+              "type": "string"
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "member"
+                              },
+                              "membership": {
+                                "type": "object",
+                                "properties": {
+                                  "appId": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "description": "App whose equal administrator authority this membership grants."
+                                  },
+                                  "principal": {
+                                    "type": "object",
+                                    "properties": {
+                                      "issuer": {
+                                        "type": "string",
+                                        "format": "uri",
+                                        "description": "Canonical issuer component of the immutable Principal key."
+                                      },
+                                      "subject": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "description": "Immutable subject component within the issuer."
+                                      }
+                                    },
+                                    "required": [
+                                      "issuer",
+                                      "subject"
+                                    ],
+                                    "readOnly": true,
+                                    "description": "Immutable authenticated identity granted membership."
+                                  },
+                                  "profile": {
+                                    "type": "object",
+                                    "properties": {
+                                      "displayName": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ],
+                                        "description": "Display-only name; never an authorization key."
+                                      },
+                                      "emailForDisplay": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ],
+                                        "description": "Display-only email; never an authorization key."
+                                      }
+                                    },
+                                    "required": [
+                                      "displayName",
+                                      "emailForDisplay"
+                                    ],
+                                    "readOnly": true,
+                                    "description": "Non-authoritative display metadata for the Principal."
+                                  }
+                                },
+                                "required": [
+                                  "appId",
+                                  "principal",
+                                  "profile"
+                                ],
+                                "readOnly": true
+                              },
+                              "joinedAt": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "membership",
+                              "joinedAt"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "invitation"
+                              },
+                              "invitation": {
+                                "type": "object",
+                                "properties": {
+                                  "invitationId": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "description": "Opaque persistent invitation identity."
+                                  },
+                                  "appId": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "description": "App the accepted invitation joins."
+                                  },
+                                  "status": {
+                                    "enum": [
+                                      "pending",
+                                      "accepted",
+                                      "expired",
+                                      "revoked"
+                                    ],
+                                    "type": "string",
+                                    "description": "Current single-use invitation lifecycle state."
+                                  },
+                                  "emailConstraint": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ],
+                                    "description": "Email the authenticated Principal must match, or null when unrestricted."
+                                  },
+                                  "expiresAt": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991,
+                                    "description": "Deadline after which acceptance is rejected."
+                                  },
+                                  "createdAt": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991,
+                                    "description": "Time at which the invitation was issued."
+                                  },
+                                  "revision": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991,
+                                    "description": "Current invitation revision."
+                                  }
+                                },
+                                "required": [
+                                  "invitationId",
+                                  "appId",
+                                  "status",
+                                  "emailConstraint",
+                                  "expiresAt",
+                                  "createdAt",
+                                  "revision"
+                                ],
+                                "readOnly": true
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "invitation"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "readOnly": true
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "readOnly": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "INVALID_CURSOR",
+                        "INVALID_REQUEST"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "ADMIN_AUTH_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PLATFORM_ACCESS_REQUIRED",
+                        "PLATFORM_ADMIN_REQUIRED",
+                        "APP_CREATION_AUTHORITY_REQUIRED",
+                        "INVITATION_SESSION_REQUIRED",
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_FOUND"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "LAST_PLATFORM_ADMIN",
+                        "SELF_BLOCK_FORBIDDEN",
+                        "INVITATION_NOT_PENDING",
+                        "LAST_MEMBER",
+                        "IDEMPOTENCY_CONFLICT",
+                        "ISSUER_CONFLICT",
+                        "ROOT_REF_SNAPSHOT_CHANGED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "412",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "REVISION_MISMATCH"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "428",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PRECONDITION_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "RATE_LIMITED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "SERVICE_UNAVAILABLE"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/apps/{appId}/member-invitations/{invitationId}": {
       "delete": {
         "operationId": "revokeAppMemberInvitation",
@@ -8418,6 +8918,4232 @@
                     "events",
                     "latestRevision",
                     "nextAfter"
+                  ],
+                  "readOnly": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "INVALID_CURSOR",
+                        "INVALID_REQUEST"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "ADMIN_AUTH_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PLATFORM_ACCESS_REQUIRED",
+                        "PLATFORM_ADMIN_REQUIRED",
+                        "APP_CREATION_AUTHORITY_REQUIRED",
+                        "INVITATION_SESSION_REQUIRED",
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_FOUND"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "LAST_PLATFORM_ADMIN",
+                        "SELF_BLOCK_FORBIDDEN",
+                        "INVITATION_NOT_PENDING",
+                        "LAST_MEMBER",
+                        "IDEMPOTENCY_CONFLICT",
+                        "ISSUER_CONFLICT",
+                        "ROOT_REF_SNAPSHOT_CHANGED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "412",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "REVISION_MISMATCH"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "428",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PRECONDITION_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "RATE_LIMITED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "SERVICE_UNAVAILABLE"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/platform/access-summary": {
+      "get": {
+        "operationId": "getPlatformAccessSummary",
+        "summary": "Read platform access counts",
+        "tags": [
+          "Platform Access"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "activePrincipalCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "platformAdminCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "appCreatorCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "blockedPrincipalCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "generatedAt": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "activePrincipalCount",
+                    "platformAdminCount",
+                    "appCreatorCount",
+                    "blockedPrincipalCount",
+                    "generatedAt"
+                  ],
+                  "readOnly": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "INVALID_CURSOR",
+                        "INVALID_REQUEST"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "ADMIN_AUTH_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PLATFORM_ACCESS_REQUIRED",
+                        "PLATFORM_ADMIN_REQUIRED",
+                        "APP_CREATION_AUTHORITY_REQUIRED",
+                        "INVITATION_SESSION_REQUIRED",
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_FOUND"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "LAST_PLATFORM_ADMIN",
+                        "SELF_BLOCK_FORBIDDEN",
+                        "INVITATION_NOT_PENDING",
+                        "LAST_MEMBER",
+                        "IDEMPOTENCY_CONFLICT",
+                        "ISSUER_CONFLICT",
+                        "ROOT_REF_SNAPSHOT_CHANGED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "412",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "REVISION_MISMATCH"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "428",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PRECONDITION_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "RATE_LIMITED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "SERVICE_UNAVAILABLE"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/platform/people": {
+      "get": {
+        "operationId": "listPlatformPeople",
+        "summary": "Search platform Principals and invitations",
+        "tags": [
+          "Platform Access"
+        ],
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "filter",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "current",
+                "principals",
+                "pending",
+                "history"
+              ],
+              "type": "string"
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "authority",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "platform.admin",
+                "apps.create",
+                "none"
+              ],
+              "type": "string"
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "effectiveAccess",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "active",
+                "blocked",
+                "no_access"
+              ],
+              "type": "string"
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "principal"
+                              },
+                              "principal": {
+                                "type": "object",
+                                "properties": {
+                                  "principalRef": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "principal": {
+                                    "type": "object",
+                                    "properties": {
+                                      "issuer": {
+                                        "type": "string",
+                                        "format": "uri",
+                                        "description": "Canonical issuer component of the immutable Principal key."
+                                      },
+                                      "subject": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "description": "Immutable subject component within the issuer."
+                                      }
+                                    },
+                                    "required": [
+                                      "issuer",
+                                      "subject"
+                                    ],
+                                    "readOnly": true
+                                  },
+                                  "status": {
+                                    "enum": [
+                                      "active",
+                                      "blocked"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "authorities": {
+                                    "type": "array",
+                                    "items": {
+                                      "enum": [
+                                        "platform.admin",
+                                        "apps.create"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "readOnly": true
+                                  },
+                                  "revision": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991,
+                                    "description": "Exact current resource revision used as the If-Match precondition."
+                                  },
+                                  "createdAt": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "updatedAt": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "profile": {
+                                    "type": "object",
+                                    "properties": {
+                                      "displayName": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ],
+                                        "description": "Display-only name; never an authorization key."
+                                      },
+                                      "emailForDisplay": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ],
+                                        "description": "Display-only email; never an authorization key."
+                                      }
+                                    },
+                                    "required": [
+                                      "displayName",
+                                      "emailForDisplay"
+                                    ],
+                                    "readOnly": true
+                                  },
+                                  "effectiveAccess": {
+                                    "enum": [
+                                      "active",
+                                      "blocked",
+                                      "no_access"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "appMembershipCount": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "lastActiveAt": {
+                                    "anyOf": [
+                                      {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "principalRef",
+                                  "principal",
+                                  "status",
+                                  "authorities",
+                                  "revision",
+                                  "createdAt",
+                                  "updatedAt",
+                                  "profile",
+                                  "effectiveAccess",
+                                  "appMembershipCount",
+                                  "lastActiveAt"
+                                ],
+                                "readOnly": true
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "principal"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "invitation"
+                              },
+                              "invitation": {
+                                "type": "object",
+                                "properties": {
+                                  "invitationId": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "emailConstraint": {
+                                    "type": "string",
+                                    "maxLength": 254,
+                                    "format": "email"
+                                  },
+                                  "authorities": {
+                                    "type": "array",
+                                    "minItems": 1,
+                                    "items": {
+                                      "enum": [
+                                        "platform.admin",
+                                        "apps.create"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "readOnly": true
+                                  },
+                                  "status": {
+                                    "enum": [
+                                      "pending",
+                                      "accepted",
+                                      "expired",
+                                      "revoked"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "expiresAt": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "createdAt": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "createdBy": {
+                                    "type": "object",
+                                    "properties": {
+                                      "issuer": {
+                                        "type": "string",
+                                        "format": "uri",
+                                        "description": "Canonical issuer component of the immutable Principal key."
+                                      },
+                                      "subject": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "description": "Immutable subject component within the issuer."
+                                      }
+                                    },
+                                    "required": [
+                                      "issuer",
+                                      "subject"
+                                    ],
+                                    "readOnly": true
+                                  },
+                                  "revision": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991,
+                                    "description": "Exact current resource revision used as the If-Match precondition."
+                                  }
+                                },
+                                "required": [
+                                  "invitationId",
+                                  "emailConstraint",
+                                  "authorities",
+                                  "status",
+                                  "expiresAt",
+                                  "createdAt",
+                                  "createdBy",
+                                  "revision"
+                                ],
+                                "readOnly": true
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "invitation"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "readOnly": true
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "readOnly": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "INVALID_CURSOR",
+                        "INVALID_REQUEST"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "ADMIN_AUTH_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PLATFORM_ACCESS_REQUIRED",
+                        "PLATFORM_ADMIN_REQUIRED",
+                        "APP_CREATION_AUTHORITY_REQUIRED",
+                        "INVITATION_SESSION_REQUIRED",
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_FOUND"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "LAST_PLATFORM_ADMIN",
+                        "SELF_BLOCK_FORBIDDEN",
+                        "INVITATION_NOT_PENDING",
+                        "LAST_MEMBER",
+                        "IDEMPOTENCY_CONFLICT",
+                        "ISSUER_CONFLICT",
+                        "ROOT_REF_SNAPSHOT_CHANGED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "412",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "REVISION_MISMATCH"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "428",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PRECONDITION_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "RATE_LIMITED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "SERVICE_UNAVAILABLE"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/platform/principals": {
+      "get": {
+        "operationId": "listPlatformPrincipals",
+        "summary": "List platform Principals",
+        "tags": [
+          "Platform Access"
+        ],
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 254
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "effectiveAccess",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "active",
+                "blocked",
+                "no_access"
+              ],
+              "type": "string"
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "authority",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "platform.admin",
+                    "apps.create"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "const": "none"
+                }
+              ]
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "principalRef": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "principal": {
+                            "type": "object",
+                            "properties": {
+                              "issuer": {
+                                "type": "string",
+                                "format": "uri",
+                                "description": "Canonical issuer component of the immutable Principal key."
+                              },
+                              "subject": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Immutable subject component within the issuer."
+                              }
+                            },
+                            "required": [
+                              "issuer",
+                              "subject"
+                            ],
+                            "readOnly": true
+                          },
+                          "status": {
+                            "enum": [
+                              "active",
+                              "blocked"
+                            ],
+                            "type": "string"
+                          },
+                          "authorities": {
+                            "type": "array",
+                            "items": {
+                              "enum": [
+                                "platform.admin",
+                                "apps.create"
+                              ],
+                              "type": "string"
+                            },
+                            "readOnly": true
+                          },
+                          "revision": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991,
+                            "description": "Exact current resource revision used as the If-Match precondition."
+                          },
+                          "createdAt": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "updatedAt": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "profile": {
+                            "type": "object",
+                            "properties": {
+                              "displayName": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "description": "Display-only name; never an authorization key."
+                              },
+                              "emailForDisplay": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "description": "Display-only email; never an authorization key."
+                              }
+                            },
+                            "required": [
+                              "displayName",
+                              "emailForDisplay"
+                            ],
+                            "readOnly": true
+                          },
+                          "effectiveAccess": {
+                            "enum": [
+                              "active",
+                              "blocked",
+                              "no_access"
+                            ],
+                            "type": "string"
+                          },
+                          "appMembershipCount": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "lastActiveAt": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "principalRef",
+                          "principal",
+                          "status",
+                          "authorities",
+                          "revision",
+                          "createdAt",
+                          "updatedAt",
+                          "profile",
+                          "effectiveAccess",
+                          "appMembershipCount",
+                          "lastActiveAt"
+                        ],
+                        "readOnly": true
+                      },
+                      "readOnly": true
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "readOnly": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "INVALID_CURSOR",
+                        "INVALID_REQUEST"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "ADMIN_AUTH_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PLATFORM_ACCESS_REQUIRED",
+                        "PLATFORM_ADMIN_REQUIRED",
+                        "APP_CREATION_AUTHORITY_REQUIRED",
+                        "INVITATION_SESSION_REQUIRED",
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_FOUND"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "LAST_PLATFORM_ADMIN",
+                        "SELF_BLOCK_FORBIDDEN",
+                        "INVITATION_NOT_PENDING",
+                        "LAST_MEMBER",
+                        "IDEMPOTENCY_CONFLICT",
+                        "ISSUER_CONFLICT",
+                        "ROOT_REF_SNAPSHOT_CHANGED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "412",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "REVISION_MISMATCH"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "428",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PRECONDITION_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "RATE_LIMITED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "SERVICE_UNAVAILABLE"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/platform/principals/{principalRef}": {
+      "get": {
+        "operationId": "getPlatformPrincipal",
+        "summary": "Read one platform Principal",
+        "tags": [
+          "Platform Access"
+        ],
+        "parameters": [
+          {
+            "name": "principalRef",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "principalRef": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "principal": {
+                      "type": "object",
+                      "properties": {
+                        "issuer": {
+                          "type": "string",
+                          "format": "uri",
+                          "description": "Canonical issuer component of the immutable Principal key."
+                        },
+                        "subject": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Immutable subject component within the issuer."
+                        }
+                      },
+                      "required": [
+                        "issuer",
+                        "subject"
+                      ],
+                      "readOnly": true
+                    },
+                    "status": {
+                      "enum": [
+                        "active",
+                        "blocked"
+                      ],
+                      "type": "string"
+                    },
+                    "authorities": {
+                      "type": "array",
+                      "items": {
+                        "enum": [
+                          "platform.admin",
+                          "apps.create"
+                        ],
+                        "type": "string"
+                      },
+                      "readOnly": true
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991,
+                      "description": "Exact current resource revision used as the If-Match precondition."
+                    },
+                    "createdAt": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "updatedAt": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "profile": {
+                      "type": "object",
+                      "properties": {
+                        "displayName": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Display-only name; never an authorization key."
+                        },
+                        "emailForDisplay": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Display-only email; never an authorization key."
+                        }
+                      },
+                      "required": [
+                        "displayName",
+                        "emailForDisplay"
+                      ],
+                      "readOnly": true
+                    },
+                    "effectiveAccess": {
+                      "enum": [
+                        "active",
+                        "blocked",
+                        "no_access"
+                      ],
+                      "type": "string"
+                    },
+                    "appMembershipCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "lastActiveAt": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "memberships": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "appId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "App whose equal administrator authority this membership grants."
+                          },
+                          "principal": {
+                            "type": "object",
+                            "properties": {
+                              "issuer": {
+                                "type": "string",
+                                "format": "uri",
+                                "description": "Canonical issuer component of the immutable Principal key."
+                              },
+                              "subject": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Immutable subject component within the issuer."
+                              }
+                            },
+                            "required": [
+                              "issuer",
+                              "subject"
+                            ],
+                            "readOnly": true,
+                            "description": "Immutable authenticated identity granted membership."
+                          },
+                          "profile": {
+                            "type": "object",
+                            "properties": {
+                              "displayName": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "description": "Display-only name; never an authorization key."
+                              },
+                              "emailForDisplay": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "description": "Display-only email; never an authorization key."
+                              }
+                            },
+                            "required": [
+                              "displayName",
+                              "emailForDisplay"
+                            ],
+                            "readOnly": true,
+                            "description": "Non-authoritative display metadata for the Principal."
+                          }
+                        },
+                        "required": [
+                          "appId",
+                          "principal",
+                          "profile"
+                        ],
+                        "readOnly": true
+                      },
+                      "readOnly": true
+                    }
+                  },
+                  "required": [
+                    "principalRef",
+                    "principal",
+                    "status",
+                    "authorities",
+                    "revision",
+                    "createdAt",
+                    "updatedAt",
+                    "profile",
+                    "effectiveAccess",
+                    "appMembershipCount",
+                    "lastActiveAt",
+                    "memberships"
+                  ],
+                  "readOnly": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "INVALID_CURSOR",
+                        "INVALID_REQUEST"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "ADMIN_AUTH_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PLATFORM_ACCESS_REQUIRED",
+                        "PLATFORM_ADMIN_REQUIRED",
+                        "APP_CREATION_AUTHORITY_REQUIRED",
+                        "INVITATION_SESSION_REQUIRED",
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_FOUND"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "LAST_PLATFORM_ADMIN",
+                        "SELF_BLOCK_FORBIDDEN",
+                        "INVITATION_NOT_PENDING",
+                        "LAST_MEMBER",
+                        "IDEMPOTENCY_CONFLICT",
+                        "ISSUER_CONFLICT",
+                        "ROOT_REF_SNAPSHOT_CHANGED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "412",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "REVISION_MISMATCH"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "428",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PRECONDITION_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "RATE_LIMITED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "SERVICE_UNAVAILABLE"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/platform/principals/{principalRef}/access": {
+      "get": {
+        "operationId": "getPlatformPrincipalAccess",
+        "summary": "Read versioned platform access",
+        "tags": [
+          "Platform Access"
+        ],
+        "parameters": [
+          {
+            "name": "principalRef",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string",
+                  "pattern": "^\"(0|[1-9][0-9]*)\"$"
+                },
+                "required": true
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "principalRef": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "principal": {
+                      "type": "object",
+                      "properties": {
+                        "issuer": {
+                          "type": "string",
+                          "format": "uri",
+                          "description": "Canonical issuer component of the immutable Principal key."
+                        },
+                        "subject": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Immutable subject component within the issuer."
+                        }
+                      },
+                      "required": [
+                        "issuer",
+                        "subject"
+                      ],
+                      "readOnly": true
+                    },
+                    "status": {
+                      "enum": [
+                        "active",
+                        "blocked"
+                      ],
+                      "type": "string"
+                    },
+                    "authorities": {
+                      "type": "array",
+                      "items": {
+                        "enum": [
+                          "platform.admin",
+                          "apps.create"
+                        ],
+                        "type": "string"
+                      },
+                      "readOnly": true
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991,
+                      "description": "Exact current resource revision used as the If-Match precondition."
+                    },
+                    "createdAt": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "updatedAt": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "principalRef",
+                    "principal",
+                    "status",
+                    "authorities",
+                    "revision",
+                    "createdAt",
+                    "updatedAt"
+                  ],
+                  "readOnly": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "INVALID_CURSOR",
+                        "INVALID_REQUEST"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "ADMIN_AUTH_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PLATFORM_ACCESS_REQUIRED",
+                        "PLATFORM_ADMIN_REQUIRED",
+                        "APP_CREATION_AUTHORITY_REQUIRED",
+                        "INVITATION_SESSION_REQUIRED",
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_FOUND"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "LAST_PLATFORM_ADMIN",
+                        "SELF_BLOCK_FORBIDDEN",
+                        "INVITATION_NOT_PENDING",
+                        "LAST_MEMBER",
+                        "IDEMPOTENCY_CONFLICT",
+                        "ISSUER_CONFLICT",
+                        "ROOT_REF_SNAPSHOT_CHANGED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "412",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "REVISION_MISMATCH"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "428",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PRECONDITION_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "RATE_LIMITED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "SERVICE_UNAVAILABLE"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patchPlatformPrincipalAccess",
+        "summary": "Change platform access",
+        "tags": [
+          "Platform Access"
+        ],
+        "parameters": [
+          {
+            "name": "principalRef",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "if-match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Exact current resource revision used as the If-Match precondition."
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "enum": [
+                      "active",
+                      "blocked"
+                    ],
+                    "type": "string"
+                  },
+                  "authorities": {
+                    "type": "array",
+                    "items": {
+                      "enum": [
+                        "platform.admin",
+                        "apps.create"
+                      ],
+                      "type": "string"
+                    }
+                  }
+                },
+                "additionalProperties": false,
+                "readOnly": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string",
+                  "pattern": "^\"(0|[1-9][0-9]*)\"$"
+                },
+                "required": true
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "INVALID_CURSOR",
+                        "INVALID_REQUEST"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "ADMIN_AUTH_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PLATFORM_ACCESS_REQUIRED",
+                        "PLATFORM_ADMIN_REQUIRED",
+                        "APP_CREATION_AUTHORITY_REQUIRED",
+                        "INVITATION_SESSION_REQUIRED",
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_FOUND"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "LAST_PLATFORM_ADMIN",
+                        "SELF_BLOCK_FORBIDDEN",
+                        "INVITATION_NOT_PENDING",
+                        "LAST_MEMBER",
+                        "IDEMPOTENCY_CONFLICT",
+                        "ISSUER_CONFLICT",
+                        "ROOT_REF_SNAPSHOT_CHANGED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "412",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "REVISION_MISMATCH"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "428",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PRECONDITION_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "RATE_LIMITED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "SERVICE_UNAVAILABLE"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/platform/invitations": {
+      "get": {
+        "operationId": "listPlatformInvitations",
+        "summary": "List platform invitations",
+        "tags": [
+          "Platform Invitations"
+        ],
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 254
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "pending",
+                "accepted",
+                "expired",
+                "revoked"
+              ],
+              "type": "string"
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "invitationId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "emailConstraint": {
+                            "type": "string",
+                            "maxLength": 254,
+                            "format": "email"
+                          },
+                          "authorities": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": {
+                              "enum": [
+                                "platform.admin",
+                                "apps.create"
+                              ],
+                              "type": "string"
+                            },
+                            "readOnly": true
+                          },
+                          "status": {
+                            "enum": [
+                              "pending",
+                              "accepted",
+                              "expired",
+                              "revoked"
+                            ],
+                            "type": "string"
+                          },
+                          "expiresAt": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "createdAt": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "createdBy": {
+                            "type": "object",
+                            "properties": {
+                              "issuer": {
+                                "type": "string",
+                                "format": "uri",
+                                "description": "Canonical issuer component of the immutable Principal key."
+                              },
+                              "subject": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Immutable subject component within the issuer."
+                              }
+                            },
+                            "required": [
+                              "issuer",
+                              "subject"
+                            ],
+                            "readOnly": true
+                          },
+                          "revision": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991,
+                            "description": "Exact current resource revision used as the If-Match precondition."
+                          }
+                        },
+                        "required": [
+                          "invitationId",
+                          "emailConstraint",
+                          "authorities",
+                          "status",
+                          "expiresAt",
+                          "createdAt",
+                          "createdBy",
+                          "revision"
+                        ],
+                        "readOnly": true
+                      },
+                      "readOnly": true
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ],
+                  "readOnly": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "INVALID_CURSOR",
+                        "INVALID_REQUEST"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "ADMIN_AUTH_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PLATFORM_ACCESS_REQUIRED",
+                        "PLATFORM_ADMIN_REQUIRED",
+                        "APP_CREATION_AUTHORITY_REQUIRED",
+                        "INVITATION_SESSION_REQUIRED",
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_FOUND"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "LAST_PLATFORM_ADMIN",
+                        "SELF_BLOCK_FORBIDDEN",
+                        "INVITATION_NOT_PENDING",
+                        "LAST_MEMBER",
+                        "IDEMPOTENCY_CONFLICT",
+                        "ISSUER_CONFLICT",
+                        "ROOT_REF_SNAPSHOT_CHANGED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "412",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "REVISION_MISMATCH"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "428",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PRECONDITION_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "RATE_LIMITED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "SERVICE_UNAVAILABLE"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createPlatformInvitation",
+        "summary": "Create a platform invitation",
+        "tags": [
+          "Platform Invitations"
+        ],
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "emailConstraint": {
+                    "type": "string",
+                    "maxLength": 254,
+                    "format": "email"
+                  },
+                  "authorities": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "enum": [
+                        "platform.admin",
+                        "apps.create"
+                      ],
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "emailConstraint",
+                  "authorities"
+                ],
+                "additionalProperties": false,
+                "readOnly": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string",
+                  "pattern": "^\"(0|[1-9][0-9]*)\"$"
+                },
+                "required": true
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "invitationId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "acceptUrl": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "expiresAt": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "invitationId",
+                    "acceptUrl",
+                    "expiresAt"
+                  ],
+                  "readOnly": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "INVALID_CURSOR",
+                        "INVALID_REQUEST"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "ADMIN_AUTH_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PLATFORM_ACCESS_REQUIRED",
+                        "PLATFORM_ADMIN_REQUIRED",
+                        "APP_CREATION_AUTHORITY_REQUIRED",
+                        "INVITATION_SESSION_REQUIRED",
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_FOUND"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "LAST_PLATFORM_ADMIN",
+                        "SELF_BLOCK_FORBIDDEN",
+                        "INVITATION_NOT_PENDING",
+                        "LAST_MEMBER",
+                        "IDEMPOTENCY_CONFLICT",
+                        "ISSUER_CONFLICT",
+                        "ROOT_REF_SNAPSHOT_CHANGED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "412",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "REVISION_MISMATCH"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "428",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PRECONDITION_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "RATE_LIMITED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "SERVICE_UNAVAILABLE"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/platform/invitations/{invitationId}": {
+      "delete": {
+        "operationId": "revokePlatformInvitation",
+        "summary": "Revoke a platform invitation",
+        "tags": [
+          "Platform Invitations"
+        ],
+        "parameters": [
+          {
+            "name": "invitationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "if-match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Exact current resource revision used as the If-Match precondition."
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string",
+                  "pattern": "^\"(0|[1-9][0-9]*)\"$"
+                },
+                "required": true
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "INVALID_CURSOR",
+                        "INVALID_REQUEST"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "ADMIN_AUTH_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PLATFORM_ACCESS_REQUIRED",
+                        "PLATFORM_ADMIN_REQUIRED",
+                        "APP_CREATION_AUTHORITY_REQUIRED",
+                        "INVITATION_SESSION_REQUIRED",
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_FOUND"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "LAST_PLATFORM_ADMIN",
+                        "SELF_BLOCK_FORBIDDEN",
+                        "INVITATION_NOT_PENDING",
+                        "LAST_MEMBER",
+                        "IDEMPOTENCY_CONFLICT",
+                        "ISSUER_CONFLICT",
+                        "ROOT_REF_SNAPSHOT_CHANGED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "412",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "REVISION_MISMATCH"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "428",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PRECONDITION_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "RATE_LIMITED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "SERVICE_UNAVAILABLE"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/platform-invitations/{token}/accept": {
+      "post": {
+        "operationId": "acceptPlatformInvitation",
+        "summary": "Accept a platform invitation",
+        "tags": [
+          "Platform Invitations"
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "not": {}
+                    },
+                    {
+                      "not": {}
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "INVALID_CURSOR",
+                        "INVALID_REQUEST"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "ADMIN_AUTH_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PLATFORM_ACCESS_REQUIRED",
+                        "PLATFORM_ADMIN_REQUIRED",
+                        "APP_CREATION_AUTHORITY_REQUIRED",
+                        "INVITATION_SESSION_REQUIRED",
+                        "APP_MEMBERSHIP_REQUIRED",
+                        "APP_SUSPENDED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_FOUND"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "LAST_PLATFORM_ADMIN",
+                        "SELF_BLOCK_FORBIDDEN",
+                        "INVITATION_NOT_PENDING",
+                        "LAST_MEMBER",
+                        "IDEMPOTENCY_CONFLICT",
+                        "ISSUER_CONFLICT",
+                        "ROOT_REF_SNAPSHOT_CHANGED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "412",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "REVISION_MISMATCH"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "428",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "PRECONDITION_REQUIRED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "RATE_LIMITED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "503",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "SERVICE_UNAVAILABLE"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/platform/audit-events": {
+      "get": {
+        "operationId": "listPlatformAuditEvents",
+        "summary": "List platform authorization audit events",
+        "tags": [
+          "Platform Audit"
+        ],
+        "parameters": [
+          {
+            "name": "action",
+            "in": "query",
+            "schema": {
+              "enum": [
+                "platform_invitation.created",
+                "platform_invitation.revoked",
+                "platform_invitation.accepted",
+                "platform_access.authority_changed",
+                "platform_access.blocked",
+                "platform_access.restored",
+                "platform_access.change_denied",
+                "app.create_denied"
+              ],
+              "type": "string"
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "actorPrincipalRef",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "targetPrincipalRef",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "createdAfter",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "eventId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "action": {
+                            "enum": [
+                              "platform_invitation.created",
+                              "platform_invitation.revoked",
+                              "platform_invitation.accepted",
+                              "platform_access.authority_changed",
+                              "platform_access.blocked",
+                              "platform_access.restored",
+                              "platform_access.change_denied",
+                              "app.create_denied"
+                            ],
+                            "type": "string"
+                          },
+                          "actorPrincipalRef": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "actorPrincipal": {
+                            "type": "object",
+                            "properties": {
+                              "issuer": {
+                                "type": "string",
+                                "format": "uri",
+                                "description": "Canonical issuer component of the immutable Principal key."
+                              },
+                              "subject": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Immutable subject component within the issuer."
+                              }
+                            },
+                            "required": [
+                              "issuer",
+                              "subject"
+                            ],
+                            "readOnly": true
+                          },
+                          "targetPrincipalRef": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "targetPrincipal": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "issuer": {
+                                    "type": "string",
+                                    "format": "uri",
+                                    "description": "Canonical issuer component of the immutable Principal key."
+                                  },
+                                  "subject": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "description": "Immutable subject component within the issuer."
+                                  }
+                                },
+                                "required": [
+                                  "issuer",
+                                  "subject"
+                                ],
+                                "readOnly": true
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "targetInvitationId": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "result": {
+                            "enum": [
+                              "succeeded",
+                              "denied"
+                            ],
+                            "type": "string"
+                          },
+                          "requestId": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "details": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "eventId",
+                          "action",
+                          "actorPrincipalRef",
+                          "actorPrincipal",
+                          "targetPrincipalRef",
+                          "targetPrincipal",
+                          "targetInvitationId",
+                          "result",
+                          "requestId",
+                          "createdAt",
+                          "details"
+                        ],
+                        "readOnly": true
+                      },
+                      "readOnly": true
+                    },
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
                   ],
                   "readOnly": true
                 }

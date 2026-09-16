@@ -1,3 +1,5 @@
+export { PeopleService } from "./people.js";
+export type { PeopleRepository, PeopleScope, PeopleEntry } from "./people.js";
 export { PlatformAccessService, PlatformAccessError } from "./platform-access.js";
 export type {
   AppInvitationAdmission,
@@ -5,6 +7,16 @@ export type {
   PlatformAccessRepository,
   PlatformAuditRecord,
 } from "./platform-access.js";
+export { PlatformInvitationService } from "./platform-invitations.js";
+export type {
+  PlatformInvitationIdempotencyRecord,
+  PlatformInvitationRepository,
+  PlatformInvitationSecrets,
+  PlatformInvitationServiceOptions,
+  StoredPlatformInvitation,
+} from "./platform-invitations.js";
+export { PlatformAuditService } from "./platform-audit.js";
+export type { PlatformAuditRepository } from "./platform-audit.js";
 export {
   createUniCasService,
   matchUniCasServiceRoute,

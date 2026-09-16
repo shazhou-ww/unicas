@@ -19,6 +19,7 @@ export interface ControlPlaneMcpEnvConfig {
   GOOGLE_OIDC_CLIENT_ID?: string;
   GOOGLE_OIDC_CLIENT_SECRET?: string;
   OAUTH_STATE_ENCRYPTION_KEY?: string;
+  SESSION_ENCRYPTION_KEYS?: string;
   OIDC_ISSUER?: string;
   OIDC_DISCOVERY_URL?: string;
   ADMIN_EMAIL_ALLOWLIST?: string;

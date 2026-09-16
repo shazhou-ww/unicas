@@ -22,7 +22,9 @@ const host = process.env.UNICAS_LOCAL_HOST ?? "127.0.0.1";
 const adminOrigin = process.env.UNICAS_ADMIN_ORIGIN ?? "http://localhost:4070";
 const runtime = await startLocalUnicasRuntime({
   host,
-  persistPath: join(root, ".wrangler", "miniflare"),
+  persistPath: process.env.UNICAS_LOCAL_PERSIST_PATH
+    ? join(root, process.env.UNICAS_LOCAL_PERSIST_PATH)
+    : join(root, ".wrangler", "miniflare"),
   logLevel: LogLevel.INFO,
 });
 

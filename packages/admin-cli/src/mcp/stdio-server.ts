@@ -11,7 +11,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type { AdminClient } from "@unicas/admin-client";
+import type { AdminClient, PlatformAuditAction, PlatformAuthority } from "@unicas/admin-client";
 import { createAdminClient } from "@unicas/admin-client";
 import type { AppAdminMcpToolName } from "@unicas/admin-protocol";
 import type { ToolDefinition } from "./catalog.js";
@@ -145,6 +145,73 @@ async function resolveEtag(
 
 /** Maps the remote tool contract to admin-client operations. */
 const TOOL_HANDLERS = {
+  async list_platform_principals(admin, args) {
+    const effectiveAccess = args.effectiveAccess;
+    const authority = args.authority;
+    return admin.listPlatformPrincipals({
+      ...pick(args, ["query", "limit", "cursor"]),
+      ...(effectiveAccess === undefined ? {} : { effectiveAccess: str(effectiveAccess) as "active" | "blocked" | "no_access" }),
+      ...(authority === undefined ? {} : { authority: str(authority) as PlatformAuthority | "none" }),
+    });
+  },
+
+  async get_platform_principal(admin, args) {
+    return admin.getPlatformPrincipal({ principalRef: str(args.principalRef) });
+  },
+
+  async update_platform_access(admin, args) {
+    const principalRef = str(args.principalRef);
+    requireMatch(args.confirmPrincipalRef, principalRef, "confirmPrincipalRef must exactly match principalRef");
+    if (args.status === undefined && args.authorities === undefined) throw new Error("at least one access change is required");
+    const requested = args.authorities;
+    if (requested !== undefined && (!Array.isArray(requested) || requested.some(authority => authority !== "platform.admin" && authority !== "apps.create"))) {
+      throw new Error("invalid platform authorities");
+    }
+    return admin.patchPlatformAccess(
+      { principalRef },
+      {
+        ...(args.status === undefined ? {} : { status: str(args.status) as "active" | "blocked" }),
+        ...(requested === undefined ? {} : { authorities: requested as PlatformAuthority[] }),
+      },
+      str(args.etag),
+    );
+  },
+
+  async list_platform_audit_events(admin, args) {
+    return admin.listPlatformAuditEvents({
+      ...pick(args, ["actorPrincipalRef", "targetPrincipalRef", "createdAfter", "limit", "cursor"]),
+      ...(args.action === undefined ? {} : { action: str(args.action) as PlatformAuditAction }),
+    });
+  },
+
+  async list_platform_invitations(admin, args) {
+    const status = args.status;
+    if (status !== undefined && status !== "pending" && status !== "accepted" && status !== "expired" && status !== "revoked") {
+      throw new Error("invalid invitation status");
+    }
+    return admin.listPlatformInvitations({
+      ...pick(args, ["query", "limit", "cursor"]),
+      ...(status === undefined ? {} : { status }),
+    });
+  },
+
+  async create_platform_invitation(admin, args) {
+    requireMatch(args.confirmEmail, args.email, "confirmEmail must exactly match the invited email");
+    const requested = args.authorities;
+    if (!Array.isArray(requested) || requested.some(authority => authority !== "platform.admin" && authority !== "apps.create")) {
+      throw new Error("invalid platform authorities");
+    }
+    return admin.createPlatformInvitation(
+      { emailConstraint: str(args.email), authorities: requested as PlatformAuthority[] },
+      str(args.idempotencyKey),
+    );
+  },
+
+  async revoke_platform_invitation(admin, args) {
+    requireMatch(args.confirmInvitationId, args.invitationId, "confirmInvitationId must exactly match invitationId");
+    return admin.revokePlatformInvitation({ invitationId: str(args.invitationId) }, str(args.etag));
+  },
+
   async list_app_member_invitations(admin, args) {
     const status = args.status;
     if (status !== undefined && status !== "pending" && status !== "accepted" && status !== "expired" && status !== "revoked") {

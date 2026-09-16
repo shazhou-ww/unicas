@@ -1,14 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Copy, X } from "lucide-react";
+import { Check, Copy } from "lucide-react";
+import { Button } from "@/components/ui/button.js";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog.js";
 
 export function McpConfigurationDialog({ open, onClose }: {
   open: boolean;
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState<"url" | "prompt" | "cli" | null>(null);
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const openerRef = useRef<HTMLElement | null>(null);
   const copyTimerRef = useRef<number | null>(null);
   const serverUrl = `${window.location.origin}/mcp`;
   const skillUrl = `${window.location.origin}/admin/assets/skills/unicas-cli/SKILL.md`;
@@ -24,40 +29,6 @@ Use Streamable HTTP. Authentication is handled with OAuth in the browser; no API
   unicas principal | unicas apps list | unicas apps get <appId> | unicas apps create "Operations" --idempotency-key ops-1
    stdio MCP: command "unicas", args ["mcp"]`;
 
-  useEffect(() => {
-    if (!open) return;
-    openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    document.body.classList.add("modal-open");
-    const focusTimer = window.setTimeout(() => closeButtonRef.current?.focus(), 50);
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-        return;
-      }
-      if (event.key !== "Tab" || !dialogRef.current) return;
-      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
-        "button:not([disabled]), [href], [tabindex]:not([tabindex='-1'])",
-      ));
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (!first || !last) return;
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.clearTimeout(focusTimer);
-      document.body.classList.remove("modal-open");
-      window.removeEventListener("keydown", onKeyDown);
-      openerRef.current?.focus();
-    };
-  }, [open, onClose]);
-
   useEffect(() => () => {
     if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
   }, []);
@@ -69,80 +40,53 @@ Use Streamable HTTP. Authentication is handled with OAuth in the browser; no API
     copyTimerRef.current = window.setTimeout(() => setCopied(null), 1800);
   }
 
-  if (!open) return null;
-
   return (
-    <div
-      className="modal-overlay"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <div
-        ref={dialogRef}
-        className="mcp-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="mcp-dialog-title"
-        aria-describedby="mcp-dialog-description"
-      >
-        <div className="mcp-dialog-header">
-          <div>
-            <p className="dialog-eyebrow">Remote server</p>
-            <h2 id="mcp-dialog-title">Connect an AI tool</h2>
-          </div>
-          <button
-            ref={closeButtonRef}
-            type="button"
-            className="dialog-close"
-            aria-label="Close AI tool connection"
-            onClick={onClose}
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <p id="mcp-dialog-description" className="mcp-dialog-description">
-          Use the server URL directly, or paste a prompt into your AI tool — the MCP prompt for
-          tools that manage MCP connections, or the CLI prompt for tools that cannot handle
-          OAuth MCP.
-        </p>
-        <button
-          type="button"
-          className="mcp-url-bubble"
+    <Dialog open={open} onOpenChange={nextOpen => { if (!nextOpen) onClose(); }}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Connect an AI tool</DialogTitle>
+          <DialogDescription>
+            Use the server URL directly, or paste a prompt into your AI tool — the MCP prompt for
+            tools that manage MCP connections, or the CLI prompt for tools that cannot handle
+            OAuth MCP.
+          </DialogDescription>
+        </DialogHeader>
+        <Button
+          variant="outline"
+          className="h-auto w-full justify-between whitespace-normal break-all py-3 text-left font-mono text-xs"
           aria-label="Copy MCP server URL"
-          title="Click to copy the MCP server URL"
           onClick={() => void copy(serverUrl, "url")}
         >
-          {serverUrl}
+          <span>{serverUrl}</span>
           {copied === "url" ? <Check size={14} /> : <Copy size={14} />}
-        </button>
-        <div className="mcp-prompt-grid">
-          <section className="mcp-prompt-section">
-            <div className="mcp-config-heading">
-              <code>Configuration prompt</code>
-              <button type="button" className="copy-button" onClick={() => void copy(configurationPrompt, "prompt")}>
+        </Button>
+        <div className="grid gap-5 md:grid-cols-2">
+          <section className="min-w-0 space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <code className="text-xs">Configuration prompt</code>
+              <Button type="button" size="sm" variant="outline" onClick={() => void copy(configurationPrompt, "prompt")}>
                 {copied === "prompt" ? <Check size={14} /> : <Copy size={14} />}
                 <span>{copied === "prompt" ? "Prompt copied" : "Copy prompt"}</span>
-              </button>
+              </Button>
             </div>
-            <pre className="mcp-config mcp-config-prompt"><code>{configurationPrompt}</code></pre>
+            <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md border bg-muted/40 p-3 text-xs"><code>{configurationPrompt}</code></pre>
           </section>
-          <section className="mcp-prompt-section">
-            <div className="mcp-config-heading">
-              <code>CLI prompt</code>
-              <button type="button" className="copy-button" onClick={() => void copy(cliPrompt, "cli")}>
+          <section className="min-w-0 space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <code className="text-xs">CLI prompt</code>
+              <Button type="button" size="sm" variant="outline" onClick={() => void copy(cliPrompt, "cli")}>
                 {copied === "cli" ? <Check size={14} /> : <Copy size={14} />}
                 <span>{copied === "cli" ? "CLI prompt copied" : "Copy CLI prompt"}</span>
-              </button>
+              </Button>
             </div>
-            <pre className="mcp-config mcp-config-prompt"><code>{cliPrompt}</code></pre>
+            <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md border bg-muted/40 p-3 text-xs"><code>{cliPrompt}</code></pre>
           </section>
         </div>
-        <div className="mcp-auth-note">
-          <strong>No API key required</strong>
-          <p>On first use, your AI tool opens a browser and asks you to approve UniCAS access.</p>
+        <div className="rounded-md border bg-muted/30 p-3 text-sm">
+          <p className="font-medium">No API key required</p>
+          <p className="text-muted-foreground">On first use, your AI tool opens a browser and asks you to approve UniCAS access.</p>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

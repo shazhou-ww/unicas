@@ -47,31 +47,35 @@ export type AppSection = "overview" | "members" | "invitations" | "playground" |
 export interface AppRoute {
   readonly appId: string;
   readonly section: AppSection;
+  readonly peopleFilter?: string;
 }
 
 /** Parse an app route like /apps/{appId}/overview into appId and section. */
 export function parseAppRoute(path: string): AppRoute | null {
-  const segments = path.split("/").filter(Boolean);
+  const [pathname, search] = path.split("?");
+  const segments = pathname!.split("/").filter(Boolean);
   if (segments.length < 2 || segments[0] !== "apps") return null;
   const appId = decodeURIComponent(segments[1]!);
   const section = segments[2] ?? "overview";
   const validSections: AppSection[] = ["overview", "members", "invitations", "playground", "change-logs"];
   if (!validSections.includes(section as AppSection)) return null;
-  return { appId, section: section as AppSection };
+  return { appId, section: section as AppSection, ...(search ? { peopleFilter: new URLSearchParams(search).get("filter") ?? "current" } : {}) };
 }
 
-export type PlatformSection = "principals" | "invitations" | "audit";
+export type PlatformSection = "people" | "principals" | "invitations" | "audit";
 
 export interface PlatformRoute {
   readonly section: PlatformSection;
+  readonly peopleFilter?: string;
 }
 
 /** Parse a platform route like /platform/principals into section. */
 export function parsePlatformRoute(path: string): PlatformRoute | null {
-  const segments = path.split("/").filter(Boolean);
+  const [pathname, search] = path.split("?");
+  const segments = pathname!.split("/").filter(Boolean);
   if (segments.length < 1 || segments[0] !== "platform") return null;
-  const section = segments[1] ?? "principals";
-  const validSections: PlatformSection[] = ["principals", "invitations", "audit"];
+  const section = segments[1] ?? "people";
+  const validSections: PlatformSection[] = ["people", "principals", "invitations", "audit"];
   if (!validSections.includes(section as PlatformSection)) return null;
-  return { section: section as PlatformSection };
+  return { section: section as PlatformSection, ...(search ? { peopleFilter: new URLSearchParams(search).get("filter") ?? "current" } : {}) };
 }

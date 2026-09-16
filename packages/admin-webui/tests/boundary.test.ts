@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
@@ -31,5 +31,23 @@ describe("cas-admin-webui package boundary", () => {
     expect(() => readFileSync(join(root, "src/server/index.ts"), "utf8")).toThrow();
     expect(pkg.main).toBe("./src/ui/index.ts");
     expect(pkg.scripts.build).toBe("vite build");
+  });
+
+  test("does not retain the superseded App shell or custom modal styles", () => {
+    const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+    expect(existsSync(join(root, "src/ui/views/stack.tsx"))).toBe(false);
+    const css = readFileSync(join(root, "src/ui/styles.css"), "utf8");
+    for (const selector of [
+      ".modal-overlay",
+      ".mcp-dialog",
+      ".stack-layout",
+      ".stack-sidebar",
+      ".stack-switcher",
+      ".tabs-vertical",
+      ".mobile-nav-trigger",
+      ".sidebar-app-item",
+    ]) {
+      expect(css).not.toContain(selector);
+    }
   });
 });

@@ -8,7 +8,11 @@ export async function handleAppAdminCompatibilityRequest(
   route: AppAdminRoute,
   legacyHandler: AdminHandler,
 ): Promise<Response> {
-  if (route.operation === "mintManagedCapability" || route.operation === "patchApp"
+  const pathname = new URL(request.url).pathname;
+  if (pathname.startsWith("/admin/platform/") || pathname.startsWith("/admin/platform-invitations/")) {
+    return legacyHandler(request);
+  }
+  if (route.operation === "listPeople" || route.operation === "mintManagedCapability" || route.operation === "patchApp"
     || route.operation === "listMemberInvitations" || route.operation === "revokeMemberInvitation"
     || route.operation === "inspectOAuthIssuer" || route.operation === "activateOAuthIssuer") {
     return legacyHandler(request);

@@ -43,7 +43,11 @@ accepted by `/mcp`.
 
 Scopes do not imply each other. Current App membership is checked during each
 tool call, so removing a member takes effect without waiting for token expiry.
-`ADMIN_EMAIL_ALLOWLIST`, when configured, is also checked during every MCP call.
+Current Platform Access is checked before OAuth grant issuance and on every MCP
+request. Platform tools additionally require `platform.admin`; `create_app`
+requires `apps.create`. Existing access and refresh grants cannot preserve
+revoked authority. `ADMIN_EMAIL_ALLOWLIST` is only a pre-migration fallback,
+not a current authorization source.
 
 Access tokens expire after 15 minutes. Refresh grants expire after 8 hours and
 refresh tokens rotate. Tokens are audience-bound to the canonical `/mcp`
@@ -84,6 +88,12 @@ App security tools:
 - `inspect_app_oauth_issuer`, `activate_app_oauth_issuer`
 - `update_app_managed_issuer`, `mint_managed_space_capability`
 
+Platform tools (`control:security` plus current `platform.admin`):
+
+- `list_platform_principals`, `get_platform_principal`, `update_platform_access`
+- `list_platform_invitations`, `create_platform_invitation`, `revoke_platform_invitation`
+- `list_platform_audit_events`
+
 App-scoped tools use `appId` and, where applicable, `spaceId`. Membership and
 audit operations use Principal `issuer`/`subject` fields. Physical Stack/Tenant
 dimensions are translated only inside the platform adapter and never appear in
@@ -95,7 +105,7 @@ ETag and exact `confirmInvitationId`; success returns only `{ etag }`. Creation
 returns `{ invitationId, acceptUrl, expiresAt, etag }`, and acceptance returns
 only `{ appId }`. App membership is checked by the server independently of scopes.
 
-The catalog contains 25 App tools and 15 v1 tools. The v1 tools, including `whoami`, `list_stacks`, and
+The catalog contains 32 App/platform tools and 15 v1 tools. The v1 tools, including `whoami`, `list_stacks`, and
 `list_root_domain_refs`, remain structurally unchanged for explicit compatibility.
 They are not aliases for the App tools.
 
@@ -138,7 +148,7 @@ Required secrets:
 ```text
 GOOGLE_OIDC_CLIENT_SECRET
 OAUTH_STATE_ENCRYPTION_KEY   base64url-encoded 32-byte AES key
-ADMIN_EMAIL_ALLOWLIST        comma-separated emails allowed to log in
+SESSION_ENCRYPTION_KEYS      versioned JSON keyring for sessions and sealed invitation replay
 CAS_AUDIT_READER_KEY        shared key for the private audit-reader RPC
 ```
 

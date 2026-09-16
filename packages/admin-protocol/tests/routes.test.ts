@@ -29,6 +29,12 @@ describe("CAS admin routes", () => {
     ["GET", casAdminRoutes.controlAuditEvents({ stackId: "stack/a" }), "listControlAuditEvents"],
     ["GET", casAdminRoutes.rootDomainRefs({ stackId: "stack/a", refDomain: "doc" }), "listRootDomainRefs"],
     ["GET", casAdminRoutes.rootDomainEvents({ stackId: "stack/a", refDomain: "doc" }), "listRootDomainEvents"],
+    ["GET", casAdminRoutes.platformInvitations(), "listPlatformInvitations"],
+    ["POST", casAdminRoutes.platformInvitations(), "createPlatformInvitation"],
+    ["DELETE", casAdminRoutes.platformInvitation({ invitationId: "invite/1" }), "revokePlatformInvitation"],
+    ["POST", casAdminRoutes.acceptPlatformInvitation({ token: "tok/1" }), "acceptPlatformInvitation"],
+    ["GET", casAdminRoutes.platformAuditEvents(), "listPlatformAuditEvents"],
+    ["GET", casAdminRoutes.platformPrincipalAccess({ principalRef: "principal/1" }), "getPlatformAccess"],
   ] as const)("matches %s %s -> %s", (method, pathname, operation) => {
     expect(matchCasAdminRoute(method, pathname)).toMatchObject({ operation });
   });
@@ -85,6 +91,12 @@ describe("App admin routes", () => {
     ["GET", appAdminRoutes.controlAuditEvents({ appId: "app/a" }), "listControlAuditEvents"],
     ["GET", appAdminRoutes.rootDomainRefs({ appId: "app/a", refDomain: "doc" }), "listRootDomainRefs"],
     ["GET", appAdminRoutes.rootDomainEvents({ appId: "app/a", refDomain: "doc" }), "listRootDomainEvents"],
+    ["GET", appAdminRoutes.platformInvitations(), "listPlatformInvitations"],
+    ["POST", appAdminRoutes.platformInvitations(), "createPlatformInvitation"],
+    ["DELETE", appAdminRoutes.platformInvitation({ invitationId: "invite/1" }), "revokePlatformInvitation"],
+    ["POST", appAdminRoutes.acceptPlatformInvitation({ token: "tok/1" }), "acceptPlatformInvitation"],
+    ["GET", appAdminRoutes.platformAuditEvents(), "listPlatformAuditEvents"],
+    ["GET", appAdminRoutes.platformPrincipalAccess({ principalRef: "principal/1" }), "getPlatformAccess"],
   ] as const)("matches %s %s -> %s", (method, pathname, operation) => {
     expect(matchAppAdminRoute(method, pathname)).toMatchObject({ operation });
   });

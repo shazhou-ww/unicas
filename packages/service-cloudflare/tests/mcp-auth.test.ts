@@ -119,6 +119,23 @@ describe("control-plane MCP OAuth authorization", () => {
     expect(fixture.completeAuthorization).not.toHaveBeenCalled();
   });
 
+  test("current platform admission replaces the legacy email allowlist for MCP grants", async () => {
+    const fixture = createFixture({ allowlist: "operator@example.com" });
+    const handler = createOAuthAuthorizationHandler({
+      oidcFactory: () => fixture.oidc,
+      authorizePrincipal: async () => "allowed",
+    });
+    const started = await handler.fetch(new Request("https://cas.example/oauth/authorize"), fixture.env);
+    const transactionId = new URL(started.headers.get("Location")!).searchParams.get("state")!;
+    const callback = await handler.fetch(new Request(
+      `https://cas.example/oauth/google/callback?code=google-code&state=${transactionId}`,
+      { headers: { Cookie: cookieFrom(started) } },
+    ), fixture.env);
+
+    expect(callback.status).toBe(200);
+    expect(await callback.text()).toContain("GitHub Copilot");
+  });
+
   test("denies consent when current platform admission is absent or unavailable", async () => {
     for (const [authorization, expectedStatus] of [
       ["denied", 403],

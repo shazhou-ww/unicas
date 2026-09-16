@@ -21,6 +21,7 @@ function repositoryFixture() {
   };
   let unavailable = false;
   const repository: PlatformAccessRepository = {
+    readSnapshot: async () => 0,
     getAccess: async () => {
       if (unavailable) throw new Error("offline");
       return state;

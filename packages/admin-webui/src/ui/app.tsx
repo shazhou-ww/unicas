@@ -1,29 +1,32 @@
 import { useEffect, useState } from "react";
 import { CircleAlert, LoaderCircle } from "lucide-react";
-import type { App as AppResource, AppAdminMeResponse } from "@unicas/admin-client";
+import type { App as AppResource, AppAdminMeResponse, AppOAuthIssuer } from "@unicas/admin-client";
 import { api } from "./api.js";
 import { navigate, parseAppRoute, parsePlatformRoute, useHashRoute, matchRoute } from "./router.js";
 import { AppSidebar } from "./components/app-sidebar.js";
 import { AppDetailTabs } from "./components/app-detail-tabs.js";
+import { CopyNotifications } from "./components/copy-bubble.js";
 import { McpConfigurationDialog } from "./mcp-configuration-dialog.js";
 import { MyAppsView } from "./views/my-stacks.js";
 import { InvitationView } from "./views/invitations.js";
 import { LoginErrorView } from "./views/login-error.js";
 import { AppOverviewView } from "./views/stack-overview.js";
-import { MembersView } from "./views/members.js";
+import { IssuerView } from "./views/issuer.js";
+import { UsageView } from "./views/usage.js";
+import { PeopleView } from "./views/people.js";
 import { ControlAuditView } from "./views/control-audit.js";
 import { PlaygroundView } from "./views/file-playground.js";
-import { AppInvitationsView } from "./views/app-invitations.js";
 import { PlaygroundCacheContext, createPlaygroundCacheSession, type PlaygroundCacheSession } from "./playground-cache.js";
 import { formatErrorSafe } from "./views/view-helpers.js";
-import { PlatformPrincipalsView } from "./views/platform/principals.js";
-import { PlatformInvitationsView } from "./views/platform/invitations.js";
 import { PlatformAuditView } from "./views/platform/audit.js";
+import { PlatformInvitationAcceptanceView } from "./views/platform-invitation-acceptance.js";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs.js";
 
 export function App() {
   const route = useHashRoute();
   const inviteMatch = matchRoute("/invitations/:token", route);
-  const inviteToken = inviteMatch?.params.token ?? null;
+  const platformInviteMatch = matchRoute("/platform-invitations/:token", route);
+  const inviteToken = inviteMatch?.params.token ?? platformInviteMatch?.params.token ?? null;
   const [me, setMe] = useState<AppAdminMeResponse | null>(null);
   const [apps, setApps] = useState<AppResource[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +37,8 @@ export function App() {
   const [currentApp, setCurrentApp] = useState<AppResource | null>(null);
   const [appError, setAppError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [focusManagedIssuer, setFocusManagedIssuer] = useState(false);
+  const [playgroundAccess, setPlaygroundAccess] = useState<{ appId: string; enabled: boolean } | null>(null);
 
   useEffect(() => {
     if (inviteToken !== null) return;
@@ -70,6 +75,14 @@ export function App() {
   const appRoute = parseAppRoute(route);
   const platformRoute = parsePlatformRoute(route);
 
+  useEffect(() => {
+    if (appRoute?.section === "invitations") {
+      window.location.replace(`#/apps/${encodeURIComponent(appRoute.appId)}/members?filter=pending`);
+    } else if (platformRoute?.section === "principals" || platformRoute?.section === "invitations") {
+      window.location.replace(`#/platform/people?filter=${platformRoute.section === "principals" ? "principals" : "pending"}`);
+    }
+  }, [route]);
+
   // Fetch the current app when appRoute changes
   useEffect(() => {
     if (!appRoute) {
@@ -93,6 +106,20 @@ export function App() {
   }, [appRoute?.appId, appRoute?.section, reloadKey]);
 
   const selectedAppId = appRoute?.appId ?? null;
+
+  useEffect(() => {
+    let active = true;
+    setPlaygroundAccess(null);
+    if (!selectedAppId) return;
+    api<AppOAuthIssuer>(`/admin/apps/${encodeURIComponent(selectedAppId)}/managed-issuer`)
+      .then(issuer => {
+        if (active) setPlaygroundAccess({ appId: selectedAppId, enabled: issuer?.status === "active" });
+      })
+      .catch(() => {
+        if (active) setPlaygroundAccess({ appId: selectedAppId, enabled: false });
+      });
+    return () => { active = false; };
+  }, [selectedAppId, appRoute?.section, reloadKey]);
 
   const authorities = me?.platformAccess?.authorities ?? [];
   const hasPlatformAdmin = authorities.includes("platform.admin");
@@ -126,13 +153,26 @@ export function App() {
       const renderSection = () => {
         switch (appRoute.section) {
           case "overview":
-            return <AppOverviewView app={currentApp} onChanged={() => setReloadKey((k) => k + 1)} />;
+            return (
+              <div className="space-y-6">
+                <AppOverviewView app={currentApp} onChanged={() => setReloadKey((k) => k + 1)} />
+                <IssuerView
+                  appId={appRoute.appId}
+                  focusManagedIssuer={focusManagedIssuer}
+                  onManagedIssuerChanged={issuer => setPlaygroundAccess({ appId: appRoute.appId, enabled: issuer.status === "active" })}
+                />
+                <UsageView appId={appRoute.appId} />
+              </div>
+            );
           case "members":
-            return <MembersView appId={appRoute.appId} appRevision={currentApp.revision} onChanged={() => setReloadKey((k) => k + 1)} />;
+            return <PeopleView scope={{ appId: appRoute.appId, appRevision: currentApp.revision, onChanged: () => setReloadKey((k) => k + 1) }} initialFilter={appRoute.peopleFilter} />;
           case "invitations":
-            return <AppInvitationsView appId={appRoute.appId} />;
+            return null;
           case "playground":
-            return <PlaygroundView appId={appRoute.appId} />;
+            return <PlaygroundView appId={appRoute.appId} onOpenManagedIssuer={() => {
+              setFocusManagedIssuer(true);
+              navigate(`/apps/${encodeURIComponent(appRoute.appId)}/overview`);
+            }} />;
           case "change-logs":
             return <ControlAuditView appId={appRoute.appId} />;
           default:
@@ -145,6 +185,7 @@ export function App() {
             appId={appRoute.appId}
             activeSection={appRoute.section}
             displayName={currentApp.displayName}
+            playgroundEnabled={playgroundAccess?.appId === appRoute.appId && playgroundAccess.enabled}
             onTabChange={(section) => navigate(`/apps/${encodeURIComponent(appRoute.appId)}/${section}`)}
           />
           {renderSection()}
@@ -152,60 +193,40 @@ export function App() {
       );
     }
   } else if (platformRoute) {
-    const renderPlatformSection = () => {
-      switch (platformRoute.section) {
-        case "principals": return <PlatformPrincipalsView />;
-        case "invitations": return <PlatformInvitationsView />;
-        case "audit": return <PlatformAuditView />;
-        default: return null;
-      }
-    };
-    detail = (
-      <div>
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-semibold tracking-tight">Platform Administration</h1>
-          <nav className="flex gap-1 border-b" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={platformRoute.section === "principals"}
-              onClick={() => navigate("/platform/principals")}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${platformRoute.section === "principals"
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
-            >
-              Principals
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={platformRoute.section === "invitations"}
-              onClick={() => navigate("/platform/invitations")}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${platformRoute.section === "invitations"
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
-            >
-              Invitations
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={platformRoute.section === "audit"}
-              onClick={() => navigate("/platform/audit")}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${platformRoute.section === "audit"
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
-            >
-              Audit
-            </button>
-          </nav>
+    if (!hasPlatformAdmin) {
+      detail = (
+        <div className="page">
+          <div className="flex items-center gap-2 text-sm text-destructive" role="alert">
+            <CircleAlert className="h-4 w-4" />
+            <span>Platform administrator access is required.</span>
+          </div>
         </div>
-        {renderPlatformSection()}
-      </div>
-    );
+      );
+    } else {
+      const renderPlatformSection = () => {
+        switch (platformRoute.section) {
+          case "people": return <PeopleView scope={{ platform: true }} initialFilter={platformRoute.peopleFilter} />;
+          case "principals":
+          case "invitations": return null;
+          case "audit": return <PlatformAuditView />;
+          default: return null;
+        }
+      };
+      detail = (
+        <div>
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+            <h1 className="text-2xl font-semibold tracking-tight">Platform Administration</h1>
+            <Tabs value={platformRoute.section} onValueChange={value => navigate(`/platform/${value}`)}>
+              <TabsList aria-label="Platform Administration sections" className="rounded-none border-b bg-transparent p-0">
+                <TabsTrigger value="people">People</TabsTrigger>
+                <TabsTrigger value="audit">Audit</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+          {renderPlatformSection()}
+        </div>
+      );
+    }
   } else {
     detail = <MyAppsView canCreateApps={canCreateApps} />;
   }
@@ -214,6 +235,13 @@ export function App() {
     return (
       <main className="min-h-screen bg-background p-4 sm:p-8">
         <InvitationView token={inviteMatch.params.token!} />
+      </main>
+    );
+  }
+  if (platformInviteMatch) {
+    return (
+      <main className="min-h-screen bg-background p-4 sm:p-8">
+        <PlatformInvitationAcceptanceView token={platformInviteMatch.params.token!} />
       </main>
     );
   }
@@ -253,6 +281,7 @@ export function App() {
         </PlaygroundCacheContext>
       </main>
       <McpConfigurationDialog open={mcpOpen} onClose={() => setMcpOpen(false)} />
+      <CopyNotifications />
     </div>
   );
 }

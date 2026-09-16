@@ -22,6 +22,25 @@ async function invoke(
 }
 
 describe("App admin physical compatibility adapter", () => {
+  test("forwards Platform Admin responses without consuming or rewriting them", async () => {
+    const upstream = Response.json({ items: [{ principalRef: "principal-1" }], nextCursor: null }, {
+      headers: { ETag: '"7"', "Cache-Control": "no-store" },
+    });
+    const handler = vi.fn(async () => upstream);
+    const response = await handleAppAdminCompatibilityRequest(
+      request("/admin/platform/principals"),
+      { operation: "listPlatformPrincipals" },
+      handler,
+    );
+
+    expect(response).toBe(upstream);
+    expect(response.headers.get("ETag")).toBe('"7"');
+    await expect(response.json()).resolves.toEqual({
+      items: [{ principalRef: "principal-1" }],
+      nextCursor: null,
+    });
+  });
+
   test("forwards App mutations without legacy rewriting and preserves no-content responses", async () => {
     const handler = vi.fn(async () => new Response(null, {
       status: 204,

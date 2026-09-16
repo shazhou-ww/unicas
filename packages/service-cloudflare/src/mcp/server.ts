@@ -1,7 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/server";
-import type {
-  ControlPlaneCallContext,
-  ControlPlaneOperations,
+import {
+  PlatformAccessError,
+  type PlatformAccessService,
+  type PlatformAuditService,
+  type PlatformInvitationService,
+  type ControlPlaneCallContext,
+  type ControlPlaneOperations,
 } from "@unicas/service";
 import {
   APP_ADMIN_MCP_TOOLS,
@@ -34,6 +38,9 @@ export interface ControlPlaneMcpServerOptions {
     grant: ControlPlaneMcpGrantProps,
     authority: PlatformAuthority,
   ) => Promise<CasAdminErrorResponse | null>;
+  readonly platformInvitations?: PlatformInvitationService;
+  readonly platformAudit?: PlatformAuditService;
+  readonly platformAccess?: PlatformAccessService;
 }
 
 export function createControlPlaneMcpServer(
@@ -225,6 +232,133 @@ export function createControlPlaneMcpServer(
         { idempotencyKey },
       );
       return appToolResult({ operation: "createApp" }, withEtag(result));
+    },
+  );
+
+  server.registerTool(
+    APP_ADMIN_MCP_TOOLS.list_platform_principals.name,
+    APP_ADMIN_MCP_TOOLS.list_platform_principals.registration,
+    async ({ query, effectiveAccess, authority, limit, cursor }) => {
+      const grant = requireGrantScope("control:security");
+      const authorizationError = await options.authorizePlatformOperation?.(grant, "platform.admin");
+      if (authorizationError) return toolResult(authorizationError);
+      if (!options.platformAccess) return toolResult({ error: "SERVICE_UNAVAILABLE" });
+      return platformToolResult(() => options.platformAccess!.listPrincipals(grantPrincipal(grant), {
+        query,
+        effectiveAccess,
+        authority,
+        limit,
+        cursor,
+      }));
+    },
+  );
+
+  server.registerTool(
+    APP_ADMIN_MCP_TOOLS.get_platform_principal.name,
+    APP_ADMIN_MCP_TOOLS.get_platform_principal.registration,
+    async ({ principalRef }) => {
+      const grant = requireGrantScope("control:security");
+      const authorizationError = await options.authorizePlatformOperation?.(grant, "platform.admin");
+      if (authorizationError) return toolResult(authorizationError);
+      if (!options.platformAccess) return toolResult({ error: "SERVICE_UNAVAILABLE" });
+      return platformToolResult(() => options.platformAccess!.getPrincipal(grantPrincipal(grant), principalRef));
+    },
+  );
+
+  server.registerTool(
+    APP_ADMIN_MCP_TOOLS.update_platform_access.name,
+    APP_ADMIN_MCP_TOOLS.update_platform_access.registration,
+    async ({ principalRef, confirmPrincipalRef, status, authorities, etag }) => {
+      const grant = requireMutation("control:security", options);
+      if (principalRef !== confirmPrincipalRef) return confirmationError("confirmPrincipalRef must exactly match principalRef");
+      if (status === undefined && authorities === undefined) return toolResult({ error: "INVALID_REQUEST" });
+      const authorizationError = await options.authorizePlatformOperation?.(grant, "platform.admin");
+      if (authorizationError) return toolResult(authorizationError);
+      if (!options.platformAccess) return toolResult({ error: "SERVICE_UNAVAILABLE" });
+      return platformToolResult(async () => {
+        const updated = await options.platformAccess!.patchAccess(
+          grantPrincipal(grant),
+          principalRef,
+          { status, authorities },
+          etag,
+        );
+        return { etag: formatCasAdminETag(updated.revision) };
+      });
+    },
+  );
+
+  server.registerTool(
+    APP_ADMIN_MCP_TOOLS.list_platform_invitations.name,
+    APP_ADMIN_MCP_TOOLS.list_platform_invitations.registration,
+    async ({ query, status, limit, cursor }) => {
+      const grant = requireGrantScope("control:security");
+      const authorizationError = await options.authorizePlatformOperation?.(grant, "platform.admin");
+      if (authorizationError) return toolResult(authorizationError);
+      if (!options.platformInvitations) return toolResult({ error: "SERVICE_UNAVAILABLE" });
+      return platformToolResult(() => options.platformInvitations!.list(
+        grantPrincipal(grant),
+        { query, status, limit, cursor },
+      ));
+    },
+  );
+
+  server.registerTool(
+    APP_ADMIN_MCP_TOOLS.create_platform_invitation.name,
+    APP_ADMIN_MCP_TOOLS.create_platform_invitation.registration,
+    async ({ email, confirmEmail, authorities, idempotencyKey }) => {
+      const grant = requireMutation("control:security", options);
+      if (email !== confirmEmail) return confirmationError("confirmEmail must exactly match email");
+      const authorizationError = await options.authorizePlatformOperation?.(grant, "platform.admin");
+      if (authorizationError) return toolResult(authorizationError);
+      if (!options.platformInvitations || !options.publicOrigin) return toolResult({ error: "SERVICE_UNAVAILABLE" });
+      return platformToolResult(async () => {
+        const created = await options.platformInvitations!.create(
+          grantPrincipal(grant),
+          { emailConstraint: email, authorities },
+          idempotencyKey,
+        );
+        return {
+          invitationId: created.invitationId,
+          acceptUrl: new URL(created.acceptUrl, options.publicOrigin).toString(),
+          expiresAt: created.expiresAt,
+          etag: formatCasAdminETag(created.revision),
+        };
+      });
+    },
+  );
+
+  server.registerTool(
+    APP_ADMIN_MCP_TOOLS.revoke_platform_invitation.name,
+    APP_ADMIN_MCP_TOOLS.revoke_platform_invitation.registration,
+    async ({ invitationId, confirmInvitationId, etag }) => {
+      const grant = requireMutation("control:security", options);
+      if (invitationId !== confirmInvitationId) return confirmationError("confirmInvitationId must exactly match invitationId");
+      const authorizationError = await options.authorizePlatformOperation?.(grant, "platform.admin");
+      if (authorizationError) return toolResult(authorizationError);
+      if (!options.platformInvitations) return toolResult({ error: "SERVICE_UNAVAILABLE" });
+      return platformToolResult(async () => {
+        const revoked = await options.platformInvitations!.revoke(grantPrincipal(grant), invitationId, etag);
+        return { etag: formatCasAdminETag(revoked.revision) };
+      });
+    },
+  );
+
+  server.registerTool(
+    APP_ADMIN_MCP_TOOLS.list_platform_audit_events.name,
+    APP_ADMIN_MCP_TOOLS.list_platform_audit_events.registration,
+    async ({ action, actorPrincipalRef, targetPrincipalRef, createdAfter, limit, cursor }) => {
+      const grant = requireGrantScope("control:security");
+      const authorizationError = await options.authorizePlatformOperation?.(grant, "platform.admin");
+      if (authorizationError) return toolResult(authorizationError);
+      if (!options.platformAudit) return toolResult({ error: "SERVICE_UNAVAILABLE" });
+      return platformToolResult(() => options.platformAudit!.list(grantPrincipal(grant), {
+        action,
+        actorPrincipalRef,
+        targetPrincipalRef,
+        createdAfter,
+        limit,
+        cursor,
+      }));
     },
   );
 
@@ -865,5 +999,18 @@ async function auditReaderValue(
       error: CasAdminErrorCodes.SERVICE_UNAVAILABLE,
       message: "Root Ref audit reader is unavailable",
     };
+  }
+}
+
+function grantPrincipal(grant: ControlPlaneMcpGrantProps) {
+  return { issuer: grant.identityIssuer, subject: grant.subject };
+}
+
+async function platformToolResult(operation: () => Promise<object>) {
+  try {
+    return toolResult(await operation());
+  } catch (error) {
+    if (error instanceof PlatformAccessError) return toolResult({ error: error.code });
+    return toolResult({ error: "SERVICE_UNAVAILABLE" });
   }
 }

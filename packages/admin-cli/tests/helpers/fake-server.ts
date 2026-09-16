@@ -169,6 +169,7 @@ export class FakeAdminApi {
         return json({
           principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
           profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+          platformAccess: { principalRef: "principal-1", status: "active", authorities: ["platform.admin", "apps.create"], revision: 1 },
           memberships: [{
             appId: "cas_stack_a",
             principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
@@ -180,6 +181,88 @@ export class FakeAdminApi {
         identity: { identityIssuer: "https://accounts.google.com", subject: "sub-1", displayName: "Alice", emailForDisplay: "alice@example.com" },
         memberships: [{ stackId: "cas_stack_a", identityIssuer: "https://accounts.google.com", subject: "sub-1", displayName: "Alice", emailForDisplay: "alice@example.com" }],
       });
+    }
+    if (url.pathname === appAdminRoutes.platformInvitations() && method === "GET") {
+      return json({ items: [{
+        invitationId: "platform-invite-1",
+        emailConstraint: "developer@example.com",
+        authorities: ["apps.create"],
+        status: "pending",
+        expiresAt: 1_800_000_000,
+        createdAt: 1,
+        createdBy: { issuer: "https://accounts.google.com", subject: "sub-1" },
+        revision: 1,
+      }], nextCursor: null });
+    }
+    if (url.pathname === appAdminRoutes.platformInvitations() && method === "POST") {
+      return Response.json({
+        invitationId: "platform-invite-new",
+        acceptUrl: `${FAKE_ORIGIN}/admin/platform-invitations/platform-token`,
+        expiresAt: 1_800_000_000,
+      }, { status: 201, headers: { ETag: '"1"' } });
+    }
+    if (url.pathname === appAdminRoutes.platformInvitation({ invitationId: "platform-invite-1" }) && method === "DELETE") {
+      return new Response(null, { status: 204, headers: { ETag: '"2"' } });
+    }
+    if (url.pathname === appAdminRoutes.platformAuditEvents() && method === "GET") {
+      return json({ items: [{
+        eventId: "platform-event-1",
+        action: "platform_invitation.created",
+        actorPrincipalRef: "principal-1",
+        actorPrincipal: { issuer: "https://accounts.google.com", subject: "sub-1" },
+        targetPrincipalRef: null,
+        targetPrincipal: null,
+        targetInvitationId: "platform-invite-1",
+        result: "succeeded",
+        requestId: "request-1",
+        createdAt: 100,
+        details: {},
+      }], nextCursor: null });
+    }
+    if (url.pathname === appAdminRoutes.platformPrincipals() && method === "GET") {
+      return json({ items: [{
+        principalRef: "principal-1",
+        principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
+        profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+        status: "active",
+        authorities: ["platform.admin", "apps.create"],
+        revision: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        effectiveAccess: "active",
+        appMembershipCount: 1,
+        lastActiveAt: 1,
+      }], nextCursor: null });
+    }
+    if (url.pathname === appAdminRoutes.platformPrincipal({ principalRef: "principal-1" }) && method === "GET") {
+      return json({
+        principalRef: "principal-1",
+        principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
+        profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+        status: "active",
+        authorities: ["platform.admin", "apps.create"],
+        revision: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        effectiveAccess: "active",
+        appMembershipCount: 1,
+        lastActiveAt: 1,
+        memberships: [],
+      });
+    }
+    if (url.pathname === appAdminRoutes.platformPrincipalAccess({ principalRef: "principal-1" }) && method === "GET") {
+      return Response.json({
+        principalRef: "principal-1",
+        principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
+        status: "active",
+        authorities: ["platform.admin", "apps.create"],
+        revision: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      }, { headers: { ETag: '"1"' } });
+    }
+    if (url.pathname === appAdminRoutes.platformPrincipalAccess({ principalRef: "principal-1" }) && method === "PATCH") {
+      return new Response(null, { status: 204, headers: { ETag: '"2"' } });
     }
     // Apps
     if (url.pathname === appAdminRoutes.apps() && method === "GET") {

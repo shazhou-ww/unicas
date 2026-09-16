@@ -2,11 +2,14 @@ import {
   effectivePlatformAccess,
   hasPlatformAuthority,
   PatchPlatformAccessSchema,
+  PlatformPrincipalQuerySchema,
   parseCasAdminETag,
   type PlatformAccessState,
   type PlatformAccessSummary,
   type PlatformAuthority,
-  type PlatformPrincipal,
+  type PlatformPrincipalDetail,
+  type PlatformPrincipalListItem,
+  type PlatformPrincipalPage,
   type Principal,
 } from "@unicas/admin-protocol";
 import { sha256Hex, validateInvitationToken } from "./control-validation.js";
@@ -22,6 +25,9 @@ export interface PlatformAuditRecord {
   readonly eventId: string;
   readonly actorPrincipal: Principal;
   readonly targetPrincipal: Principal | null;
+  readonly targetInvitationId?: string | null;
+  readonly requestId?: string | null;
+  readonly details?: Readonly<Record<string, string | number | boolean | null>>;
   readonly action: string;
   readonly result: "succeeded" | "denied";
   readonly createdAt: number;
@@ -40,11 +46,18 @@ export interface AppInvitationAdmission extends Omit<AppInvitationAdmissionRecor
 }
 
 export interface PlatformAccessRepository {
+  readSnapshot(): Promise<number>;
   getAccess(principal: Principal): Promise<PlatformAccessState | null>;
   hasMembership(principal: Principal): Promise<boolean>;
   getAppInvitationByTokenHash(tokenHash: string): Promise<AppInvitationAdmissionRecord | null>;
-  getPrincipal(principalRef: string): Promise<PlatformPrincipal | null>;
-  listPrincipals(input: { readonly after: string; readonly limit: number }): Promise<readonly PlatformPrincipal[]>;
+  getPrincipal(principalRef: string): Promise<PlatformPrincipalDetail | null>;
+  listPrincipals(input: {
+    readonly after: string;
+    readonly limit: number;
+    readonly query?: string;
+    readonly effectiveAccess?: "active" | "blocked" | "no_access";
+    readonly authority?: PlatformAuthority | "none";
+  }): Promise<readonly PlatformPrincipalListItem[]>;
   getAccessSummary(): Promise<Omit<PlatformAccessSummary, "generatedAt">>;
   patchAccess(input: {
     readonly actor: Principal;
@@ -130,6 +143,29 @@ export class PlatformAccessService {
   }
 
   async patchAccess(actor: Principal, principalRef: string, input: unknown, ifMatch?: string): Promise<{ readonly revision: number }> {
+    try {
+      return await this.#patchAccess(actor, principalRef, input, ifMatch);
+    } catch (error) {
+      if (error instanceof PlatformAccessError && error.code !== "SERVICE_UNAVAILABLE") {
+        try {
+          await this.repository.appendAudit({
+            eventId: crypto.randomUUID(),
+            actorPrincipal: actor,
+            targetPrincipal: null,
+            action: "platform_access.change_denied",
+            result: "denied",
+            createdAt: this.now(),
+            details: { errorCode: error.code, principalRef },
+          });
+        } catch {
+          throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
+        }
+      }
+      throw error;
+    }
+  }
+
+  async #patchAccess(actor: Principal, principalRef: string, input: unknown, ifMatch?: string): Promise<{ readonly revision: number }> {
     await this.requireAccess(actor, "platform.admin");
     const parsed = PatchPlatformAccessSchema.safeParse(input);
     if (!parsed.success) throw new PlatformAccessError("INVALID_REQUEST", 400);
@@ -160,18 +196,46 @@ export class PlatformAccessService {
     return { revision: current.revision + 1 };
   }
 
-  async listPrincipals(actor: Principal, input: { readonly after: string; readonly limit: number }): Promise<readonly PlatformPrincipal[]> {
+  async listPrincipals(actor: Principal, input: unknown): Promise<PlatformPrincipalPage> {
     await this.requireAccess(actor, "platform.admin");
+    const parsed = PlatformPrincipalQuerySchema.safeParse(normalizeListInput(input));
+    if (!parsed.success) throw new PlatformAccessError("INVALID_REQUEST", 400);
+    const cursor = decodePrincipalCursor(parsed.data.cursor);
+    const query = parsed.data.query?.trim().toLowerCase();
+    const filters = {
+      query,
+      effectiveAccess: parsed.data.effectiveAccess,
+      authority: parsed.data.authority,
+    };
+    if (cursor && JSON.stringify(cursor.filters) !== JSON.stringify(filters)) {
+      throw new PlatformAccessError("INVALID_CURSOR", 400);
+    }
+    const limit = parsed.data.limit ?? 50;
+    const snapshot = await readSnapshot(this.repository);
+    if (cursor && cursor.snapshot !== snapshot) throw new PlatformAccessError("INVALID_CURSOR", 400);
     try {
-      return await this.repository.listPrincipals(input);
-    } catch {
+      const rows = await this.repository.listPrincipals({
+        after: cursor?.last ?? "",
+        limit: limit + 1,
+        ...filters,
+      });
+      const items = rows.slice(0, limit);
+      if (await this.repository.readSnapshot() !== snapshot) throw new PlatformAccessError("INVALID_CURSOR", 400);
+      return {
+        items,
+        nextCursor: rows.length > limit
+          ? btoa(JSON.stringify({ v: 1, snapshot, last: items.at(-1)!.principalRef, filters }))
+          : null,
+      };
+    } catch (error) {
+      if (error instanceof PlatformAccessError) throw error;
       throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
     }
   }
 
-  async getPrincipal(actor: Principal, principalRef: string): Promise<PlatformPrincipal> {
+  async getPrincipal(actor: Principal, principalRef: string): Promise<PlatformPrincipalDetail> {
     await this.requireAccess(actor, "platform.admin");
-    let principal: PlatformPrincipal | null;
+    let principal: PlatformPrincipalDetail | null;
     try {
       principal = await this.repository.getPrincipal(principalRef);
     } catch {
@@ -179,6 +243,19 @@ export class PlatformAccessService {
     }
     if (!principal) throw new PlatformAccessError("NOT_FOUND", 404);
     return principal;
+  }
+
+  async getAccessState(actor: Principal, principalRef: string): Promise<PlatformAccessState> {
+    const principal = await this.getPrincipal(actor, principalRef);
+    return {
+      principalRef: principal.principalRef,
+      principal: principal.principal,
+      status: principal.status,
+      authorities: principal.authorities,
+      revision: principal.revision,
+      createdAt: principal.createdAt,
+      updatedAt: principal.updatedAt,
+    };
   }
 
   async getAccessSummary(actor: Principal): Promise<PlatformAccessSummary> {
@@ -189,5 +266,48 @@ export class PlatformAccessService {
     } catch {
       throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
     }
+  }
+}
+
+function normalizeListInput(input: unknown): unknown {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) return input;
+  const record = input as Record<string, unknown>;
+  return {
+    ...record,
+    ...(record.limit === undefined ? {} : { limit: Number(record.limit) }),
+  };
+}
+
+interface PrincipalCursor {
+  readonly v: 1;
+  readonly snapshot: number;
+  readonly last: string;
+  readonly filters: {
+    readonly query?: string;
+    readonly effectiveAccess?: "active" | "blocked" | "no_access";
+    readonly authority?: PlatformAuthority | "none";
+  };
+}
+
+function decodePrincipalCursor(value: string | undefined): PrincipalCursor | null {
+  if (value === undefined) return null;
+  try {
+    const parsed = JSON.parse(atob(value)) as PrincipalCursor;
+    if (parsed.v !== 1 || !Number.isSafeInteger(parsed.snapshot) || parsed.snapshot < 0
+      || typeof parsed.last !== "string" || parsed.last.length === 0
+      || typeof parsed.filters !== "object" || parsed.filters === null) {
+      throw new Error("invalid cursor");
+    }
+    return parsed;
+  } catch {
+    throw new PlatformAccessError("INVALID_CURSOR", 400);
+  }
+}
+
+async function readSnapshot(repository: PlatformAccessRepository): Promise<number> {
+  try {
+    return await repository.readSnapshot();
+  } catch {
+    throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
   }
 }

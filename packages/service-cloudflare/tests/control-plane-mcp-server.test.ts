@@ -4,10 +4,12 @@ import type { D1Database } from "@cloudflare/workers-types";
 import { CLIENT_CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, PROTOCOL_VERSION_META_KEY } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { APP_ADMIN_MCP_TOOL_LIST } from "@unicas/admin-protocol";
+import { PlatformAccessService, PlatformAuditService, PlatformInvitationService } from "@unicas/service";
 import { createControlPlaneMcpServer } from "../src/mcp/server.js";
 import type { ControlPlaneMcpGrantProps } from "../src/mcp/server.js";
 import { migrateControlSchema } from "../src/control-schema.js";
 import { createControlPlaneOperations } from "../src/control-operations.js";
+import { D1PlatformAccessRepository } from "../src/platform-access-repository.js";
 
 let miniflare: Miniflare;
 let db: D1Database;
@@ -179,6 +181,83 @@ describe("adapter-hosted control-plane MCP server", () => {
     expect((await callTool(handler, "revoke_app_member_invitation", { appId, invitationId, confirmInvitationId: "wrong", etag: '"1"' })).isError).toBe(true);
     expect((await callTool(handler, "revoke_app_member_invitation", { appId, invitationId, confirmInvitationId: invitationId, etag: '"1"' })).structuredContent).toEqual({ etag: '"2"' });
     expect((await callTool(handler, "list_app_member_invitations", { appId, status: "revoked" })).structuredContent).toMatchObject({ items: [{ invitationId, status: "revoked" }] });
+  });
+
+  test("creates, lists, and revokes platform invitations with current platform authority", async () => {
+    await db.prepare("INSERT INTO cas_platform_principals (principal_ref, identity_issuer, subject, status, platform_admin, apps_create, revision, created_at, updated_at) VALUES ('alice-ref', ?, ?, 'active', 1, 0, 1, 1, 1)")
+      .bind("https://accounts.google.com", "alice-sub").run();
+    await db.prepare("INSERT INTO cas_platform_principals (principal_ref, identity_issuer, subject, status, platform_admin, apps_create, revision, created_at, updated_at) VALUES ('target-ref', ?, 'target-sub', 'active', 0, 0, 1, 1, 1)")
+      .bind("https://accounts.google.com").run();
+    const repository = new D1PlatformAccessRepository(db);
+    const platformAccess = new PlatformAccessService(repository);
+    const platformInvitations = new PlatformInvitationService(
+      repository,
+      platformAccess,
+      { seal: async token => `sealed:${token}`, open: async sealed => sealed.slice(7) },
+    );
+    const handler = handlerFor(grant(["control:security"]), {
+      mutationsEnabled: true,
+      publicOrigin: "https://console.unicas.work",
+      platformInvitations,
+      platformAudit: new PlatformAuditService(repository, platformAccess),
+      platformAccess,
+    });
+
+    expect((await callTool(handler, "create_platform_invitation", {
+      email: "developer@example.com",
+      confirmEmail: "wrong@example.com",
+      authorities: ["apps.create"],
+      idempotencyKey: "platform-invite-1",
+    })).isError).toBe(true);
+    const created = await callTool(handler, "create_platform_invitation", {
+      email: "developer@example.com",
+      confirmEmail: "developer@example.com",
+      authorities: ["apps.create"],
+      idempotencyKey: "platform-invite-1",
+    });
+    expect(created.structuredContent).toMatchObject({
+      invitationId: expect.any(String),
+      acceptUrl: expect.stringMatching(/^https:\/\/console\.unicas\.work\/admin\/platform-invitations\//),
+      etag: '"1"',
+    });
+    const invitationId = String(created.structuredContent.invitationId);
+    expect((await callTool(handler, "list_platform_principals", { authority: "platform.admin" })).structuredContent)
+      .toMatchObject({ items: [{ principalRef: "alice-ref" }] });
+    expect((await callTool(handler, "get_platform_principal", { principalRef: "target-ref" })).structuredContent)
+      .toMatchObject({ principalRef: "target-ref", authorities: [] });
+    expect((await callTool(handler, "update_platform_access", {
+      principalRef: "target-ref",
+      confirmPrincipalRef: "wrong",
+      authorities: ["apps.create"],
+      etag: '"1"',
+    })).isError).toBe(true);
+    expect((await callTool(handler, "update_platform_access", {
+      principalRef: "target-ref",
+      confirmPrincipalRef: "target-ref",
+      authorities: ["apps.create"],
+      etag: '"1"',
+    })).structuredContent).toEqual({ etag: '"2"' });
+    const listed = await callTool(handler, "list_platform_invitations", { status: "pending" });
+    expect(listed.structuredContent).toMatchObject({
+      items: [{ invitationId, emailConstraint: "developer@example.com", authorities: ["apps.create"] }],
+    });
+    expect(JSON.stringify(listed.structuredContent)).not.toMatch(/acceptUrl|tokenHash|sealedToken/);
+    expect((await callTool(handler, "list_platform_audit_events", {
+      action: "platform_invitation.created",
+      limit: 10,
+    })).structuredContent).toMatchObject({
+      items: [{ action: "platform_invitation.created", targetInvitationId: invitationId }],
+    });
+    expect((await callTool(handler, "revoke_platform_invitation", {
+      invitationId,
+      confirmInvitationId: "wrong",
+      etag: '"1"',
+    })).isError).toBe(true);
+    expect((await callTool(handler, "revoke_platform_invitation", {
+      invitationId,
+      confirmInvitationId: invitationId,
+      etag: '"1"',
+    })).structuredContent).toEqual({ etag: '"2"' });
   });
 
   test("serves App memberships and Principal-owned Playground records", async () => {

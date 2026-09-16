@@ -5,8 +5,8 @@ control plane. It exists because DeepSeek Harness's MCP client only supports
 static headers and therefore cannot complete the OAuth authorization-code flow
 that protects `https://api.unicas.work/mcp`. The CLI authenticates through
 the control-plane BFF instead: it opens the BFF's `/admin/auth/cli/authorize`,
-the BFF runs Google OIDC (client secret held server-side) and the email
-allowlist, then redirects the browser back to the CLI's loopback with a one-time
+the BFF runs Google OIDC (client secret held server-side) and verifies current
+Platform Access, then redirects the browser back to the CLI's loopback with a one-time
 code that the CLI exchanges (PKCE) for a BFF session cookie + CSRF token,
 persisted to `~/.unicas/session.json` (0600). The CLI never talks to Google and
 needs no client id or secret of its own. Every command calls the typed
@@ -62,6 +62,19 @@ Alternatively, skip MCP entirely and have DSH run plain shell commands
 | Read (`control:read`) | `principal`, `apps list/get`, `app-members list`, `app-oauth-issuer get`, `app-ref-domains list`, `app-audit control/root-domain-refs/root-domain-events` |
 | Write (`control:write`) | `apps create` (idempotency key), `apps update` (ETag) |
 | Security (`control:security`) | `app-members invite/remove/invitations/revoke-invitation`, `app-oauth-issuer inspect/activate` |
+
+Platform operations are available as:
+
+```text
+unicas platform-access list|get|update
+unicas platform-invitations list|create|revoke
+unicas platform-audit
+```
+
+These require current `platform.admin` authority in addition to the
+authenticated session. `apps create` requires independent `apps.create`
+authority. An App member without that authority can list and administer only
+their Apps and is denied App creation by the server.
 
 V2 commands use `appId`, Principal `{ issuer, subject }`, and `--space-id`.
 They never return `stackId`, `tenantId`, or flattened identity/profile fields.

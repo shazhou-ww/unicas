@@ -21,6 +21,9 @@ import { logoutCommand } from "./commands/logout.js";
 import { membersCommand } from "./commands/members.js";
 import { oauthIssuerCommand } from "./commands/oauth-issuer.js";
 import { principalCommand } from "./commands/principal.js";
+import { platformInvitationsCommand } from "./commands/platform-invitations.js";
+import { platformAuditCommand } from "./commands/platform-audit.js";
+import { platformAccessCommand } from "./commands/platform-access.js";
 import { refDomainsCommand } from "./commands/refdomains.js";
 import { stacksCommand } from "./commands/stacks.js";
 import { statusCommand } from "./commands/status.js";
@@ -54,6 +57,14 @@ Usage:
   unicas app-audit control <appId> [--limit N] [--cursor C] [--after ID]
   unicas app-audit root-domain-refs <appId> <refDomain> [--space-id S] [--limit N] [--cursor C]
   unicas app-audit root-domain-events <appId> <refDomain> [--space-id S] [--after N] [--limit N]
+
+  unicas platform-invitations list [--query Q] [--status pending|accepted|expired|revoked] [--limit N] [--cursor C]
+  unicas platform-invitations create <email> --authority platform.admin|apps.create [--authority ...] [--idempotency-key K]
+  unicas platform-invitations revoke <invitationId> --etag E [--confirm-invitation-id ID]
+  unicas platform-audit [--action A] [--actor-principal-ref R] [--target-principal-ref R] [--created-after MS] [--limit N] [--cursor C]
+  unicas platform-access list [--query Q] [--effective-access active|blocked|no_access] [--authority platform.admin|apps.create|none] [--limit N] [--cursor C]
+  unicas platform-access get <principalRef>
+  unicas platform-access update <principalRef> [--status active|blocked] [--authority platform.admin|apps.create ... | --clear-authorities] [--etag E]
 
 Legacy v1 compatibility:
   unicas whoami                                             Legacy operator identity and Stack memberships
@@ -128,6 +139,19 @@ export async function main(argv: readonly string[]): Promise<void> {
     case "app-audit": {
       const [subcommand, ...subArgs] = rest;
       await appAuditCommand(ctx, subcommand, subArgs);
+      return;
+    }
+    case "platform-invitations": {
+      const [subcommand, ...subArgs] = rest;
+      await platformInvitationsCommand(ctx, subcommand, subArgs);
+      return;
+    }
+    case "platform-audit":
+      await platformAuditCommand(ctx, rest);
+      return;
+    case "platform-access": {
+      const [subcommand, ...subArgs] = rest;
+      await platformAccessCommand(ctx, subcommand, subArgs);
       return;
     }
     case "stacks": {

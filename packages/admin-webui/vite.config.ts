@@ -23,14 +23,15 @@ export default defineConfig({
     proxy: {
       "/admin": {
         target: "http://localhost:8792",
-        changeOrigin: true,
+        changeOrigin: false,
         // Proxy ONLY the BFF-owned paths; everything else (the SPA shell,
-        // assets, Vite module graph: /admin/src/*, /admin/@vite/*,
+        // Vite module graph: /admin/src/*, /admin/@vite/*,
         // /admin/@react-refresh, pre-bundled deps) is served by Vite.
         bypass: (req) => {
           const path = req.url ?? "";
           const isBffRoute =
             path === "/admin/me"
+            || path.startsWith("/admin/assets/")
             || path.startsWith("/admin/apps")
             || path.startsWith("/admin/stacks")
             || path.startsWith("/admin/member-invitations")
@@ -43,15 +44,15 @@ export default defineConfig({
       },
       "/stacks": {
         target: "http://localhost:8794",
-        changeOrigin: true,
+        changeOrigin: false,
       },
       "/managed-issuers": {
         target: "http://localhost:8794",
-        changeOrigin: true,
+        changeOrigin: false,
       },
       "/.well-known": {
         target: "http://localhost:8794",
-        changeOrigin: true,
+        changeOrigin: false,
       },
     },
   },

@@ -811,9 +811,10 @@ the production implementation task.
 ## Unified people query amendment
 
 Proposed on 2026-09-16 after the user approved merging App Members/Invitations
-and requested the same treatment for Platform Principals/Invitations. The UI
-direction is accepted; this new read contract and its implementation boundaries
-await explicit interface/model/architecture review. Existing resource and
+and requested the same treatment for Platform Principals/Invitations. The read
+contract and implementation boundaries were explicitly approved after `83beb4b`;
+approval was published as `23d8c52`. Both queries are now implemented locally.
+Existing resource and
 mutation contracts remain unchanged. No new membership or identity entity is
 created, and no schema/data migration is required by this projection.
 
@@ -860,8 +861,10 @@ wrong-scope, wrong-filter, and stale cursors with `INVALID_CURSOR`. Detect
 changes both before and after the read. Snapshot handling must cover searchable
 profile updates as well as membership, grant, and invitation changes; the
 existing control snapshot must not be assumed to cover profile updates without
-verification. Reconcile expiry through the existing lifecycle before reading
-the page, without introducing grant or acceptance side effects.
+verification. Profile writes now advance it when searchable values change.
+App expiry reconciliation follows the existing lifecycle before reading; platform
+expiry follows its existing effective-status projection. Cursor validity also
+ends at the earliest pending invitation expiry, without grant/acceptance effects.
 
 Ownership: protocol owns schemas/routes/generated OpenAPI; admin-client exposes
 typed reads; service owns authorization, selection, and cursor rules; the D1

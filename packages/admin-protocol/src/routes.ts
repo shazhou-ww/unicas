@@ -25,9 +25,17 @@ export type CasAdminRoute =
   | { operation: "accessSummary" }
   | { operation: "listPlatformPrincipals" }
   | { operation: "getPlatformPrincipal"; principalRef: string }
-  | { operation: "patchPlatformAccess"; principalRef: string };
+  | { operation: "getPlatformAccess"; principalRef: string }
+  | { operation: "patchPlatformAccess"; principalRef: string }
+  | { operation: "listPlatformInvitations" }
+  | { operation: "createPlatformInvitation" }
+  | { operation: "revokePlatformInvitation"; invitationId: string }
+  | { operation: "acceptPlatformInvitation"; token: string }
+  | { operation: "listPlatformAuditEvents" };
 
 export type AppAdminRoute =
+  | { operation: "listPeople"; appId: string }
+  | { operation: "listPlatformPeople" }
   | { operation: "me" }
   | { operation: "listApps" }
   | { operation: "createApp" }
@@ -56,7 +64,13 @@ export type AppAdminRoute =
   | { operation: "accessSummary" }
   | { operation: "listPlatformPrincipals" }
   | { operation: "getPlatformPrincipal"; principalRef: string }
-  | { operation: "patchPlatformAccess"; principalRef: string };
+  | { operation: "getPlatformAccess"; principalRef: string }
+  | { operation: "patchPlatformAccess"; principalRef: string }
+  | { operation: "listPlatformInvitations" }
+  | { operation: "createPlatformInvitation" }
+  | { operation: "revokePlatformInvitation"; invitationId: string }
+  | { operation: "acceptPlatformInvitation"; token: string }
+  | { operation: "listPlatformAuditEvents" };
 
 function segment(value: string): string {
   return encodeURIComponent(value);
@@ -107,9 +121,17 @@ export const casAdminRoutes = {
     `/admin/platform/principals/${segment(principalRef)}`,
   platformPrincipalAccess: ({ principalRef }: { principalRef: string }) =>
     `/admin/platform/principals/${segment(principalRef)}/access`,
+  platformInvitations: () => "/admin/platform/invitations",
+  platformInvitation: ({ invitationId }: { invitationId: string }) =>
+    `/admin/platform/invitations/${segment(invitationId)}`,
+  acceptPlatformInvitation: ({ token }: { token: string }) =>
+    `/admin/platform-invitations/${segment(token)}/accept`,
+  platformAuditEvents: () => "/admin/platform/audit-events",
 } as const;
 
 export const appAdminRoutes = {
+  people: ({ appId }: { appId: string }) => `/admin/apps/${segment(appId)}/people`,
+  platformPeople: () => "/admin/platform/people",
   me: () => "/admin/me",
   apps: () => "/admin/apps",
   app: ({ appId }: { appId: string }) =>
@@ -148,6 +170,12 @@ export const appAdminRoutes = {
     `/admin/platform/principals/${segment(principalRef)}`,
   platformPrincipalAccess: ({ principalRef }: { principalRef: string }) =>
     `/admin/platform/principals/${segment(principalRef)}/access`,
+  platformInvitations: () => "/admin/platform/invitations",
+  platformInvitation: ({ invitationId }: { invitationId: string }) =>
+    `/admin/platform/invitations/${segment(invitationId)}`,
+  acceptPlatformInvitation: ({ token }: { token: string }) =>
+    `/admin/platform-invitations/${segment(token)}/accept`,
+  platformAuditEvents: () => "/admin/platform/audit-events",
 } as const;
 
 /**
@@ -164,6 +192,16 @@ export function matchCasAdminRoute(
   if (parts[1] === "platform") {
     const platformRoute = matchPlatformAdminRoute(method, pathname);
     return platformRoute as CasAdminRoute | null;
+  }
+
+  if (
+    parts.length === 4
+    && parts[1] === "platform-invitations"
+    && parts[3] === "accept"
+    && method === "POST"
+  ) {
+    const token = decodeSegment(parts[2]!);
+    return token === null ? null : { operation: "acceptPlatformInvitation", token };
   }
 
   if (parts.length === 2 && parts[1] === "me" && method === "GET") {
@@ -282,6 +320,16 @@ export function matchAppAdminRoute(
     return matchPlatformAdminRoute(method, pathname);
   }
 
+  if (
+    parts.length === 4
+    && parts[1] === "platform-invitations"
+    && parts[3] === "accept"
+    && method === "POST"
+  ) {
+    const token = decodeSegment(parts[2]!);
+    return token === null ? null : { operation: "acceptPlatformInvitation", token };
+  }
+
   if (parts.length === 2 && parts[1] === "me" && method === "GET") {
     return { operation: "me" };
   }
@@ -305,6 +353,8 @@ export function matchAppAdminRoute(
   if (parts[1] !== "apps" || !parts[2]) return null;
   const appId = decodeSegment(parts[2]);
   if (appId === null) return null;
+
+  if (parts.length === 4 && parts[3] === "people" && method === "GET") return { operation: "listPeople", appId };
 
   if (parts.length === 3) {
     if (method === "GET") return { operation: "getApp", appId };
@@ -399,6 +449,8 @@ export function matchPlatformAdminRoute(
   const parts = pathname.split("/").filter(Boolean);
   if (parts[0] !== "admin" || parts[1] !== "platform") return null;
 
+  if (parts.length === 3 && parts[2] === "people" && method === "GET") return { operation: "listPlatformPeople" };
+
   if (parts.length === 3 && parts[2] === "access-summary" && method === "GET") {
     return { operation: "accessSummary" };
   }
@@ -406,6 +458,21 @@ export function matchPlatformAdminRoute(
   if (parts.length === 3 && parts[2] === "principals") {
     if (method === "GET") return { operation: "listPlatformPrincipals" };
     return null;
+  }
+
+  if (parts.length === 3 && parts[2] === "invitations") {
+    if (method === "GET") return { operation: "listPlatformInvitations" };
+    if (method === "POST") return { operation: "createPlatformInvitation" };
+    return null;
+  }
+
+  if (parts.length === 3 && parts[2] === "audit-events" && method === "GET") {
+    return { operation: "listPlatformAuditEvents" };
+  }
+
+  if (parts.length === 4 && parts[2] === "invitations" && method === "DELETE") {
+    const invitationId = decodeSegment(parts[3]!);
+    return invitationId === null ? null : { operation: "revokePlatformInvitation", invitationId };
   }
 
   if (parts.length === 4 && parts[2] === "principals" && parts[3]) {
@@ -420,11 +487,11 @@ export function matchPlatformAdminRoute(
     && parts[2] === "principals"
     && parts[3]
     && parts[4] === "access"
-    && method === "PATCH"
   ) {
     const principalRef = decodeSegment(parts[3]!);
     if (principalRef === null) return null;
-    return { operation: "patchPlatformAccess", principalRef };
+    if (method === "GET") return { operation: "getPlatformAccess", principalRef };
+    if (method === "PATCH") return { operation: "patchPlatformAccess", principalRef };
   }
 
   return null;

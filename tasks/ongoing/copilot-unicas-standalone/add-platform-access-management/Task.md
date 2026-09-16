@@ -132,6 +132,10 @@ customized for UniCAS, and makes the App list the primary navigation.
 
 ## Acceptance criteria
 
+- [x] App Members and Platform People combine existing identities with pending
+  invitations in one server-paged, searchable table per workspace, with
+  Invite toolbar actions, history filters, distinct permission boundaries,
+  unchanged conditional writes, and compatible legacy links.
 - [ ] A Google-authenticated Principal without a platform grant, an eligible
       pending invitation, or an existing App membership is denied Console, CLI,
       and remote MCP access without an authorization record being created

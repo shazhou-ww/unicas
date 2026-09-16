@@ -5,6 +5,7 @@ const principal = { issuer: "https://identity.example.test", subject: "synthetic
 
 function fixture() {
   const repository: PlatformAccessRepository = {
+    readSnapshot: vi.fn(async () => 0),
     getAccess: vi.fn(async () => null), hasMembership: vi.fn(async () => false),
     getAppInvitationByTokenHash: vi.fn(async () => null),
     getPrincipal: vi.fn(async () => null), listPrincipals: vi.fn(async () => []),
@@ -45,6 +46,23 @@ describe("platform access service", () => {
     vi.mocked(repository.hasMembership).mockResolvedValue(true);
     await expect(service.requireAccess(principal)).rejects.toMatchObject({ code: "PLATFORM_ACCESS_REQUIRED" });
     await expect(service.assertNotBlocked(principal)).rejects.toMatchObject({ code: "PLATFORM_ACCESS_REQUIRED" });
+  });
+
+  test("audits denied Platform Access mutations without request bodies", async () => {
+    const { repository, service } = fixture();
+    vi.mocked(repository.hasMembership).mockResolvedValue(true);
+
+    await expect(service.patchAccess(principal, "target-ref", { authorities: ["platform.admin"] }, '"1"'))
+      .rejects.toMatchObject({ code: "PLATFORM_ADMIN_REQUIRED" });
+
+    expect(repository.appendAudit).toHaveBeenCalledWith(expect.objectContaining({
+      actorPrincipal: principal,
+      targetPrincipal: null,
+      action: "platform_access.change_denied",
+      result: "denied",
+      details: { errorCode: "PLATFORM_ADMIN_REQUIRED", principalRef: "target-ref" },
+    }));
+    expect(JSON.stringify(vi.mocked(repository.appendAudit).mock.calls)).not.toContain("authorities");
   });
 
   test("admits only a pending email-bound invitation for an otherwise unadmitted Principal", async () => {

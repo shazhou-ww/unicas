@@ -8,7 +8,9 @@ import type { D1Database } from "@cloudflare/workers-types";
 
 const CONTROL_TABLE_MIGRATIONS = [
   "CREATE TABLE IF NOT EXISTS cas_platform_principals (principal_ref TEXT PRIMARY KEY, identity_issuer TEXT NOT NULL, subject TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('active','blocked')), platform_admin INTEGER NOT NULL DEFAULT 0 CHECK(platform_admin IN (0,1)), apps_create INTEGER NOT NULL DEFAULT 0 CHECK(apps_create IN (0,1)), revision INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, UNIQUE(identity_issuer, subject))",
-  "CREATE TABLE IF NOT EXISTS cas_platform_audit_events (event_id TEXT PRIMARY KEY, actor_issuer TEXT NOT NULL, actor_subject TEXT NOT NULL, target_issuer TEXT, target_subject TEXT, action TEXT NOT NULL, result TEXT NOT NULL CHECK(result IN ('succeeded','denied')), created_at INTEGER NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS cas_platform_audit_events (event_id TEXT PRIMARY KEY, actor_issuer TEXT NOT NULL, actor_subject TEXT NOT NULL, target_issuer TEXT, target_subject TEXT, target_invitation_id TEXT, action TEXT NOT NULL, result TEXT NOT NULL CHECK(result IN ('succeeded','denied')), request_id TEXT, created_at INTEGER NOT NULL, details_json TEXT NOT NULL DEFAULT '{}')",
+  "CREATE TABLE IF NOT EXISTS cas_platform_invitations (invitation_id TEXT PRIMARY KEY, email_constraint TEXT NOT NULL, platform_admin INTEGER NOT NULL DEFAULT 0 CHECK(platform_admin IN (0,1)), apps_create INTEGER NOT NULL DEFAULT 0 CHECK(apps_create IN (0,1)), status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','accepted','expired','revoked')), token_hash TEXT NOT NULL UNIQUE, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL, created_by_issuer TEXT NOT NULL, created_by_subject TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1)",
+  "CREATE TABLE IF NOT EXISTS cas_platform_invitation_idempotency (actor_issuer TEXT NOT NULL, actor_subject TEXT NOT NULL, idempotency_key TEXT NOT NULL, payload_hash TEXT NOT NULL, invitation_id TEXT NOT NULL, sealed_token TEXT NOT NULL, expires_at INTEGER NOT NULL, PRIMARY KEY(actor_issuer, actor_subject, idempotency_key))",
   "CREATE TABLE IF NOT EXISTS cas_operator_identities (identity_issuer TEXT NOT NULL, subject TEXT NOT NULL, display_name TEXT, email_for_display TEXT, created_at INTEGER NOT NULL, PRIMARY KEY (identity_issuer, subject))",
   "CREATE TABLE IF NOT EXISTS cas_apps (app_id TEXT NOT NULL, display_name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','suspended')), created_at INTEGER NOT NULL, revision INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (app_id))",
   "CREATE TABLE IF NOT EXISTS cas_app_members (app_id TEXT NOT NULL, identity_issuer TEXT NOT NULL, subject TEXT NOT NULL, joined_at INTEGER NOT NULL, PRIMARY KEY (app_id, identity_issuer, subject))",
@@ -26,6 +28,9 @@ const CONTROL_TABLE_MIGRATIONS = [
 
 const CONTROL_INDEX_MIGRATIONS = [
   "CREATE INDEX IF NOT EXISTS cas_invitations_by_token_hash ON cas_app_member_invitations(token_hash)",
+  "CREATE INDEX IF NOT EXISTS cas_platform_invitations_by_token_hash ON cas_platform_invitations(token_hash)",
+  "CREATE INDEX IF NOT EXISTS cas_platform_invitations_by_email ON cas_platform_invitations(email_constraint, invitation_id)",
+  "CREATE INDEX IF NOT EXISTS cas_platform_invitation_idempotency_by_expiry ON cas_platform_invitation_idempotency(expires_at)",
   "CREATE INDEX IF NOT EXISTS cas_playground_file_roots_by_owner ON cas_playground_file_roots(app_id, owner_key, name, root_id)",
   "CREATE UNIQUE INDEX IF NOT EXISTS cas_oauth_issuer_by_issuer ON cas_app_oauth_issuers(issuer)",
   "CREATE INDEX IF NOT EXISTS cas_oauth_issuers_by_status ON cas_app_oauth_issuers(status, app_id)",
@@ -43,5 +48,50 @@ export const CONTROL_SCHEMA_MIGRATIONS = [
 ];
 
 export async function migrateControlSchema(db: D1Database): Promise<void> {
-  for (const sql of CONTROL_SCHEMA_MIGRATIONS) await db.exec(sql);
+  for (const sql of CONTROL_TABLE_MIGRATIONS) await db.exec(sql);
+  await renameColumn(db, "cas_oauth_issuer_inspections", "stack_id", "app_id");
+  await renameColumn(db, "cas_control_audit_events", "stack_id", "app_id");
+  for (const sql of CONTROL_INDEX_MIGRATIONS) await db.exec(sql);
+  await ensureColumns(db, "cas_platform_audit_events", {
+    target_invitation_id: "TEXT",
+    request_id: "TEXT",
+    details_json: "TEXT NOT NULL DEFAULT '{}'",
+  });
+  await db.prepare(
+    `INSERT INTO cas_platform_principals
+      (principal_ref, identity_issuer, subject, status, platform_admin,
+       apps_create, revision, created_at, updated_at)
+     SELECT 'prn_' || lower(hex(randomblob(16))), member.identity_issuer,
+       member.subject, 'active', 0, 0, 1, MIN(member.joined_at), MIN(member.joined_at)
+     FROM cas_app_members AS member
+     LEFT JOIN cas_platform_principals AS access
+       ON access.identity_issuer = member.identity_issuer AND access.subject = member.subject
+     WHERE access.principal_ref IS NULL
+     GROUP BY member.identity_issuer, member.subject`,
+  ).run();
+}
+
+async function renameColumn(
+  db: D1Database,
+  table: string,
+  legacyName: string,
+  currentName: string,
+): Promise<void> {
+  const current = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
+  const names = new Set((current.results ?? []).map(column => column.name));
+  if (names.has(legacyName) && !names.has(currentName)) {
+    await db.exec(`ALTER TABLE ${table} RENAME COLUMN ${legacyName} TO ${currentName}`);
+  }
+}
+
+async function ensureColumns(
+  db: D1Database,
+  table: string,
+  columns: Readonly<Record<string, string>>,
+): Promise<void> {
+  const current = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
+  const names = new Set((current.results ?? []).map(column => column.name));
+  for (const [name, definition] of Object.entries(columns)) {
+    if (!names.has(name)) await db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+  }
 }

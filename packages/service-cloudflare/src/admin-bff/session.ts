@@ -25,6 +25,22 @@ export interface AppInvitationSession {
   readonly tokenHash: string;
 }
 
+export interface PlatformInvitationContinuation {
+  readonly kind: "platform";
+  readonly invitationId: string;
+  readonly tokenHash: string;
+  readonly token: string;
+}
+
+export interface PlatformInvitationSession {
+  readonly kind: "platform";
+  readonly invitationId: string;
+  readonly tokenHash: string;
+}
+
+export type InvitationContinuation = AppInvitationContinuation | PlatformInvitationContinuation;
+export type InvitationSession = AppInvitationSession | PlatformInvitationSession;
+
 export interface AdminSessionPayload {
   readonly v: 1;
   /** true once a Google identity has been verified into this session. */
@@ -40,9 +56,9 @@ export interface AdminSessionPayload {
   readonly codeVerifier?: string;
   readonly returnTo?: string;
   /** Encrypted, single-use invitation state while OIDC is in progress. */
-  readonly invitationContinuation?: AppInvitationContinuation;
+  readonly invitationContinuation?: InvitationContinuation;
   /** Exact invitation route allowed for an invitation-limited session. */
-  readonly invitationAccess?: AppInvitationSession;
+  readonly invitationAccess?: InvitationSession;
   /** Preserve the invitation login exception while full admission is rechecked. */
   readonly admittedViaInvitation?: true;
   /** CLI login transaction: set when this pre-login was started by the admin CLI. */
