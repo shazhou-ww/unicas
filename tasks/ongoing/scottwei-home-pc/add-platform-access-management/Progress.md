@@ -15,7 +15,7 @@ Updated: 2026-09-16
 - [x] Remove verified obsolete UI styles and synchronize design/runner documentation (Milestone 7).
 - [x] Validate local bootstrap/migration tests, workflows, scoped accessibility checks, and repository gates.
 - [x] Complete operator production cutover and real-provider verification in [UserAcceptance](./UserAcceptance.md).
-- [ ] Publish implementation completion after required reviews and remaining acceptance checks.
+- [x] Publish implementation completion after required reviews and remaining acceptance checks.
 - [ ] Obtain explicit human delivery acceptance.
 - [ ] Publish archive as a separate final integration.
 
@@ -724,7 +724,7 @@ audit reads.
 | Managed issuer CopyBubble and editor integration | `1e97284`; issuer regressions, no-emit check, and built desktop preview verified. | Published |
 | Ownership handoff to `scottwei-home-pc` | `d16ddb7`, verified reachable from refreshed `origin/main`. | Published |
 | Denied-login guidance and strong ETag follow-up | `c171901`; PR #3 merged as `19dd7ef`; run 35099365111 passed and tagged `production-20260916-108`; direct production page/ETag checks passed. | Published |
-| Implementation complete | All acceptance criteria and operator checks pass with the explicit second-administrator waiver; publication pending. | Pending |
+| Implementation complete | `5cfc938`, verified reachable from refreshed `origin/main`; all acceptance criteria and operator checks pass with the explicit second-administrator waiver. | Published |
 | Archive | Not yet archived. | Pending |
 
 ## Validation
