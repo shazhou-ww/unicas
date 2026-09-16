@@ -21,6 +21,40 @@ Updated: 2026-09-16
 
 ## Current state
 
+### Release request and blocking preflight
+
+On 2026-09-16 the requesting user accepted the management Console ("剩下的都没问题")
+and explicitly requested a release, while deferring remaining Playground layout
+polish to [the backlog task](/tasks/backlog/refine-playground-layout/Task.md).
+This is approval of the current delivered scope/interface/model/architecture
+and implementation at `8ef3391`, not retrospective permission for earlier work
+and not evidence that production cutover or real-provider tests passed.
+
+The latest main CI passed at `8ef3391`:
+[CI run 35074846616](https://github.com/shazhou-ww/unicas/actions/runs/35074846616).
+The remote release branch is still at `cf01559d8ba9604399fa3a516760241b63900beb`.
+Release is triggered by a push to `release` (or workflow dispatch on that ref),
+after the workflow's validation job succeeds.
+
+Read-only production D1 preflight found `cas_apps` and `cas_app_members`, but
+no `cas_platform_principals` table. Therefore no initial Platform Admin has
+been provisioned in that table. The enforcing Worker must not be released
+before the runbook bootstrap, or administrators could lose Platform Access
+management and App-creation authority. The preflight returned schema names
+only; no Principal values or credentials were read or written.
+
+**Release has not been triggered.** Next required action: an authorized operator
+backs up production D1, provisions the chosen verified immutable Principal via
+the [bootstrap runbook](/docs/cas-operations.md#platform-access-bootstrap-and-migration),
+and reports readiness without posting secrets or Principal identifiers. Then
+recheck the active-admin count, refresh branch/CI state, trigger the approved
+release, and record the deployment and real-provider verification outcome.
+Do not infer administrator identity from email or deploy around this gate.
+
+The installed repoledger CLI does not implement `status`; backlog and ongoing
+positions were inspected directly as the documented fallback. Concurrent task
+skill updates remain outside this release checkpoint and are not staged.
+
 The implemented Console and local validation are complete. This cleanup removes
 the remaining verified legacy CSS groups and reconciles documentation; it does
 not add features, execute a release, or satisfy human acceptance automatically.
@@ -56,9 +90,9 @@ not add features, execute a release, or satisfy human acceptance automatically.
    [UserAcceptance](./UserAcceptance.md). Local mock and schema tests do not
    establish production cutover success. No production action is authorized
    implicitly by task execution.
-2. Reconcile outstanding broad scope/interface/model/architecture decisions with
-   the requesting human. Focused approvals are recorded; no retroactive blanket
-   approval is inferred from implementation or a request to continue.
+2. Current implementation review is accepted in the explicit release request
+  above, with Playground layout polish deferred. Complete the production
+  preflight/bootstrap before triggering that release; approval is not a test result.
 3. Publish the formal implementation-complete milestone once its required gates
    are met, obtain explicit final delivery acceptance, and archive in a separate
    integration. Keep this task ongoing until then.
@@ -599,13 +633,15 @@ audit reads.
 
 ## Blockers
 
-- Pending human scope, interface, model, and architecture review. Do not cross
-  further implementation gates or archive without the required decisions.
-- Production bootstrap execution requires an operator with a Cloudflare token
-  and verified initial Principal; no production action ran in this session.
+- Production Platform Admin bootstrap is absent: read-only D1 preflight found
+  no `cas_platform_principals` table. Await the authorized operator's out-of-band
+  bootstrap before triggering release. No production writes or deployment ran.
+- Real-provider/post-release verification and final task closure remain pending.
+  Remaining Playground visual polish is intentionally deferred to its backlog task.
 
 ## Outcome
 
-Ongoing. Type fixes are published; enabled Playground and mobile creation are
-now locally verified as documented above. Production cutover verification,
-outstanding human review decisions, and final delivery acceptance remain pending.
+Ongoing, implementation accepted for release with Playground layout polish
+deferred. Release is authorized but not triggered because the production
+Platform Admin bootstrap precondition is missing. Production verification and
+task closure remain pending; this is not a failed CI or an implicit release.

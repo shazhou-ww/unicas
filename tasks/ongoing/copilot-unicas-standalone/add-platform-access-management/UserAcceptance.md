@@ -60,4 +60,13 @@ Final delivery approval must be explicit and separate from these test results.
 
 ## Status
 
-Pending. No production or real-provider outcome has been reported by the operator.
+Blocked before release on 2026-09-16. The user accepted the current management
+Console and requested release, with further Playground layout polish deferred
+to [backlog](/tasks/backlog/refine-playground-layout/Task.md). This is separate
+from production test execution.
+
+Agent read-only production schema preflight found `cas_apps` and
+`cas_app_members`, but no `cas_platform_principals`. The operator must complete
+the backup and out-of-band bootstrap before the enforcing release can proceed.
+No production writes/deployment or real-provider acceptance test was performed;
+no successful operator result has been reported.

@@ -96,6 +96,9 @@ customized for UniCAS, and makes the App list the primary navigation.
 
 ## Out of scope
 
+- Further Playground visual/layout polish is explicitly deferred by the user
+  to [Refine Playground layout](/tasks/backlog/refine-playground-layout/Task.md)
+  and does not block acceptance of the current Console implementation.
 - A separate Platform Admin frontend deployment, hostname, or identity provider.
 - A separately published design-system package or generic component library for
   products outside the UniCAS Console.
@@ -202,11 +205,14 @@ below is a design coverage inventory, not a claim that every choice is still ope
 
 ## Human review checkpoints
 
-Reviewer: the requesting user. Focused unified-query scope/interface/model/
-architecture approval was published as `23d8c52`; subsequent UI refinements were
-explicitly requested. Those decisions are recorded in [Progress](./Progress.md).
-They do not constitute retroactive approval of the complete implementation.
-Remaining broad review reconciliation and delivery acceptance are still pending.
+Reviewer: the requesting user. Focused unified-query approval was published as
+`23d8c52`; subsequent UI refinements were explicitly requested. On 2026-09-16
+the user accepted the current management Console and requested release of the
+implemented revision at `8ef3391`, deferring remaining Playground layout polish
+to backlog. This approves the current scope/interface/model/architecture and
+implementation, not production verification or retrospective authorization.
+See [Progress](./Progress.md#release-request-and-blocking-preflight) for the
+release blocker and actual evidence. Final operational closure remains pending.
 
 | Checkpoint | Review artifact and decision | Gate |
 | --- | --- | --- |
