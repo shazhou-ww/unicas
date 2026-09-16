@@ -9,6 +9,7 @@ import {
   type PlatformPrincipal,
   type Principal,
 } from "@unicas/admin-protocol";
+import { sha256Hex, validateInvitationToken } from "./control-validation.js";
 
 export class PlatformAccessError extends Error {
   constructor(readonly code: string, readonly status: number) {
@@ -26,9 +27,22 @@ export interface PlatformAuditRecord {
   readonly createdAt: number;
 }
 
+export interface AppInvitationAdmissionRecord {
+  readonly invitationId: string;
+  readonly appId: string;
+  readonly status: "pending" | "accepted" | "expired" | "revoked";
+  readonly emailConstraint: string | null;
+  readonly expiresAt: number;
+}
+
+export interface AppInvitationAdmission extends Omit<AppInvitationAdmissionRecord, "status"> {
+  readonly tokenHash: string;
+}
+
 export interface PlatformAccessRepository {
   getAccess(principal: Principal): Promise<PlatformAccessState | null>;
   hasMembership(principal: Principal): Promise<boolean>;
+  getAppInvitationByTokenHash(tokenHash: string): Promise<AppInvitationAdmissionRecord | null>;
   getPrincipal(principalRef: string): Promise<PlatformPrincipal | null>;
   listPrincipals(input: { readonly after: string; readonly limit: number }): Promise<readonly PlatformPrincipal[]>;
   getAccessSummary(): Promise<Omit<PlatformAccessSummary, "generatedAt">>;
@@ -43,7 +57,7 @@ export interface PlatformAccessRepository {
 }
 
 export class PlatformAccessService {
-  constructor(readonly repository: PlatformAccessRepository, readonly now: () => number = Date.now) {}
+  constructor(readonly repository: PlatformAccessRepository, readonly now: () => number = Date.now) { }
 
   async requireAccess(principal: Principal, authority?: PlatformAuthority): Promise<PlatformAccessState | null> {
     let state: PlatformAccessState | null;
@@ -70,6 +84,51 @@ export class PlatformAccessService {
     if (state?.status === "blocked") throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
   }
 
+  async resolveAppInvitation(token: string): Promise<AppInvitationAdmission> {
+    if (validateInvitationToken(token)) throw new PlatformAccessError("NOT_FOUND", 404);
+    const tokenHash = await sha256Hex(token);
+    let invitation: AppInvitationAdmissionRecord | null;
+    try {
+      invitation = await this.repository.getAppInvitationByTokenHash(tokenHash);
+    } catch {
+      throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
+    }
+    if (!invitation || invitation.status !== "pending" || invitation.expiresAt <= this.now()) {
+      throw new PlatformAccessError("NOT_FOUND", 404);
+    }
+    const { status: _status, ...pending } = invitation;
+    return { ...pending, tokenHash };
+  }
+
+  async authorizeAppInvitationLogin(
+    principal: Principal,
+    email: string | null,
+    emailVerified: boolean,
+    token: string,
+  ): Promise<{ readonly mode: "full" | "invitation"; readonly invitation: AppInvitationAdmission }> {
+    const invitation = await this.resolveAppInvitation(token);
+    let state: PlatformAccessState | null;
+    let member: boolean;
+    try {
+      [state, member] = await Promise.all([
+        this.repository.getAccess(principal),
+        this.repository.hasMembership(principal),
+      ]);
+    } catch {
+      throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
+    }
+    if (effectivePlatformAccess(state, member) === "active") {
+      return { mode: "full", invitation };
+    }
+    if (state?.status === "blocked"
+      || invitation.emailConstraint === null
+      || !emailVerified
+      || email?.trim().toLowerCase() !== invitation.emailConstraint) {
+      throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
+    }
+    return { mode: "invitation", invitation };
+  }
+
   async patchAccess(actor: Principal, principalRef: string, input: unknown, ifMatch?: string): Promise<{ readonly revision: number }> {
     await this.requireAccess(actor, "platform.admin");
     const parsed = PatchPlatformAccessSchema.safeParse(input);
@@ -88,11 +147,13 @@ export class PlatformAccessService {
     }
     if (status === current.status && authorities.length === current.authorities.length
       && authorities.every(authority => current.authorities.includes(authority))) return { revision: current.revision };
-    const result = await this.repository.patchAccess({ actor, current, status, authorities, audit: {
-      eventId: crypto.randomUUID(), actorPrincipal: actor, targetPrincipal: current.principal,
-      action: status !== current.status ? status === "blocked" ? "platform_access.blocked" : "platform_access.restored" : "platform_access.authority_changed",
-      result: "succeeded", createdAt: this.now(),
-    } });
+    const result = await this.repository.patchAccess({
+      actor, current, status, authorities, audit: {
+        eventId: crypto.randomUUID(), actorPrincipal: actor, targetPrincipal: current.principal,
+        action: status !== current.status ? status === "blocked" ? "platform_access.blocked" : "platform_access.restored" : "platform_access.authority_changed",
+        result: "succeeded", createdAt: this.now(),
+      }
+    });
     if (result === "revision-mismatch") throw new PlatformAccessError("REVISION_MISMATCH", 412);
     if (result === "last-admin") throw new PlatformAccessError("LAST_PLATFORM_ADMIN", 409);
     if (result === "forbidden") throw new PlatformAccessError("PLATFORM_ADMIN_REQUIRED", 403);

@@ -18,6 +18,7 @@ const TRANSACTION_TTL_SECONDS = 10 * 60;
 
 export interface OAuthAuthorizationEnv {
   OAUTH_KV: KVNamespace;
+  CAS_CONTROL_DB?: D1Database;
   OAUTH_PROVIDER?: OAuthHelpers;
   MCP_PUBLIC_ORIGIN?: string;
   PUBLIC_ORIGIN?: string;
@@ -28,6 +29,8 @@ export interface OAuthAuthorizationEnv {
   OIDC_DISCOVERY_URL?: string;
   ADMIN_EMAIL_ALLOWLIST?: string;
 }
+
+export type PrincipalAuthorizationResult = "allowed" | "denied" | "unavailable";
 
 interface PendingGoogleAuthorization {
   readonly kind: "google";
@@ -53,6 +56,10 @@ type PendingAuthorization = PendingGoogleAuthorization | PendingConsent;
 
 export interface OAuthAuthorizationHandlerOptions {
   readonly oidcFactory?: (env: OAuthAuthorizationEnv) => OidcClient;
+  readonly authorizePrincipal?: (
+    env: OAuthAuthorizationEnv,
+    principal: { readonly issuer: string; readonly subject: string },
+  ) => Promise<PrincipalAuthorizationResult>;
 }
 
 export function createOAuthAuthorizationHandler(options: OAuthAuthorizationHandlerOptions = {}) {
@@ -131,6 +138,16 @@ async function finishGoogleAuthentication(
     });
     if (!identity.emailVerified || !emailAllowed(identity.email, env.ADMIN_EMAIL_ALLOWLIST)) {
       return authFailure("This Google account is not allowed to access the UniCAS control plane", 403);
+    }
+    const admission = await options.authorizePrincipal?.(env, {
+      issuer: env.OIDC_ISSUER ?? "https://accounts.google.com",
+      subject: identity.sub,
+    });
+    if (admission === "denied") {
+      return authFailure("This Google account is not allowed to access the UniCAS control plane", 403);
+    }
+    if (admission === "unavailable") {
+      return authFailure("Platform access could not be verified", 503);
     }
     const client = await oauthProvider(env).lookupClient(transaction.oauthRequest.clientId);
     if (!client) return authFailure("OAuth client is no longer registered");

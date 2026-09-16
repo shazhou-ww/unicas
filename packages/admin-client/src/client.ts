@@ -67,7 +67,7 @@ export interface AdminClient {
   createApp(
     body: { readonly displayName: string },
     headers?: CasAdminCreateHeaders,
-  ): Promise<AdminClientRead<App>>;
+  ): Promise<AdminClientRead<{ readonly appId: AppId }>>;
   getApp(path: { readonly appId: AppId }): Promise<AdminClientRead<App>>;
   patchApp(
     path: { readonly appId: AppId },

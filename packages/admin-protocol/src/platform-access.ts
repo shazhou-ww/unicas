@@ -16,6 +16,13 @@ export interface PlatformAccessState {
   readonly updatedAt: number;
 }
 
+export interface CurrentPlatformAccess {
+  readonly principalRef: string;
+  readonly status: "active";
+  readonly authorities: readonly PlatformAuthority[];
+  readonly revision: number;
+}
+
 export interface PlatformPrincipal extends PlatformAccessState {
   readonly profile: Profile;
   readonly effectiveAccess: EffectivePlatformAccess;

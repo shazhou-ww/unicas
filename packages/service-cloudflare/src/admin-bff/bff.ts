@@ -31,7 +31,7 @@ import type {
   ControlSessionRepository,
   PlatformAccessRepository,
 } from "@unicas/service";
-import { PlatformAccessError, PlatformAccessService } from "@unicas/service";
+import { PlatformAccessError, PlatformAccessService, sha256Hex } from "@unicas/service";
 import type { AdminBffConfig } from "./config.js";
 const ADMIN_ASSET_CACHE_BUSTER = "issuer-discovery-v1";
 
@@ -279,6 +279,13 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
 
   async function handleOidcLogin(url: URL): Promise<Response> {
     const returnTo = sanitizeReturnTo(url.searchParams.get("returnTo")) ?? undefined;
+    return startOidcLogin(returnTo);
+  }
+
+  async function startOidcLogin(
+    returnTo?: string,
+    invitationContinuation?: AdminSessionPayload["invitationContinuation"],
+  ): Promise<Response> {
     const oidcState = generateOidcState();
     const oidcNonce = generateOidcNonce();
     const codeVerifier = generatePkceVerifier();
@@ -296,6 +303,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       oidcNonce,
       codeVerifier,
       returnTo,
+      invitationContinuation,
     };
     await sessionStore.create(sessionId, await sessionCrypto.encrypt(payload), sessionTtlMs);
     const authorizationUrl = await oidc.authorizationUrl({ state: oidcState, nonce: oidcNonce, codeChallenge });
@@ -393,7 +401,8 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       return oidcCallbackFailure(preLogin, reason);
     }
 
-    if (!isEmailAllowed(identity.email, identity.emailVerified)) {
+    const invitationContinuation = preLogin.invitationContinuation;
+    if (!invitationContinuation && !isEmailAllowed(identity.email, identity.emailVerified)) {
       if (sessionId) await sessionStore.delete(sessionId);
       await auditLoginFailure("email-not-allowed");
       return new Response(null, {
@@ -402,13 +411,31 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       });
     }
 
+    const loginPrincipal = {
+      issuer: config.oidcIssuer ?? "https://accounts.google.com",
+      subject: identity.sub,
+    };
+    let invitationAccess: AdminSessionPayload["invitationAccess"];
     if (platformAccess !== null) {
-      const loginPrincipal = {
-        issuer: config.oidcIssuer ?? "https://accounts.google.com",
-        subject: identity.sub,
-      };
       try {
-        await platformAccess.requireAccess(loginPrincipal);
+        if (invitationContinuation) {
+          const authorization = await platformAccess.authorizeAppInvitationLogin(
+            loginPrincipal,
+            identity.email,
+            identity.emailVerified,
+            invitationContinuation.token,
+          );
+          if (authorization.mode === "invitation") {
+            invitationAccess = {
+              kind: "app",
+              invitationId: authorization.invitation.invitationId,
+              appId: authorization.invitation.appId,
+              tokenHash: authorization.invitation.tokenHash,
+            };
+          }
+        } else {
+          await platformAccess.requireAccess(loginPrincipal);
+        }
       } catch (error) {
         if (error instanceof PlatformAccessError && error.code === "PLATFORM_ACCESS_REQUIRED") {
           if (sessionId) await sessionStore.delete(sessionId);
@@ -430,6 +457,12 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         }
         throw error;
       }
+    } else if (invitationContinuation) {
+      if (sessionId) await sessionStore.delete(sessionId);
+      return new Response(null, {
+        status: 302,
+        headers: { Location: "/admin/auth/login?error=access-denied" },
+      });
     }
 
     if (preLogin.cliClientId !== undefined) {
@@ -468,11 +501,15 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       displayName: identity.name,
       emailForDisplay: identity.email,
       csrfToken: generateCsrfToken(),
+      invitationAccess,
+      admittedViaInvitation: invitationContinuation ? true : undefined,
     };
     return createAuthenticatedSession(
       request,
       authenticatedPayload,
-      preLogin.returnTo ?? "/admin/",
+      invitationContinuation
+        ? `/admin/#/invitations/${encodeURIComponent(invitationContinuation.token)}`
+        : preLogin.returnTo ?? "/admin/",
       sessionId,
     );
   }
@@ -542,20 +579,44 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
   }
 
   async function handleInvitationPage(request: Request, token: string): Promise<Response> {
+    if (platformAccess === null) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "platform access service is not configured");
+    }
+    let invitation;
+    try {
+      invitation = await platformAccess.resolveAppInvitation(token);
+    } catch (error) {
+      if (error instanceof PlatformAccessError) {
+        return adminErrorResponse(error.code as CasAdminErrorResponse["error"], "invitation is not available");
+      }
+      throw error;
+    }
     const sessionId = readSessionId(request);
     const payload = sessionId ? await readSession(sessionId) : null;
-    if (!payload || !payload.authenticated) {
-      const returnTo = `/admin/invitations/${encodeURIComponent(token)}`;
-      const loginUrl = new URL("/admin/auth/login", request.url);
-      loginUrl.searchParams.set("returnTo", returnTo);
-      return new Response(null, {
-        status: 302,
-        headers: { Location: `${loginUrl.pathname}${loginUrl.search}` },
-      });
+    if (payload?.authenticated) {
+      if (payload.invitationAccess?.tokenHash === invitation.tokenHash) {
+        return new Response(null, {
+          status: 302,
+          headers: { Location: `/admin/#/invitations/${encodeURIComponent(token)}` },
+        });
+      }
+      try {
+        await platformAccess.requireAccess({ issuer: payload.identityIssuer, subject: payload.subject });
+        return new Response(null, {
+          status: 302,
+          headers: { Location: `/admin/#/invitations/${encodeURIComponent(token)}` },
+        });
+      } catch (error) {
+        if (!(error instanceof PlatformAccessError) || error.code !== "PLATFORM_ACCESS_REQUIRED") throw error;
+        if (sessionId) await sessionStore.delete(sessionId);
+      }
     }
-    return new Response(null, {
-      status: 302,
-      headers: { Location: `/admin/#/invitations/${encodeURIComponent(token)}` },
+    return startOidcLogin(undefined, {
+      kind: "app",
+      invitationId: invitation.invitationId,
+      appId: invitation.appId,
+      tokenHash: invitation.tokenHash,
+      token,
     });
   }
 
@@ -764,11 +825,62 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     });
   }
 
+  async function handleMemberInvitationAcceptance(request: Request, token: string): Promise<Response> {
+    const sessionId = readSessionId(request);
+    if (!sessionId) return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED, "login required");
+    const payload = await readSession(sessionId);
+    if (!payload || !payload.authenticated || payload.subject.length === 0) {
+      return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED, "login required");
+    }
+    if (payload.invitationAccess) {
+      const tokenHash = await sha256Hex(token);
+      if (!(await secureEqual(tokenHash, payload.invitationAccess.tokenHash))) {
+        return adminErrorResponse(
+          CasAdminErrorCodes.INVITATION_SESSION_REQUIRED,
+          "this session is bound to another invitation",
+        );
+      }
+    } else {
+      const auth = await requireAuthenticated(request);
+      if (auth instanceof Response) return auth;
+    }
+    if (!(await passCsrf(request, payload))) return csrfRejected();
+
+    const result = await controlPlane.acceptMemberInvitation(
+      serviceContext(payload, request),
+      { path: { token } },
+    );
+    if ("error" in result) return json(result, casAdminErrorHttpStatus[result.error]);
+
+    const nextPayload: AdminSessionPayload = {
+      v: 1,
+      authenticated: true,
+      identityIssuer: payload.identityIssuer,
+      subject: payload.subject,
+      displayName: payload.displayName,
+      emailForDisplay: payload.emailForDisplay,
+      csrfToken: generateCsrfToken(),
+      admittedViaInvitation: payload.admittedViaInvitation || payload.invitationAccess
+        ? true
+        : undefined,
+    };
+    const nextSessionId = generateSessionId();
+    await sessionStore.create(nextSessionId, await sessionCrypto.encrypt(nextPayload), sessionTtlMs);
+    await sessionStore.delete(sessionId);
+    const response = json(result, 200);
+    response.headers.set("Set-Cookie", sessionCookieHeader(cookieOptions, nextSessionId));
+    response.headers.set("X-CSRF-Token", nextPayload.csrfToken);
+    return response;
+  }
+
   async function handleAdminApi(
     request: Request,
     url: URL,
     route: CasAdminRoute,
   ): Promise<Response> {
+    if (route.operation === "acceptMemberInvitation") {
+      return handleMemberInvitationAcceptance(request, route.token);
+    }
     const auth = await requireAuthenticated(request);
     if (auth instanceof Response) return auth;
     if (isMutating(request.method) && !(await passCsrf(request, auth.payload))) {
@@ -784,8 +896,43 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     switch (route.operation) {
       case "me": {
         const result = await controlPlane.me(ctx);
-        const response = json(result, "error" in result ? casAdminErrorHttpStatus[result.error] : 200);
-        if (!("error" in result)) response.headers.set("X-CSRF-Token", auth.payload.csrfToken);
+        if ("error" in result) return json(result, casAdminErrorHttpStatus[result.error]);
+        let responseResult: typeof result & { platformAccess?: {
+          principalRef: string;
+          status: "active";
+          authorities: readonly ("platform.admin" | "apps.create")[];
+          revision: number;
+        } } = result;
+        if (platformAccess !== null) {
+          try {
+            const state = await platformAccess.requireAccess({
+              issuer: auth.payload.identityIssuer,
+              subject: auth.payload.subject,
+            });
+            if (!state) {
+              return adminErrorResponse(
+                CasAdminErrorCodes.SERVICE_UNAVAILABLE,
+                "platform access state is unavailable",
+              );
+            }
+            responseResult = {
+              ...result,
+              platformAccess: {
+                principalRef: state.principalRef,
+                status: "active",
+                authorities: state.authorities,
+                revision: state.revision,
+              },
+            };
+          } catch (error) {
+            if (error instanceof PlatformAccessError) {
+              return adminErrorResponse(error.code as CasAdminErrorResponse["error"]);
+            }
+            throw error;
+          }
+        }
+        const response = json(responseResult, 200);
+        response.headers.set("X-CSRF-Token", auth.payload.csrfToken);
         return response;
       }
       case "listStacks": {
@@ -793,6 +940,19 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         return json(result, "error" in result ? casAdminErrorHttpStatus[result.error] : 200);
       }
       case "createStack": {
+        if (platformAccess !== null) {
+          try {
+            await platformAccess.requireAccess(
+              { issuer: auth.payload.identityIssuer, subject: auth.payload.subject },
+              "apps.create",
+            );
+          } catch (error) {
+            if (error instanceof PlatformAccessError) {
+              return adminErrorResponse(error.code as CasAdminErrorResponse["error"]);
+            }
+            throw error;
+          }
+        }
         const body = await readJsonBody<{ displayName?: unknown }>(request);
         if (!body) return invalidRequest("JSON body is required");
         const result = await controlPlane.createStack(ctx, { body: { displayName: String(body.displayName ?? "") } }, mutation);
@@ -870,10 +1030,6 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         }, mutation);
         if ("error" in result) return json(result, casAdminErrorHttpStatus[result.error]);
         return json({ ...result, acceptUrl: absolutize(result.acceptUrl) }, 200);
-      }
-      case "acceptMemberInvitation": {
-        const result = await controlPlane.acceptMemberInvitation(ctx, { path: { token: route.token } });
-        return json(result, "error" in result ? casAdminErrorHttpStatus[result.error] : 200);
       }
       case "getOAuthIssuer": {
         if (query.optional !== undefined && query.optional !== "true" && query.optional !== "false") {
@@ -1084,7 +1240,10 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     if (!stored) return null;
     try {
       const payload = await sessionCrypto.decrypt(stored.encryptedPayload);
-      if (payload.authenticated && !isEmailAllowed(payload.emailForDisplay, true)) {
+      if (payload.authenticated
+        && !payload.invitationAccess
+        && !payload.admittedViaInvitation
+        && !isEmailAllowed(payload.emailForDisplay, true)) {
         await sessionStore.delete(sessionId);
         return null;
       }
@@ -1103,6 +1262,13 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     const payload = await readSession(sessionId);
     if (!payload || !payload.authenticated || payload.subject.length === 0) {
       return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED, "login required");
+    }
+    if (payload.invitationAccess) {
+      await sessionStore.touch(sessionId, sessionTtlMs);
+      return adminErrorResponse(
+        CasAdminErrorCodes.INVITATION_SESSION_REQUIRED,
+        "this session is limited to its invitation",
+      );
     }
     if (platformAccess !== null) {
       const sessionPrincipal = {

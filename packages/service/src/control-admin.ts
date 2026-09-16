@@ -67,6 +67,7 @@ import {
   generateInvitationToken,
   generateNonce,
   generateOAuthInspectionId,
+  generatePrincipalRef,
   generateStackId,
 } from "./control-ids.js";
 import {
@@ -218,6 +219,7 @@ export interface ControlAcceptMemberInvitationPlan {
   readonly invitationId: string;
   readonly stackId: string;
   readonly tokenHash: string;
+  readonly principalRef: string;
   readonly now: number;
   readonly identity: ControlIdentityRecord;
   readonly membership: ControlMembershipRecord & { readonly joinedAt: number };
@@ -444,6 +446,7 @@ export interface ControlPlaneAdminServiceOptions {
   readonly generateEventId?: () => string;
   readonly generateInvitationId?: () => string;
   readonly generateInvitationToken?: () => string;
+  readonly generatePrincipalRef?: () => string;
   readonly generateNonce?: () => string;
   readonly invitationTtlMs?: number;
   readonly oauthDiscovery?: OAuthDiscoveryPort;
@@ -464,6 +467,7 @@ export class ControlPlaneAdminService {
   readonly #generateEventId: () => string;
   readonly #generateInvitationId: () => string;
   readonly #generateInvitationToken: () => string;
+  readonly #generatePrincipalRef: () => string;
   readonly #generateNonce: () => string;
   readonly #invitationTtlMs: number;
   readonly #oauthDiscovery: OAuthDiscoveryPort | null;
@@ -481,6 +485,7 @@ export class ControlPlaneAdminService {
     this.#generateEventId = options.generateEventId ?? generateEventId;
     this.#generateInvitationId = options.generateInvitationId ?? generateInvitationId;
     this.#generateInvitationToken = options.generateInvitationToken ?? generateInvitationToken;
+    this.#generatePrincipalRef = options.generatePrincipalRef ?? generatePrincipalRef;
     this.#generateNonce = options.generateNonce ?? generateNonce;
     this.#invitationTtlMs = options.invitationTtlMs ?? INVITATION_TTL_MS;
     this.#oauthDiscovery = options.oauthDiscovery ?? null;
@@ -829,6 +834,7 @@ export class ControlPlaneAdminService {
         invitationId: invitation.invitationId,
         stackId: invitation.stackId,
         tokenHash,
+        principalRef: this.#generatePrincipalRef(),
         now,
         identity,
         membership,

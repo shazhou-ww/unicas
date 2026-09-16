@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button.js";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.js";
 import { PageHeading } from "../components/page-heading.js";
 
-export function MyAppsView() {
+export function MyAppsView({ canCreateApps = true }: { readonly canCreateApps?: boolean }) {
   const [apps, setApps] = useState<App[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -69,31 +69,33 @@ export function MyAppsView() {
           </dl>
         </div>
       </aside>
-      <Card>
-        <CardHeader>
-          <CardTitle>Create an App</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="inline-form">
-            <input
-              aria-label="App display name"
-              value={name}
-              placeholder="e.g. unidocs-cloudflare"
-              onChange={(event) => setName(event.target.value)}
-            />
-            <Button onClick={() => void createApp()} disabled={creating || name.trim().length === 0}>
-              <Plus className="mr-2 h-4 w-4" />
-              {creating ? "Creating…" : "Create App"}
-            </Button>
-          </div>
-          {createError ? (
-            <div className="flex items-center gap-2 text-sm text-destructive">
-              <CircleAlert className="h-4 w-4" />
-              <span>{createError}</span>
+      {canCreateApps ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Create an App</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="inline-form">
+              <input
+                aria-label="App display name"
+                value={name}
+                placeholder="e.g. unidocs-cloudflare"
+                onChange={(event) => setName(event.target.value)}
+              />
+              <Button onClick={() => void createApp()} disabled={creating || name.trim().length === 0}>
+                <Plus className="mr-2 h-4 w-4" />
+                {creating ? "Creating…" : "Create App"}
+              </Button>
             </div>
-          ) : null}
-        </CardContent>
-      </Card>
+            {createError ? (
+              <div className="flex items-center gap-2 text-sm text-destructive">
+                <CircleAlert className="h-4 w-4" />
+                <span>{createError}</span>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
       <Card>
         <CardHeader>
           <CardTitle>Your Apps</CardTitle>
@@ -114,7 +116,9 @@ export function MyAppsView() {
           {apps !== null && apps.length === 0 ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Inbox className="h-4 w-4" />
-              <span>You are not a member of any App yet. Create one above.</span>
+              <span>{canCreateApps
+                ? "You are not a member of any App yet. Create one above."
+                : "You are not a member of any App yet."}</span>
             </div>
           ) : null}
           {apps !== null && apps.length > 0 ? (

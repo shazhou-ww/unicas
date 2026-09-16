@@ -49,6 +49,12 @@ describe("App admin physical compatibility adapter", () => {
           displayName: "Alice",
           emailForDisplay: "alice@example.com",
         },
+        platformAccess: {
+          principalRef: "principal-1",
+          status: "active",
+          authorities: ["platform.admin"],
+          revision: 3,
+        },
         memberships: [{
           stackId: "app-1",
           identityIssuer: "https://accounts.example",
@@ -64,6 +70,12 @@ describe("App admin physical compatibility adapter", () => {
     await expect(response.json()).resolves.toEqual({
       principal: { issuer: "https://accounts.example", subject: "alice" },
       profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+      platformAccess: {
+        principalRef: "principal-1",
+        status: "active",
+        authorities: ["platform.admin"],
+        revision: 3,
+      },
       memberships: [{
         appId: "app-1",
         principal: { issuer: "https://accounts.example", subject: "alice" },
@@ -87,6 +99,25 @@ describe("App admin physical compatibility adapter", () => {
     expect(legacyHandler).toHaveBeenCalledWith(expect.objectContaining({
       url: "https://console.unicas.work/admin/member-invitations/invite-1/accept",
     }));
+    await expect(response.json()).resolves.toEqual({ appId: "app-1" });
+  });
+
+  test("maps App creation to a 201 identifier receipt without echoing the resource", async () => {
+    const { response } = await invoke(
+      { operation: "createApp" },
+      "/admin/apps",
+      {
+        stackId: "app-1",
+        displayName: "App 1",
+        description: "",
+        status: "active",
+        createdAt: 1,
+        revision: 1,
+      },
+    );
+
+    expect(response.status).toBe(201);
+    expect(response.headers.get("ETag")).toBe('"3"');
     await expect(response.json()).resolves.toEqual({ appId: "app-1" });
   });
 

@@ -51,6 +51,7 @@ export type {
   PlatformAccessStatus,
   EffectivePlatformAccess,
   PlatformAccessState,
+  CurrentPlatformAccess,
   PlatformPrincipal,
   PlatformPrincipalListItem,
   PlatformPrincipalDetail,

@@ -383,11 +383,21 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
       plan.membership.subject,
       plan.membership.joinedAt,
     );
+    const insertPlatformPrincipal = this.#db.prepare(
+      "INSERT INTO cas_platform_principals (principal_ref, identity_issuer, subject, status, platform_admin, apps_create, revision, created_at, updated_at) VALUES (?, ?, ?, 'active', 0, 0, 1, ?, ?) ON CONFLICT(identity_issuer, subject) DO NOTHING",
+    ).bind(
+      plan.principalRef,
+      plan.identity.identityIssuer,
+      plan.identity.subject,
+      plan.now,
+      plan.now,
+    );
     try {
       await this.#db.batch([
         claim,
         requireClaimed,
         synchronizeIdentity,
+        insertPlatformPrincipal,
         insertMember,
         ...this.#mutationStatements(plan.audit),
       ]);

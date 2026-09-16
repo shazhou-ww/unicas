@@ -7,6 +7,12 @@ import { UserMenu } from "../src/ui/index.js";
 const mockMe = {
   principal: { issuer: "https://accounts.example", subject: "admin" },
   profile: { displayName: "Admin User", emailForDisplay: "admin@example.com" },
+  platformAccess: {
+    principalRef: "principal-admin",
+    status: "active",
+    authorities: [],
+    revision: 1,
+  },
   memberships: [],
 };
 

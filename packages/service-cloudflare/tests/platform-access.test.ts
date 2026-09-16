@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
-import { PlatformAccessService } from "@unicas/service";
+import { PlatformAccessService, sha256Hex } from "@unicas/service";
 import { D1PlatformAccessRepository } from "../src/platform-access-repository.js";
 import { migrateControlSchema } from "../src/control-schema.js";
 
@@ -26,6 +26,13 @@ describe("persistent platform access", () => {
     await expect(service.patchAccess(actor, "synthetic-ref", { authorities: ["platform.admin", "apps.create"] }, '"1"')).resolves.toEqual({ revision: 2 });
     await expect(service.patchAccess(actor, "synthetic-ref", { authorities: [] }, '"1"')).rejects.toMatchObject({ code: "REVISION_MISMATCH" });
     await service.requireAccess(actor, "apps.create");
+    const invitationToken = "i".repeat(32);
+    await db.prepare("INSERT INTO cas_app_member_invitations (invitation_id, app_id, status, email_constraint, token_hash, expires_at, created_at, revision) VALUES ('invitation-1', 'app-1', 'pending', 'invitee@example.com', ?, 2000, 1, 1)").bind(await sha256Hex(invitationToken)).run();
+    await expect(service.resolveAppInvitation(invitationToken)).resolves.toMatchObject({
+      invitationId: "invitation-1",
+      appId: "app-1",
+      emailConstraint: "invitee@example.com",
+    });
     const audit = await db.prepare("SELECT action, result FROM cas_platform_audit_events ORDER BY created_at").all();
     expect(audit.results).toEqual(expect.arrayContaining([{ action: "app.create_denied", result: "denied" }, { action: "platform_access.authority_changed", result: "succeeded" }]));
   });

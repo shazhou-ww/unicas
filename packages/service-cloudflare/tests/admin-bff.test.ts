@@ -9,6 +9,7 @@ import type {
   PlatformAccessRepository,
   StoredSession,
 } from "@unicas/service";
+import { sha256Hex } from "@unicas/service";
 import { createAdminBff, OidcClient, SessionCrypto, uiAssets } from "../src/admin-bff/index.js";
 import type { AdminBffConfig } from "../src/admin-bff/config.js";
 
@@ -300,6 +301,13 @@ import type {
 class MemoryPlatformAccessRepository implements PlatformAccessRepository {
   private readonly states = new Map<string, PlatformAccessState>();
   private readonly members = new Set<string>();
+  private readonly invitations = new Map<string, {
+    invitationId: string;
+    appId: string;
+    status: "pending" | "accepted" | "expired" | "revoked";
+    emailConstraint: string | null;
+    expiresAt: number;
+  }>();
 
   private key(p: Principal): string {
     return `${p.issuer}\0${p.subject}`;
@@ -337,10 +345,31 @@ class MemoryPlatformAccessRepository implements PlatformAccessRepository {
   grantViaMembership(issuer: string, subject: string): void {
     const k = this.key({ issuer, subject });
     this.members.add(k);
+    if (!this.states.has(k)) {
+      this.states.set(k, {
+        principalRef: k,
+        principal: { issuer, subject },
+        status: "active",
+        authorities: [],
+        revision: 1,
+        createdAt: 0,
+        updatedAt: 0,
+      });
+    }
   }
 
   revokeMembership(issuer: string, subject: string): void {
     this.members.delete(this.key({ issuer, subject }));
+  }
+
+  async addInvitation(token: string, emailConstraint: string | null): Promise<void> {
+    this.invitations.set(await sha256Hex(token), {
+      invitationId: "invitation-1",
+      appId: "app-invited",
+      status: "pending",
+      emailConstraint,
+      expiresAt: Date.now() + 60_000,
+    });
   }
 
   block(issuer: string, subject: string): void {
@@ -365,6 +394,10 @@ class MemoryPlatformAccessRepository implements PlatformAccessRepository {
 
   async hasMembership(principal: Principal): Promise<boolean> {
     return this.members.has(this.key(principal));
+  }
+
+  async getAppInvitationByTokenHash(tokenHash: string) {
+    return this.invitations.get(tokenHash) ?? null;
   }
 
   async getPrincipal(principalRef: string): Promise<PlatformPrincipal | null> {
@@ -454,6 +487,7 @@ async function createBff(
   auditReader?: { fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> },
   configOverrides: Partial<AdminBffConfig> = {},
   platformAccessRepository?: PlatformAccessRepository,
+  controlPlane: ControlPlaneOperations = fakeControlPlane(),
 ): Promise<(request: Request) => Promise<Response>> {
   const providerFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? new URL(input) : input instanceof URL ? input : new URL(input.url);
@@ -500,7 +534,7 @@ async function createBff(
   );
   return createAdminBff({
     config,
-    controlPlane: fakeControlPlane(),
+    controlPlane,
     sessionStore: new MemorySessionRepository(config.now),
     oidc,
     auditReader,
@@ -977,6 +1011,11 @@ describe("cas-admin-webui BFF", () => {
     expect(me.status).toBe(200);
     expect(await me.json()).toMatchObject({
       identity: { subject: "google-user-with-grant" },
+      platformAccess: {
+        status: "active",
+        authorities: ["apps.create"],
+        revision: 1,
+      },
     });
   }, 10_000);
 
@@ -1046,6 +1085,24 @@ describe("cas-admin-webui BFF", () => {
     const me = await authRequest(bff, "/admin/me", cookie);
     expect(me.status).toBe(401);
     expect(await me.json()).toMatchObject({ error: "ADMIN_AUTH_REQUIRED" });
+  }, 10_000);
+
+  test("App membership does not grant App creation authority", async () => {
+    const provider = await createMockProvider();
+    const repo = new MemoryPlatformAccessRepository();
+    repo.grantViaMembership(ISSUER, "google-user-123");
+    const bff = await createBff(provider, undefined, {}, repo);
+    const { cookie, csrf } = await signIn(bff, provider);
+
+    const response = await authRequest(bff, "/admin/stacks", cookie, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+      body: JSON.stringify({ displayName: "Denied App" }),
+    });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: "APP_CREATION_AUTHORITY_REQUIRED" });
+    expect(fakeStacks.size).toBe(0);
   }, 10_000);
 
   test("email allowlist is still the first gate; denied by allowlist before platform access check", async () => {
@@ -1409,19 +1466,123 @@ describe("cas-admin-webui BFF", () => {
     expect(deleted.status).toBe(200);
   });
 
-  test("invitation page redirects unauthenticated visitors to login, then to the hash route", async () => {
+  test("email-bound App invitation grants only exact acceptance, then rotates to a full membership session", async () => {
     const provider = await createMockProvider();
-    const bff = await createBff(provider);
-    const page = await bff(new Request(`${PUBLIC_ORIGIN}/admin/invitations/token-abc`));
-    expect(page.status).toBe(302);
-    expect(page.headers.get("Location")).toContain("/admin/auth/login");
-    expect(page.headers.get("Location")).toContain("returnTo=%2Fadmin%2Finvitations%2Ftoken-abc");
+    const repo = new MemoryPlatformAccessRepository();
+    const token = "i".repeat(32);
+    await repo.addInvitation(token, "outside@example.com");
+    const baseControlPlane = fakeControlPlane();
+    const controlPlane: ControlPlaneOperations = {
+      ...baseControlPlane,
+      acceptMemberInvitation: async (ctx, request) => {
+        expect(request.path.token).toBe(token);
+        repo.grantViaMembership(ctx.identity.identityIssuer, ctx.identity.subject);
+        return {
+          stackId: "app-invited",
+          ...ctx.identity,
+          displayName: ctx.profile?.displayName ?? null,
+          emailForDisplay: ctx.profile?.emailForDisplay ?? null,
+        };
+      },
+    };
+    const bff = await createBff(
+      provider,
+      undefined,
+      { emailAllowlist: ["internal@example.com"] },
+      repo,
+      controlPlane,
+    );
 
-    const { cookie } = await signIn(bff, provider);
-    const authed = await authRequest(bff, "/admin/invitations/token-abc", cookie);
-    expect(authed.status).toBe(302);
-    expect(authed.headers.get("Location")).toBe("/admin/#/invitations/token-abc");
-  });
+    const page = await bff(new Request(`${PUBLIC_ORIGIN}/admin/invitations/${token}`));
+    expect(page.status).toBe(302);
+    const authorization = new URL(page.headers.get("Location")!);
+    expect(authorization.origin).toBe(ISSUER);
+    expect(authorization.href).not.toContain(token);
+    const preLoginCookie = cookieFrom(page)!;
+    provider.pendingClaims = {
+      iss: ISSUER,
+      sub: "outside-user",
+      aud: CLIENT_ID,
+      nonce: authorization.searchParams.get("nonce")!,
+      email: "outside@example.com",
+      email_verified: true,
+      name: "Outside User",
+    };
+
+    const callback = await bff(new Request(
+      `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(authorization.searchParams.get("state")!)}`,
+      { headers: { Cookie: preLoginCookie } },
+    ));
+    expect(callback.status).toBe(302);
+    expect(callback.headers.get("Location")).toBe(`/admin/#/invitations/${token}`);
+    const limitedCookie = cookieFrom(callback)!;
+
+    const shell = await authRequest(bff, "/admin/", limitedCookie);
+    expect(shell.status).toBe(200);
+    const csrf = /<meta name="x-csrf-token" content="([^"]+)"/.exec(await shell.text())![1]!;
+    const generalApi = await authRequest(bff, "/admin/me", limitedCookie);
+    expect(generalApi.status).toBe(403);
+    expect(await generalApi.json()).toMatchObject({ error: "INVITATION_SESSION_REQUIRED" });
+
+    const wrongToken = await authRequest(bff, `/admin/member-invitations/${"w".repeat(32)}/accept`, limitedCookie, {
+      method: "POST",
+      headers: { "X-CSRF-Token": csrf },
+    });
+    expect(wrongToken.status).toBe(403);
+    expect(await wrongToken.json()).toMatchObject({ error: "INVITATION_SESSION_REQUIRED" });
+
+    const accepted = await authRequest(bff, `/admin/member-invitations/${token}/accept`, limitedCookie, {
+      method: "POST",
+      headers: { "X-CSRF-Token": csrf },
+    });
+    expect(accepted.status).toBe(200);
+    expect(await accepted.json()).toMatchObject({ stackId: "app-invited" });
+    const fullCookie = cookieFrom(accepted)!;
+    expect(fullCookie).not.toBe(limitedCookie);
+
+    const staleSession = await authRequest(bff, "/admin/me", limitedCookie);
+    expect(staleSession.status).toBe(401);
+    const admitted = await authRequest(bff, "/admin/me", fullCookie);
+    expect(admitted.status).toBe(200);
+  }, 10_000);
+
+  test("invitation login fails closed for invalid, unconstrained, and mismatched-email invitations", async () => {
+    const provider = await createMockProvider();
+    const repo = new MemoryPlatformAccessRepository();
+    const constrainedToken = "c".repeat(32);
+    const unconstrainedToken = "u".repeat(32);
+    await repo.addInvitation(constrainedToken, "expected@example.com");
+    await repo.addInvitation(unconstrainedToken, null);
+    const bff = await createBff(provider, undefined, {}, repo);
+
+    const invalid = await bff(new Request(`${PUBLIC_ORIGIN}/admin/invitations/short`));
+    expect(invalid.status).toBe(404);
+
+    for (const [token, email] of [
+      [constrainedToken, "other@example.com"],
+      [unconstrainedToken, "expected@example.com"],
+    ] as const) {
+      const page = await bff(new Request(`${PUBLIC_ORIGIN}/admin/invitations/${token}`));
+      const authorization = new URL(page.headers.get("Location")!);
+      const preLoginCookie = cookieFrom(page)!;
+      provider.pendingClaims = {
+        iss: ISSUER,
+        sub: `user-${token[0]}`,
+        aud: CLIENT_ID,
+        nonce: authorization.searchParams.get("nonce")!,
+        email,
+        email_verified: true,
+        name: "Invitee",
+      };
+      const callback = await bff(new Request(
+        `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(authorization.searchParams.get("state")!)}`,
+        { headers: { Cookie: preLoginCookie } },
+      ));
+      expect(callback.status).toBe(302);
+      expect(callback.headers.get("Location")).toBe("/admin/auth/login?error=access-denied");
+      expect(callback.headers.get("Set-Cookie")).toBeNull();
+    }
+  }, 10_000);
 
   test("root-ref audit routes are not available yet without the reader binding", async () => {
     const provider = await createMockProvider();

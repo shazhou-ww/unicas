@@ -2,7 +2,12 @@
 
 import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
 import { createMcpHandler } from "agents/mcp/server";
-import type { ControlPlaneOperations } from "@unicas/service";
+import {
+  PlatformAccessError,
+  PlatformAccessService,
+  type ControlPlaneOperations,
+} from "@unicas/service";
+import { D1PlatformAccessRepository } from "../platform-access-repository.js";
 import { createOAuthAuthorizationHandler } from "./auth.js";
 import {
   CONTROL_PLANE_MCP_PATH,
@@ -13,21 +18,28 @@ import {
 import type { ControlPlaneMcpEnvConfig } from "./config.js";
 import { createControlPlaneMcpServer } from "./server.js";
 import type { ControlPlaneMcpGrantProps } from "./server.js";
-
-export { mcpConfigFromEnv } from "./config.js";
+import {
+  authorizeMcpPlatformOperation,
+  checkMcpPlatformAccess,
+} from "./platform-access.js";
 
 export interface Env extends ControlPlaneMcpEnvConfig {
   OAUTH_KV: KVNamespace;
+  CAS_CONTROL_DB: D1Database;
   CAS_TENANT_AUDIT_READER?: Fetcher;
 }
 
-export type ControlPlaneOperationsFactory = (env: Env) => ControlPlaneOperations;
+export type ControlPlaneOperationsFactory = (
+  env: Env,
+) => ControlPlaneOperations;
 
 type ExecutionContextWithProps = ExecutionContext & {
   props?: ControlPlaneMcpGrantProps;
 };
 
-const VERIFIED_OAUTH_CONTEXT = Symbol.for("cloudflare.workers-oauth-provider.verified-context.v1");
+const VERIFIED_OAUTH_CONTEXT = Symbol.for(
+  "cloudflare.workers-oauth-provider.verified-context.v1",
+);
 
 function attachVerifiedOAuthContext(
   request: Request,
@@ -38,8 +50,11 @@ function attachVerifiedOAuthContext(
   const target = ctx as ExecutionContext & Record<PropertyKey, unknown>;
   if (VERIFIED_OAUTH_CONTEXT in target) return;
   const authorization = request.headers.get("Authorization") ?? "";
-  const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
-  if (!token) throw new Error("validated MCP request is missing its bearer token");
+  const token = authorization.startsWith("Bearer ")
+    ? authorization.slice(7)
+    : "";
+  if (!token)
+    throw new Error("validated MCP request is missing its bearer token");
   target[VERIFIED_OAUTH_CONTEXT] = {
     version: 1,
     token,
@@ -55,21 +70,44 @@ export function createControlPlaneMcpWorker(
   operationsForEnv: ControlPlaneOperationsFactory,
 ) {
   const mcpApiHandler = {
-    async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    async fetch(
+      request: Request,
+      env: Env,
+      ctx: ExecutionContext,
+    ): Promise<Response> {
       const requestConfig = mcpConfigFromEnv(env);
       const props = (ctx as ExecutionContextWithProps).props;
-      if (!props) return Response.json({ error: "MCP_AUTH_CONTEXT_MISSING" }, { status: 500 });
+      if (!props)
+        return Response.json(
+          { error: "MCP_AUTH_CONTEXT_MISSING" },
+          { status: 500 },
+        );
       if (!emailAllowed(props.emailForDisplay, env.ADMIN_EMAIL_ALLOWLIST)) {
-        return Response.json({ error: "MCP_ACCESS_NOT_ALLOWED" }, { status: 403 });
+        return Response.json(
+          { error: "MCP_ACCESS_NOT_ALLOWED" },
+          { status: 403 },
+        );
       }
+      const platformAccess = new PlatformAccessService(
+        new D1PlatformAccessRepository(env.CAS_CONTROL_DB),
+      );
+      const accessError = await checkMcpPlatformAccess(platformAccess, props);
+      if (accessError) return accessError;
       attachVerifiedOAuthContext(request, ctx, props, requestConfig.resource);
       const handler = createMcpHandler(
-        () => createControlPlaneMcpServer(operationsForEnv(env), {
-          auditReader: env.CAS_TENANT_AUDIT_READER,
-          auditReaderKey: env.CAS_AUDIT_READER_KEY,
-          publicOrigin: requestConfig.publicOrigin,
-          mutationsEnabled: env.MCP_MUTATIONS_ENABLED === "true",
-        }),
+        () =>
+          createControlPlaneMcpServer(operationsForEnv(env), {
+            auditReader: env.CAS_TENANT_AUDIT_READER,
+            auditReaderKey: env.CAS_AUDIT_READER_KEY,
+            publicOrigin: requestConfig.publicOrigin,
+            mutationsEnabled: env.MCP_MUTATIONS_ENABLED === "true",
+            authorizePlatformOperation: (grant, authority) =>
+              authorizeMcpPlatformOperation(
+                platformAccess,
+                { issuer: grant.identityIssuer, subject: grant.subject },
+                authority,
+              ),
+          }),
         {
           route: CONTROL_PLANE_MCP_PATH,
           allowedOriginHostnames: [...requestConfig.allowedOriginHostnames],
@@ -83,7 +121,23 @@ export function createControlPlaneMcpWorker(
   return new OAuthProvider<Env>({
     apiRoute: CONTROL_PLANE_MCP_PATH,
     apiHandler: mcpApiHandler,
-    defaultHandler: createOAuthAuthorizationHandler(),
+    defaultHandler: createOAuthAuthorizationHandler({
+      authorizePrincipal: async (env, principal) => {
+        if (!env.CAS_CONTROL_DB) return "unavailable";
+        const platformAccess = new PlatformAccessService(
+          new D1PlatformAccessRepository(env.CAS_CONTROL_DB),
+        );
+        try {
+          await platformAccess.requireAccess(principal);
+          return "allowed";
+        } catch (error) {
+          return error instanceof PlatformAccessError &&
+            error.code !== "SERVICE_UNAVAILABLE"
+            ? "denied"
+            : "unavailable";
+        }
+      },
+    }),
     authorizeEndpoint: "/oauth/authorize",
     tokenEndpoint: "/oauth/token",
     clientRegistrationEndpoint: "/oauth/register",
@@ -108,3 +162,4 @@ export function createControlPlaneMcpWorker(
     },
   });
 }
+export { mcpConfigFromEnv } from "./config.js";

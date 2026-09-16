@@ -21,6 +21,12 @@ describe("AI tool connection", () => {
         return json({
           principal: { issuer: "https://accounts.example", subject: "admin" },
           profile: { displayName: "Admin User", emailForDisplay: "admin@example.com" },
+          platformAccess: {
+            principalRef: "principal-admin",
+            status: "active",
+            authorities: ["platform.admin", "apps.create"],
+            revision: 1,
+          },
           memberships: [],
         });
       }
@@ -29,6 +35,9 @@ describe("AI tool connection", () => {
     }));
 
     render(<App />);
+
+    expect(await screen.findByText("Platform access")).toBeInTheDocument();
+    expect(screen.getByTitle("Create App")).toBeInTheDocument();
 
     // Open the user menu from sidebar footer
     const userMenuTrigger = await screen.findByRole("button", { name: "Open user menu" });
@@ -68,5 +77,56 @@ describe("AI tool connection", () => {
 
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog", { name: "Connect an AI tool" })).not.toBeInTheDocument();
+  });
+
+  test("hides platform administration and App creation for an App-only member", async () => {
+    window.location.hash = "#/";
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
+      if (path === "/admin/me") {
+        return json({
+          principal: { issuer: "https://accounts.example", subject: "member" },
+          profile: { displayName: "App Member", emailForDisplay: "member@example.com" },
+          platformAccess: {
+            principalRef: "principal-member",
+            status: "active",
+            authorities: [],
+            revision: 1,
+          },
+          memberships: [],
+        });
+      }
+      if (path === "/admin/apps") return json({ items: [] });
+      return new Response(null, { status: 404 });
+    }));
+
+    render(<App />);
+
+    await screen.findByRole("button", { name: "Open user menu" });
+    expect(screen.queryByText("Platform access")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Create App")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create App" })).not.toBeInTheDocument();
+  });
+});
+
+describe("invitation-limited Console", () => {
+  test("renders the invitation route without loading general session or App APIs", async () => {
+    const user = userEvent.setup();
+    window.location.hash = "#/invitations/invite%2F1";
+    const fetchMock = vi.fn(async () => json({ appId: "app-invited" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    const accept = await screen.findByRole("button", { name: "Accept membership" });
+    await waitFor(() => expect(fetchMock).not.toHaveBeenCalled());
+    await user.click(accept);
+
+    expect(await screen.findByText(/You are now a member of App/)).toHaveTextContent("app-invited");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/admin/member-invitations/invite%2F1/accept",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 });

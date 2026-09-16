@@ -22,6 +22,8 @@ import { PlatformAuditView } from "./views/platform/audit.js";
 
 export function App() {
   const route = useHashRoute();
+  const inviteMatch = matchRoute("/invitations/:token", route);
+  const inviteToken = inviteMatch?.params.token ?? null;
   const [me, setMe] = useState<AppAdminMeResponse | null>(null);
   const [apps, setApps] = useState<AppResource[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +36,7 @@ export function App() {
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    if (inviteToken !== null) return;
     let active = true;
     let session: PlaygroundCacheSession | undefined;
     Promise.all([
@@ -52,7 +55,7 @@ export function App() {
       if (active) setError(formatErrorSafe(caught));
     });
     return () => { active = false; session?.close(); };
-  }, []);
+  }, [inviteToken]);
 
   async function logout() {
     setMe(null);
@@ -66,7 +69,6 @@ export function App() {
 
   const appRoute = parseAppRoute(route);
   const platformRoute = parsePlatformRoute(route);
-  const inviteMatch = matchRoute("/invitations/:token", route);
 
   // Fetch the current app when appRoute changes
   useEffect(() => {
@@ -92,10 +94,9 @@ export function App() {
 
   const selectedAppId = appRoute?.appId ?? null;
 
-  // Check authorities
-  // TODO: wire hasPlatformAdmin from /admin/me response when platform authorities are included
-  const hasPlatformAdmin = false;
-  const canCreateApps = true;
+  const authorities = me?.platformAccess?.authorities ?? [];
+  const hasPlatformAdmin = authorities.includes("platform.admin");
+  const canCreateApps = authorities.includes("apps.create");
 
   let detail: React.ReactNode;
   if (route === "/login-error") {
@@ -169,11 +170,10 @@ export function App() {
               role="tab"
               aria-selected={platformRoute.section === "principals"}
               onClick={() => navigate("/platform/principals")}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                platformRoute.section === "principals"
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${platformRoute.section === "principals"
                   ? "border-primary text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
+                }`}
             >
               Principals
             </button>
@@ -182,11 +182,10 @@ export function App() {
               role="tab"
               aria-selected={platformRoute.section === "invitations"}
               onClick={() => navigate("/platform/invitations")}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                platformRoute.section === "invitations"
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${platformRoute.section === "invitations"
                   ? "border-primary text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
+                }`}
             >
               Invitations
             </button>
@@ -195,11 +194,10 @@ export function App() {
               role="tab"
               aria-selected={platformRoute.section === "audit"}
               onClick={() => navigate("/platform/audit")}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                platformRoute.section === "audit"
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${platformRoute.section === "audit"
                   ? "border-primary text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
+                }`}
             >
               Audit
             </button>
@@ -209,7 +207,15 @@ export function App() {
       </div>
     );
   } else {
-    detail = <MyAppsView />;
+    detail = <MyAppsView canCreateApps={canCreateApps} />;
+  }
+
+  if (inviteMatch) {
+    return (
+      <main className="min-h-screen bg-background p-4 sm:p-8">
+        <InvitationView token={inviteMatch.params.token!} />
+      </main>
+    );
   }
 
   if (me === null && error === null) {

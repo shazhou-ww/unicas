@@ -8,6 +8,8 @@ import {
   CasAdminErrorCodes,
   formatCasAdminETag,
   type AppAdminRoute,
+  type CasAdminErrorResponse,
+  type PlatformAuthority,
 } from "@unicas/admin-protocol";
 import { getMcpAuthContext } from "agents/mcp/server";
 import { z } from "zod";
@@ -28,6 +30,10 @@ export interface ControlPlaneMcpServerOptions {
   readonly auditReaderKey?: string;
   readonly publicOrigin?: string;
   readonly mutationsEnabled?: boolean;
+  readonly authorizePlatformOperation?: (
+    grant: ControlPlaneMcpGrantProps,
+    authority: PlatformAuthority,
+  ) => Promise<CasAdminErrorResponse | null>;
 }
 
 export function createControlPlaneMcpServer(
@@ -211,6 +217,8 @@ export function createControlPlaneMcpServer(
     APP_ADMIN_MCP_TOOLS.create_app.registration,
     async ({ displayName, idempotencyKey }) => {
       const grant = requireMutation("control:write", options);
+      const authorizationError = await options.authorizePlatformOperation?.(grant, "apps.create");
+      if (authorizationError) return toolResult(authorizationError);
       const result = await controlPlane.createStack(
         serviceContext(grant, "create_app"),
         { body: { displayName } },

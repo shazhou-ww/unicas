@@ -17,6 +17,7 @@ import {
   SpaceRootRefBalanceSchema,
   SpaceRootRefEventSchema,
 } from "./schemas.js";
+import { PlatformAuthoritySchema } from "./platform-access.js";
 
 export const AppAdminApiBasePath = "/admin/apps";
 
@@ -25,6 +26,12 @@ const error = (status: number, message: string) => ({ status, message, data: Err
 
 export const AppAdminApiErrorMap = {
   ADMIN_AUTH_REQUIRED: error(401, "Administrator authentication is required"),
+  PLATFORM_ACCESS_REQUIRED: error(403, "Current platform access is required"),
+  PLATFORM_ADMIN_REQUIRED: error(403, "Platform administrator authority is required"),
+  APP_CREATION_AUTHORITY_REQUIRED: error(403, "App creation authority is required"),
+  LAST_PLATFORM_ADMIN: error(409, "The final active Platform Admin cannot be removed"),
+  SELF_BLOCK_FORBIDDEN: error(409, "A Platform Admin cannot block their own Principal"),
+  INVITATION_SESSION_REQUIRED: error(403, "A matching invitation session is required"),
   APP_MEMBERSHIP_REQUIRED: error(403, "App membership is required"),
   APP_SUSPENDED: error(403, "App is suspended"),
   INVITATION_NOT_PENDING: error(409, "Invitation is accepted, expired, or revoked"),
@@ -86,6 +93,12 @@ export const appMeContract = appProcedure
   .output(z.object({
     principal: PrincipalSchema,
     profile: ProfileSchema,
+    platformAccess: z.object({
+      principalRef: z.string().min(1),
+      status: z.literal("active"),
+      authorities: z.array(PlatformAuthoritySchema).readonly(),
+      revision: z.number().int().positive(),
+    }).readonly(),
     memberships: z.array(AppMembershipSchema).readonly(),
   }).readonly().meta({ id: "AppAdminMeResponse" }));
 
@@ -110,6 +123,7 @@ export const createAppContract = appProcedure
     summary: "Create an App",
     description: "Creates an App and grants the current Principal equal administrator membership.",
     inputStructure: "detailed",
+    outputStructure: "detailed",
     successStatus: 201,
     tags: ["Apps"],
   })
@@ -117,7 +131,10 @@ export const createAppContract = appProcedure
     headers: createHeaders.optional(),
     body: z.object({ displayName: z.string().min(1) }).readonly(),
   }).readonly())
-  .output(AppSchema);
+  .output(z.object({
+    headers: z.object({ ETag: z.string().regex(/^"(0|[1-9][0-9]*)"$/) }).readonly(),
+    body: z.object({ appId: AppIdSchema }).readonly(),
+  }).readonly().meta({ id: "AppAdminCreateAppResponse" }));
 
 export const getAppContract = appProcedure
   .route({

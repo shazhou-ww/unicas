@@ -17,6 +17,14 @@ interface PrincipalRow {
   membership_count?: number;
 }
 
+interface AppInvitationAdmissionRow {
+  invitation_id: string;
+  app_id: string;
+  status: "pending" | "accepted" | "expired" | "revoked";
+  email_constraint: string | null;
+  expires_at: number;
+}
+
 function accessState(row: PrincipalRow): PlatformAccessState {
   const authorities: PlatformAuthority[] = [];
   if (row.platform_admin === 1) authorities.push("platform.admin");
@@ -35,7 +43,7 @@ function principalView(row: PrincipalRow): PlatformPrincipal {
 }
 
 export class D1PlatformAccessRepository implements PlatformAccessRepository {
-  constructor(readonly db: D1Database) {}
+  constructor(readonly db: D1Database) { }
 
   async getAccess(principal: Principal): Promise<PlatformAccessState | null> {
     const row = await this.db.prepare("SELECT * FROM cas_platform_principals WHERE identity_issuer = ? AND subject = ?").bind(principal.issuer, principal.subject).first<PrincipalRow>();
@@ -44,6 +52,19 @@ export class D1PlatformAccessRepository implements PlatformAccessRepository {
 
   async hasMembership(principal: Principal): Promise<boolean> {
     return (await this.db.prepare("SELECT 1 AS member FROM cas_app_members WHERE identity_issuer = ? AND subject = ? LIMIT 1").bind(principal.issuer, principal.subject).first()) !== null;
+  }
+
+  async getAppInvitationByTokenHash(tokenHash: string) {
+    const row = await this.db.prepare(
+      "SELECT invitation_id, app_id, status, email_constraint, expires_at FROM cas_app_member_invitations WHERE token_hash = ?",
+    ).bind(tokenHash).first<AppInvitationAdmissionRow>();
+    return row ? {
+      invitationId: row.invitation_id,
+      appId: row.app_id,
+      status: row.status,
+      emailConstraint: row.email_constraint,
+      expiresAt: row.expires_at,
+    } : null;
   }
 
   async getPrincipal(principalRef: string): Promise<PlatformPrincipal | null> {

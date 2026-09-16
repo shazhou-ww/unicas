@@ -1,4 +1,5 @@
 import type { AppId } from "@unicas/tenant-protocol";
+import type { CurrentPlatformAccess } from "./platform-access.js";
 
 /**
  * Content-addressed node digest wire shape.
@@ -54,6 +55,7 @@ export interface AppMembership {
 export interface AppAdminMeResponse {
   readonly principal: Principal;
   readonly profile: Profile;
+  readonly platformAccess: CurrentPlatformAccess;
   readonly memberships: readonly AppMembership[];
 }
 

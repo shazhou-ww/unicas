@@ -24,11 +24,15 @@ export async function handleAppAdminCompatibilityRequest(
   }
   if (route.operation === "createMemberInvitation" && isRecord(body) && isRecord(body.invitation)
     && typeof body.invitation.revision === "number") {
-    const response = copyJsonResponse(legacyResponse, mapInvitationResponse(body));
+    const response = copyJsonResponse(legacyResponse, mapInvitationResponse(body), 201);
     response.headers.set("ETag", formatCasAdminETag(body.invitation.revision));
     return response;
   }
-  return copyJsonResponse(legacyResponse, transformAppAdminResponse(route, body));
+  return copyJsonResponse(
+    legacyResponse,
+    transformAppAdminResponse(route, body),
+    route.operation === "createApp" ? 201 : undefined,
+  );
 }
 
 export function transformAppAdminError(value: JsonRecord): JsonRecord {
@@ -70,6 +74,7 @@ export function transformAppAdminResponse(route: AppAdminRoute, body: unknown): 
     case "listApps":
       return mapPage(body, mapApp);
     case "createApp":
+      return mapCreateApp(body);
     case "getApp":
       return mapApp(body);
     case "patchApp":
@@ -118,12 +123,21 @@ function mapMe(value: unknown): unknown {
       displayName: value.identity.displayName,
       emailForDisplay: value.identity.emailForDisplay,
     },
+    ...("platformAccess" in value ? { platformAccess: value.platformAccess } : {}),
     memberships: value.memberships.map(mapMembership),
   };
 }
 
 function mapApp(value: unknown): unknown {
   return renameField(value, "stackId", "appId");
+}
+
+function mapCreateApp(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+  return {
+    appId: value.stackId,
+    ...(typeof value.etag === "string" ? { etag: value.etag } : {}),
+  };
 }
 
 function mapMembership(value: unknown): unknown {
@@ -180,11 +194,11 @@ function renameField(value: unknown, from: string, to: string): unknown {
   return { ...rest, [to]: renamed };
 }
 
-function copyJsonResponse(source: Response, body: unknown): Response {
+function copyJsonResponse(source: Response, body: unknown, status = source.status): Response {
   const headers = new Headers(source.headers);
   headers.delete("Content-Length");
   return new Response(JSON.stringify(body), {
-    status: source.status,
+    status,
     statusText: source.statusText,
     headers,
   });

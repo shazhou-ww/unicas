@@ -1,5 +1,10 @@
 export { PlatformAccessService, PlatformAccessError } from "./platform-access.js";
-export type { PlatformAccessRepository, PlatformAuditRecord } from "./platform-access.js";
+export type {
+  AppInvitationAdmission,
+  AppInvitationAdmissionRecord,
+  PlatformAccessRepository,
+  PlatformAuditRecord,
+} from "./platform-access.js";
 export {
   createUniCasService,
   matchUniCasServiceRoute,
@@ -158,6 +163,7 @@ export {
   generateInvitationToken,
   generateNonce,
   generateOAuthInspectionId,
+  generatePrincipalRef,
   generateSessionId,
   generateStackId,
 } from "./control-ids.js";

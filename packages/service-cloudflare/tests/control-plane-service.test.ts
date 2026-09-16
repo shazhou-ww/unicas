@@ -166,7 +166,7 @@ describe("D1-backed control-plane service", () => {
 
   test("enforces invitation constraints, expiry, one-time use, and last-member transfer", async () => {
     let clock = 1_000_000;
-    const { service } = await createService(() => clock);
+    const { db, service } = await createService(() => clock);
     const stackId = await createStack(service);
     expectError(await service.deleteMember(ctx(alice), { path: { stackId }, query: alice }, { ifMatch: '"1"' }), CasAdminErrorCodes.LAST_MEMBER);
     const invitationRequest = { path: { stackId }, body: { emailConstraint: " BOB-SUB@example.com " } };
@@ -180,6 +180,14 @@ describe("D1-backed control-plane service", () => {
     const token = invitation.acceptUrl.split("/").pop()!;
     expectError(await service.acceptMemberInvitation(ctx(bob, "wrong@example.com"), { path: { token } }), CasAdminErrorCodes.NOT_FOUND);
     expect(await service.acceptMemberInvitation(ctx(bob), { path: { token } })).toMatchObject({ stackId, subject: "bob-sub" });
+    expect(await db.prepare(
+      "SELECT principal_ref, status, platform_admin, apps_create FROM cas_platform_principals WHERE identity_issuer = ? AND subject = ?",
+    ).bind(bob.identityIssuer, bob.subject).first()).toEqual({
+      principal_ref: expect.stringMatching(/^prn_[A-Za-z0-9_-]{16}$/),
+      status: "active",
+      platform_admin: 0,
+      apps_create: 0,
+    });
     expectError(await service.acceptMemberInvitation(ctx(bob), { path: { token } }), CasAdminErrorCodes.NOT_FOUND);
     expect(await service.listMembers(ctx(alice), { path: { stackId }, query: { limit: 1 } })).toMatchObject({
       items: [{ subject: "alice-sub", displayName: null, emailForDisplay: null }],
@@ -403,10 +411,12 @@ describe("D1-backed control-plane service", () => {
     let clock = 1_000;
     const pair = await generateKeyPair("ES256");
     const publicJwk = { ...await exportJWK(pair.publicKey), kid: "candidate-key", alg: "ES256" };
-    const discovery: OAuthDiscoveryPort = { inspectIssuer: async ({ issuer }) => ({
-      metadata: { issuer, metadataUrl: `${issuer}/metadata`, metadataType: "oauth", authorizationEndpoint: `${issuer}/authorize`, tokenEndpoint: `${issuer}/token`, jwksUri: `${issuer}/jwks`, registrationEndpoint: null, scopesSupported: [], codeChallengeMethodsSupported: ["S256"] },
-      metadataDigest: "a".repeat(64), jwksDigest: "b".repeat(64), keys: [{ kid: "candidate-key", algorithm: "ES256", publicJwk }],
-    }) };
+    const discovery: OAuthDiscoveryPort = {
+      inspectIssuer: async ({ issuer }) => ({
+        metadata: { issuer, metadataUrl: `${issuer}/metadata`, metadataType: "oauth", authorizationEndpoint: `${issuer}/authorize`, tokenEndpoint: `${issuer}/token`, jwksUri: `${issuer}/jwks`, registrationEndpoint: null, scopesSupported: [], codeChallengeMethodsSupported: ["S256"] },
+        metadataDigest: "a".repeat(64), jwksDigest: "b".repeat(64), keys: [{ kid: "candidate-key", algorithm: "ES256", publicJwk }],
+      })
+    };
     const { db, service } = await createService(() => clock, discovery);
     const firstApp = await createStack(service);
     const secondApp = await createStack(service);

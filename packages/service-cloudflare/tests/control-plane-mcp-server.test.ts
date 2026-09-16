@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import type { D1Database } from "@cloudflare/workers-types";
 import { CLIENT_CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, PROTOCOL_VERSION_META_KEY } from "@modelcontextprotocol/server";
@@ -70,6 +70,31 @@ describe("adapter-hosted control-plane MCP server", () => {
     })).content[0]?.text).toContain("disabled by deployment policy");
   });
 
+  test("requires apps.create authority in addition to the delegated write scope", async () => {
+    const authorizePlatformOperation = vi.fn(async () => ({
+      error: "APP_CREATION_AUTHORITY_REQUIRED" as const,
+    }));
+    const handler = handlerFor(grant(["control:write"]), {
+      mutationsEnabled: true,
+      authorizePlatformOperation,
+    });
+
+    const denied = await callTool(handler, "create_app", {
+      displayName: "Denied App",
+      idempotencyKey: "denied-app-1",
+    });
+
+    expect(denied).toMatchObject({
+      isError: true,
+      structuredContent: { error: "APP_CREATION_AUTHORITY_REQUIRED" },
+    });
+    expect(authorizePlatformOperation).toHaveBeenCalledWith(
+      expect.objectContaining({ subject: "alice-sub" }),
+      "apps.create",
+    );
+    expect(await db.prepare("SELECT COUNT(*) AS count FROM cas_apps").first()).toEqual({ count: 0 });
+  });
+
   test("creates idempotent stacks, records MCP audit attribution, and guards writes with ETags", async () => {
     const handler = handlerFor(grant(["control:read", "control:write"]), { mutationsEnabled: true });
     const first = await callTool(handler, "create_stack", { displayName: "Operations", idempotencyKey: "create-ops-1" });
@@ -98,10 +123,8 @@ describe("adapter-hosted control-plane MCP server", () => {
       displayName: "Documents",
       idempotencyKey: "create-app-1",
     });
-    expect(created.structuredContent).toMatchObject({
+    expect(created.structuredContent).toEqual({
       appId: expect.any(String),
-      displayName: "Documents",
-      revision: 1,
       etag: '"1"',
     });
     expect(created.structuredContent).not.toHaveProperty("stackId");

@@ -8,7 +8,8 @@ Updated: 2026-09-16
 - [x] Settle core authorization and bootstrap policy with the user.
 - [x] Implement persistent deny-by-default admission, authorities, and audit.
 - [x] Implement protected platform APIs (list principals, get principal, patch access, access summary).
-- [ ] Implement invitation-limited login and revocation for existing sessions.
+- [x] Implement email-bound App invitation-limited login and browser/MCP revocation.
+- [ ] Implement platform invitations, complete Principal detail, and platform audit reads.
 - [ ] Rebuild Console with source-owned shadcn primitives and two-column navigation.
 - [ ] Validate bootstrap/migration, workflows, accessibility, and repository gates.
 - [ ] Publish validated implementation and archive.
@@ -26,7 +27,7 @@ into the BFF authentication paths. Protected platform API endpoints are now
 implemented and pass tests:
 
 - **Login flow**: `PlatformAccessService.requireAccess` enforced; no-access principals denied.
-- **Authenticated request path**: `assertNotBlocked` enforced on every request.
+- **Authenticated request path**: full effective admission is rechecked on every request.
 - **Platform Admin API** (all require `platform.admin` authority):
   - `GET /admin/platform/access-summary` → aggregate counts via `D1PlatformAccessRepository.getAccessSummary`
   - `GET /admin/platform/principals` → paginated list via `PlatformAccessService.listPrincipals`
@@ -38,11 +39,23 @@ implemented and pass tests:
 - **Browser session revocation**: every authenticated BFF request now rechecks
   effective platform admission. Removing the last platform authority or App
   membership invalidates an existing session on its next request.
+- **Invitation-limited login**: pending email-bound App invitations use an
+  encrypted OIDC continuation. Raw tokens never enter OAuth state; the limited
+  session is bound to invitation ID and token hash, can call only matching
+  acceptance and logout, and rotates after membership is granted.
+- **MCP revocation**: platform admission is checked before OAuth consent and on
+  every authenticated MCP request. `create_app` independently requires current
+  `apps.create` authority in addition to delegated `control:write` scope.
+- **Current session projection**: `/admin/me` now returns persisted platform
+  authorities; Console Platform Administration and App creation visibility are
+  derived from them. App invitation acceptance atomically creates an active,
+  empty-authority Principal state alongside membership.
 
-All 228 tests pass (`pnpm --filter @unicas/service-cloudflare test`). `pnpm run build` passes.
+All 235 service-cloudflare tests pass. Console tests and production build pass.
 
-Next: implement invitation-limited login, then enforce current platform access
-for each remote MCP request.
+Next: implement platform invitation resources and reuse the limited-session
+continuation for their acceptance, then complete platform Principal detail and
+audit reads.
 
 ## Decisions
 
@@ -57,7 +70,9 @@ for each remote MCP request.
   delegated operation classes and do not substitute for current authority.
 - All three prerequisite implementations and archives are published on main;
   preserve their accepted minimal write contracts and legacy boundaries.
-- emailAllowlist remains the first gate; platform access is the second gate.
+- `emailAllowlist` remains the first gate for ordinary login; an email-bound
+  invitation continuation is the explicit exception for an external invitee.
+  Full admission is still rechecked from authorities or App membership.
 
 ## Publication milestones
 
@@ -95,6 +110,15 @@ for each remote MCP request.
   the last authority and removal of the last App membership; all 46 BFF tests
   pass. `pnpm --filter @unicas/service-cloudflare typecheck` passes, and a clean
   full rerun passes all 228 service-cloudflare tests.
+- On 2026-09-16, invitation and revocation security validation passed:
+  `@unicas/admin-protocol` 79 tests, `@unicas/admin-client` 14 tests,
+  `@unicas/service` 111 tests, `@unicas/admin-webui` 54 tests plus production
+  build, repository OpenAPI drift 4 tests, and `@unicas/service-cloudflare`
+  235 tests across 22 files. Coverage includes invitation token secrecy,
+  verified-email matching, exact limited-session routing, post-acceptance
+  rotation, atomic empty-authority Principal creation, next-request browser
+  and MCP revocation, fail-closed storage errors, and independent App creation
+  authority in BFF and MCP paths.
 
 ## Console rebuild progress
 
