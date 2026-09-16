@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  BookOpenText,
   Cable,
+  CircleAlert,
   FlaskConical,
   LayoutDashboard,
+  LoaderCircle,
   LogOut,
   Menu,
   ScrollText,
@@ -11,9 +14,9 @@ import {
 } from "lucide-react";
 import type { App } from "@unicas/admin-client";
 import { api } from "../api.js";
-import { ConceptGuide, ErrorState, LoadingState, Page, Tabs } from "../components.js";
 import { navigate } from "../router.js";
 import { formatErrorSafe } from "./view-helpers.js";
+import { PageHeading } from "../components/page-heading.js";
 import { AppOverviewView } from "./stack-overview.js";
 import { MembersView } from "./members.js";
 import { IssuerView } from "./issuer.js";
@@ -163,11 +166,32 @@ export function AppView({ appId, onAppChange, onOpenMcpConfiguration, onLogout }
     if (mobileNavigationOpen) closeMobileNavigation();
   }
 
-  if (error) return <Page title="App"><ErrorState message={error} /></Page>;
-  if (!app || !apps) return <Page title="App"><LoadingState /></Page>;
+  if (error) {
+    return (
+      <section className="page">
+        <PageHeading title="App" />
+        <div className="flex items-center gap-2 text-sm text-destructive">
+          <CircleAlert className="h-4 w-4" />
+          <span>{error}</span>
+        </div>
+      </section>
+    );
+  }
+  if (!app || !apps) {
+    return (
+      <section className="page">
+        <PageHeading title="App" />
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <LoaderCircle className="h-4 w-4 animate-spin" />
+          <span>Loading…</span>
+        </div>
+      </section>
+    );
+  }
 
   return (
-    <Page title={app.displayName}>
+    <section className="page">
+      <PageHeading title={app.displayName} />
       <button
         ref={navigationButtonRef}
         type="button"
@@ -226,7 +250,21 @@ export function AppView({ appId, onAppChange, onOpenMcpConfiguration, onLogout }
               ))}
             </select>
           </div>
-          <Tabs tabs={TABS} active={tab} onChange={selectTab} orientation="vertical" />
+          <nav className="tabs tabs-vertical" role="tablist" aria-orientation="vertical">
+            {TABS.map((tabItem) => (
+              <button
+                key={tabItem.id}
+                type="button"
+                role="tab"
+                aria-selected={tabItem.id === tab}
+                className={`tab tab-vertical${tabItem.id === tab ? " tab-active" : ""}`}
+                onClick={() => selectTab(tabItem.id)}
+              >
+                {tabItem.icon ? <span className="tab-icon" aria-hidden="true">{tabItem.icon}</span> : null}
+                {tabItem.label}
+              </button>
+            ))}
+          </nav>
           <div className="drawer-footer">
             <button
               type="button"
@@ -246,7 +284,24 @@ export function AppView({ appId, onAppChange, onOpenMcpConfiguration, onLogout }
           </div>
         </aside>
         <section className="stack-content" aria-hidden={mobileNavigationOpen ? true : undefined}>
-          {tab !== "playground" ? <ConceptGuide {...activeGuide} /> : null}
+          {tab !== "playground" ? (
+            <aside className="concept-guide" aria-labelledby={`concept-${activeGuide.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}>
+              <BookOpenText className="concept-guide-icon" size={18} aria-hidden="true" />
+              <div className="concept-guide-content">
+                <p className="concept-guide-label">About this page</p>
+                <h2 id={`concept-${activeGuide.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}>{activeGuide.title}</h2>
+                <p className="concept-guide-summary">{activeGuide.summary}</p>
+                <dl className="concept-list">
+                  {activeGuide.concepts.map((concept) => (
+                    <div key={concept.term}>
+                      <dt>{concept.term}</dt>
+                      <dd>{concept.detail}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            </aside>
+          ) : null}
           {tab === "overview" ? (
             <>
               <AppOverviewView app={app} onChanged={reload} />
@@ -262,6 +317,6 @@ export function AppView({ appId, onAppChange, onOpenMcpConfiguration, onLogout }
           {tab === "change-log" ? <ControlAuditView appId={appId} /> : null}
         </section>
       </div>
-    </Page>
+    </section>
   );
 }

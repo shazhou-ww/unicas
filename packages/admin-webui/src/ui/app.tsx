@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
+import { CircleAlert, LoaderCircle } from "lucide-react";
 import type { App as AppResource, AppAdminMeResponse } from "@unicas/admin-client";
 import { api } from "./api.js";
 import { navigate, parseAppRoute, parsePlatformRoute, useHashRoute, matchRoute } from "./router.js";
 import { AppSidebar } from "./components/app-sidebar.js";
 import { AppDetailTabs } from "./components/app-detail-tabs.js";
-import { ErrorState, LoadingState } from "./components.js";
 import { McpConfigurationDialog } from "./mcp-configuration-dialog.js";
 import { MyAppsView } from "./views/my-stacks.js";
 import { InvitationView } from "./views/invitations.js";
@@ -104,9 +104,23 @@ export function App() {
     detail = <InvitationView token={inviteMatch.params.token!} />;
   } else if (appRoute) {
     if (appError) {
-      detail = <div className="page"><ErrorState message={appError} /></div>;
+      detail = (
+        <div className="page">
+          <div className="flex items-center gap-2 text-sm text-destructive">
+            <CircleAlert className="h-4 w-4" />
+            <span>{appError}</span>
+          </div>
+        </div>
+      );
     } else if (!currentApp) {
-      detail = <div className="page"><LoadingState label="Loading app…" /></div>;
+      detail = (
+        <div className="page">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <LoaderCircle className="h-4 w-4 animate-spin" />
+            <span>Loading app…</span>
+          </div>
+        </div>
+      );
     } else {
       const renderSection = () => {
         switch (appRoute.section) {
@@ -199,7 +213,14 @@ export function App() {
   }
 
   if (me === null && error === null) {
-    return <div className="loading-shell"><LoadingState label="Loading session…" /></div>;
+    return (
+      <div className="loading-shell">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <LoaderCircle className="h-4 w-4 animate-spin" />
+          <span>Loading session…</span>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -215,7 +236,12 @@ export function App() {
         onLogout={() => void logout()}
       />
       <main className="console-main">
-        {error ? <ErrorState message={error} /> : null}
+        {error ? (
+          <div className="flex items-center gap-2 text-sm text-destructive">
+            <CircleAlert className="h-4 w-4" />
+            <span>{error}</span>
+          </div>
+        ) : null}
         <PlaygroundCacheContext value={cacheSession}>
           {me || route === "/login-error" ? detail : null}
         </PlaygroundCacheContext>

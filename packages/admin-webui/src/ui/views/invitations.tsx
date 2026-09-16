@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
-import { Check } from "lucide-react";
+import { Check, AlertCircle } from "lucide-react";
 import { api } from "../api.js";
-import { Button, Card, ErrorState, Page } from "../components.js";
+import { Button } from "@/components/ui/button.js";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.js";
+import { PageHeading } from "../components/page-heading.js";
 import { formatErrorSafe } from "./view-helpers.js";
 
 /**
@@ -38,26 +40,43 @@ export function InvitationView({ token }: { token: string }) {
   }
 
   return (
-    <Page title="App membership invitation">
+    <section className="page">
+      <PageHeading title="App membership invitation" />
       {result ? (
-        <Card title="Invitation accepted">
-          <p>
-            You are now a member of App <strong>{result.appId}</strong>.
-          </p>
-          <p><a href="#/">Go to My Apps</a></p>
+        <Card>
+          <CardHeader>
+            <CardTitle>Invitation accepted</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p>
+              You are now a member of App <strong>{result.appId}</strong>.
+            </p>
+            <p><a href="#/">Go to My Apps</a></p>
+          </CardContent>
         </Card>
       ) : (
-        <Card title="Join an App">
-          <p>
-            Someone invited you to administer a UniCAS App. Accepting binds your
-            Principal to the App with equal administrator authority.
-          </p>
-          {error ? <ErrorState message={error} /> : null}
-          <Button icon={<Check size={15} />} variant="primary" onClick={() => void accept()} disabled={accepting || accepted}>
-            {accepting ? "Accepting…" : "Accept membership"}
-          </Button>
+        <Card>
+          <CardHeader>
+            <CardTitle>Join an App</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Someone invited you to administer a UniCAS App. Accepting binds your
+              Principal to the App with equal administrator authority.
+            </p>
+            {error ? (
+              <div className="flex items-center gap-2 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4" />
+                <span>{error}</span>
+              </div>
+            ) : null}
+            <Button onClick={() => void accept()} disabled={accepting || accepted}>
+              <Check className="mr-2 h-4 w-4" />
+              {accepting ? "Accepting…" : "Accept membership"}
+            </Button>
+          </CardContent>
         </Card>
       )}
-    </Page>
+    </section>
   );
 }
