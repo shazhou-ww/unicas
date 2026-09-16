@@ -117,17 +117,6 @@ a {
   font-weight: 750;
 }
 
-.brand-section {
-  padding-left: 0.55rem;
-  color: var(--muted);
-  border-left: 1px solid var(--border-strong);
-  font-weight: 500;
-}
-
-
-
-
-
 .file-folder-draft {
   display: flex;
   align-items: center;
@@ -147,65 +136,6 @@ a {
 
 .page {
   animation: page-in 180ms ease-out both;
-}
-
-.concept-guide {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  margin-bottom: 0.85rem;
-  padding: 0.9rem 1rem;
-  background: #f1f5f3;
-  border-left: 3px solid #37624f;
-  border-radius: 0 6px 6px 0;
-}
-
-.concept-guide-icon {
-  margin-top: 0.12rem;
-  color: #37624f;
-}
-
-.concept-guide-label {
-  margin: 0 0 0.14rem;
-  color: #37624f;
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.concept-guide h2 {
-  margin: 0;
-  font-size: 0.94rem;
-  line-height: 1.3;
-}
-
-.concept-guide-summary {
-  max-width: 74ch;
-  margin: 0.28rem 0 0;
-  color: var(--muted-strong);
-  font-size: 0.82rem;
-}
-
-.concept-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 0.5rem 1rem;
-  margin: 0.72rem 0 0;
-}
-
-.concept-list div {
-  min-width: 0;
-}
-
-.concept-list dt {
-  color: var(--foreground);
-  font-size: 0.76rem;
-  font-weight: 650;
-}
-
-.concept-list dd {
-  margin: 0.08rem 0 0;
-  color: var(--muted);
-  font-size: 0.76rem;
 }
 
 .muted {
@@ -324,41 +254,6 @@ a:focus-visible {
   border-color: var(--ring);
   outline: none;
   box-shadow: 0 0 0 3px rgba(82, 82, 91, 0.16);
-}
-
-.inline-form {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  flex-wrap: wrap;
-}
-
-.inline-form input {
-  flex: 1 1 250px;
-  width: auto;
-}
-
-.invitation-list {
-  display: grid;
-  gap: 1rem;
-  min-width: 0;
-}
-
-.invitation-list .table-wrap {
-  margin: 0;
-}
-
-.invitation-list .table {
-  min-width: 540px;
-}
-
-.invitation-list td:first-child {
-  max-width: 300px;
-  overflow-wrap: anywhere;
-}
-
-.invitation-confirmation p {
-  overflow-wrap: anywhere;
 }
 
 .field-row {
@@ -595,41 +490,6 @@ a:focus-visible {
 
 .file-detail>.card {
   margin: 0;
-}
-
-.file-root-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  flex-wrap: wrap;
-}
-
-.file-root-actions {
-  justify-content: flex-end;
-  margin: -2.3rem 0 1rem;
-}
-
-.file-manager-shell {
-  min-width: 0;
-  margin: 0 -1.1rem -1rem;
-  overflow: hidden;
-  border-top: 1px solid var(--border);
-}
-
-.file-manager-shell>* {
-  max-width: 100%;
-}
-
-.file-upload-button {
-  position: relative;
-  cursor: pointer;
-}
-
-.file-upload-button input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
 }
 
 .file-pathbar,
@@ -1098,38 +958,6 @@ a:focus-visible {
 .table th:last-child,
 .table td:last-child {
   text-align: right;
-}
-
-.stack-list {
-  margin: 0 -1.1rem -1rem;
-  padding: 0;
-  border-top: 1px solid var(--border);
-  list-style: none;
-}
-
-.stack-list li {
-  border-bottom: 1px solid var(--border);
-}
-
-.stack-list li:last-child {
-  border-bottom: 0;
-}
-
-.stack-list a {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  padding: 0.72rem 1.1rem;
-  text-decoration: none;
-}
-
-.stack-list a:hover {
-  background: #fafafa;
-}
-
-.stack-list strong {
-  font-size: 0.88rem;
-  font-weight: 600;
 }
 
 .challenge-box {

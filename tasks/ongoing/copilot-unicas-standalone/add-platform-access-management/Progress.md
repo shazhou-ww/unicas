@@ -12,6 +12,7 @@ Updated: 2026-09-16
 - [x] Implement platform invitations, complete Principal detail, and platform audit reads.
 - [x] Review and implement unified App Members and Platform People queries/tables.
 - [x] Rebuild Console with source-owned shadcn primitives and two-column navigation.
+- [x] Remove verified obsolete UI styles and synchronize design/runner documentation (Milestone 7).
 - [x] Validate local bootstrap/migration tests, workflows, scoped accessibility checks, and repository gates.
 - [ ] Complete operator production cutover and real-provider verification in [UserAcceptance](./UserAcceptance.md).
 - [ ] Publish implementation completion after required reviews and remaining acceptance checks.
@@ -20,7 +21,62 @@ Updated: 2026-09-16
 
 ## Current state
 
-### Latest continuation
+The implemented Console and local validation are complete. This cleanup removes
+the remaining verified legacy CSS groups and reconciles documentation; it does
+not add features, execute a release, or satisfy human acceptance automatically.
+
+### Cleanup checkpoint
+
+- Removed unused brand-section, concept-guide/list, inline-form, old invitation
+  list/confirmation, file-root-actions, file-manager-shell/upload, and stack-list
+  selectors. A source/template search found no consumers outside generated CSS.
+  The existing boundary test now prevents these groups from returning. Login
+  template styles and active file manager rules remain unchanged.
+- Synchronized [UiDesign](./UiDesign.md) with Members/Change Logs naming,
+  unframed log tables, no Platform statistics, sidebar inline App creation,
+  starter state, right-side mobile Sheet, and the actual component ownership.
+  The original HTML mock remains historical evidence, not the current UI contract.
+  [ApiDesign](./ApiDesign.md) now records the previously settled policy decisions
+  and actual unified-query publication rather than describing them as open work.
+- [acceptance-runtime.mjs](./acceptance-runtime.mjs) now finds the workspace
+  by walking ancestors for the workspace manifest and runtime module. It no
+  longer depends on ongoing-task directory depth. An executable assertion check
+  passed for ongoing, archived, backlog, and missing-root cases without moving
+  the task, starting a server, or generating credentials.
+- Cleanup validation passes: all 85 WebUI tests, explicit source/test/config
+  `tsc --noEmit`, Worker/UI production build, and focused task policy checks.
+  Built CSS decreased from about 52 KB to 50 KB. The edited stylesheet, boundary
+  test, and runner have no editor diagnostics. Existing Vite build warnings are
+  unchanged. Concurrent skill-installation/lockfile edits are outside this
+  checkpoint and are preserved without staging them.
+
+### Remaining work
+
+1. Complete authorized production/real-provider checks in
+   [UserAcceptance](./UserAcceptance.md). Local mock and schema tests do not
+   establish production cutover success. No production action is authorized
+   implicitly by task execution.
+2. Reconcile outstanding broad scope/interface/model/architecture decisions with
+   the requesting human. Focused approvals are recorded; no retroactive blanket
+   approval is inferred from implementation or a request to continue.
+3. Publish the formal implementation-complete milestone once its required gates
+   are met, obtain explicit final delivery acceptance, and archive in a separate
+   integration. Keep this task ongoing until then.
+
+Known validation limits: native OS download-save completion was not observed
+in the integrated browser; reconstructed filename and bytes were verified.
+Axe scans and keyboard/focus tests are scoped checks, not comprehensive assistive
+technology certification. Build warnings for sourcemaps and bundle size remain
+non-failing. The running 8892 and 8992 instances are build snapshots; local
+cleanup does not silently replace their data or signing material.
+
+## Historical execution evidence
+
+Entries below retain their original sequencing and test counts. Any historical
+"next action", "pending", or "local" statement is superseded by Current state
+above and the Publication milestones table; do not use it as a current todo.
+
+### Issuer and editor follow-ups
 
 Desktop issuer follow-up: inspecting the running 8892 acceptance Worker confirmed
 it still served the legacy `issuer-url-copy` markup, not the updated CopyBubble.
@@ -396,17 +452,9 @@ At 375px the Principal Sheet spans 0..375px; the navigation Sheet spans
 keyboard/focus/reduced-motion browser acceptance pass is still outstanding.
 Screenshots were inspected in the session, not committed as durable artifacts.
 
-Remaining acceptance work (latest continuation above supersedes older gaps):
-
-- Recheck all Console migration criteria, including full existing workflows.
-- Sidebar refresh and App-switch isolation are fixed and regression-tested;
-  finish mobile inline-creation browser validation.
-- Complete keyboard, focus-return, screen-reader labeling, and reduced-motion
-  browser checks. Preserve current passing responsive layouts.
-- Review migration applicability: successful local startup is not evidence
-  that all historical stack data has been converted to App tables.
-- Obtain the operator's review of the production runbook; do not perform
-  production bootstrap implicitly or mark it executed based on mock tests.
+The earlier mobile/Playground, sidebar-refresh, and scoped accessibility gaps
+were subsequently resolved in the execution evidence above. Current remaining
+work is listed only under Current state.
 
 ### Human review state
 
@@ -423,12 +471,9 @@ constitute blanket approval of the broader task's checkpoints. They are included
 in the validated partial checkpoint accompanying this record; the unified-query
 amendment has its own explicit approval published as `23d8c52`.
 
-Next action: continue the concrete enabled-Playground/mobile validation in the
-latest checkpoint above. Sidebar refresh, shared naming, focus restoration, and
-foreground clipboard-write feedback are already verified. Publish implementation
-completion only once the remaining criteria and required gates are met, then
-request separate delivery acceptance. The unified people slice is implemented,
-not a pending proposal; broader task gates remain.
+Next action: complete the human-only checks and decisions listed under Current
+state. Do not repeat already-passed local checks merely because older chronology
+still records them as pending.
 
 ## Historical implementation checkpoint
 
@@ -499,6 +544,8 @@ audit reads.
 | Unified people and Console partial checkpoint | `0555cc0`, verified reachable from refreshed `origin/main`; full tests, typecheck, OpenAPI and local build passed. | Published |
 | Console refinement partial checkpoint | `11dc74a`; 85 WebUI tests, typecheck, build, and diff checks passed and publication was verified. | Published |
 | Test typecheck coverage | `46e01cb`; explicit WebUI no-emit test/config checking and workspace typecheck passed. | Published |
+| Enabled Playground acceptance | `4827425`; isolated real CAS workflow, mobile creation, responsive checks, and release gates. | Published |
+| Managed issuer CopyBubble and editor integration | `1e97284`; issuer regressions, no-emit check, and built desktop preview verified. | Published |
 | Implementation complete | Not yet completed. | Pending |
 | Archive | Not yet archived. | Pending |
 
@@ -546,9 +593,9 @@ audit reads.
 - [x] Milestone 2: Sidebar shell + two-column layout + routing — `app-sidebar.tsx` (brand, Apps list, Platform Admin, profile footer), `app-detail-tabs.tsx` (shadcn Tabs), `parseAppRoute`/`parsePlatformRoute` in router, `app.tsx` rewritten with two-column flex layout, `user-menu.tsx` migrated to shadcn DropdownMenu + Avatar. All 52 tests pass.
 - [x] Milestone 3: Port Overview view to shadcn, with copy bubble and metadata grid.
 - [x] Milestone 4: Port Members/Invitations to one table and Change Logs to an unframed table.
-- [x] Milestone 5: Port Playground controls to shadcn; enabled end-to-end browser validation remains a separate gate.
+- [x] Milestone 5: Port Playground controls to shadcn; enabled local workflow/browser checks passed in `4827425`.
 - [x] Milestone 6: Platform Administration views with shared navigation and Members/Change Logs presentation.
-- [ ] Milestone 7: Cleanup old components, CSS, and tests.
+- [x] Milestone 7: Remove superseded screens/legacy CSS, retain thin public entry wrappers, and guard cleanup with boundary tests.
 
 ## Blockers
 

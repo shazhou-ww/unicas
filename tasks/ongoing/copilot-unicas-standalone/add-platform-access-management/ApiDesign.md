@@ -788,34 +788,30 @@ references passed focused assertions. `pnpm check:tasks` passed the ledger
 check and all 6 policy tests. These validate the design artifacts, not runtime
 authorization, HTTP handlers, or client behavior.
 
-Next action: settle the remaining product/security decisions below, then
-implement the prerequisite task contracts and migrate source protocols,
-clients, and Console workflows together. This review does not claim or begin
-the production implementation task.
+The preceding review records the proposal-stage evidence. Implementation and
+current validation are tracked in [Progress](./Progress.md), not inferred from
+that design-only review.
 
-## Decisions still open
+## Settled policy decisions
 
-1. Whether `platform.admin` should remain independent from `apps.create` as
-   recommended, or imply it for operational simplicity.
-2. Whether a global block should also prevent data-plane capabilities issued by
-   an App's independent issuer. Recommendation: no; platform access controls
-   the administrator plane, while data-plane revocation remains App-owned.
-3. Exact bounded-staleness target for browser sessions and remote MCP authority
-   checks. Recommendation: fail closed after at most 60 seconds, matching the
-   existing authority-registry hard stale bound where practical.
-4. Whether platform audit may retain normalized invitation email after expiry
-   or revocation.
-5. Whether platform endpoints should ship in remote MCP at first release or
-   initially remain Console and CLI only.
+The requesting user's decisions are recorded in [Progress](./Progress.md#decisions):
+
+1. `platform.admin` and `apps.create` remain independent; neither implies the other.
+2. Platform blocking governs administrator access, not App-issued data-plane
+  capabilities. Data-plane revocation remains App-owned.
+3. Revocation must take effect within 60 seconds. Browser and remote MCP paths
+  recheck current admission on each authenticated request.
+4. Platform audit does not retain invitation email or bearer credentials.
+5. Platform access/invitation/audit operations ship in the client, CLI, remote
+  MCP, and stdio MCP surfaces. Delegated OAuth scopes do not replace authority.
 
 ## Unified people query amendment
 
 Proposed on 2026-09-16 after the user approved merging App Members/Invitations
 and requested the same treatment for Platform Principals/Invitations. The read
 contract and implementation boundaries were explicitly approved after `83beb4b`;
-approval was published as `23d8c52`. Both queries are now implemented locally.
-Existing resource and
-mutation contracts remain unchanged. No new membership or identity entity is
+approval was published as `23d8c52`. Both queries were published in `0555cc0`.
+Existing resource and mutation contracts remain unchanged. No new membership or identity entity is
 created, and no schema/data migration is required by this projection.
 
 | Resource | Authorization | Row variants | Default selection |

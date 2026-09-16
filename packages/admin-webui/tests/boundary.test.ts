@@ -46,6 +46,16 @@ describe("cas-admin-webui package boundary", () => {
       ".tabs-vertical",
       ".mobile-nav-trigger",
       ".sidebar-app-item",
+      ".brand-section",
+      ".concept-guide",
+      ".concept-list",
+      ".inline-form",
+      ".invitation-list",
+      ".invitation-confirmation",
+      ".file-root-actions",
+      ".file-manager-shell",
+      ".file-upload-button",
+      ".stack-list",
     ]) {
       expect(css).not.toContain(selector);
     }

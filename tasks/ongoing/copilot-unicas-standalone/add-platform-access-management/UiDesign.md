@@ -1,8 +1,8 @@
 # Console UI redesign
 
-Status: discussion draft
+Status: implemented UI reference; final delivery acceptance pending
 
-Updated: 2026-09-15
+Updated: 2026-09-16
 
 ## Design target
 
@@ -11,22 +11,24 @@ primitives and one responsive two-column Console shell. The left navigation is
 the durable App and workspace context. The right pane is the selected App or
 Platform Administration detail.
 
-The interactive reference is [ConsoleMock.html](./ConsoleMock.html). It covers:
+The original interactive prototype is [ConsoleMock.html](./ConsoleMock.html).
+It is retained as historical design evidence, not the current UI contract.
+The implemented Console and acceptance evidence in [Progress](./Progress.md)
+are the current reference. They cover:
 
 - selecting Apps from primary navigation;
-- switching Overview, Members, Invitations, Playground, and Change Logs in the
-  App detail;
+- switching Overview, Members, and Change Logs in App detail, with Playground
+  independently right-aligned and disabled unless the managed issuer is active;
 - entering Platform Administration when the Principal is authorized;
 - opening the signed-in profile menu from the Sidebar footer;
-- opening App creation, developer invitation, and Connect AI tools dialogs;
+- inline App creation in the Sidebar, invitation dialogs, and Connect AI tools;
 - desktop and mobile Sidebar behavior;
 - long App names and table overflow.
 - App suspension and restoration;
 - managed and custom OAuth issuer management;
 - App member invitation listing and revocation.
 
-`ConsoleMock.html` is the sole interactive reference for the Console shell,
-workflows, and visual direction.
+Do not restore superseded navigation or forms merely to match the prototype.
 
 ## Information architecture
 
@@ -47,20 +49,19 @@ Console
     ├── App
     │   ├── Overview
     │   ├── Members
-    │   ├── Invitations
-    │   ├── Playground
-    │   └── Change Logs
+    │   ├── Change Logs
+    │   └── Playground (right-aligned)
     ├── Platform Administration
-    │   ├── Principals
-    │   ├── Invitations
-    │   └── Audit
+    │   ├── Members (Principals and invitations)
+    │   └── Change Logs
+    ├── No-selection starter
     ├── Invitation acceptance
     └── Login error
 ```
 
-There is no global top Header. The mobile-only bar contains only the Sidebar
-trigger and current context label; it is navigation affordance, not a second
-Header action surface.
+There is no global top Header or mobile context bar. A bottom-right button
+opens a right-side mobile navigation Sheet; selecting a destination closes it
+and returns focus to that trigger.
 
 ### Primary navigation
 
@@ -84,11 +85,21 @@ App creation is an icon action beside the Apps label. It is absent when
 `apps.create` is not effective. An App-only member therefore sees its Apps but
 no creation affordance.
 
+The plus inserts an autofocus temporary App row at the top of the list, with
+inline Check and X buttons inside the name input. Check/Enter or nonempty blur
+outside the whole editor creates the App and navigates to its Overview. Moving
+focus to either inline button does not submit. Empty/whitespace blur and Escape
+cancel without a write. Invalid names remain editable with an anchored floating
+hint. Pending submission disables both actions and retries preserve idempotency.
+With no App selected, show only a short starter message, not a duplicate list
+or creation card. The message mentions creation only when `apps.create` applies.
+
 ### Platform entry
 
 Show the Administration group only when `/admin/me` includes
-`platform.admin`. The entry has a restrained privileged accent and an `Admin`
-badge, but it remains part of the same Console navigation.
+`platform.admin`. The entry uses a shield icon and the Platform access label
+within the same Console navigation. The detail title identifies the privileged
+workspace as Platform Administration.
 
 Client-side conditional rendering is not authorization. Direct navigation to a
 platform route must still receive a server-side `PLATFORM_ADMIN_REQUIRED`
@@ -96,15 +107,14 @@ response and render a non-disclosing forbidden state.
 
 ### App detail navigation
 
-Overview, Members, Invitations, Playground, and Change Logs are line-style top
-Tabs under the selected App heading, in that order. Members and Invitations are
-sibling pages; Playground is penultimate. These pages are no longer Sidebar
-entries and there is no second App switcher.
+Overview, Members, and Change Logs are line-style top Tabs under the selected
+App heading, followed by right-aligned Playground. Invitations are rows in
+Members, not a separate tab. These pages are not Sidebar entries and there is
+no second App switcher. App and Platform reuse the same heading/tab component;
+each selected tab controls a real, labelled tabpanel.
 
-Switching App preserves the current App section when that section exists for
-all Apps. Example: switching from Canvas Sync Playground to Archive Tools keeps
-Playground selected. This supports repeated comparison and avoids resetting the
-operator's task context.
+Selecting an App in the Sidebar opens its Overview. Do not render previous App
+data/revisions while the next resource is loading; unsaved drafts are App-scoped.
 
 Long App names also ellipsize in the detail heading rather than resizing the
 page or displacing actions. The full name remains available through the Sidebar
@@ -115,7 +125,6 @@ The route, not component-local state, is authoritative:
 ```text
 /admin/#/apps/{appId}/overview
 /admin/#/apps/{appId}/members
-/admin/#/apps/{appId}/invitations
 /admin/#/apps/{appId}/playground
 /admin/#/apps/{appId}/change-logs
 ```
@@ -123,6 +132,7 @@ The route, not component-local state, is authoritative:
 Use `overview` as the canonical redirect for `/apps/{appId}`. Retain hash
 routing for this rewrite unless deployment is deliberately changed to provide
 SPA fallback for path routing.
+Old `/apps/{appId}/invitations` links redirect to Members with the pending filter.
 
 ### Profile menu
 
@@ -145,23 +155,26 @@ navigation implementations.
 Platform Administration reuses the same detail shell and line Tabs:
 
 ```text
-/admin/#/platform/principals
-/admin/#/platform/invitations
+/admin/#/platform/people
 /admin/#/platform/audit
 ```
 
-The Principals page owns aggregate counts, search/filter controls, the Principal
-table, the access detail Sheet, and authority/block mutations. Invitations owns
-creation and revocation. Audit owns platform event filtering and pagination.
+The visible labels are Members and Change Logs; technical `people`/`audit`
+routes remain stable. Members owns search/filter controls, the mixed Principal
+and invitation table, Invite Dialog, conditional revocation, and Principal detail
+Sheet. It does not render statistics or request access-summary. The existing
+protected summary API remains available to other clients.
 
-App invitation remains in each App's Invitations page. Platform invitation
-remains in Platform Administration. The labels must distinguish `Invite member`
-from `Invite developer`.
+Both App and Platform member tables use an Invite toolbar action, with distinct
+App-member and platform-authority dialogs. App membership and platform grants
+remain separate. Default lists include existing identities and pending invitations;
+accepted/expired/revoked invitations are available through history filtering.
+Old platform `/principals` and `/invitations` links redirect to `/people` with
+Principal-only or pending selection respectively.
 
-Members lists current equal-authority App members. The sibling Invitations page
-lists pending, accepted, expired, and revoked invitations and permits
-conditional revocation of pending invitations. This deliberately mirrors the
-Platform workspace without conflating App membership with platform authority.
+Both Change Logs pages use unframed tables, including column headers and an
+empty table row when no events exist. Keep platform filter controls without
+adding a card wrapper or a duplicate in-page heading.
 
 ## App operational status
 
@@ -306,30 +319,30 @@ browser UI primitives.
 
 ## React component ownership
 
-Recommended source structure:
+Current source structure (selected files):
 
 ```text
-src/ui/
-├── components/
-│   ├── ui/                 copied shadcn primitives
-│   ├── app-sidebar.tsx
-│   ├── app-detail-tabs.tsx
-│   ├── profile-menu.tsx
-│   ├── page-heading.tsx
-│   └── async-state.tsx
-├── views/
-│   ├── app-overview.tsx
-│   ├── app-playground.tsx
-│   ├── app-members.tsx
-│   ├── app-change-logs.tsx
-│   └── platform/
-│       ├── principals.tsx
-│       ├── invitations.tsx
-│       └── audit.tsx
-├── app.tsx
-├── api.ts
-├── router.ts
-└── styles.css
+src/
+├── components/ui/          source-owned shadcn primitives
+└── ui/
+  ├── components/
+  │   ├── app-sidebar.tsx
+  │   ├── app-detail-tabs.tsx
+  │   ├── app-create-row.tsx
+  │   └── copy-bubble.tsx
+  ├── views/
+  │   ├── stack-overview.tsx
+  │   ├── file-playground.tsx
+  │   ├── people.tsx
+  │   ├── control-audit.tsx
+  │   └── platform/
+  │       ├── principal-editor.tsx
+  │       └── audit.tsx
+  ├── user-menu.tsx
+  ├── app.tsx
+  ├── api.ts
+  ├── router.ts
+  └── styles.css
 ```
 
 `components/ui` contains low-level source-owned primitives. Console components
@@ -337,24 +350,25 @@ compose them into product behavior. Views own API loading and domain workflow.
 Do not put API calls, UniCAS authorization decisions, or invitation workflow in
 shadcn primitive files.
 
-Use `SidebarProvider`, `Sidebar`, `SidebarHeader`, `SidebarContent`,
-`SidebarGroup`, `SidebarMenu`, `SidebarFooter`, `SidebarInset`, and
-`SidebarTrigger` for the shell. Use `DropdownMenu` for the profile actions,
-line-style `Tabs` for App/platform detail, `Dialog` for creation, and `Sheet`
-for Principal access detail on desktop and mobile.
+The source-owned AppSidebar implements the two-column shell and uses Sheet for
+mobile navigation. Use DropdownMenu for profile actions, line-style Tabs with
+TabsContent for detail, Dialog for invitations/confirmations, and Sheet for
+Principal details. App creation is inline, not a Dialog. Shared CopyBubble owns
+click/keyboard copying and localized Sonner success/error feedback for App IDs,
+managed issuer URLs, and one-time invitation receipts.
 
 ## Unified people lists amendment
 
 User-requested direction on 2026-09-16 supersedes separate member/Principal and
-invitation navigation in this proposal. See the proposed query contract in
+invitation navigation in the original proposal. See the implemented query contract in
 [API design](./ApiDesign.md#unified-people-query-amendment).
 
 - App detail navigation becomes Overview, Members, Change Logs, with Playground
   independently right-aligned and disabled unless the managed issuer is active.
   Members presents existing members and pending invitations in one table.
-- Platform detail navigation becomes People and Audit. People presents existing
+- Platform detail navigation displays Members and Change Logs. Members presents existing
   Principals (including blocked/no-access states) and pending invitations in one
-  table. Keep the access summary and Principal details/authority editor.
+  table. Retain the Principal details/authority editor, without statistics blocks.
 - Each table has a search/filter toolbar, refresh action, and right-aligned
   Invite button. Invite opens the existing creation/receipt workflow in a Dialog.
   Keep email constraints, authority selection on platform invitations, one-time
@@ -374,9 +388,9 @@ invitation navigation in this proposal. See the proposed query contract in
   Multiple records with the same email remain distinct. Labels identify whether
   a row is a member, Principal, or invitation, independent of color.
 - Old App `/invitations` links redirect to Members with the pending filter;
-  old platform `/principals` and `/invitations` links redirect to People with
+  old platform `/principals` and `/invitations` links redirect to Members with
   Principal and pending selection respectively. Filter/search changes reset
-  pagination; mutations refresh the unified list and relevant summaries.
+  pagination; mutations refresh the unified list. No summary fetch is needed.
 - Use source-owned controls and a shared toolbar/table presentation where useful,
   but keep App and Platform query hooks, mutation handlers, and authorization
   context separate. Preserve mobile wrapping, local table scrolling, focus
@@ -408,7 +422,7 @@ it after App creation, App metadata changes, membership acceptance/removal, or
 an authorization error indicating access changed.
 
 The original navigation redesign required no additional platform endpoint.
-The unified people-list amendment now proposes separate App/platform combined
+The unified people-list amendment implements separate App/platform combined
 read endpoints for coherent search, ordering, and pagination. `/admin/me`
 continues to determine navigation visibility and App creation; existing detail,
 mutation, summary, and audit endpoints retain their responsibilities.

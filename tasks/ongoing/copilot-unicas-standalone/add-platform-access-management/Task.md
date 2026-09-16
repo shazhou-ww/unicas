@@ -66,7 +66,7 @@ customized for UniCAS, and makes the App list the primary navigation.
   Change Logs separate. Both workspaces use the App-style header and unframed
   log tables. Platform Members has no statistics blocks or summary request.
   Preserve row identity, permission boundaries, old
-  deep links, and coherent server-side combined pagination. The proposed read
+  deep links, and coherent server-side combined pagination. The implemented read
   contract is in [API design](./ApiDesign.md#unified-people-query-amendment).
 - Put the signed-in user at the bottom of the left navigation and move
   Documentation, Connect AI tools, and Sign out into its profile menu.
@@ -117,7 +117,12 @@ customized for UniCAS, and makes the App list the primary navigation.
 - [Manage App member invitations](/tasks/archived/manage-app-member-invitations/Task.md)
 - [Replace an active App OAuth issuer](/tasks/archived/replace-active-app-oauth-issuer/Task.md)
 
-## Design decisions to settle
+## Design decision coverage
+
+These topics guided the implementation. Settled policy choices are recorded in
+[API design](./ApiDesign.md#settled-policy-decisions); current evidence and the
+remaining human review gates are tracked in [Progress](./Progress.md). The list
+below is a design coverage inventory, not a claim that every choice is still open.
 
 - Choose the persistent platform-grant resource, capability vocabulary, storage
   ownership, revision model, and whether Platform Admin implicitly includes App
@@ -197,9 +202,11 @@ customized for UniCAS, and makes the App list the primary navigation.
 
 ## Human review checkpoints
 
-Reviewer: the requesting user. This task predates the checkpoint plan; prior
-task execution and individual policy decisions are not retroactive approval
-of the complete current implementation. All five checkpoints remain pending.
+Reviewer: the requesting user. Focused unified-query scope/interface/model/
+architecture approval was published as `23d8c52`; subsequent UI refinements were
+explicitly requested. Those decisions are recorded in [Progress](./Progress.md).
+They do not constitute retroactive approval of the complete implementation.
+Remaining broad review reconciliation and delivery acceptance are still pending.
 
 | Checkpoint | Review artifact and decision | Gate |
 | --- | --- | --- |
