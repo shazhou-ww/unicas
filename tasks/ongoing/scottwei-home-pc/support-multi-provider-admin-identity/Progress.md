@@ -32,10 +32,19 @@ The requesting user approved the scope review artifact, the canonical
 approval request. This approves its goal, scope, out-of-scope boundaries,
 constraints, acceptance criteria, provider set, and prerequisite.
 
-Next: publish the scope approval, then research, prepare, and publish the
-business/data-model, architecture, and interface review artifacts. Do not begin
-the implementation protected by any of those checkpoints before its explicit
-approval.
+Scope approval is published on `origin/main` as
+`aa94d2efef95c581dbc67a0493539ed2f42f4ab3`. The task-owned
+[business/data-model](./BusinessDataModel.md),
+[architecture](./Architecture.md), and [interface](./InterfaceDesign.md) review
+artifacts are prepared and pending publication. They define the stable Account
+and evidence model, one-to-one migration and rollback boundary, provider and
+service composition, fresh-auth linking/unlinking, Account-keyed contracts,
+Console/CLI/MCP behavior, and privacy/error rules.
+
+Next: publish these three artifacts and this pending checkpoint state to
+`origin/main`, verify the commit is reachable there, then request explicit
+business/data-model, architecture, and interface decisions. Do not begin the
+implementation protected by any pending checkpoint.
 
 ## Decisions
 
@@ -55,9 +64,9 @@ approval.
 | Checkpoint | Status | Review artifact and decision evidence |
 | --- | --- | --- |
 | Scope | Approved | Requesting user, 2026-09-16: explicitly responded that there were no issues after being asked to approve or reject the goal, scope, out of scope, constraints, acceptance criteria, provider set, and prerequisite in [Task](./Task.md). |
-| Business and data model | Pending | Prepare and publish the task-owned account model and migration design before changing persistent schemas, ownership keys, migration code, profile projections, invitation rules, linking semantics, or authorization records. |
-| Architecture | Pending | Prepare and publish the task-owned provider, service-port, persistence, BFF/session, revocation, alias-resolution, deployment, and compatibility design before structural implementation. |
-| Interface | Pending | Prepare and publish the Console, callback/linking route, administrator API, CLI/MCP, conflict, privacy, and compatibility design before affected interface implementation. |
+| Business and data model | Pending | Review [Business and data model](./BusinessDataModel.md): Account, ExternalIdentity, VerifiedEmail, Profile precedence, relationship ownership, evidence freshness, future Merge aliases, one-to-one migration, session/grant transition, rollback boundary, retention, and redaction. Explicit user or delegated identity/security-owner approval is required before protected model work. |
+| Architecture | Pending | Review [Architecture](./Architecture.md): provider adapters, `control-auth`, cloud-neutral service ports, D1/Email bindings, BFF/MCP composition, account resolution, linking state machines, revocation, deployment stages, and compatibility. Explicit user or delegated architecture-owner approval is required before protected structural work. |
+| Interface | Pending | Review [Interface](./InterfaceDesign.md): Account wire types, Account-keyed relationship routes, provider selection/callbacks, Console account flows, CLI/MCP presentation, compatibility sunset, errors, and privacy. Explicit user or delegated product/API-owner approval is required before protected interface work. |
 | Delivery acceptance | Pending | Present the integrated revision and complete validation, security/privacy, deployment/rollback, and manual test evidence after implementation publication. |
 
 ## Publication milestones
@@ -90,12 +99,24 @@ approval.
   refreshed `origin/main` both resolved to
   `448478c177b4dc78d657649d17225bb1e3633973`, the worktree was clean, and the
   final `pnpm check:tasks` run passed all ledger checks and 6 policy tests.
+- The scope approval was published as
+  `aa94d2efef95c581dbc67a0493539ed2f42f4ab3` and verified reachable from
+  refreshed `origin/main` by `repoledger doctor` and `git merge-base`.
+- Read-only code research mapped the current Principal/Profile, invitation,
+  platform access, membership, Playground, audit, BFF/session, CLI, MCP, D1,
+  protocol, client, and Console ownership surfaces before design.
+- Current Google, Microsoft personal-account, GitHub OAuth/Emails API,
+  Cloudflare Email Service, and Workers guidance was reviewed for the provider
+  and platform constraints recorded in the artifacts.
+- `pnpm check:tasks` passed after each new review artifact and after the focused
+  credential-migration, identity-redaction, and retired-email retention review
+  corrections: all 16 ledger tasks and all 6 policy tests passed.
 
 ## Blockers
 
-- Business/data-model, architecture, and interface approvals are pending. Their
-  review artifacts must be prepared and published before requesting decisions;
-  do not begin implementation protected by those checkpoints.
+- Business/data-model, architecture, and interface approvals are pending. Do not
+  begin implementation protected by those checkpoints until the published
+  artifacts receive explicit decisions and those decisions are published.
 
 ## Outcome
 
