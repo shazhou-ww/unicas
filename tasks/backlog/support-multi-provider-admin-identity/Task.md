@@ -77,6 +77,29 @@ AppMembership  --> accountId
   expose the Account's ExternalIdentity list; no projection collapses linked
   identities into an `(issuer, email)` key.
 
+### Identity linking versus account merge
+
+Identity linking and Account merge are distinct operations with different risk
+and reversibility:
+
+- Linking attaches an ExternalIdentity that is not owned by any Account to the
+  currently authenticated Account. This task implements linking and guarded
+  unlinking; unlinking never removes the final usable identity.
+- Merge applies only when the newly authenticated ExternalIdentity already
+  belongs to another established Account. It combines two authorization and
+  ownership histories, not merely two login methods. This task detects and
+  rejects that conflict but does not execute a merge.
+- A future Merge is irreversible. It must choose one surviving Account, retain
+  every source Account as a permanent tombstone or alias to the survivor,
+  preserve original audit attribution, and never reuse or silently delete a
+  source `accountId`. There is no ordinary unmerge or undo operation.
+- Any future Merge flow must require fresh authentication of both Accounts,
+  present the complete impact on platform authorities, App memberships,
+  owned resources, identities, profile fields, emails, and active sessions,
+  then show an unmistakable warning that the operation cannot be undone and
+  obtain a separate explicit confirmation. Matching email alone can neither
+  start nor approve a Merge.
+
 ## Scope
 
 - Introduce a stable UniCAS account identifier and persistence model that can
@@ -122,6 +145,10 @@ AppMembership  --> accountId
 - Add guarded unlinking that requires fresh authentication and leaves at least
   one usable login identity. Blocking or revoking a UniCAS account must apply to
   every linked identity within the existing revocation bound.
+- Keep Account identifiers, ownership references, and immutable audit records
+  compatible with a future irreversible Merge through canonical Account
+  resolution and retained source tombstones; do not add a Merge endpoint or
+  execute a Merge in this task.
 - Update administrator protocol types, service ports, Cloudflare persistence,
   BFF/session composition, CLI and MCP login presentation, Console account UI,
   generated contracts, terminology, operations documentation, and focused
@@ -135,8 +162,9 @@ AppMembership  --> accountId
   registration, or automatic authorization based on an email domain.
 - Automatic account linking or permission transfer because two providers report
   the same email address.
-- Merging two already-established UniCAS accounts. Conflicts require a separate
-  reviewed recovery or merge workflow.
+- Executing a Merge of two already-established UniCAS Accounts. Such a Merge is
+  an irreversible, separately reviewed workflow; this task only preserves the
+  model invariants and rejects linking conflicts that would require it.
 - Microsoft work/school multi-tenant `common` login, Entra tenant federation,
   SCIM provisioning, organization/group synchronization, or customer-managed
   identity providers.
@@ -187,6 +215,9 @@ AppMembership  --> accountId
       and emits audit evidence without provider tokens or invitation secrets.
 - [ ] Unlinking requires fresh authentication, cannot remove the final usable
       identity, and does not alter the account's memberships or audit identity.
+- [ ] The Account model can retain a merged source `accountId` as an immutable
+  tombstone or alias to a surviving Account without rewriting historical
+  audit attribution; this task exposes no Merge or unmerge operation.
 - [ ] Blocking an account or removing its final admission grant denies all
       linked identities on browser, CLI, and MCP paths within the accepted
       revocation bound.
@@ -209,6 +240,12 @@ AppMembership  --> accountId
 - Account linking is a privilege-bearing mutation and must use state, nonce
   where applicable, PKCE, short expirations, one-time continuations, session
   rotation, CSRF/origin protection, optimistic concurrency, and durable audit.
+- Account Merge is an irreversible privilege and ownership consolidation, not
+  an extension of linking. Any future implementation must fail closed on
+  conflicts, authenticate both Accounts afresh, preview all consequences,
+  require a separate explicit confirmation under an unmistakable cannot-be-
+  undone warning, commit atomically, revoke affected sessions, retain source
+  tombstones and audit history, and offer no ordinary undo or unmerge action.
 - Provider issuer, discovery, authorization, token, JWKS, and API endpoints are
   operator-configured or provider-pinned server-side values. Callback input
   must never select trust endpoints or algorithms.
@@ -235,9 +272,9 @@ and explicitly approved before the protected work begins.
 | Checkpoint | Applicability | Reviewer | Planned review artifact | Approval required before |
 | --- | --- | --- | --- | --- |
 | Scope | Required | User or accountable owner | This task's goal, scope, out of scope, constraints, acceptance criteria, provider set, and dependency on the platform-access task. | Substantive implementation. |
-| Business and data model | Required | User or delegated identity/security owner | Task-owned account model and migration design covering Account, ExternalIdentity, VerifiedEmail, shared Profile name/avatar ownership and precedence, PlatformAccess and AppMembership references, API projections, invitation ownership, audit attribution, linking conflicts, retention, one-to-one migration, and rollback. | Changing persistent schemas, ownership keys, migration code, profile projections, invitation rules, linking semantics, or authorization records. |
-| Architecture | Required | User or delegated architecture owner | Task-owned architecture and sequencing design covering provider adapters, `control-auth`, cloud-neutral service ports, Cloudflare persistence and BFF composition, session/account resolution, revocation, deployment order, and compatibility boundaries. | Changing module responsibilities, dependencies, provider composition, session architecture, or deployment wiring. |
-| Interface | Required | User or delegated product/API owner | Task-owned interface design for Console login and account management, callback and linking routes, administrator API contracts, CLI and MCP login behavior, error/privacy semantics, and compatibility with existing clients. | Implementing or changing affected GUI flows, HTTP contracts, CLI commands, or MCP behavior. |
+| Business and data model | Required | User or delegated identity/security owner | Task-owned account model and migration design covering Account, ExternalIdentity, VerifiedEmail, shared Profile name/avatar ownership and precedence, PlatformAccess and AppMembership references, API projections, invitation ownership, audit attribution, linking conflicts, future irreversible-Merge tombstones and canonical resolution, retention, one-to-one migration, and rollback. | Changing persistent schemas, ownership keys, migration code, profile projections, invitation rules, linking semantics, or authorization records. |
+| Architecture | Required | User or delegated architecture owner | Task-owned architecture and sequencing design covering provider adapters, `control-auth`, cloud-neutral service ports, Cloudflare persistence and BFF composition, session/account resolution, revocation, retained Account aliases, deployment order, and compatibility boundaries. | Changing module responsibilities, dependencies, provider composition, Account resolution, session architecture, or deployment wiring. |
+| Interface | Required | User or delegated product/API owner | Task-owned interface design for Console login and account management, callback and linking routes, explicit handling of conflicts that require a future irreversible Merge, administrator API contracts, CLI and MCP login behavior, error/privacy semantics, and compatibility with existing clients. | Implementing or changing affected GUI flows, HTTP contracts, CLI commands, or MCP behavior. |
 | Delivery acceptance | Required | User or accountable owner | Integrated revision, provider and migration test matrix, security and privacy evidence, validation results, deployment/rollback rehearsal, and required Console, CLI, and MCP manual test results. | Marking the task completed and archiving it. |
 
 ## References
