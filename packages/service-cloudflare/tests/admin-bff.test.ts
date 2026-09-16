@@ -339,11 +339,23 @@ class MemoryPlatformAccessRepository implements PlatformAccessRepository {
     this.members.add(k);
   }
 
+  revokeMembership(issuer: string, subject: string): void {
+    this.members.delete(this.key({ issuer, subject }));
+  }
+
   block(issuer: string, subject: string): void {
     const k = this.key({ issuer, subject });
     const existing = this.states.get(k);
     if (existing) {
       this.states.set(k, { ...existing, status: "blocked" });
+    }
+  }
+
+  revokeAuthorities(issuer: string, subject: string): void {
+    const k = this.key({ issuer, subject });
+    const existing = this.states.get(k);
+    if (existing) {
+      this.states.set(k, { ...existing, authorities: [], revision: existing.revision + 1 });
     }
   }
 
@@ -417,7 +429,7 @@ class MemoryPlatformAccessRepository implements PlatformAccessRepository {
     return "updated";
   }
 
-  async appendAudit(_event: PlatformAuditRecord): Promise<void> {}
+  async appendAudit(_event: PlatformAuditRecord): Promise<void> { }
 }
 
 async function createMockProvider(): Promise<MockProvider> {
@@ -1006,6 +1018,34 @@ describe("cas-admin-webui BFF", () => {
     const meAfter = await authRequest(bff, "/admin/me", cookie);
     expect(meAfter.status).toBe(401);
     expect(await meAfter.json()).toMatchObject({ error: "ADMIN_AUTH_REQUIRED" });
+  }, 10_000);
+
+  test("platform access revoked: authenticated request is denied after the last authority is removed", async () => {
+    const provider = await createMockProvider();
+    const repo = new MemoryPlatformAccessRepository();
+    repo.grant(ISSUER, "google-user-123");
+    const bff = await createBff(provider, undefined, {}, repo);
+    const { cookie } = await signIn(bff, provider);
+
+    repo.revokeAuthorities(ISSUER, "google-user-123");
+
+    const me = await authRequest(bff, "/admin/me", cookie);
+    expect(me.status).toBe(401);
+    expect(await me.json()).toMatchObject({ error: "ADMIN_AUTH_REQUIRED" });
+  }, 10_000);
+
+  test("App membership revoked: membership-only authenticated session is denied", async () => {
+    const provider = await createMockProvider();
+    const repo = new MemoryPlatformAccessRepository();
+    repo.grantViaMembership(ISSUER, "google-user-123");
+    const bff = await createBff(provider, undefined, {}, repo);
+    const { cookie } = await signIn(bff, provider);
+
+    repo.revokeMembership(ISSUER, "google-user-123");
+
+    const me = await authRequest(bff, "/admin/me", cookie);
+    expect(me.status).toBe(401);
+    expect(await me.json()).toMatchObject({ error: "ADMIN_AUTH_REQUIRED" });
   }, 10_000);
 
   test("email allowlist is still the first gate; denied by allowlist before platform access check", async () => {

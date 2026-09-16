@@ -199,11 +199,11 @@ customized for UniCAS, and makes the App list the primary navigation.
 
 ## References
 
-- [Console UI redesign](/tasks/ongoing/copilot-unicas-standalone/add-platform-access-management/UiDesign.md)
-- [Interactive Console mock](/tasks/ongoing/copilot-unicas-standalone/add-platform-access-management/ConsoleMock.html)
-- [Platform access API design](/tasks/ongoing/copilot-unicas-standalone/add-platform-access-management/ApiDesign.md)
-- [API proposal schema](/tasks/ongoing/copilot-unicas-standalone/add-platform-access-management/PlatformAccess.openapi.json)
-- [Rendered API reference](/tasks/ongoing/copilot-unicas-standalone/add-platform-access-management/ApiReference.html)
+- [Console UI redesign](./UiDesign.md)
+- [Interactive Console mock](./ConsoleMock.html)
+- [Platform access API design](./ApiDesign.md)
+- [API proposal schema](./PlatformAccess.openapi.json)
+- [Rendered API reference](./ApiReference.html)
 - [UniCAS architecture](/docs/cas-architecture.md)
 - [UniCAS control-plane CLI](/docs/cas-control-plane-cli.md)
 - [UniCAS control-plane MCP](/docs/cas-control-plane-mcp.md)

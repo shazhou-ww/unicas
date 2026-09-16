@@ -15,11 +15,9 @@ Updated: 2026-09-16
 
 ## Current state
 
-On 2026-09-16, the user requested handoff from `xiaoju-neko-vm` to the
-current worktree identity, `copilot-unicas-standalone`. The destination lane is
-verified on `origin/main`, and no overlapping backlog or ongoing task exists.
-This directory move is the handoff checkpoint; resume implementation only
-after it is published and verified on `origin/main`.
+Handoff from `xiaoju-neko-vm` to `copilot-unicas-standalone` is published as
+`ae10e7d20b357647a52c9036bd7a636463ff13a5` and verified on `origin/main`. No
+overlapping backlog or ongoing task exists.
 
 Claim `ff3c87e0318d4c30b76111d8cf96302a0b354fba` is verified on `origin/main`.
 The shared platform authorization model, service guards, D1 tables, and atomic
@@ -37,10 +35,14 @@ implemented and pass tests:
 - **Types added** to `@unicas/admin-protocol`: `PlatformPrincipalListItem`, `PlatformPrincipalDetail`, `PlatformPrincipalPage`, `PlatformAccessSummary`
 - **Routes added**: `matchPlatformAdminRoute` (shared between `AppAdminRoute` and `CasAdminRoute`); route builders for `accessSummary`, `platformPrincipals`, `platformPrincipal`, `platformPrincipalAccess`
 - **Service expanded**: `PlatformAccessService.listPrincipals`, `getPrincipal`, `getAccessSummary`; `PlatformAccessRepository.getAccessSummary` interface + D1 implementation
+- **Browser session revocation**: every authenticated BFF request now rechecks
+  effective platform admission. Removing the last platform authority or App
+  membership invalidates an existing session on its next request.
 
-All 226 tests pass (`pnpm --filter @unicas/service-cloudflare test`). `pnpm run build` passes.
+All 228 tests pass (`pnpm --filter @unicas/service-cloudflare test`). `pnpm run build` passes.
 
-Next: implement invitation-limited login and revocation for existing sessions.
+Next: implement invitation-limited login, then enforce current platform access
+for each remote MCP request.
 
 ## Decisions
 
@@ -88,6 +90,11 @@ Next: implement invitation-limited login and revocation for existing sessions.
   - `PATCH /admin/platform/principals/{ref}/access` delegates to service and returns ETag
   - `PATCH` without `If-Match` returns 428
   - Non-platform-admin (apps.create only) gets 403 on all platform routes
+- On 2026-09-16, existing browser sessions were changed from blocked-only
+  checks to full effective-admission checks. Focused BFF tests cover removal of
+  the last authority and removal of the last App membership; all 46 BFF tests
+  pass. `pnpm --filter @unicas/service-cloudflare typecheck` passes, and a clean
+  full rerun passes all 228 service-cloudflare tests.
 
 ## Console rebuild progress
 

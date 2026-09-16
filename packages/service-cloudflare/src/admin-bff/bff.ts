@@ -1110,7 +1110,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         subject: payload.subject,
       };
       try {
-        await platformAccess.assertNotBlocked(sessionPrincipal);
+        await platformAccess.requireAccess(sessionPrincipal);
       } catch (error) {
         if (error instanceof PlatformAccessError && error.code === "PLATFORM_ACCESS_REQUIRED") {
           await sessionStore.delete(sessionId);
