@@ -37,14 +37,16 @@ state.
    artifact, and approval gate. Do not ask for every approval during intake;
    unresolved design details belong at their planned execution checkpoint.
    Acceptance of the candidate for the backlog is not scope approval.
-5. Inspect current backlog and ongoing definitions only for a plausible match.
-   Ignore unrelated claims, dirty files, and surface overlap during intake. If
-   a match exists, ask whether to merge context or create a distinct task; do
-   not mutate either route until the user decides.
+5. Use `repoledger status` when available to inventory active positions, then
+   read only definitions that plausibly match the candidate. The CLI supplies
+   positions, not semantic duplicate judgment. Ignore unrelated claims, dirty
+   files, and surface overlap during intake. If a match exists, ask whether to
+   merge context or create a distinct task; do not mutate either route until
+   the user decides.
 6. Apply core admission and ask only for the smallest missing decision. Keep
    rejected, duplicate, unconfirmed, and task-free requests outside the ledger.
-   For admitted work, use the core template, profile, validation, and
-   publication rules.
+   For admitted work, use the core template and profile, then run
+   `repoledger check --task <task-name>` when available before publication.
 
 Finish by reporting whether the candidate was admitted and whether it was
 merged or created. When created, include the task's canonical backlog path and

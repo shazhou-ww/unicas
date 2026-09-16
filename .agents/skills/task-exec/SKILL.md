@@ -22,17 +22,20 @@ implementation files.
 1. Prefer exactly one attached canonical `Task.md` as a locator, not a content
    snapshot. Otherwise resolve from the supplied name or description, then the
    latest explicit conversation context.
-2. Refresh the shared branch and read the latest canonical `Task.md` and
-   `Progress.md` before routing status.
+2. Follow the core preparation sequence: run `doctor`, use `status` for the
+   deterministic position, run `check --task` for focused validity, and read
+   the latest canonical `Task.md` and `Progress.md` before routing status.
 3. Require one unambiguous task in one owning repository. For no match,
    conflicting locators, multiple plausible matches, or ambiguous ownership,
    ask for the smallest clarification. Never create a task; route new intake
    through `task-new`.
 4. Route by current status:
-   - **Backlog:** validate identity and overlap, then claim and publish before
-     implementation.
+    - **Backlog:** after semantic overlap review, preview and apply `plan claim`,
+       then publish before implementation.
    - **Ongoing here:** resume from canonical task and progress state.
-   - **Ongoing elsewhere:** coordinate or hand off; never take over implicitly.
+    - **Ongoing elsewhere:** coordinate explicitly; the receiving worktree may
+       then use `plan claim --take-from <source-identity>`. Never take over
+       implicitly.
    - **Archived:** report the recorded outcome and stop.
 
 ## Execute The Lifecycle
