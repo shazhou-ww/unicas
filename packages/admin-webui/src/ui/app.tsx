@@ -16,6 +16,9 @@ import { PlaygroundView } from "./views/file-playground.js";
 import { AppInvitationsView } from "./views/app-invitations.js";
 import { PlaygroundCacheContext, createPlaygroundCacheSession, type PlaygroundCacheSession } from "./playground-cache.js";
 import { formatErrorSafe } from "./views/view-helpers.js";
+import { PlatformPrincipalsView } from "./views/platform/principals.js";
+import { PlatformInvitationsView } from "./views/platform/invitations.js";
+import { PlatformAuditView } from "./views/platform/audit.js";
 
 export function App() {
   const route = useHashRoute();
@@ -90,6 +93,7 @@ export function App() {
   const selectedAppId = appRoute?.appId ?? null;
 
   // Check authorities
+  // TODO: wire hasPlatformAdmin from /admin/me response when platform authorities are included
   const hasPlatformAdmin = false;
   const canCreateApps = true;
 
@@ -133,10 +137,61 @@ export function App() {
       );
     }
   } else if (platformRoute) {
+    const renderPlatformSection = () => {
+      switch (platformRoute.section) {
+        case "principals": return <PlatformPrincipalsView />;
+        case "invitations": return <PlatformInvitationsView />;
+        case "audit": return <PlatformAuditView />;
+        default: return null;
+      }
+    };
     detail = (
-      <div className="page">
-        <h1>Platform Administration</h1>
-        <p>Section: {platformRoute.section} — coming soon</p>
+      <div>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-semibold tracking-tight">Platform Administration</h1>
+          <nav className="flex gap-1 border-b" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={platformRoute.section === "principals"}
+              onClick={() => navigate("/platform/principals")}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                platformRoute.section === "principals"
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Principals
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={platformRoute.section === "invitations"}
+              onClick={() => navigate("/platform/invitations")}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                platformRoute.section === "invitations"
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Invitations
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={platformRoute.section === "audit"}
+              onClick={() => navigate("/platform/audit")}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                platformRoute.section === "audit"
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Audit
+            </button>
+          </nav>
+        </div>
+        {renderPlatformSection()}
       </div>
     );
   } else {
