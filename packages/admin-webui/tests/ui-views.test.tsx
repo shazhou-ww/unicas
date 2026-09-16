@@ -268,7 +268,7 @@ describe("MembersView", () => {
     await user.click(screen.getByRole("button", { name: "Load more invitations" }));
     expect(await screen.findByText("second@example.test")).toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: "Revoke" })[0]!);
-    expect(screen.getByRole("group", { name: "Revoke invitation confirmation" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Revoke Invitation" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Confirm revoke" }));
     expect(await screen.findByRole("cell", { name: "revoked" })).toBeInTheDocument();
     const deletion = fetchMock.mock.calls.find(([, init]) => init?.method === "DELETE");

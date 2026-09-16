@@ -89,10 +89,10 @@ describe("AppView", () => {
     expect(screen.getByRole("tab", { name: "Change Log" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Ref domains" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "My Apps" })).not.toBeInTheDocument();
-    const metadata = screen.getByRole("heading", { name: "App metadata" }).closest(".card");
-    expect(metadata).toHaveTextContent("App IDcas_one");
-    expect(metadata).toHaveTextContent("Statusactive");
-    expect(metadata).toHaveTextContent("Revision3");
+    const metadata = screen.getByText("App Identity").closest(".rounded-lg");
+    expect(metadata).toHaveTextContent("cas_one");
+    expect(metadata).toHaveTextContent("active");
+    expect(metadata).toHaveTextContent("3");
     expect(metadata).toHaveTextContent("Created");
 
     await user.selectOptions(switcher, "cas_two");
@@ -144,7 +144,7 @@ describe("AppView", () => {
     const description = await screen.findByLabelText("Description");
     await user.clear(description);
     await user.type(description, "Updated production App");
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
 
     await waitFor(() => expect(patchBody).toMatchObject({
       displayName: "Primary App",

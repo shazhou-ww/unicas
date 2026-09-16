@@ -2,8 +2,20 @@ import { useCallback, useEffect, useState } from "react";
 import { ChevronsDown } from "lucide-react";
 import type { AppControlAuditEvent } from "@unicas/admin-client";
 import { api } from "../api.js";
-import { Button, Card, EmptyState, ErrorState, LoadingState, Table } from "../components.js";
 import { formatErrorSafe } from "./view-helpers.js";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 interface AuditPage {
   readonly items: readonly AppControlAuditEvent[];
@@ -45,38 +57,83 @@ export function ControlAuditView({ appId }: { appId: string }) {
   }, [load]);
 
   return (
-    <Card title="Change Log">
-      <p className="hint">Append-only record of every administrative change to this App.</p>
-      {error ? <ErrorState message={error} /> : null}
-      {page === null && !error ? <LoadingState /> : null}
-      {page !== null && page.items.length === 0 ? (
-        <EmptyState message="No control audit events yet." />
-      ) : null}
-      {page !== null && page.items.length > 0 ? (
-        <>
-          <Table
-            columns={["Time", "Action", "Actor", "Target", "Request ID"]}
-            empty="No events."
-            rows={page.items.map((event) => [
-              new Date(event.createdAt).toLocaleString(),
-              <span className="action-label" key={`action-${event.eventId}`}>
-                <code>{event.action}</code>
-                {isLegacyIssuerAction(event.action) ? (
-                  <span className="legacy-badge" title="Historical action from the retired issuer-key API">Legacy</span>
-                ) : null}
-              </span>,
-              event.actor.subject,
-              <code key={`target-${event.eventId}`}>{event.target}</code>,
-              event.requestId ?? "—",
-            ])}
-          />
-          {cursor ? (
-            <Button icon={<ChevronsDown size={15} />} onClick={() => void load(cursor, false)} disabled={loading}>
-              {loading ? "Loading…" : "Load more"}
-            </Button>
-          ) : null}
-        </>
-      ) : null}
+    <Card>
+      <CardHeader>
+        <CardTitle>Change Log</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Append-only record of every administrative change to this App.
+        </p>
+      </CardHeader>
+      <CardContent>
+        {error ? (
+          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive mb-4" role="alert">
+            {error}
+          </div>
+        ) : null}
+
+        {page === null && !error ? (
+          <div className="space-y-3">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : null}
+
+        {page !== null && page.items.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
+            <p>No control audit events yet.</p>
+          </div>
+        ) : null}
+
+        {page !== null && page.items.length > 0 ? (
+          <div className="space-y-4">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Time</TableHead>
+                  <TableHead>Action</TableHead>
+                  <TableHead>Actor</TableHead>
+                  <TableHead>Target</TableHead>
+                  <TableHead>Request ID</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {page.items.map((event) => (
+                  <TableRow key={event.eventId}>
+                    <TableCell>{new Date(event.createdAt).toLocaleString()}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{event.action}</code>
+                        {isLegacyIssuerAction(event.action) ? (
+                          <Badge variant="outline" className="text-xs" title="Historical action from the retired issuer-key API">
+                            Legacy
+                          </Badge>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                    <TableCell>{event.actor.subject}</TableCell>
+                    <TableCell>
+                      <code className="text-xs">{event.target}</code>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{event.requestId ?? "—"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+
+            {cursor ? (
+              <div className="flex justify-center">
+                <Button variant="outline" onClick={() => void load(cursor, false)} disabled={loading}>
+                  <ChevronsDown className="h-4 w-4" />
+                  {loading ? "Loading…" : "Load more"}
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </CardContent>
     </Card>
   );
 }

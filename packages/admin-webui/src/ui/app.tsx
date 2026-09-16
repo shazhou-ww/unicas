@@ -13,6 +13,7 @@ import { AppOverviewView } from "./views/stack-overview.js";
 import { MembersView } from "./views/members.js";
 import { ControlAuditView } from "./views/control-audit.js";
 import { PlaygroundView } from "./views/file-playground.js";
+import { AppInvitationsView } from "./views/app-invitations.js";
 import { PlaygroundCacheContext, createPlaygroundCacheSession, type PlaygroundCacheSession } from "./playground-cache.js";
 import { formatErrorSafe } from "./views/view-helpers.js";
 
@@ -110,7 +111,7 @@ export function App() {
           case "members":
             return <MembersView appId={appRoute.appId} appRevision={currentApp.revision} onChanged={() => setReloadKey((k) => k + 1)} />;
           case "invitations":
-            return <div className="page"><p>Invitations view — coming soon</p></div>;
+            return <AppInvitationsView appId={appRoute.appId} />;
           case "playground":
             return <PlaygroundView appId={appRoute.appId} />;
           case "change-logs":
