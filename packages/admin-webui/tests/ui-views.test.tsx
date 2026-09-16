@@ -14,6 +14,7 @@ import { PlatformInvitationAcceptanceView } from "../src/ui/views/platform-invit
 import { PlatformInvitationsView } from "../src/ui/views/platform/invitations.js";
 import { PlatformPrincipalsView } from "../src/ui/views/platform/principals.js";
 import { PlatformAuditView } from "../src/ui/views/platform/audit.js";
+import { toast } from "sonner";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -553,27 +554,30 @@ describe("IssuerView", () => {
     const enable = await screen.findByRole("button", { name: "Enable managed issuer" });
     expect(screen.queryByText("Managed issuer URL")).not.toBeInTheDocument();
     expect(screen.queryByText(disabled.issuer)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Copy managed issuer URL" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Copy Managed issuer URL / })).not.toBeInTheDocument();
     await user.click(enable);
-    expect(await screen.findByRole("button", { name: "Copy managed issuer URL" })).toHaveTextContent(disabled.issuer);
+    expect(await screen.findByRole("button", { name: /^Copy Managed issuer URL / })).toHaveTextContent(disabled.issuer);
     await user.click(screen.getByRole("button", { name: "Disable managed issuer" }));
     await screen.findByRole("button", { name: "Enable managed issuer" });
     expect(screen.queryByText("Managed issuer URL")).not.toBeInTheDocument();
     expect(screen.queryByText(disabled.issuer)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Copy managed issuer URL" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Copy Managed issuer URL / })).not.toBeInTheDocument();
   });
 
   test("copies the managed issuer URL from a non-editable text block with keyboard support", async () => {
     const user = userEvent.setup();
     const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+    const notify = vi.spyOn(toast, "success");
     fetchMock.mockResolvedValueOnce(json(null)).mockResolvedValueOnce(json(managedIssuer()));
     render(<IssuerView appId={STACK} />);
-    const copy = await screen.findByRole("button", { name: "Copy managed issuer URL" });
+    const copy = await screen.findByRole("button", { name: /^Copy Managed issuer URL / });
+    expect(copy).toHaveClass("cursor-pointer", "max-w-full", "whitespace-normal");
+    expect(copy.parentElement).toHaveClass("flex-col", "gap-2");
     expect(screen.queryByRole("textbox", { name: "Managed issuer URL" })).not.toBeInTheDocument();
     expect(copy).toHaveTextContent(managedIssuer().issuer);
     await user.click(copy);
     expect(writeText).toHaveBeenCalledWith(managedIssuer().issuer);
-    expect(screen.getByRole("status")).toHaveTextContent("Copied");
+    expect(notify).toHaveBeenCalledWith("Managed issuer URL copied", expect.any(Object));
     await user.keyboard("{Enter}");
     expect(writeText).toHaveBeenCalledTimes(2);
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -582,10 +586,11 @@ describe("IssuerView", () => {
   test("reports clipboard failures without changing the issuer", async () => {
     const user = userEvent.setup();
     vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
+    const notify = vi.spyOn(toast, "error");
     fetchMock.mockResolvedValueOnce(json(null)).mockResolvedValueOnce(json(managedIssuer()));
     render(<IssuerView appId={STACK} />);
-    await user.click(await screen.findByRole("button", { name: "Copy managed issuer URL" }));
-    expect(screen.getByRole("status")).toHaveTextContent("Could not copy URL");
+    await user.click(await screen.findByRole("button", { name: /^Copy Managed issuer URL / }));
+    expect(notify).toHaveBeenCalledWith("Could not copy Managed issuer URL. Try again.", expect.any(Object));
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 

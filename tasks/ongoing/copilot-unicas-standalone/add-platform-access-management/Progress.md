@@ -11,8 +11,9 @@ Updated: 2026-09-16
 - [x] Implement email-bound App invitation-limited login and browser/MCP revocation.
 - [x] Implement platform invitations, complete Principal detail, and platform audit reads.
 - [x] Review and implement unified App Members and Platform People queries/tables.
-- [ ] Rebuild Console with source-owned shadcn primitives and two-column navigation.
-- [ ] Validate bootstrap/migration, workflows, accessibility, and repository gates.
+- [x] Rebuild Console with source-owned shadcn primitives and two-column navigation.
+- [x] Validate local bootstrap/migration tests, workflows, scoped accessibility checks, and repository gates.
+- [ ] Complete operator production cutover and real-provider verification in [UserAcceptance](./UserAcceptance.md).
 - [ ] Publish implementation completion after required reviews and remaining acceptance checks.
 - [ ] Obtain explicit human delivery acceptance.
 - [ ] Publish archive as a separate final integration.
@@ -20,6 +21,43 @@ Updated: 2026-09-16
 ## Current state
 
 ### Latest continuation
+
+Desktop issuer follow-up: inspecting the running 8892 acceptance Worker confirmed
+it still served the legacy `issuer-url-copy` markup, not the updated CopyBubble.
+Preserved that instance and its temporary data. The acceptance launcher now
+supports `UNICAS_ACCEPTANCE_PORT` (default 8892, plus two adjacent runtime ports)
+so a second independently isolated preview can run without replacing the first.
+Rebuilt the Worker and started the current UI on 8992 with mock OIDC and fresh
+temporary data. At 1440px, the actual built Overview has no legacy copy button,
+an 8px label/bubble gap, and no page overflow; the desktop screenshot was
+inspected without API-response or CSS overrides. A synthetic App was created
+only in this new local instance. Copy click was initiated, but no toast outcome
+was recorded before navigation changed; its success/error behavior remains
+covered by the preceding eight issuer tests, not claimed as a new browser pass.
+Worker build and launcher syntax checks pass. Original 8892 remains an old
+snapshot; latest preview is `http://127.0.0.1:8992/admin/`.
+
+Managed issuer layout follow-up: replaced the legacy `issuer-url-copy` button,
+icon, timer, and inline copy-status state with the shared `CopyBubble`. Label
+and URL now form a min-width-safe vertical group with an 8px gap, and long URLs
+wrap inside the bubble. Existing issuer activation controls are unchanged.
+All eight Issuer tests and WebUI source/test/config `tsc --noEmit` pass, covering
+mouse/keyboard copy, shared success/error notifications, and issuer toggling.
+Development-browser layout checks at 1280px and 375px used a read-only managed
+issuer response fixture; the mobile screenshot has no overlap/page overflow.
+The fixture was removed and no issuer state changed. The running 8892 built
+acceptance snapshot was deliberately not restarted or cleared; these latest UI
+changes require a rebuild/restart there before appearing in that snapshot.
+
+Checklist reconciled with published evidence in `4827425`: Console rebuilding
+and local technical checks are complete. Production verification remains separate
+from local validation; formal completion publication, human delivery acceptance,
+and archival are not implied by a validated partial checkpoint.
+
+Editor warning follow-up: workspace CSS custom data now registers Tailwind 4
+`@theme` and `@custom-variant`. VS Code reports no diagnostics in the stylesheet
+or the two editor configuration files. CSS validation remains enabled; no global
+unknown-at-rule suppression or runtime stylesheet change was used.
 
 #### Enabled Playground acceptance, 2026-09-16
 

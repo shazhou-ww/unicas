@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Copy, Power, Search, ShieldCheck, AlertCircle } from "lucide-react";
+import { Power, Search, ShieldCheck, AlertCircle } from "lucide-react";
 import type {
   AppOAuthIssuer,
   AppOAuthIssuerInspection,
@@ -8,6 +8,7 @@ import { api, ifMatch } from "../api.js";
 import { Button } from "@/components/ui/button.js";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.js";
 import { formatErrorSafe } from "./view-helpers.js";
+import { CopyBubble } from "../components/copy-bubble.js";
 
 /**
  * App OAuth issuer connection. UniCAS discovers the issuer's metadata and
@@ -37,28 +38,7 @@ function IssuerPanel({ appId, focusManagedIssuer = false, onManagedIssuerChanged
   const [activating, setActivating] = useState(false);
   const [togglingManaged, setTogglingManaged] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copyStatus, setCopyStatus] = useState<"copied" | "failed" | null>(null);
   const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    setCopyStatus(null);
-  }, [appId, managedIssuer?.issuer]);
-
-  useEffect(() => {
-    if (copyStatus !== "copied") return;
-    const timer = window.setTimeout(() => setCopyStatus(null), 1800);
-    return () => window.clearTimeout(timer);
-  }, [copyStatus]);
-
-  async function copyManagedIssuerUrl() {
-    if (!managedIssuer) return;
-    try {
-      await navigator.clipboard.writeText(managedIssuer.issuer);
-      setCopyStatus("copied");
-    } catch {
-      setCopyStatus("failed");
-    }
-  }
 
   const load = useCallback(async () => {
     setError(null);
@@ -178,21 +158,9 @@ function IssuerPanel({ appId, focusManagedIssuer = false, onManagedIssuerChanged
                   Status: <strong>{managedIssuer.status}</strong> · Revision {managedIssuer.revision}
                 </p>
                 {managedIssuer.status === "active" ? (
-                  <div className="space-y-2">
+                  <div className="flex min-w-0 flex-col items-start gap-2">
                     <span className="text-sm text-muted-foreground">Managed issuer URL</span>
-                    <button
-                      type="button"
-                      className="issuer-url-copy"
-                      aria-label="Copy managed issuer URL"
-                      title={copyStatus === "copied" ? "Copied" : "Copy managed issuer URL"}
-                      onClick={() => void copyManagedIssuerUrl()}
-                    >
-                      <code>{managedIssuer.issuer}</code>
-                      {copyStatus === "copied" ? <Check size={15} /> : <Copy size={15} />}
-                    </button>
-                    <span className="text-sm text-muted-foreground" role="status">
-                      {copyStatus === "copied" ? "Copied" : copyStatus === "failed" ? "Could not copy URL. Clipboard access is unavailable." : ""}
-                    </span>
+                    <CopyBubble label="Managed issuer URL" value={managedIssuer.issuer} className="justify-start text-left" />
                   </div>
                 ) : null}
                 <Button onClick={() => void toggleManagedIssuer()} disabled={togglingManaged}>
