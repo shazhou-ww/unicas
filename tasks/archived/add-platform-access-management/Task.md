@@ -214,13 +214,13 @@ implementation, not production verification or retrospective authorization.
 See [Progress](./Progress.md) for the final production evidence and explicit
 second-administrator waiver. Delivery acceptance remains pending.
 
-| Checkpoint | Review artifact and decision | Gate |
-| --- | --- | --- |
-| Scope alignment | Accepted by the requesting user with Playground polish deferred to its backlog task; production acceptance evidence is in [Progress](./Progress.md). | Passed. |
-| Interface alignment | Accepted Console, HTTP, CLI, and MCP behavior; live provider checks and the denied-access follow-up passed. | Passed. |
-| Business and data model alignment | Accepted independent grants, immutable identity, invitation-limited sessions, bootstrap, and revocation behavior. A second administrator is explicitly waived for now. | Passed. |
-| Architecture alignment | Accepted protocol/client/presentation/service/adapter ownership; package and deployment boundaries passed repository validation. | Passed. |
-| Delivery acceptance | The requesting user explicitly accepted the published implementation and authorized archival on 2026-09-16 after reviewing the final production state and second-administrator waiver. | Passed; publish this decision before the separate archive integration. |
+| Checkpoint | Applicability | Reviewer | Planned review artifact | Approval required before |
+| --- | --- | --- | --- | --- |
+| Scope | Required | Requesting user | Goal, scope, exclusions, constraints, acceptance criteria, and the explicit Playground deferral. | Substantive implementation. |
+| Interface | Required | Requesting user | [UI design](./UiDesign.md), [API design](./ApiDesign.md), and Console, HTTP, CLI, and MCP behavior. | Implementing the affected interfaces. |
+| Business and data model | Required | Requesting user | Independent grants, immutable identity, invitation-limited sessions, bootstrap, migration, and revocation behavior. | Implementing model and data changes. |
+| Architecture | Required | Requesting user | Protocol, client, presentation, service, adapter, package, and deployment responsibilities. | Implementing structural changes. |
+| Delivery acceptance | Required | Requesting user | Published implementation, validation evidence, production results, manual acceptance, and the second-administrator waiver. | Marking the task completed and archiving it. |
 
 ## Constraints
 

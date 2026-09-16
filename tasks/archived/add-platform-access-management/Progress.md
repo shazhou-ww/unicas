@@ -17,7 +17,7 @@ Updated: 2026-09-16
 - [x] Complete operator production cutover and real-provider verification in [UserAcceptance](./UserAcceptance.md).
 - [x] Publish implementation completion after required reviews and remaining acceptance checks.
 - [x] Obtain explicit human delivery acceptance.
-- [ ] Publish archive as a separate final integration.
+- [x] Publish archive as a separate final integration.
 
 ## Current state
 
@@ -718,6 +718,16 @@ audit reads.
   The allowlist remains only a rollback fallback. Current admission is rechecked
   from authorities or App membership.
 
+## Human approvals
+
+| Checkpoint | Status | Review artifact and decision evidence |
+| --- | --- | --- |
+| Scope | Approved | Requesting user, 2026-09-16: accepted the implemented management Console and release scope, with Playground polish explicitly deferred to backlog. |
+| Interface | Approved | Requesting user, 2026-09-16: accepted the Console and requested release; subsequent real-provider Console, CLI, MCP, denied-access, invitation, and revocation behavior passed. |
+| Business and data model | Approved | Requesting user, 2026-09-16: accepted independent authorities, immutable Principal identity, invitation-limited access, bootstrap/reset, and revocation behavior; later waived a second Platform Admin for now. |
+| Architecture | Approved | Requesting user, 2026-09-16: accepted the released implementation; package boundaries, deployment boundaries, and repository validation passed. |
+| Delivery acceptance | Approved | Requesting user, 2026-09-16: after implementation-complete publication `5cfc938` and production tag `production-20260916-108`, explicitly selected “接受并归档”; published as `4f66f37`. |
+
 ## Publication milestones
 
 | Milestone | Evidence | Status |
@@ -731,8 +741,8 @@ audit reads.
 | Ownership handoff to `scottwei-home-pc` | `d16ddb7`, verified reachable from refreshed `origin/main`. | Published |
 | Denied-login guidance and strong ETag follow-up | `c171901`; PR #3 merged as `19dd7ef`; run 35099365111 passed and tagged `production-20260916-108`; direct production page/ETag checks passed. | Published |
 | Implementation complete | `5cfc938`, verified reachable from refreshed `origin/main`; all acceptance criteria and operator checks pass with the explicit second-administrator waiver. | Published |
-| Delivery acceptance | Explicitly accepted by the requesting user on 2026-09-16 after implementation-complete publication; publication pending. | Pending |
-| Archive | Not yet archived. | Pending |
+| Delivery acceptance | `4f66f37`, verified reachable from refreshed `origin/main`; explicit acceptance and archive authorization on 2026-09-16. | Published |
+| Archive | `origin/main` archive commit containing this record. | Published |
 
 ## Validation
 
@@ -786,14 +796,13 @@ audit reads.
 
 - The production bootstrap and release blocker is resolved by the reset,
   bootstrap, and successful release recorded under Current state.
-- No implementation, operator-acceptance, or delivery blocker remains. The user
-  explicitly waived a second Platform Admin for now and accepted delivery.
-  Archive publication remains pending. Playground visual polish is intentionally
-  deferred to its backlog task.
+- None. The user explicitly waived a second Platform Admin for now and accepted
+  delivery. Playground visual polish is intentionally deferred to its backlog task.
 
 ## Outcome
 
-Completed and accepted, pending only separate archive publication. All acceptance
-criteria, production releases, real-provider checks, and post-release checks are
-complete with the explicit second-administrator waiver. Playground layout polish
-is deferred to its backlog task.
+Completed. Accepted delivery, published implementation completion, and archived
+the task as a separate final integration. All acceptance criteria, production
+releases, real-provider checks, and post-release checks are complete with the
+explicit second-administrator waiver. Playground layout polish is deferred to
+its backlog task.
