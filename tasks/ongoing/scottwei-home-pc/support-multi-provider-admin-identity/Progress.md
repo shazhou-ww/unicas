@@ -4,7 +4,7 @@ Updated: 2026-09-16
 
 ## Checklist
 
-- [ ] Publish the claim to the shared primary branch.
+- [x] Publish the claim to the shared primary branch.
 - [ ] Obtain scope approval before substantive implementation.
 - [ ] Complete each applicable interface, business and data model, and
       architecture approval before the affected implementation.
@@ -16,7 +16,8 @@ Updated: 2026-09-16
 
 ## Current state
 
-The task is claimed locally by `scottwei-home-pc`. The prerequisite
+Claim commit `1b33a29c6ebcc9e7ed66fe273b4ca7c020e43584` assigns the task to
+`scottwei-home-pc`. The prerequisite
 `add-platform-access-management` task is archived with its implementation,
 production verification, delivery acceptance, and archive publication recorded.
 No backlog or ongoing task has overlapping multi-provider administrator identity
@@ -27,8 +28,9 @@ out-of-scope boundaries, constraints, acceptance criteria, provider set, and
 prerequisite are ready for review. Substantive implementation is blocked until
 that scope receives an explicit human decision.
 
-Next: publish this claim and pending scope checkpoint to `origin/main`, verify the
-claim commit is reachable there, then request explicit scope approval.
+This progress integration publishes the claim evidence and pending scope
+checkpoint with that commit. Next: verify the claim commit is reachable on
+refreshed `origin/main`, then request explicit scope approval.
 
 ## Decisions
 
@@ -54,7 +56,7 @@ claim commit is reachable there, then request explicit scope approval.
 
 | Milestone | Evidence | Status |
 | --- | --- | --- |
-| Claim | Local claim prepared; publication pending. | Pending |
+| Claim | `origin/main` commit `1b33a29c6ebcc9e7ed66fe273b4ca7c020e43584`. | Published |
 | Implementation complete | Pending. | Pending |
 | Archive | Pending. | Pending |
 
@@ -72,7 +74,10 @@ claim commit is reachable there, then request explicit scope approval.
   references to its backlog path.
 - The first post-claim `pnpm check:tasks` run rejected a pending claim milestone,
   confirming the ongoing-task publication invariant; this record now uses the
-  repository's self-identifying claim-integration convention.
+  required immutable claim commit evidence.
+- A second pre-publication check rejected claim evidence without a literal
+  commit reference, so the move and its evidence are published together as two
+  claim-only commits.
 
 ## Blockers
 
