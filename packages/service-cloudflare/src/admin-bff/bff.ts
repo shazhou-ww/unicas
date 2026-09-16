@@ -13,12 +13,15 @@ import {
   formatCasAdminETag,
   matchAppAdminRoute,
   matchCasAdminRoute,
+  matchPlatformAdminRoute,
   PatchAppRequestSchema,
+  PatchPlatformAccessSchema,
   AppInvitationQuerySchema,
   InspectAppIssuerRequestSchema,
   ActivateAppIssuerRequestSchema,
 } from "@unicas/admin-protocol";
 import type {
+  AppAdminRoute,
   CasAdminErrorResponse,
   CasAdminRoute,
 } from "@unicas/admin-protocol";
@@ -26,7 +29,9 @@ import type {
   ControlPlaneCallContext,
   ControlPlaneOperations,
   ControlSessionRepository,
+  PlatformAccessRepository,
 } from "@unicas/service";
+import { PlatformAccessError, PlatformAccessService } from "@unicas/service";
 import type { AdminBffConfig } from "./config.js";
 const ADMIN_ASSET_CACHE_BUSTER = "issuer-discovery-v1";
 
@@ -66,6 +71,11 @@ export interface CreateAdminBffOptions {
   readonly auditReader?: {
     fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
   };
+  /**
+   * Platform access repository. When present, login and authenticated requests
+   * are gated by the deny-by-default admission guard.
+   */
+  readonly platformAccessRepository?: PlatformAccessRepository;
 }
 
 const NOT_AVAILABLE_MESSAGE = "Root Ref audit reads are not yet available from the admin plane";
@@ -100,6 +110,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
   const controlPlane = options.controlPlane;
   const sessionStore = options.sessionStore;
   const sessionCrypto = new SessionCrypto(config.sessionEncryptionKeys);
+  const platformAccess = options.platformAccessRepository
+    ? new PlatformAccessService(options.platformAccessRepository, now)
+    : null;
   const oidc = options.oidc
     ?? new OidcClient({
       issuer: config.oidcIssuer ?? "https://accounts.google.com",
@@ -167,6 +180,11 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     if (pathname.startsWith("/admin/assets/")) {
       const asset = await assets(pathname.slice("/admin".length));
       return asset ?? new Response("Not Found", { status: 404 });
+    }
+
+    const platformRoute = matchPlatformAdminRoute(method, pathname);
+    if (platformRoute) {
+      return handlePlatformAdminApi(request, url, platformRoute);
     }
 
     const route = matchCasAdminRoute(method, pathname);
@@ -382,6 +400,36 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         status: 302,
         headers: { Location: "/admin/auth/login?error=not-allowed" },
       });
+    }
+
+    if (platformAccess !== null) {
+      const loginPrincipal = {
+        issuer: config.oidcIssuer ?? "https://accounts.google.com",
+        subject: identity.sub,
+      };
+      try {
+        await platformAccess.requireAccess(loginPrincipal);
+      } catch (error) {
+        if (error instanceof PlatformAccessError && error.code === "PLATFORM_ACCESS_REQUIRED") {
+          if (sessionId) await sessionStore.delete(sessionId);
+          await auditLoginFailure("platform-access-denied");
+          if (preLogin.cliClientId !== undefined && preLogin.cliRedirectUri && preLogin.cliState) {
+            const redirect = new URL(preLogin.cliRedirectUri);
+            redirect.searchParams.set("error", "access_denied");
+            redirect.searchParams.set("error_description", "platform access denied");
+            redirect.searchParams.set("state", preLogin.cliState);
+            return new Response(null, {
+              status: 302,
+              headers: { Location: redirect.toString() },
+            });
+          }
+          return new Response(null, {
+            status: 302,
+            headers: { Location: "/admin/auth/login?error=access-denied" },
+          });
+        }
+        throw error;
+      }
     }
 
     if (preLogin.cliClientId !== undefined) {
@@ -894,6 +942,8 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       case "listRootDomainEvents": {
         return handleAuditRead(request, route, ctx, query);
       }
+      default:
+        return json({ error: "Not Found" }, 404);
     }
   }
 
@@ -910,6 +960,67 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       : json(result, 201);
     response.headers.set("Cache-Control", "no-store");
     return response;
+  }
+
+  // ------------------------------------------------------------------
+  // Platform Admin API
+  // ------------------------------------------------------------------
+
+  async function handlePlatformAdminApi(
+    request: Request,
+    url: URL,
+    route: AppAdminRoute,
+  ): Promise<Response> {
+    if (platformAccess === null) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "platform access service is not configured");
+    }
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (isMutating(request.method) && !(await passCsrf(request, auth.payload))) return csrfRejected();
+
+    const actor = { issuer: auth.payload.identityIssuer, subject: auth.payload.subject };
+
+    try {
+      switch (route.operation) {
+        case "accessSummary": {
+          const summary = await platformAccess.getAccessSummary(actor);
+          return json(summary, 200);
+        }
+        case "listPlatformPrincipals": {
+          const query = queryFromUrl(url);
+          const limitRaw = query.limit !== undefined ? Number(query.limit) : 50;
+          if (!Number.isInteger(limitRaw) || limitRaw < 1 || limitRaw > 1000) {
+            return invalidRequest("limit must be an integer between 1 and 1000");
+          }
+          const after = query.cursor ?? "";
+          const items = await platformAccess.listPrincipals(actor, { after, limit: limitRaw });
+          const nextCursor = items.length === limitRaw ? (items[items.length - 1]?.principalRef ?? null) : null;
+          return json({ items, nextCursor }, 200);
+        }
+        case "getPlatformPrincipal": {
+          const principal = await platformAccess.getPrincipal(actor, route.principalRef);
+          return json(principal, 200);
+        }
+        case "patchPlatformAccess": {
+          const ifMatch = request.headers.get("If-Match") ?? undefined;
+          const body = await readJsonBody<unknown>(request);
+          if (body === null) return invalidRequest("JSON body is required");
+          const { revision } = await platformAccess.patchAccess(actor, route.principalRef, body, ifMatch);
+          return new Response(null, {
+            status: 204,
+            headers: { ETag: formatCasAdminETag(revision), "Cache-Control": "no-store" },
+          });
+        }
+        default:
+          return json({ error: "Not Found" }, 404);
+      }
+    } catch (error) {
+      if (error instanceof PlatformAccessError) {
+        const body: CasAdminErrorResponse = { error: error.code as CasAdminErrorResponse["error"] };
+        return json(body, error.status);
+      }
+      throw error;
+    }
   }
 
   /** Root Ref audit reads: membership first, then the private reader RPC. */
@@ -992,6 +1103,21 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     const payload = await readSession(sessionId);
     if (!payload || !payload.authenticated || payload.subject.length === 0) {
       return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED, "login required");
+    }
+    if (platformAccess !== null) {
+      const sessionPrincipal = {
+        issuer: payload.identityIssuer,
+        subject: payload.subject,
+      };
+      try {
+        await platformAccess.assertNotBlocked(sessionPrincipal);
+      } catch (error) {
+        if (error instanceof PlatformAccessError && error.code === "PLATFORM_ACCESS_REQUIRED") {
+          await sessionStore.delete(sessionId);
+          return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED, "login required");
+        }
+        throw error;
+      }
     }
     await sessionStore.touch(sessionId, sessionTtlMs);
     return { payload, sessionId };

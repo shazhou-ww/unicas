@@ -199,11 +199,11 @@ customized for UniCAS, and makes the App list the primary navigation.
 
 ## References
 
-- [Console UI redesign](/tasks/ongoing/scottwei-home-pc/add-platform-access-management/UiDesign.md)
-- [Interactive Console mock](/tasks/ongoing/scottwei-home-pc/add-platform-access-management/ConsoleMock.html)
-- [Platform access API design](/tasks/ongoing/scottwei-home-pc/add-platform-access-management/ApiDesign.md)
-- [API proposal schema](/tasks/ongoing/scottwei-home-pc/add-platform-access-management/PlatformAccess.openapi.json)
-- [Rendered API reference](/tasks/ongoing/scottwei-home-pc/add-platform-access-management/ApiReference.html)
+- [Console UI redesign](/tasks/ongoing/xiaoju-neko-vm/add-platform-access-management/UiDesign.md)
+- [Interactive Console mock](/tasks/ongoing/xiaoju-neko-vm/add-platform-access-management/ConsoleMock.html)
+- [Platform access API design](/tasks/ongoing/xiaoju-neko-vm/add-platform-access-management/ApiDesign.md)
+- [API proposal schema](/tasks/ongoing/xiaoju-neko-vm/add-platform-access-management/PlatformAccess.openapi.json)
+- [Rendered API reference](/tasks/ongoing/xiaoju-neko-vm/add-platform-access-management/ApiReference.html)
 - [UniCAS architecture](/docs/cas-architecture.md)
 - [UniCAS control-plane CLI](/docs/cas-control-plane-cli.md)
 - [UniCAS control-plane MCP](/docs/cas-control-plane-mcp.md)

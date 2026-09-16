@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Principal, Profile } from "./types.js";
+import type { AppMembership, Principal, Profile } from "./types.js";
 
 export const PlatformAuthoritySchema = z.enum(["platform.admin", "apps.create"]);
 export type PlatformAuthority = z.infer<typeof PlatformAuthoritySchema>;
@@ -20,6 +20,27 @@ export interface PlatformPrincipal extends PlatformAccessState {
   readonly profile: Profile;
   readonly effectiveAccess: EffectivePlatformAccess;
   readonly appMembershipCount: number;
+}
+
+export interface PlatformPrincipalListItem extends PlatformPrincipal {
+  readonly lastActiveAt: number | null;
+}
+
+export interface PlatformPrincipalDetail extends PlatformPrincipalListItem {
+  readonly memberships: readonly AppMembership[];
+}
+
+export interface PlatformPrincipalPage {
+  readonly items: readonly PlatformPrincipalListItem[];
+  readonly nextCursor: string | null;
+}
+
+export interface PlatformAccessSummary {
+  readonly activePrincipalCount: number;
+  readonly platformAdminCount: number;
+  readonly appCreatorCount: number;
+  readonly blockedPrincipalCount: number;
+  readonly generatedAt: number;
 }
 
 export const PatchPlatformAccessSchema = z.object({

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Inbox, CircleAlert, LoaderCircle } from "lucide-react";
 import type { App } from "@unicas/admin-client";
 import { api } from "../api.js";
 import { formatErrorSafe } from "./view-helpers.js";
-import { Button, Card, ConceptGuide, EmptyState, ErrorState, LoadingState, Page } from "../components.js";
+import { Button } from "@/components/ui/button.js";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.js";
+import { PageHeading } from "../components/page-heading.js";
 
 export function MyAppsView() {
   const [apps, setApps] = useState<App[] | null>(null);
@@ -44,49 +46,91 @@ export function MyAppsView() {
   }
 
   return (
-    <Page title="My Apps">
-      <ConceptGuide
-        title="UniCAS Apps"
-        summary="An App is the top-level UniCAS trust, administration, and storage namespace for an integrating application."
-        concepts={[
-          { term: "Isolation", detail: "Each App has independent issuer trust, Spaces, data history, and stored objects." },
-          { term: "Stable identity", detail: "UniCAS generates an opaque App ID. The display name is only an administrator-facing label." },
-          { term: "First membership", detail: "Creating an App grants your current Principal its first administrator membership." },
-        ]}
-      />
-      <Card title="Create an App">
-        <div className="inline-form">
-          <input
-            aria-label="App display name"
-            value={name}
-            placeholder="e.g. unidocs-cloudflare"
-            onChange={(event) => setName(event.target.value)}
-          />
-          <Button icon={<Plus size={15} />} variant="primary" onClick={() => void createApp()} disabled={creating || name.trim().length === 0}>
-            {creating ? "Creating…" : "Create App"}
-          </Button>
+    <section className="page">
+      <PageHeading title="My Apps" />
+      <aside className="concept-guide" aria-labelledby="concept-unicas-apps">
+        <div className="concept-guide-content">
+          <p className="concept-guide-label">About this page</p>
+          <h2 id="concept-unicas-apps">UniCAS Apps</h2>
+          <p className="concept-guide-summary">An App is the top-level UniCAS trust, administration, and storage namespace for an integrating application.</p>
+          <dl className="concept-list">
+            <div>
+              <dt>Isolation</dt>
+              <dd>Each App has independent issuer trust, Spaces, data history, and stored objects.</dd>
+            </div>
+            <div>
+              <dt>Stable identity</dt>
+              <dd>UniCAS generates an opaque App ID. The display name is only an administrator-facing label.</dd>
+            </div>
+            <div>
+              <dt>First membership</dt>
+              <dd>Creating an App grants your current Principal its first administrator membership.</dd>
+            </div>
+          </dl>
         </div>
-        {createError ? <ErrorState message={createError} /> : null}
+      </aside>
+      <Card>
+        <CardHeader>
+          <CardTitle>Create an App</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="inline-form">
+            <input
+              aria-label="App display name"
+              value={name}
+              placeholder="e.g. unidocs-cloudflare"
+              onChange={(event) => setName(event.target.value)}
+            />
+            <Button onClick={() => void createApp()} disabled={creating || name.trim().length === 0}>
+              <Plus className="mr-2 h-4 w-4" />
+              {creating ? "Creating…" : "Create App"}
+            </Button>
+          </div>
+          {createError ? (
+            <div className="flex items-center gap-2 text-sm text-destructive">
+              <CircleAlert className="h-4 w-4" />
+              <span>{createError}</span>
+            </div>
+          ) : null}
+        </CardContent>
       </Card>
-      <Card title="Your Apps">
-        {error ? <ErrorState message={error} /> : null}
-        {apps === null && !error ? <LoadingState /> : null}
-        {apps !== null && apps.length === 0 ? (
-          <EmptyState message="You are not a member of any App yet. Create one above." />
-        ) : null}
-        {apps !== null && apps.length > 0 ? (
-          <ul className="stack-list">
-            {apps.map((app) => (
-              <li key={app.appId}>
-                <a href={`#/apps/${encodeURIComponent(app.appId)}`}>
-                  <strong>{app.displayName}</strong>
-                  <span className="muted">{app.appId}</span>
-                </a>
-              </li>
-            ))}
-          </ul>
-        ) : null}
+      <Card>
+        <CardHeader>
+          <CardTitle>Your Apps</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {error ? (
+            <div className="flex items-center gap-2 text-sm text-destructive">
+              <CircleAlert className="h-4 w-4" />
+              <span>{error}</span>
+            </div>
+          ) : null}
+          {apps === null && !error ? (
+            <div role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+              <span>Loading…</span>
+            </div>
+          ) : null}
+          {apps !== null && apps.length === 0 ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Inbox className="h-4 w-4" />
+              <span>You are not a member of any App yet. Create one above.</span>
+            </div>
+          ) : null}
+          {apps !== null && apps.length > 0 ? (
+            <ul className="stack-list">
+              {apps.map((app) => (
+                <li key={app.appId}>
+                  <a href={`#/apps/${encodeURIComponent(app.appId)}`}>
+                    <strong>{app.displayName}</strong>
+                    <span className="muted">{app.appId}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </CardContent>
       </Card>
-    </Page>
+    </section>
   );
 }

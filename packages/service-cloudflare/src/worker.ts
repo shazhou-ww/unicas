@@ -31,6 +31,7 @@ import { AppAuthorityRepository, AuthorityRepository } from "./control-authority
 import { migrateControlSchema } from "./control-schema.js";
 import { createControlPlaneOperations } from "./control-operations.js";
 import { ControlSessionStore } from "./control-sessions.js";
+import { D1PlatformAccessRepository } from "./platform-access-repository.js";
 import { CloudflareOAuthDiscoveryPort } from "./oauth-discovery.js";
 import { CloudflareManagedIssuer } from "./managed-issuer.js";
 import {
@@ -372,6 +373,7 @@ function adminHandlerFor(env: Env): Promise<(request: Request) => Promise<Respon
         sessionStore: new ControlSessionStore(env.CAS_CONTROL_DB, now),
         auditReader: localAuditReader(env),
         assets: uiAssets,
+        platformAccessRepository: new D1PlatformAccessRepository(env.CAS_CONTROL_DB),
       });
     })();
     adminHandlers.set(key, handler);

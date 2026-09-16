@@ -1,9 +1,15 @@
 import { useState } from "react";
-import { Save } from "lucide-react";
+import { Copy, Save } from "lucide-react";
 import type { App } from "@unicas/admin-client";
 import { api, ifMatch } from "../api.js";
-import { Button, Card, ErrorState } from "../components.js";
 import { formatErrorSafe } from "./view-helpers.js";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 export function AppOverviewView({ app, onChanged }: {
   app: App;
@@ -14,6 +20,7 @@ export function AppOverviewView({ app, onChanged }: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   async function save() {
     setSaving(true);
@@ -38,62 +45,134 @@ export function AppOverviewView({ app, onChanged }: {
     }
   }
 
+  async function copyAppId() {
+    try {
+      await navigator.clipboard.writeText(app.appId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Silently fail if clipboard API not available
+    }
+  }
+
+  const statusVariant = app.status === "active" ? "default" : "destructive";
+
   return (
-    <Card title="App metadata">
-      <dl className="stack-details">
-        <div>
-          <dt>App ID</dt>
-          <dd><code>{app.appId}</code></dd>
-        </div>
-        <div>
-          <dt>Status</dt>
-          <dd><span className="status-badge">{app.status}</span></dd>
-        </div>
-        <div>
-          <dt>Revision</dt>
-          <dd>{app.revision}</dd>
-        </div>
-        <div>
-          <dt>Created</dt>
-          <dd>{new Date(app.createdAt).toLocaleString()}</dd>
-        </div>
-      </dl>
-      <div className="field-row">
-        <label htmlFor="stack-display-name">Display name</label>
-        <input
-          id="stack-display-name"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-        />
-      </div>
-      <div className="field-row">
-        <label htmlFor="stack-description">Description</label>
-        <textarea
-          id="stack-description"
-          value={description}
-          maxLength={2_000}
-          rows={4}
-          onChange={(event) => setDescription(event.target.value)}
-        />
-        <Button
-          icon={<Save size={15} />}
-          variant="primary"
-          onClick={() => void save()}
-          disabled={
-            saving
-            || name.trim().length === 0
-            || (name.trim() === app.displayName && description.trim() === app.description)
-          }
-        >
-          {saving ? "Saving…" : "Save"}
-        </Button>
-      </div>
-      {error ? <ErrorState message={error} /> : null}
-      {conflict ? (
-        <p className="hint">
-          The App changed on the server (revision {app.revision}). Reload the page and retry.
-        </p>
-      ) : null}
-    </Card>
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>App Identity</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* App ID */}
+          <div className="space-y-2">
+            <Label>App ID</Label>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 rounded-md bg-muted px-3 py-2 text-sm font-mono">
+                {app.appId}
+              </code>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void copyAppId()}
+              >
+                <Copy className="h-4 w-4" />
+                {copied ? "Copied!" : "Copy"}
+              </Button>
+            </div>
+          </div>
+
+          {/* Status */}
+          <div className="space-y-2">
+            <Label>Status</Label>
+            <div>
+              <Badge variant={statusVariant}>
+                {app.status}
+              </Badge>
+            </div>
+          </div>
+
+          {/* Read-only metadata */}
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <Label className="text-muted-foreground">Revision</Label>
+              <p className="font-medium">{app.revision}</p>
+            </div>
+            <div>
+              <Label className="text-muted-foreground">Created</Label>
+              <p className="font-medium">{new Date(app.createdAt).toLocaleString()}</p>
+            </div>
+          </div>
+
+          {/* Editable fields */}
+          <div className="space-y-2">
+            <Label htmlFor="stack-display-name">Display Name</Label>
+            <Input
+              id="stack-display-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Enter display name"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="stack-description">Description</Label>
+            <textarea
+              id="stack-description"
+              value={description}
+              maxLength={2_000}
+              rows={4}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="Enter description"
+              className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          </div>
+
+          {/* Error state */}
+          {error ? (
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive" role="alert">
+              {error}
+            </div>
+          ) : null}
+
+          {conflict ? (
+            <p className="text-sm text-muted-foreground">
+              The App changed on the server (revision {app.revision}). Reload the page and retry.
+            </p>
+          ) : null}
+        </CardContent>
+        <CardFooter>
+          <Button
+            type="button"
+            onClick={() => void save()}
+            disabled={
+              saving
+              || name.trim().length === 0
+              || (name.trim() === app.displayName && description.trim() === app.description)
+            }
+          >
+            <Save className="h-4 w-4" />
+            {saving ? "Saving…" : "Save Changes"}
+          </Button>
+        </CardFooter>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>OAuth Issuers</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <p className="text-sm text-muted-foreground mb-4">
+              OAuth issuer configuration
+            </p>
+            <Button variant="outline" size="sm">
+              Configure issuers
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

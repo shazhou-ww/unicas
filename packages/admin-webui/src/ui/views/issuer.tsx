@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Copy, Power, Search, ShieldCheck } from "lucide-react";
+import { Check, Copy, Power, Search, ShieldCheck, AlertCircle } from "lucide-react";
 import type {
   AppOAuthIssuer,
   AppOAuthIssuerInspection,
 } from "@unicas/admin-client";
 import { api, ifMatch } from "../api.js";
-import { Button, Card, ErrorState } from "../components.js";
+import { Button } from "@/components/ui/button.js";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.js";
 import { formatErrorSafe } from "./view-helpers.js";
 
 /**
@@ -151,88 +152,106 @@ function IssuerPanel({ appId, focusManagedIssuer = false }: { appId: string; foc
         tabIndex={-1}
         ref={managedSettingsRef}
       >
-        <Card title="Managed issuer">
-          <p className="hint">
-            Admin sign-in grants App management access, not access to Space data.
-            The managed issuer is UniCAS's built-in authorization server: it issues short-lived
-            Space capabilities for Playground and gives each App member an isolated personal Space.
-            Enable it to use Playground without running your own authorization server.
-            Applications using a custom OAuth issuer do not need to enable it.
-          </p>
-          {error ? <ErrorState message={error} /> : null}
-          {managedIssuer ? (
-            <>
-              <p className="hint">
-                Status: <strong>{managedIssuer.status}</strong> · Revision {managedIssuer.revision}
-              </p>
-              {managedIssuer.status === "active" ? (
-                <div className="field-row">
-                  <span className="hint">Managed issuer URL</span>
-                  <button
-                    type="button"
-                    className="issuer-url-copy"
-                    aria-label="Copy managed issuer URL"
-                    title={copyStatus === "copied" ? "Copied" : "Copy managed issuer URL"}
-                    onClick={() => void copyManagedIssuerUrl()}
-                  >
-                    <code>{managedIssuer.issuer}</code>
-                    {copyStatus === "copied" ? <Check size={15} /> : <Copy size={15} />}
-                  </button>
-                  <span className="hint" role="status">
-                    {copyStatus === "copied" ? "Copied" : copyStatus === "failed" ? "Could not copy URL. Clipboard access is unavailable." : ""}
-                  </span>
-                </div>
-              ) : null}
-              <Button icon={<Power size={15} />} variant="primary" onClick={() => void toggleManagedIssuer()} disabled={togglingManaged}>
-                {togglingManaged ? "Updating…" : managedIssuer.status === "active" ? "Disable managed issuer" : "Enable managed issuer"}
-              </Button>
-            </>
-          ) : null}
+        <Card>
+          <CardHeader>
+            <CardTitle>Managed issuer</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Admin sign-in grants App management access, not access to Space data.
+              The managed issuer is UniCAS's built-in authorization server: it issues short-lived
+              Space capabilities for Playground and gives each App member an isolated personal Space.
+              Enable it to use Playground without running your own authorization server.
+              Applications using a custom OAuth issuer do not need to enable it.
+            </p>
+            {error ? (
+              <div className="flex items-center gap-2 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4" />
+                <span>{error}</span>
+              </div>
+            ) : null}
+            {managedIssuer ? (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Status: <strong>{managedIssuer.status}</strong> · Revision {managedIssuer.revision}
+                </p>
+                {managedIssuer.status === "active" ? (
+                  <div className="space-y-2">
+                    <span className="text-sm text-muted-foreground">Managed issuer URL</span>
+                    <button
+                      type="button"
+                      className="issuer-url-copy"
+                      aria-label="Copy managed issuer URL"
+                      title={copyStatus === "copied" ? "Copied" : "Copy managed issuer URL"}
+                      onClick={() => void copyManagedIssuerUrl()}
+                    >
+                      <code>{managedIssuer.issuer}</code>
+                      {copyStatus === "copied" ? <Check size={15} /> : <Copy size={15} />}
+                    </button>
+                    <span className="text-sm text-muted-foreground" role="status">
+                      {copyStatus === "copied" ? "Copied" : copyStatus === "failed" ? "Could not copy URL. Clipboard access is unavailable." : ""}
+                    </span>
+                  </div>
+                ) : null}
+                <Button onClick={() => void toggleManagedIssuer()} disabled={togglingManaged}>
+                  <Power className="mr-2 h-4 w-4" />
+                  {togglingManaged ? "Updating…" : managedIssuer.status === "active" ? "Disable managed issuer" : "Enable managed issuer"}
+                </Button>
+              </>
+            ) : null}
+          </CardContent>
         </Card>
       </section>
-      <Card title="Custom OAuth authorization server">
-        <p className="hint">
-          Connect a standards-based authorization server through RFC 8414 or OpenID discovery.
-          UniCAS validates its metadata and JWKS, then requires a signed control challenge before
-          activation. When active, this issuer is listed before the managed issuer and is the CLI login default.
-        </p>
-        {configured ? (
-          <p className="hint">
-            Mode: <strong>{oauthIssuer!.mode}</strong> · Status: <strong>{oauthIssuer!.status}</strong> · Metadata: {oauthIssuer!.metadataType} · Revision {oauthIssuer!.revision}
-            <br />Issuer: {oauthIssuer!.issuer}
-            <br />JWKS: <a href={oauthIssuer!.jwksUri} target="_blank" rel="noreferrer">{oauthIssuer!.jwksUri}</a>
-            <br />Resource audience: {oauthIssuer!.audience} · Maximum capability lifetime: {oauthIssuer!.capabilityMaxLifetimeSeconds}s
+      <Card>
+        <CardHeader>
+          <CardTitle>Custom OAuth authorization server</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Connect a standards-based authorization server through RFC 8414 or OpenID discovery.
+            UniCAS validates its metadata and JWKS, then requires a signed control challenge before
+            activation. When active, this issuer is listed before the managed issuer and is the CLI login default.
           </p>
-        ) : null}
-        <div className="field-row">
-          <label htmlFor="oauth-issuer-url">Issuer</label>
-          <input id="oauth-issuer-url" value={oauthIssuerUrl} placeholder="https://authorization.example" disabled={!canInspect} onChange={(event) => {
-            setOAuthIssuerUrl(event.target.value);
-            setInspection(null);
-            setActivationProof("");
-          }} />
-        </div>
-        <Button icon={<Search size={15} />} variant="primary" onClick={() => void inspectOAuthIssuer()} disabled={inspecting || !canInspect || oauthIssuerUrl.trim().length === 0}>
-          {inspecting ? "Inspecting…" : oauthIssuer?.status === "active" ? "Inspect replacement" : "Inspect issuer"}
-        </Button>
-        {inspection ? (
-          <div className="challenge-box">
-            <h3>Candidate issuer</h3>
-            <p className="hint">{oauthIssuerUrl} · Expires {new Date(inspection.expiresAt).toLocaleString()}</p>
-            <p>
-              The issuer JWKS contains {inspection.keys.length} eligible signing key(s).
-              Sign this one-time control challenge with the matching private key:
+          {configured ? (
+            <p className="text-sm text-muted-foreground">
+              Mode: <strong>{oauthIssuer!.mode}</strong> · Status: <strong>{oauthIssuer!.status}</strong> · Metadata: {oauthIssuer!.metadataType} · Revision {oauthIssuer!.revision}
+              <br />Issuer: {oauthIssuer!.issuer}
+              <br />JWKS: <a href={oauthIssuer!.jwksUri} target="_blank" rel="noreferrer">{oauthIssuer!.jwksUri}</a>
+              <br />Resource audience: {oauthIssuer!.audience} · Maximum capability lifetime: {oauthIssuer!.capabilityMaxLifetimeSeconds}s
             </p>
-            <code className="challenge">{inspection.challenge}</code>
-            <div className="field-row">
-              <label htmlFor="oauth-activation-proof">Activation proof (compact JWS)</label>
-              <textarea id="oauth-activation-proof" value={activationProof} rows={3} onChange={(event) => setActivationProof(event.target.value)} />
-            </div>
-            <Button icon={<ShieldCheck size={15} />} variant="primary" disabled={activating || activationProof.trim().length === 0} onClick={() => void activateOAuthIssuer()}>
-              {activating ? "Activating…" : oauthIssuer?.status === "active" ? "Verify and replace" : "Verify and activate"}
-            </Button>
+          ) : null}
+          <div className="space-y-2">
+            <label htmlFor="oauth-issuer-url" className="text-sm font-medium">Issuer</label>
+            <input id="oauth-issuer-url" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" value={oauthIssuerUrl} placeholder="https://authorization.example" disabled={!canInspect} onChange={(event) => {
+              setOAuthIssuerUrl(event.target.value);
+              setInspection(null);
+              setActivationProof("");
+            }} />
           </div>
-        ) : null}
+          <Button onClick={() => void inspectOAuthIssuer()} disabled={inspecting || !canInspect || oauthIssuerUrl.trim().length === 0}>
+            <Search className="mr-2 h-4 w-4" />
+            {inspecting ? "Inspecting…" : oauthIssuer?.status === "active" ? "Inspect replacement" : "Inspect issuer"}
+          </Button>
+          {inspection ? (
+            <div className="challenge-box space-y-3 rounded-lg border p-4">
+              <h3 className="font-semibold">Candidate issuer</h3>
+              <p className="text-sm text-muted-foreground">{oauthIssuerUrl} · Expires {new Date(inspection.expiresAt).toLocaleString()}</p>
+              <p className="text-sm">
+                The issuer JWKS contains {inspection.keys.length} eligible signing key(s).
+                Sign this one-time control challenge with the matching private key:
+              </p>
+              <code className="challenge block rounded bg-muted p-2 text-xs">{inspection.challenge}</code>
+              <div className="space-y-2">
+                <label htmlFor="oauth-activation-proof" className="text-sm font-medium">Activation proof (compact JWS)</label>
+                <textarea id="oauth-activation-proof" className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" value={activationProof} rows={3} onChange={(event) => setActivationProof(event.target.value)} />
+              </div>
+              <Button disabled={activating || activationProof.trim().length === 0} onClick={() => void activateOAuthIssuer()}>
+                <ShieldCheck className="mr-2 h-4 w-4" />
+                {activating ? "Activating…" : oauthIssuer?.status === "active" ? "Verify and replace" : "Verify and activate"}
+              </Button>
+            </div>
+          ) : null}
+        </CardContent>
       </Card>
     </>
   );

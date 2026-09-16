@@ -47,4 +47,13 @@ export type {
   CasStackMember,
   CasStackOAuthIssuer,
   CasManagedCapability,
+  PlatformAuthority,
+  PlatformAccessStatus,
+  EffectivePlatformAccess,
+  PlatformAccessState,
+  PlatformPrincipal,
+  PlatformPrincipalListItem,
+  PlatformPrincipalDetail,
+  PlatformPrincipalPage,
+  PlatformAccessSummary,
 } from "@unicas/admin-protocol";

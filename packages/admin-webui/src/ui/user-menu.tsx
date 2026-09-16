@@ -1,61 +1,96 @@
-import { useEffect, useRef, useState } from "react";
-import { ChevronDown, LogOut } from "lucide-react";
+import { BookOpenText, Cable, LogOut, Shield, Users } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar.js";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu.js";
+import type { AppAdminMeResponse } from "@unicas/admin-client";
 
-export function UserMenu({ name, onLogout }: {
-  name: string;
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0]![0]! + parts[1]![0]!).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+}
+
+/**
+ * Migrated to shadcn DropdownMenu.
+ * Shows avatar, display name, effective context, and dropdown items:
+ * Documentation (external link), Connect AI tools, separator, Sign out (destructive).
+ */
+export function UserMenu({
+  me,
+  onOpenMcpConfiguration,
+  onLogout,
+}: {
+  me: AppAdminMeResponse;
+  onOpenMcpConfiguration: () => void;
   onLogout: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setOpen(false);
-      triggerRef.current?.focus();
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
+  const displayName = me.profile.displayName ?? me.profile.emailForDisplay ?? "Account";
+  const membershipCount = me.memberships.length;
+  const contextLabel = membershipCount === 1
+    ? "1 App membership"
+    : `${membershipCount} App memberships`;
 
   return (
-    <div className="user-menu" ref={rootRef}>
-      <button
-        ref={triggerRef}
-        type="button"
-        className="user-menu-trigger"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-      >
-        <span>{name}</span>
-        <ChevronDown size={14} aria-hidden="true" />
-      </button>
-      {open ? (
-        <div className="user-menu-popover" role="menu" aria-label="User menu">
-          <button
-            type="button"
-            className="user-menu-item user-menu-item-danger"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onLogout();
-            }}
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="console-user-menu-trigger"
+          aria-label="Open user menu"
+        >
+          <Avatar className="h-8 w-8">
+            <AvatarFallback className="text-xs bg-primary text-primary-foreground">
+              {getInitials(displayName)}
+            </AvatarFallback>
+          </Avatar>
+          <div className="console-user-menu-info">
+            <span className="console-user-menu-name">{displayName}</span>
+            <span className="console-user-menu-context">{contextLabel}</span>
+          </div>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="top" align="start" className="w-56">
+        <DropdownMenuLabel className="font-normal">
+          <div className="flex flex-col space-y-1">
+            <p className="text-sm font-medium leading-none">{displayName}</p>
+            <p className="text-xs leading-none text-muted-foreground">
+              {me.profile.emailForDisplay ?? me.principal.subject}
+            </p>
+          </div>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <a
+            href="https://docs.unicas.work"
+            target="_blank"
+            rel="noreferrer"
+            className="cursor-pointer"
           >
-            <LogOut size={15} aria-hidden="true" />
-            <span>Sign out</span>
-          </button>
-        </div>
-      ) : null}
-    </div>
+            <BookOpenText className="mr-2 h-4 w-4" />
+            <span>Documentation</span>
+          </a>
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onOpenMcpConfiguration} className="cursor-pointer">
+          <Cable className="mr-2 h-4 w-4" />
+          <span>Connect AI tools</span>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={onLogout}
+          className="cursor-pointer text-destructive focus:text-destructive"
+        >
+          <LogOut className="mr-2 h-4 w-4" />
+          <span>Sign out</span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

@@ -1,4 +1,6 @@
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import path from "path";
 import { defineConfig } from "vitest/config";
 
 /**
@@ -9,7 +11,12 @@ import { defineConfig } from "vitest/config";
  */
 export default defineConfig({
   base: "/admin/",
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
   server: {
     host: "127.0.0.1",
     port: 4070,
@@ -28,7 +35,8 @@ export default defineConfig({
             || path.startsWith("/admin/stacks")
             || path.startsWith("/admin/member-invitations")
             || path.startsWith("/admin/auth/")
-            || path.startsWith("/admin/invitations/");
+            || path.startsWith("/admin/invitations/")
+            || path.startsWith("/admin/platform");
           if (isBffRoute) return undefined; // forward to the BFF worker
           return path; // serve from Vite
         },
@@ -61,7 +69,7 @@ export default defineConfig({
     },
   },
   test: {
-    environment: "node",
+    environment: "jsdom",
     setupFiles: ["./tests/setup.ts"],
   },
 });

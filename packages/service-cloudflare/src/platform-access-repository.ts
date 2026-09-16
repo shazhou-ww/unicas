@@ -1,5 +1,5 @@
 import type { D1Database } from "@cloudflare/workers-types";
-import { effectivePlatformAccess, type PlatformAccessState, type PlatformAuthority, type PlatformPrincipal, type Principal } from "@unicas/admin-protocol";
+import { effectivePlatformAccess, type PlatformAccessState, type PlatformAccessSummary, type PlatformAuthority, type PlatformPrincipal, type Principal } from "@unicas/admin-protocol";
 import type { PlatformAccessRepository, PlatformAuditRecord } from "@unicas/service";
 
 interface PrincipalRow {
@@ -54,6 +54,23 @@ export class D1PlatformAccessRepository implements PlatformAccessRepository {
   async listPrincipals(input: { readonly after: string; readonly limit: number }): Promise<readonly PlatformPrincipal[]> {
     const rows = await this.db.prepare(`${principalProjection} WHERE access.principal_ref > ? ORDER BY access.principal_ref LIMIT ?`).bind(input.after, input.limit).all<PrincipalRow>();
     return (rows.results ?? []).map(principalView);
+  }
+
+  async getAccessSummary(): Promise<Omit<PlatformAccessSummary, "generatedAt">> {
+    const row = await this.db.prepare(
+      `SELECT
+        SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active_count,
+        SUM(CASE WHEN status = 'active' AND platform_admin = 1 THEN 1 ELSE 0 END) AS admin_count,
+        SUM(CASE WHEN status = 'active' AND apps_create = 1 THEN 1 ELSE 0 END) AS creator_count,
+        SUM(CASE WHEN status = 'blocked' THEN 1 ELSE 0 END) AS blocked_count
+      FROM cas_platform_principals`,
+    ).first<{ active_count: number; admin_count: number; creator_count: number; blocked_count: number }>();
+    return {
+      activePrincipalCount: row?.active_count ?? 0,
+      platformAdminCount: row?.admin_count ?? 0,
+      appCreatorCount: row?.creator_count ?? 0,
+      blockedPrincipalCount: row?.blocked_count ?? 0,
+    };
   }
 
   async appendAudit(event: PlatformAuditRecord): Promise<void> {

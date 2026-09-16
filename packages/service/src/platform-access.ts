@@ -4,6 +4,7 @@ import {
   PatchPlatformAccessSchema,
   parseCasAdminETag,
   type PlatformAccessState,
+  type PlatformAccessSummary,
   type PlatformAuthority,
   type PlatformPrincipal,
   type Principal,
@@ -30,6 +31,7 @@ export interface PlatformAccessRepository {
   hasMembership(principal: Principal): Promise<boolean>;
   getPrincipal(principalRef: string): Promise<PlatformPrincipal | null>;
   listPrincipals(input: { readonly after: string; readonly limit: number }): Promise<readonly PlatformPrincipal[]>;
+  getAccessSummary(): Promise<Omit<PlatformAccessSummary, "generatedAt">>;
   patchAccess(input: {
     readonly actor: Principal;
     readonly current: PlatformAccessState;
@@ -95,5 +97,36 @@ export class PlatformAccessService {
     if (result === "last-admin") throw new PlatformAccessError("LAST_PLATFORM_ADMIN", 409);
     if (result === "forbidden") throw new PlatformAccessError("PLATFORM_ADMIN_REQUIRED", 403);
     return { revision: current.revision + 1 };
+  }
+
+  async listPrincipals(actor: Principal, input: { readonly after: string; readonly limit: number }): Promise<readonly PlatformPrincipal[]> {
+    await this.requireAccess(actor, "platform.admin");
+    try {
+      return await this.repository.listPrincipals(input);
+    } catch {
+      throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
+    }
+  }
+
+  async getPrincipal(actor: Principal, principalRef: string): Promise<PlatformPrincipal> {
+    await this.requireAccess(actor, "platform.admin");
+    let principal: PlatformPrincipal | null;
+    try {
+      principal = await this.repository.getPrincipal(principalRef);
+    } catch {
+      throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
+    }
+    if (!principal) throw new PlatformAccessError("NOT_FOUND", 404);
+    return principal;
+  }
+
+  async getAccessSummary(actor: Principal): Promise<PlatformAccessSummary> {
+    await this.requireAccess(actor, "platform.admin");
+    try {
+      const counts = await this.repository.getAccessSummary();
+      return { ...counts, generatedAt: this.now() };
+    } catch {
+      throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
+    }
   }
 }
