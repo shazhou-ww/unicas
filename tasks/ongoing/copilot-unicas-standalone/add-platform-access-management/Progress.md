@@ -10,6 +10,7 @@ Updated: 2026-09-16
 - [x] Implement protected platform APIs (list principals, get principal, patch access, access summary).
 - [x] Implement email-bound App invitation-limited login and browser/MCP revocation.
 - [x] Implement platform invitations, complete Principal detail, and platform audit reads.
+- [ ] Review and implement unified App Members and Platform People queries/tables.
 - [ ] Rebuild Console with source-owned shadcn primitives and two-column navigation.
 - [ ] Validate bootstrap/migration, workflows, accessibility, and repository gates.
 - [ ] Publish implementation completion after required reviews and remaining acceptance checks.
@@ -17,6 +18,22 @@ Updated: 2026-09-16
 - [ ] Publish archive as a separate final integration.
 
 ## Current state
+
+Latest scope update, 2026-09-16: the user approved the App Members/Invitations
+merge ("好的，那就这么调整吧") and requested the same treatment for Platform
+Principals/Invitations. Both remain unimplemented. Source inspection confirmed
+duplicate App invitation navigation and independent per-resource pagination.
+The attempted App people protocol patch returned unknown outcome; a file check
+confirmed it did not land. No aggregate endpoint or unified table is delivered.
+
+Concrete review artifacts now describe both sides:
+[unified query contract](./ApiDesign.md#unified-people-query-amendment) and
+[unified UI amendment](./UiDesign.md#unified-people-lists-amendment).
+Scope/UI intent is accepted for this focused change. Proposed new read APIs,
+discriminated rows, cursor/snapshot behavior (including profile updates), and
+service/D1 ownership still require explicit interface/model/architecture
+approval before implementation. Existing membership/grant/invitation writes
+and protections remain unchanged; there is no new Principal identity model.
 
 Local implementation is validated but not implementation-complete or approved
 for archival. The latest source changes remain uncommitted. This progress
@@ -31,6 +48,44 @@ rollback, break-glass, and encryption-key retention. No production action ran.
 
 Integration findings fixed during browser verification:
 
+- Latest user-requested refinement: extracted `CopyBubble` and a shared Sonner
+  notification host. App ID uses the component with pointer cursor, hover/focus
+  affordance, native keyboard activation, and floating success/failure messages.
+  The value remains visible and unchanged. Messages prefer the document language,
+  then browser language, with English fallback; English, simplified Chinese,
+  and traditional Chinese are covered. This is not a full Console translation
+  system. Other explicit copy buttons have not been migrated in this slice.
+- App ID, Status, Revision, and Created now share one semantic two-column
+  definition grid. Browser geometry at 1280px and 375px verifies equal column
+  widths, aligned row positions, and no horizontal page overflow.
+- Latest focused checks: all nine App-shell tests pass, covering three message
+  languages, mouse/Enter copy, clipboard rejection, and prior navigation flows.
+  WebUI typecheck and touched-file editor diagnostics pass. A browser probe with
+  a temporary clipboard stub rendered a visible `App ID copied` toast; the stub
+  was restored immediately. Real clipboard interaction and screenshot capture
+  timed out in the background browser page, so they are not recorded as passed
+  visual or real-clipboard acceptance. Full repository gates below predate this
+  refinement and have not been rerun for it.
+- User requested compact inline App ID/Status and a copyable ID bubble with no
+  separate Copy button. The identity row now wraps responsively, keeps the ID
+  visible during copy feedback, supports native button keyboard activation,
+  and reports clipboard errors. All six App-shell tests pass, including mouse,
+  Enter, and clipboard rejection coverage. Desktop screenshot and 375px geometry
+  confirm a compact bubble with no page overflow; touched-file diagnostics pass.
+- User requested Playground independently right-aligned and unavailable until
+  the managed issuer is enabled. The tab now follows Change Logs with an auto
+  left margin and is disabled during loading, on lookup failure, or when the
+  issuer is not active. Overview issuer toggles update the entry immediately;
+  existing deep links keep the settings fallback. Four App-shell tests pass,
+  including enable/disable transitions. Browser geometry checks at 1280px and
+  375px show the Playground and tablist right edges match without page overflow.
+  This supersedes the original tab order in the UI proposal and is a focused
+  user-approved interface adjustment, not approval of the remaining gates.
+- User-reported login CSS failure: Vite returned SPA HTML for the BFF's
+  `/admin/assets/index.css` URL. The local proxy now forwards built assets to
+  the BFF. Browser validation confirms 200 `text/css`, the intended font and
+  button background, and no horizontal overflow. Vite config diagnostics pass.
+  This focused user-requested fix does not approve the broader review gates.
 - Vite preserves the browser Host so the Worker public-origin check accepts
   local requests. `/admin/me` changed from Worker 404 to expected 401/login.
 - The App compatibility adapter passes Platform routes through unchanged;
@@ -87,9 +142,18 @@ state. Earlier individual policy decisions below remain evidence only for
 those decisions. Delivery acceptance is pending a published final revision and
 completion of the outstanding criteria. No retrospective approval is inferred.
 
-Next action: publish this pending review plan and progress update, ask the user
-to confirm or revise the first four checkpoints, and stop further implementation
-until that decision is recorded. Then resolve the remaining acceptance items,
+The pending review plan was published as `53093dc` and verified on `origin/main`.
+Subsequent focused UI fixes were explicitly requested by the user; they do not
+constitute blanket approval of the first four checkpoints. These later changes
+and progress updates remain local.
+
+Next action: publish the unified query/UI review artifacts and request explicit
+approval for the two additive read APIs and their cursor/ownership contract.
+Do not implement the protected new query surfaces before that decision. After
+approval, implement and test the combined server-side pages, shared presentation,
+Invite dialogs, old-link redirects, and separate authorization/mutation paths.
+Broader task gates remain pending. Repeat real-clipboard and toast
+visual acceptance in a foreground browser, rerun the relevant final gates,
 publish implementation completion, and request separate delivery acceptance.
 
 ## Historical implementation checkpoint

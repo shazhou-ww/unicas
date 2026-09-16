@@ -343,6 +343,45 @@ Use `SidebarProvider`, `Sidebar`, `SidebarHeader`, `SidebarContent`,
 line-style `Tabs` for App/platform detail, `Dialog` for creation, and `Sheet`
 for Principal access detail on desktop and mobile.
 
+## Unified people lists amendment
+
+User-requested direction on 2026-09-16 supersedes separate member/Principal and
+invitation navigation in this proposal. See the proposed query contract in
+[API design](./ApiDesign.md#unified-people-query-amendment).
+
+- App detail navigation becomes Overview, Members, Change Logs, with Playground
+  independently right-aligned and disabled unless the managed issuer is active.
+  Members presents existing members and pending invitations in one table.
+- Platform detail navigation becomes People and Audit. People presents existing
+  Principals (including blocked/no-access states) and pending invitations in one
+  table. Keep the access summary and Principal details/authority editor.
+- Each table has a search/filter toolbar, refresh action, and right-aligned
+  Invite button. Invite opens the existing creation/receipt workflow in a Dialog.
+  Keep email constraints, authority selection on platform invitations, one-time
+  receipt handling, copy feedback, and expiry display.
+- App columns: person/email, state, joined/invited timestamp, expiry, actions.
+  Platform columns: person/email, effective state, current/proposed authorities,
+  App membership count, created/invited timestamp, expiry, actions. Invitation
+  rows have no fabricated App membership count or effective-access state.
+- Filters show current entries by default, members/Principals only, pending
+  invitations only, or invitation history. Platform retains authority and
+  effective-access filters with the API amendment's explicit semantics.
+- Principal rows open the existing detail editor. App member rows offer member
+  removal; pending invitation rows offer revoke confirmation. Preserve App and
+  invitation ETags, self-block and last-admin protections. Never delete a member
+  merely because its email matches an invitation being revoked.
+- Keep accepted invitations out of the default view and retain them in history.
+  Multiple records with the same email remain distinct. Labels identify whether
+  a row is a member, Principal, or invitation, independent of color.
+- Old App `/invitations` links redirect to Members with the pending filter;
+  old platform `/principals` and `/invitations` links redirect to People with
+  Principal and pending selection respectively. Filter/search changes reset
+  pagination; mutations refresh the unified list and relevant summaries.
+- Use source-owned controls and a shared toolbar/table presentation where useful,
+  but keep App and Platform query hooks, mutation handlers, and authorization
+  context separate. Preserve mobile wrapping, local table scrolling, focus
+  return, empty/loading/error states, and clear privileged-context presentation.
+
 ## Data loading and API alignment
 
 The shell should make one current-session request and one App-list request in
@@ -368,10 +407,11 @@ The Sidebar keeps its App list mounted while detail routes change. Revalidate
 it after App creation, App metadata changes, membership acceptance/removal, or
 an authorization error indicating access changed.
 
-The navigation redesign requires no additional platform endpoint beyond the
-API draft. The draft's `/admin/me` extension is sufficient for conditional
-navigation and App creation. Platform summary, Principal list/detail,
-invitation, mutation, and audit endpoints map directly to the platform views.
+The original navigation redesign required no additional platform endpoint.
+The unified people-list amendment now proposes separate App/platform combined
+read endpoints for coherent search, ordering, and pagination. `/admin/me`
+continues to determine navigation visibility and App creation; existing detail,
+mutation, summary, and audit endpoints retain their responsibilities.
 
 Three App-level prerequisites are intentionally separate from this Console
 rewrite: complete suspension enforcement, member invitation list/revoke, and

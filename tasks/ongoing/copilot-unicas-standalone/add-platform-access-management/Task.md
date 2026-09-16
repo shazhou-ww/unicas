@@ -56,9 +56,16 @@ customized for UniCAS, and makes the App list the primary navigation.
 - Rebuild the full Console shell as a responsive two-column layout: persistent
   App-list navigation on the left and the selected App or platform workspace on
   the right.
-- Remove the global top Header. Put App Overview, Members, Invitations,
-  Playground, and Change Logs in that order in top navigation within the
-  selected App detail page.
+- Remove the global top Header. Put App Overview, Members, and
+  Change Logs in that order in top navigation within the selected App detail
+  page, with Playground separated at the far right. Disable Playground unless
+  the managed issuer is active, including while its state is unavailable.
+- Merge App members and pending invitations into one Members table with search,
+  lifecycle filters, history, and an Invite action above the table. Apply the
+  same presentation to Platform Principals and invitations in People; keep
+  Platform Audit separate. Preserve row identity, permission boundaries, old
+  deep links, and coherent server-side combined pagination. The proposed read
+  contract is in [API design](./ApiDesign.md#unified-people-query-amendment).
 - Put the signed-in user at the bottom of the left navigation and move
   Documentation, Connect AI tools, and Sign out into its profile menu.
 - Show the Platform Administration navigation entry only when `/admin/me`
@@ -159,9 +166,10 @@ customized for UniCAS, and makes the App list the primary navigation.
   Platform Administration only to effective Platform Admins, and keep the
   signed-in profile and its Documentation, Connect AI tools, and Sign out
   actions at the navigation bottom.
-- [ ] Selecting an App renders Overview, Members, Invitations, Playground, and
-  Change Logs as top detail navigation in that order, with direct-linkable route
-  state and no global top Header or second App switcher.
+- [ ] Selecting an App renders Overview, Members, and Change Logs
+  as top detail navigation in that order, with Playground independently
+  right-aligned and disabled unless the managed issuer is active. Preserve
+  direct-linkable route state with no global top Header or second App switcher.
 - [ ] Existing App creation, App settings, issuer, usage, Playground, member,
   invitation, audit, login-error, and logout workflows remain functionally
   covered after the component and navigation rewrite.

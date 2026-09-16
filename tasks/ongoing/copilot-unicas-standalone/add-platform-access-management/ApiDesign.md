@@ -807,3 +807,70 @@ the production implementation task.
    or revocation.
 5. Whether platform endpoints should ship in remote MCP at first release or
    initially remain Console and CLI only.
+
+## Unified people query amendment
+
+Proposed on 2026-09-16 after the user approved merging App Members/Invitations
+and requested the same treatment for Platform Principals/Invitations. The UI
+direction is accepted; this new read contract and its implementation boundaries
+await explicit interface/model/architecture review. Existing resource and
+mutation contracts remain unchanged. No new membership or identity entity is
+created, and no schema/data migration is required by this projection.
+
+| Resource | Authorization | Row variants | Default selection |
+| --- | --- | --- | --- |
+| `GET /admin/apps/{appId}/people` | Current App membership and platform admission | `member`, `invitation` | Members plus pending, unexpired App invitations |
+| `GET /admin/platform/people` | Current `platform.admin` | `principal`, `invitation` | All persisted Principals plus pending, unexpired platform invitations |
+
+Both return `{ items, nextCursor }`. App member rows contain
+`{ kind: "member", membership, joinedAt }`; App invitation rows contain
+`{ kind: "invitation", invitation }`. Platform rows contain either
+`{ kind: "principal", principal }` (the current Principal-list projection) or
+`{ kind: "invitation", invitation }` (the non-secret platform invitation).
+Do not synthesize a Principal for an invitation or export a token, accept URL,
+token hash, or sealed receipt in a list response.
+
+Shared query parameters:
+
+- `query`: trimmed case-insensitive substring search, at most 200 characters,
+  over the applicable profile name/email and immutable Principal issuer/subject,
+  or invitation email constraint. Never use email as a join/deduplication key.
+- `filter`: `current` (default), `members` (App only), `principals` (platform
+  only), `pending`, or `history`. History contains accepted, expired, and
+  revoked invitations only. Accepted invitations do not create duplicate rows
+  in the default view, regardless of whether their email matches a Principal.
+- `limit`: 1..100, default 50. `cursor`: opaque, nullable in responses.
+- Platform only: optional `authority` (`platform.admin`, `apps.create`, `none`)
+  and `effectiveAccess` (`active`, `blocked`, `no_access`). Authority filters
+  match current Principal grants or an invitation's proposed grants. An
+  effective-access filter selects Principal rows only; it never treats an
+  invitation as active access. Incompatible filter combinations return an
+  empty page rather than broadening the selection.
+
+One server-side ordered query must own each combined page. Sort by descending
+membership join time, Principal creation time, or invitation creation time,
+then by a stable kind-specific identity key. App member tie-breaking includes
+both issuer and subject; Principal rows use `principalRef`, and invitation rows
+use `invitationId`. Do not concatenate the first pages of existing endpoints.
+Do not collect an unbounded directory in the browser to implement filters.
+
+Bind cursors to resource scope/App, normalized filters, sort version, and the
+relevant snapshot. Recheck current authorization on every page. Reject malformed,
+wrong-scope, wrong-filter, and stale cursors with `INVALID_CURSOR`. Detect
+changes both before and after the read. Snapshot handling must cover searchable
+profile updates as well as membership, grant, and invitation changes; the
+existing control snapshot must not be assumed to cover profile updates without
+verification. Reconcile expiry through the existing lifecycle before reading
+the page, without introducing grant or acceptance side effects.
+
+Ownership: protocol owns schemas/routes/generated OpenAPI; admin-client exposes
+typed reads; service owns authorization, selection, and cursor rules; the D1
+adapter executes the combined ordered query. WebUI renders discriminated rows
+and keeps existing mutation preconditions. Existing CLI/MCP resource tools stay
+available; no new CLI command/MCP tool is required solely for this UI projection.
+
+Required tests: mixed-page ordering; equal timestamps and equal subjects under
+different issuers; search/filter matches beyond page one; same-email distinct
+records; accepted and expired invitation handling; stale and cross-scope cursor
+rejection; profile-change snapshot behavior; App/Platform permission separation;
+token-free responses; unchanged mutation ETags and administrator safeguards.
