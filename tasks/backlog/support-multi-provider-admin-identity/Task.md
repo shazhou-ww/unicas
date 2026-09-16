@@ -40,6 +40,43 @@ platform authorization established by
 Finish and publish that task before changing its identity and invitation
 boundaries here.
 
+## Settled identity and profile model
+
+Platform Principals and App members are not separate kinds of user records.
+They are platform-access and App-membership relationships to the same stable
+UniCAS Account. The target model is:
+
+```text
+Account { accountId, Profile }
+|-- ExternalIdentity[] { issuer, subject, provider }
+`-- VerifiedEmail[] { normalizedEmail, source, verifiedAt }
+
+PlatformAccess --> accountId
+AppMembership  --> accountId
+```
+
+- `accountId` is the opaque UniCAS primary key and the durable target of
+  authorization, ownership, session, and audit relationships.
+- `(issuer, subject)` is the unique key of an ExternalIdentity. An Account has
+  one or more ExternalIdentities, so issuer is not a single Account field.
+- Email is a first-class, potentially multi-valued Account attribute with
+  explicit verification provenance. It is not a primary-key component, is not
+  globally unique, and never causes automatic account linking or grant
+  transfer. One verified address may be selected as the primary contact and
+  display email.
+- Profile owns the Account-level display name and avatar presentation. Both are
+  mutable, non-authoritative display data; provider values may initialize or
+  refresh them under an explicit precedence policy. A missing avatar renders a
+  deterministic fallback rather than affecting admission or authorization.
+- PlatformAccess and AppMembership store only their relationship to
+  `accountId` plus relationship-specific state. They do not copy issuer,
+  email, name, or avatar as independent user records.
+- Platform Principal and App member API/UI projections resolve the same shared
+  Account summary: `accountId`, primary verified email, display name, and
+  avatar or fallback. Privileged identity-management views may additionally
+  expose the Account's ExternalIdentity list; no projection collapses linked
+  identities into an `(issuer, email)` key.
+
 ## Scope
 
 - Introduce a stable UniCAS account identifier and persistence model that can
@@ -113,6 +150,14 @@ boundaries here.
 - [ ] A new or migrated administrator has one stable UniCAS account whose App
       memberships, platform access, Playground ownership, and authorization do
       not change when a linked external login identity is used.
+- [ ] Platform Principal and App member reads resolve the same Account profile
+      and present a consistent primary verified email, display name, and avatar
+      or deterministic fallback without duplicating those values in access or
+      membership records.
+- [ ] Persistent and wire models distinguish the internal `accountId`, every
+      linked `(issuer, subject)` ExternalIdentity, verified email attributes,
+      and display-only Profile; no schema or API treats `(issuer, email)` as a
+      user key.
 - [ ] Existing Google Principals migrate one-to-one without email-based merges,
       grant changes, orphaned memberships, or loss of durable audit attribution.
 - [ ] Console, CLI, and MCP login offer the configured Google, personal
@@ -190,7 +235,7 @@ and explicitly approved before the protected work begins.
 | Checkpoint | Applicability | Reviewer | Planned review artifact | Approval required before |
 | --- | --- | --- | --- | --- |
 | Scope | Required | User or accountable owner | This task's goal, scope, out of scope, constraints, acceptance criteria, provider set, and dependency on the platform-access task. | Substantive implementation. |
-| Business and data model | Required | User or delegated identity/security owner | Task-owned account model and migration design covering Account, ExternalIdentity, verified-email evidence, invitation ownership, membership and platform grants, audit attribution, linking conflicts, retention, one-to-one migration, and rollback. | Changing persistent schemas, ownership keys, migration code, invitation rules, linking semantics, or authorization records. |
+| Business and data model | Required | User or delegated identity/security owner | Task-owned account model and migration design covering Account, ExternalIdentity, VerifiedEmail, shared Profile name/avatar ownership and precedence, PlatformAccess and AppMembership references, API projections, invitation ownership, audit attribution, linking conflicts, retention, one-to-one migration, and rollback. | Changing persistent schemas, ownership keys, migration code, profile projections, invitation rules, linking semantics, or authorization records. |
 | Architecture | Required | User or delegated architecture owner | Task-owned architecture and sequencing design covering provider adapters, `control-auth`, cloud-neutral service ports, Cloudflare persistence and BFF composition, session/account resolution, revocation, deployment order, and compatibility boundaries. | Changing module responsibilities, dependencies, provider composition, session architecture, or deployment wiring. |
 | Interface | Required | User or delegated product/API owner | Task-owned interface design for Console login and account management, callback and linking routes, administrator API contracts, CLI and MCP login behavior, error/privacy semantics, and compatibility with existing clients. | Implementing or changing affected GUI flows, HTTP contracts, CLI commands, or MCP behavior. |
 | Delivery acceptance | Required | User or accountable owner | Integrated revision, provider and migration test matrix, security and privacy evidence, validation results, deployment/rollback rehearsal, and required Console, CLI, and MCP manual test results. | Marking the task completed and archiving it. |
