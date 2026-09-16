@@ -108,7 +108,9 @@ strong revision ETag, causing a conditional CLI write to fail before a local
 client compatibility fix was applied. Source fixes now normalize only numeric
 revision ETags weakened in transit, prohibit edge transformation of BFF revision
 responses, and show a dedicated no-management-access page with an account-switch
-action. These fixes passed focused and package validation but still require
-publication, production release, and post-release verification. Step 2 also
+action. These fixes passed focused and package validation and are published as
+`c171901`; they still require production release and post-release verification.
+Release PR creation is blocked until a repository collaborator authenticates.
+Step 2 also
 still requires establishing a second Platform Admin through the protected
 workflow; do not report overall acceptance until both items complete.

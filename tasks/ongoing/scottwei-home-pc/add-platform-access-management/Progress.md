@@ -74,8 +74,9 @@ for both legacy allowlist denial and persisted platform-access denial.
 Validation for this follow-up passes: 17 admin-client tests, 46 admin-CLI tests,
 247 service-cloudflare tests, affected package typechecks, the Cloudflare
 production build, focused 63-test BFF/adapter checks, editor diagnostics, and
-`git diff --check`. The fixes are not yet published or deployed. After release,
-verify the denied-account page and a compressed App read's strong ETag. The
+`git diff --check`. The source fixes are published as `c171901` and verified on
+`origin/main`, but are not yet deployed. After release, verify the denied-account
+page and a compressed App read's strong ETag. The
 remaining operator acceptance item is establishing a second Platform Admin
 through the protected workflow before final delivery acceptance.
 
@@ -704,6 +705,7 @@ audit reads.
 | Enabled Playground acceptance | `4827425`; isolated real CAS workflow, mobile creation, responsive checks, and release gates. | Published |
 | Managed issuer CopyBubble and editor integration | `1e97284`; issuer regressions, no-emit check, and built desktop preview verified. | Published |
 | Ownership handoff to `scottwei-home-pc` | `d16ddb7`, verified reachable from refreshed `origin/main`. | Published |
+| Denied-login guidance and strong ETag follow-up | `c171901`, verified reachable from refreshed `origin/main`; release pending. | Published |
 | Implementation complete | Not yet completed. | Pending |
 | Archive | Not yet archived. | Pending |
 
@@ -759,14 +761,20 @@ audit reads.
 
 - The production bootstrap and release blocker is resolved by the reset,
   bootstrap, and successful release recorded under Current state.
-- Real-provider/post-release verification requires the user to authenticate
-  with the verified Google account and complete [UserAcceptance](./UserAcceptance.md).
-  Final delivery approval remains pending after those checks. Remaining
-  Playground visual polish is intentionally deferred to its backlog task.
+- Publishing the follow-up release PR is externally blocked: the VS Code GitHub
+  identity is not a repository collaborator, the browser is not signed in to
+  GitHub, and the local `gh` token for the repository owner is invalid. Next:
+  authenticate as a collaborator and create the `main` to `release` PR from
+  `https://github.com/shazhou-ww/unicas/compare/release...main?expand=1`.
+- Post-release verification, establishment of a second Platform Admin, and final
+  delivery approval remain pending. Playground visual polish is intentionally
+  deferred to its backlog task.
 
 ## Outcome
 
-Ongoing. Production reset, bootstrap, and release are complete. Real-provider
-acceptance, implementation-complete publication, explicit delivery acceptance,
-and separate archive publication remain pending. Playground layout polish is
+Ongoing. The initial production reset/bootstrap/release and real-provider App
+invitation/revocation checks are complete. The denied-login and strong-ETag
+follow-up is published on `main` but awaits release authentication, deployment,
+post-release verification, second-Platform-Admin verification, explicit delivery
+acceptance, and separate archive publication. Playground layout polish is
 deferred to its backlog task.
