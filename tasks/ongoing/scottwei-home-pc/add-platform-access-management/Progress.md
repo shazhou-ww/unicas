@@ -80,6 +80,16 @@ page and a compressed App read's strong ETag. The
 remaining operator acceptance item is establishing a second Platform Admin
 through the protected workflow before final delivery acceptance.
 
+The follow-up was merged from `main` to `release` by
+[PR #3](https://github.com/shazhou-ww/unicas/pull/3) as `19dd7ef`. Production
+[run 35099365111](https://github.com/shazhou-ww/unicas/actions/runs/35099365111)
+attempt 1 passed validation, deployment, canonical smoke, all public-origin
+checks, and production tagging. The deployed revision is tagged
+`production-20260916-108`. Direct post-release checks confirmed the denied
+account page renders No management access with a Sign in with another Google
+account action. An authenticated App read returned strong ETag `"1"` with
+`Cache-Control: no-store, no-transform`; the edge did not compress or weaken it.
+
 ### Production reset and release
 
 Reset execution completed on 2026-09-16 and supersedes the initial preflight
@@ -705,7 +715,7 @@ audit reads.
 | Enabled Playground acceptance | `4827425`; isolated real CAS workflow, mobile creation, responsive checks, and release gates. | Published |
 | Managed issuer CopyBubble and editor integration | `1e97284`; issuer regressions, no-emit check, and built desktop preview verified. | Published |
 | Ownership handoff to `scottwei-home-pc` | `d16ddb7`, verified reachable from refreshed `origin/main`. | Published |
-| Denied-login guidance and strong ETag follow-up | `c171901`, verified reachable from refreshed `origin/main`; release pending. | Published |
+| Denied-login guidance and strong ETag follow-up | `c171901`; PR #3 merged as `19dd7ef`; run 35099365111 passed and tagged `production-20260916-108`; direct production page/ETag checks passed. | Published |
 | Implementation complete | Not yet completed. | Pending |
 | Archive | Not yet archived. | Pending |
 
@@ -761,20 +771,15 @@ audit reads.
 
 - The production bootstrap and release blocker is resolved by the reset,
   bootstrap, and successful release recorded under Current state.
-- Publishing the follow-up release PR is externally blocked: the VS Code GitHub
-  identity is not a repository collaborator, the browser is not signed in to
-  GitHub, and the local `gh` token for the repository owner is invalid. Next:
-  authenticate as a collaborator and create the `main` to `release` PR from
-  `https://github.com/shazhou-ww/unicas/compare/release...main?expand=1`.
-- Post-release verification, establishment of a second Platform Admin, and final
-  delivery approval remain pending. Playground visual polish is intentionally
+- The follow-up production release and direct post-release checks are complete.
+  Establishment of a second Platform Admin through the protected workflow and
+  final delivery approval remain pending. Playground visual polish is intentionally
   deferred to its backlog task.
 
 ## Outcome
 
-Ongoing. The initial production reset/bootstrap/release and real-provider App
-invitation/revocation checks are complete. The denied-login and strong-ETag
-follow-up is published on `main` but awaits release authentication, deployment,
-post-release verification, second-Platform-Admin verification, explicit delivery
-acceptance, and separate archive publication. Playground layout polish is
+Ongoing. Production reset/bootstrap, both releases, real-provider App
+invitation/revocation checks, and denied-login/strong-ETag post-release checks
+are complete. Second-Platform-Admin verification, explicit delivery acceptance,
+and separate archive publication remain pending. Playground layout polish is
 deferred to its backlog task.

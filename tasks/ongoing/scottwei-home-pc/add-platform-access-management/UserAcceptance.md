@@ -109,8 +109,9 @@ client compatibility fix was applied. Source fixes now normalize only numeric
 revision ETags weakened in transit, prohibit edge transformation of BFF revision
 responses, and show a dedicated no-management-access page with an account-switch
 action. These fixes passed focused and package validation and are published as
-`c171901`; they still require production release and post-release verification.
-Release PR creation is blocked until a repository collaborator authenticates.
-Step 2 also
+`c171901`. PR #3 merged them to `release` as `19dd7ef`; production run
+35099365111 passed and tagged the deployment as `production-20260916-108`.
+Post-release checks confirmed both the dedicated no-management-access page and
+the strong revision ETag with `no-transform` at the production edge. Step 2
 still requires establishing a second Platform Admin through the protected
-workflow; do not report overall acceptance until both items complete.
+workflow; do not report overall acceptance until that item completes.
