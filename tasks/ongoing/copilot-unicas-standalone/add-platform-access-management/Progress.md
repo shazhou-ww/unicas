@@ -19,6 +19,14 @@ Updated: 2026-09-16
 
 ## Current state
 
+Approval on 2026-09-16: after publication of the unified query/UI amendment
+as `83beb4b`, the requesting user explicitly directed "你继续去做吧" in
+response to the request to proceed with both read contracts. This approves
+the focused scope, interface, projection model, and service/D1 ownership in
+that amendment. Publish this approval before implementing the new queries.
+Broader task delivery acceptance remains pending. Current next action:
+implement and validate the two aggregate queries and their Console consumers.
+
 Latest scope update, 2026-09-16: the user approved the App Members/Invitations
 merge ("好的，那就这么调整吧") and requested the same treatment for Platform
 Principals/Invitations. Both remain unimplemented. Source inspection confirmed
@@ -32,7 +40,7 @@ Concrete review artifacts now describe both sides:
 Scope/UI intent is accepted for this focused change. Proposed new read APIs,
 discriminated rows, cursor/snapshot behavior (including profile updates), and
 service/D1 ownership still require explicit interface/model/architecture
-approval before implementation. Existing membership/grant/invitation writes
+approval before implementation; that approval is now recorded above. Existing membership/grant/invitation writes
 and protections remain unchanged; there is no new Principal identity model.
 
 Local implementation is validated but not implementation-complete or approved
