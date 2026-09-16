@@ -23,14 +23,18 @@ production verification, delivery acceptance, and archive publication recorded.
 No backlog or ongoing task has overlapping multi-provider administrator identity
 scope, and all other identity lanes are empty.
 
+The claim and its evidence record are published on `origin/main`; refreshed
+`origin/main` and local `HEAD` both resolved to evidence commit
+`448478c177b4dc78d657649d17225bb1e3633973` before this blocker update.
+
 The scope review artifact is the canonical [Task](./Task.md): its goal, scope,
 out-of-scope boundaries, constraints, acceptance criteria, provider set, and
 prerequisite are ready for review. Substantive implementation is blocked until
 that scope receives an explicit human decision.
 
-This progress integration publishes the claim evidence and pending scope
-checkpoint with that commit. Next: verify the claim commit is reachable on
-refreshed `origin/main`, then request explicit scope approval.
+Next: obtain an explicit scope decision from the user or accountable owner. If
+approved, record and publish that decision before preparing the remaining
+business/data-model, architecture, and interface review artifacts.
 
 ## Decisions
 
@@ -78,6 +82,10 @@ refreshed `origin/main`, then request explicit scope approval.
 - A second pre-publication check rejected claim evidence without a literal
   commit reference, so the move and its evidence are published together as two
   claim-only commits.
+- After publication, `pnpm exec repoledger doctor` passed, local `HEAD` and
+  refreshed `origin/main` both resolved to
+  `448478c177b4dc78d657649d17225bb1e3633973`, the worktree was clean, and the
+  final `pnpm check:tasks` run passed all ledger checks and 6 policy tests.
 
 ## Blockers
 
