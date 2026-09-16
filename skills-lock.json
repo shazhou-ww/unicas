@@ -5,19 +5,19 @@
       "source": "shazhou-ww/skills",
       "sourceType": "github",
       "skillPath": "skills/repository-task-ledger/SKILL.md",
-      "computedHash": "1b11f9db948bc2112c8e2b0bd76bcf8f1eb7a504284082933b9b45779f3cd212"
+      "computedHash": "f488db582d5719712fb5e8e2dd47de8ce0fbb15fb67b50f632b2701730bf6471"
     },
     "task-exec": {
       "source": "shazhou-ww/skills",
       "sourceType": "github",
       "skillPath": "skills/task-exec/SKILL.md",
-      "computedHash": "e911da3ae00a20e6c33784d3f35d5704544b1d5114d6c6b62196e875a2a9c2c7"
+      "computedHash": "3cd746cf8284ea1e6c628f10da791fc7d11868fad97a8d47aa88b2354e3b2cf5"
     },
     "task-new": {
       "source": "shazhou-ww/skills",
       "sourceType": "github",
       "skillPath": "skills/task-new/SKILL.md",
-      "computedHash": "1ee83266a35b5ce4cbea0f3315b3a76a8ae67141c11b7e7a5b073f62571ca7a3"
+      "computedHash": "66c0c4cd42c05ba00098c2cb32ffd578999ea7bc0941b3f634536c2af463fa56"
     }
   }
 }

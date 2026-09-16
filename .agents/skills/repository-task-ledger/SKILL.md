@@ -87,21 +87,25 @@ After `task-new` intake and admission:
 
 1. Create `tasks/backlog/<task-name>/Task.md` from the
    [task template](./assets/Task.md). Record the accepted goal, scope,
-   constraints, and observable acceptance criteria rather than a transcript.
+   constraints, observable acceptance criteria, and task-specific human review
+   plan rather than a transcript. Task creation plans approval gates; it does
+   not satisfy them.
 2. Keep Issues or another external tracker available for open intake and link
    it bidirectionally when possible.
 3. Refresh the shared branch and recheck all backlog and ongoing tasks.
 4. Move the whole folder with `git mv` to
    `tasks/ongoing/<identity>/<task-name>`.
 5. Create `Progress.md` from the [progress template](./assets/Progress.md),
-   record current state and next action, and apply the move checks below.
+   copy the planned human checkpoints and their current status, record current
+   state and next action, and apply the move checks below.
 6. Commit only the claim artifacts, publish them, and verify the claim before
    substantive implementation.
 
 ## Work And Coordinate
 
 - Keep `Task.md` durable; put chronology, current state, decisions, validation,
-   blockers, checklist state, and the next concrete action in `Progress.md`.
+   human approval evidence, blockers, checklist state, and the next concrete
+   action in `Progress.md`.
 - Publish meaningful validated checkpoints with current progress evidence. Do
    not publish known-broken work merely to create a checkpoint.
 - Keep task-specific research with the task. Put only stable project consensus
@@ -113,6 +117,52 @@ A claim advertises intent but is not a lock. If another task overlaps, stop
 before expanding the implementation, refresh the shared branch, compare scope
 and state, coordinate ownership or sequencing, record the resolution, and
 preserve both actors' work.
+
+## Pass Human Review Checkpoints
+
+Every new task plans five checkpoint categories in `Task.md`. Scope alignment
+and delivery acceptance are required for completed work. Interface, business
+and data model, and architecture checkpoints are required when the task affects
+those surfaces; otherwise record a reason they do not apply or the concrete
+trigger that will decide during execution. The middle checkpoints may be
+reordered to follow task dependencies.
+
+Before resuming a backlog or ongoing task that predates this plan, add and
+publish its task-specific checkpoints without claiming that prior discussion
+was approval. Do not retrofit archived task history solely for this change.
+
+The checkpoints cover:
+
+1. **Scope alignment:** goal, included and excluded work, constraints, and
+   acceptance criteria before substantive implementation.
+2. **Interface alignment:** affected GUI flows, CLI commands, MCP tools, or API
+   contracts, including compatibility, before implementing that interface.
+3. **Business and data model alignment:** concepts, rules, entities,
+   relationships, schemas, and migration impact before implementing those
+   model or data changes.
+4. **Architecture alignment:** affected modules, responsibilities, boundaries,
+   dependencies, and any split or combination before structural implementation.
+5. **Delivery acceptance:** the integrated revision, validation evidence, and
+   any manual test result before marking the task completed and archiving it.
+
+Claim publication and research needed to prepare a review artifact may happen
+before approval. At each applicable gate:
+
+1. Prepare the concrete review artifact and summarize it in `Progress.md`, with
+   a durable link when available.
+2. Publish the artifact and pending gate state to the shared primary branch.
+3. Ask the named human reviewer for an explicit decision and stop before the
+   work that the gate protects.
+4. Record the actual decision, reviewer, date, and concise evidence in
+   `Progress.md`; publish that approval before continuing through the gate.
+
+Do not infer approval from task creation, a `task-exec` invocation, silence,
+routine Git authorization, or an earlier approval of a materially different
+plan. Resolve every `Assess during execution` row before its trigger is crossed.
+If implementation changes invalidate an approved artifact or introduce a
+previously excluded surface, reopen the affected checkpoint, publish that
+state, and obtain fresh approval. An abandoned task may archive with unresolved
+checkpoints when `Progress.md` records the reason; do not label it completed.
 
 ## Verify Every Move
 
@@ -128,17 +178,21 @@ Never copy tasks between positions. Preserve identity `.gitkeep` files.
 
 ## Run User Acceptance
 
-Require manual acceptance only when a criterion depends on user judgment,
-user-only access, physical interaction, or another result the agent cannot
-verify. Otherwise do not invent a confirmation gate.
+Create a manual acceptance procedure only when a criterion depends on user
+operation, user-only access, physical interaction, or another result the agent
+cannot verify. This procedure tests the delivered behavior; it is distinct
+from the required human delivery-acceptance decision. Do not invent manual test
+steps for criteria the agent can verify.
 
 When required, create `UserAcceptance.md` from the
 [template](./assets/UserAcceptance.md) with exact prerequisites, numbered
 actions, expected results, and an unambiguous reporting method. Publish it with
 implementation completion and keep the task ongoing. Record only the result
 the user reports. On failure, record the observation, fix and republish, then
-repeat acceptance. On success, archive without requesting another routine Git
-confirmation.
+repeat acceptance. On success, record the test result and continue to the
+delivery checkpoint without requesting routine Git confirmation. A single user
+response may satisfy both the manual test result and delivery approval only
+when it explicitly states both decisions; record them separately.
 
 ## Handoff
 
@@ -154,9 +208,11 @@ To complete:
    `Task.md` and `Progress.md` with actual results.
 2. Publish implementation completion while the task remains ongoing and verify
    it on the refreshed remote branch.
-3. Complete any required user acceptance. Mark `Completed` only after every
-   required criterion passes.
-4. Mark archive publication as the final checklist action, move the whole task
+3. Complete any required manual user acceptance.
+4. Present the delivery checkpoint, obtain explicit human approval, record and
+   publish it, and mark `Completed` only after every required criterion and
+   review checkpoint passes.
+5. Mark archive publication as the final checklist action, move the whole task
    to `tasks/archived/<task-name>`, apply the move checks, then commit, publish,
    and verify this separate final integration.
 
@@ -168,9 +224,15 @@ Archived tasks have no identity layer; Git history preserves prior ownership.
 
 ## Link Task Artifacts
 
-Use `/path/from/repository/root` only when the repository profile declares that
-all supported renderers resolve it. Otherwise use portable file-relative links
-and update them when tasks move. Preserve external and fragment-only links, and
+Use a file-relative link for every target stored inside the current task
+directory, such as `./Progress.md` or `./UserAcceptance.md`. The task directory
+moves as a unit, so these links remain valid across lifecycle moves regardless
+of renderer behavior.
+
+For repository-local targets outside the task directory, use
+`/path/from/repository/root` only when the repository profile declares that all
+supported renderers resolve it. Otherwise use portable file-relative links and
+update them when tasks move. Preserve external and fragment-only links, and
 never couple local links to a machine path, repository owner, remote, or branch.
 
 ## Canonical Layout

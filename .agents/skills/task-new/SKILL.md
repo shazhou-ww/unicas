@@ -29,11 +29,19 @@ state.
 3. Identify the owning repository, one testable outcome, important boundaries,
    and observable acceptance criteria. Invocation counts as acceptance only
    when the candidate is sufficiently specified and passes core admission.
-4. Inspect current backlog and ongoing definitions only for a plausible match.
+4. Populate the task template's human review checkpoints for this specific
+   outcome. Scope alignment and delivery acceptance are always required. Mark
+   interface, business and data model, and architecture review as `Required`,
+   `Not applicable` with a reason, or `Assess during execution` with the
+   decision trigger. Name the expected reviewer or role, concrete review
+   artifact, and approval gate. Do not ask for every approval during intake;
+   unresolved design details belong at their planned execution checkpoint.
+   Acceptance of the candidate for the backlog is not scope approval.
+5. Inspect current backlog and ongoing definitions only for a plausible match.
    Ignore unrelated claims, dirty files, and surface overlap during intake. If
    a match exists, ask whether to merge context or create a distinct task; do
    not mutate either route until the user decides.
-5. Apply core admission and ask only for the smallest missing decision. Keep
+6. Apply core admission and ask only for the smallest missing decision. Keep
    rejected, duplicate, unconfirmed, and task-free requests outside the ledger.
    For admitted work, use the core template, profile, validation, and
    publication rules.

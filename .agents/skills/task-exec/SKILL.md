@@ -41,8 +41,11 @@ After resolving the route, follow `repository-task-ledger` and the repository
 profile as the sole authority for implementation, validation, progress,
 publication, acceptance, handoff, abandonment, and archival. Continue until
 the task reaches its next genuine external blocker or its completed archive
-state; do not pause merely to request permission for routine lifecycle actions
-that the core protocol already authorizes.
+state. A pending human review checkpoint is such a blocker: publish its review
+artifact and current progress, request an explicit decision, and do not cross
+the protected implementation or completion gate. Do not pause merely to
+request permission for routine lifecycle actions that the core protocol
+already authorizes.
 
 Finish by reporting the resolved task, resulting ledger state, validation
 outcome, and shared-primary-branch publication state. When blocked, preserve
