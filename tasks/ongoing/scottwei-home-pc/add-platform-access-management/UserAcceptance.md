@@ -115,3 +115,8 @@ Post-release checks confirmed both the dedicated no-management-access page and
 the strong revision ETag with `no-transform` at the production edge. Step 2
 still requires establishing a second Platform Admin through the protected
 workflow; do not report overall acceptance until that item completes.
+
+The user explicitly declined to grant Neko persistent `platform.admin`
+authority on 2026-09-16. This defers step 2 rather than failing it. Keep the task
+ongoing unless a second administrator is established through the protected
+workflow or the acceptance requirement is explicitly revised.

@@ -772,9 +772,11 @@ audit reads.
 - The production bootstrap and release blocker is resolved by the reset,
   bootstrap, and successful release recorded under Current state.
 - The follow-up production release and direct post-release checks are complete.
-  Establishment of a second Platform Admin through the protected workflow and
-  final delivery approval remain pending. Playground visual polish is intentionally
-  deferred to its backlog task.
+  On 2026-09-16 the user explicitly chose not to grant Neko persistent
+  `platform.admin` authority. Establishment of a second Platform Admin through
+  the protected workflow therefore remains deferred, not failed. Final delivery
+  approval remains pending. Playground visual polish is intentionally deferred
+  to its backlog task.
 
 ## Outcome
 
