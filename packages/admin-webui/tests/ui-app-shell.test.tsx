@@ -124,7 +124,7 @@ describe("current App shell", () => {
     window.location.hash = "#/apps/cas_one/invitations";
     render(<App />);
     await waitFor(() => expect(window.location.hash).toBe("#/apps/cas_one/members?filter=pending"));
-    expect(await screen.findByRole("button", { name: "Invite", exact: true })).toBeVisible();
+    expect(await screen.findByRole("button", { name: "Invite" })).toBeVisible();
     expect(screen.queryByRole("tab", { name: "Invitations" })).not.toBeInTheDocument();
   });
 
@@ -173,7 +173,7 @@ describe("current App shell", () => {
 
     const bubble = await screen.findByRole("button", { name: "Copy App ID cas_one" });
     expect(bubble).toHaveTextContent("cas_one");
-    expect(screen.queryByRole("button", { name: "Copy", exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Copy" })).not.toBeInTheDocument();
     await user.click(bubble);
     expect(writeText).toHaveBeenLastCalledWith("cas_one");
     expect(await screen.findByText("App ID copied")).toBeVisible();
@@ -202,8 +202,9 @@ describe("current App shell", () => {
       if (url.pathname === "/admin/me") return json(me);
       if (url.pathname === "/admin/apps") return json({ items: [app] });
       if (url.pathname === "/admin/apps/cas_one" && init?.method === "PATCH") {
-        patchBody = JSON.parse(String(init.body));
-        app = { ...app, description: String(patchBody.description), revision: 4 };
+        const parsedBody: Record<string, unknown> = JSON.parse(String(init.body));
+        patchBody = parsedBody;
+        app = { ...app, description: String(parsedBody.description), revision: 4 };
         return new Response(null, { status: 204 });
       }
       if (url.pathname === "/admin/apps/cas_one") return json(app);

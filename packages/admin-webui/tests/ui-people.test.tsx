@@ -8,11 +8,11 @@ const invitation = { kind: "invitation", invitation: { invitationId: "invite-1",
 const response = (body: unknown) => Response.json(body);
 
 test("Platform Members renders its toolbar without statistics or summary requests", async () => {
-  const fetcher = vi.fn(async () => response({ items: [], nextCursor: null }));
+  const fetcher = vi.fn(async (_input: RequestInfo | URL) => response({ items: [], nextCursor: null }));
   vi.stubGlobal("fetch", fetcher);
   render(<PeopleView scope={{ platform: true }} />);
   await screen.findByText("No people found.");
-  expect(screen.getByRole("button", { name: "Invite", exact: true })).toBeVisible();
+  expect(screen.getByRole("button", { name: "Invite" })).toBeVisible();
   expect(screen.getByRole("table")).toBeVisible();
   expect(screen.getByRole("region", { name: "Platform people" }).querySelector("dl")).toBeNull();
   expect(fetcher.mock.calls.every(([url]) => !String(url).includes("access-summary"))).toBe(true);
@@ -23,7 +23,7 @@ test("restores focus to the Invite and member action triggers on dismissal", asy
   const user = userEvent.setup();
   render(<PeopleView scope={{ appId: "cas_one", appRevision: 3, onChanged: vi.fn() }} />);
   await screen.findByText("Alice");
-  const invite = screen.getByRole("button", { name: "Invite", exact: true });
+  const invite = screen.getByRole("button", { name: "Invite" });
   await user.click(invite);
   await user.keyboard("{Escape}");
   await waitFor(() => expect(invite).toHaveFocus());
@@ -55,7 +55,7 @@ test("App invitations use existing create/revoke receipts and member removal use
   const user = userEvent.setup();
   render(<PeopleView scope={{ appId: "cas_one", appRevision: 3, onChanged: vi.fn() }} />);
   await screen.findByText("Alice");
-  await user.click(screen.getByRole("button", { name: "Invite", exact: true }));
+  await user.click(screen.getByRole("button", { name: "Invite" }));
   await user.type(screen.getByLabelText("Email constraint (optional)"), "invitee@example.test");
   await user.click(screen.getByRole("button", { name: "Create invitation" }));
   expect(await screen.findByText("https://example.test/invite/one")).toBeVisible();
@@ -74,7 +74,7 @@ test("Platform Invite requires proposed authorities and keeps permission editing
   render(<PeopleView scope={{ platform: true }} />);
   await screen.findByText("same@example.test");
   expect(screen.queryByTitle("Remove member")).not.toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Invite", exact: true }));
+  await user.click(screen.getByRole("button", { name: "Invite" }));
   expect(screen.getByRole("button", { name: "Create invitation" })).toBeDisabled();
   await user.type(screen.getByLabelText("Email"), "new@example.test");
   await user.click(screen.getByLabelText("App creation"));

@@ -22,7 +22,7 @@
     "build:ui": "pnpm --filter \"@unicas/admin-webui^...\" build && vite build",
     "dev:ui": "vite",
     "test": "vitest run",
-    "typecheck": "tsc -b",
+    "typecheck": "tsc -b && tsc --noEmit -p tsconfig.test.json",
     "clean": "rimraf --glob dist \"*.tsbuildinfo\""
   },
   "dependencies": {

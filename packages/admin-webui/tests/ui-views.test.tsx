@@ -82,7 +82,7 @@ describe("PlatformInvitationsView", () => {
     render(<PlatformInvitationsView />);
 
     expect(await screen.findByText("developer@example.com")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Invite", exact: true }));
+    await user.click(screen.getByRole("button", { name: "Invite" }));
     await user.type(screen.getByLabelText("Email"), "new@example.com");
     await user.click(screen.getByLabelText("App creation"));
     await user.click(screen.getByRole("button", { name: "Create invitation" }));
@@ -478,7 +478,7 @@ describe("MembersView", () => {
       .mockResolvedValueOnce(json({ items: [] }));
     const user = userEvent.setup();
     const { rerender } = render(<MembersView appId={STACK} appRevision={1} onChanged={() => undefined} />);
-    await user.click(screen.getByRole("button", { name: "Invite", exact: true }));
+    await user.click(screen.getByRole("button", { name: "Invite" }));
     await user.click(screen.getByRole("button", { name: "Create invitation" }));
     expect(await screen.findByText("https://console.example.test/synthetic-once")).toBeInTheDocument();
     rerender(<MembersView appId="other-app" appRevision={1} onChanged={() => undefined} />);
@@ -506,7 +506,7 @@ describe("MembersView", () => {
     const user = userEvent.setup();
     render(<MembersView appId={STACK} appRevision={1} onChanged={() => undefined} />);
     await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: "Invite", exact: true }));
+    await user.click(screen.getByRole("button", { name: "Invite" }));
     await user.click(screen.getByRole("button", { name: "Create invitation" }));
     await waitFor(() => expect(screen.getByText(/Share this one-time URL/)).toBeInTheDocument());
     expect(screen.getByText("https://cas.example/admin/invitations/token-xyz")).toBeInTheDocument();
@@ -595,7 +595,7 @@ describe("IssuerView", () => {
       .mockResolvedValueOnce(json(managedIssuer()));
     render(<IssuerView appId={STACK} />);
     await waitFor(() => expect(screen.getByRole("button", { name: "Inspect issuer" })).toBeInTheDocument());
-    const customCard = screen.getByRole("heading", { name: "Custom OAuth authorization server" }).closest("[class*='bg-card']")!;
+    const customCard = screen.getByRole("heading", { name: "Custom OAuth authorization server" }).closest<HTMLDivElement>("div[class*='bg-card']")!;
     expect(within(customCard).queryByText(/Status:/)).not.toBeInTheDocument();
     expect(fetchMock.mock.calls[0][0]).toBe(`/admin/apps/${STACK}/oauth-issuer?optional=true`);
   });
@@ -622,7 +622,7 @@ describe("IssuerView", () => {
       revision: 2,
     })).mockResolvedValueOnce(json(managedIssuer()));
     render(<IssuerView appId={STACK} />);
-    const customCard = screen.getByRole("heading", { name: "Custom OAuth authorization server" }).closest("[class*='bg-card']")!;
+    const customCard = screen.getByRole("heading", { name: "Custom OAuth authorization server" }).closest<HTMLDivElement>("div[class*='bg-card']")!;
     await waitFor(() => expect(within(customCard).getByText(/Status:/)).toHaveTextContent("active"));
     expect(screen.getByRole("button", { name: "Inspect replacement" })).toBeEnabled();
     expect(screen.getByLabelText("Issuer")).toBeEnabled();
@@ -645,7 +645,7 @@ describe("IssuerView", () => {
     await user.type(input, "https://replacement.example");
     await user.click(screen.getByRole("button", { name: "Inspect replacement" }));
     expect(await screen.findByText("candidate-challenge")).toBeInTheDocument();
-    const custom = screen.getByRole("heading", { name: "Custom OAuth authorization server" }).closest("[class*='bg-card']")!;
+    const custom = screen.getByRole("heading", { name: "Custom OAuth authorization server" }).closest<HTMLDivElement>("div[class*='bg-card']")!;
     expect(within(custom).getByText(/Mode:/)).toHaveTextContent("https://current.example");
     expect(within(custom).getByText(/Mode:/)).toHaveTextContent("active");
     await user.type(screen.getByLabelText("Activation proof (compact JWS)"), "synthetic-proof");
@@ -698,7 +698,7 @@ describe("IssuerView", () => {
     await screen.findByText(/cas-oauth-issuer-inspection-v1/);
     await user.type(screen.getByLabelText("Activation proof (compact JWS)"), "proof");
     await user.click(screen.getByRole("button", { name: "Verify and activate" }));
-    const customCard = screen.getByRole("heading", { name: "Custom OAuth authorization server" }).closest("[class*='bg-card']")!;
+    const customCard = screen.getByRole("heading", { name: "Custom OAuth authorization server" }).closest<HTMLDivElement>("div[class*='bg-card']")!;
     await waitFor(() => expect(within(customCard).getByText(/Status:/)).toHaveTextContent("active"));
     const inspectionCall = fetchMock.mock.calls.find((call) => String(call[0]).endsWith("/oauth-issuer/inspections"));
     expect(JSON.parse(inspectionCall![1]!.body as string)).toEqual({ issuer: "https://auth.example" });

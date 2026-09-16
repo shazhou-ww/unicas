@@ -21,6 +21,25 @@ Updated: 2026-09-16
 
 ### Latest continuation
 
+Type-check coverage follow-up: added WebUI `tsconfig.test.json` covering `src`,
+all `tests`, and `vite.config.ts`, with noEmit enabled. The standard package
+typecheck now runs `tsc -b && tsc --noEmit -p tsconfig.test.json`, so root/CI
+typecheck includes this coverage. The full check exposed six Element/HTMLElement
+errors in four issuer-test selectors, now corrected with typed HTML div queries;
+also fixed the no-argument mock that inferred an empty call tuple. Direct
+`pnpm --filter @unicas/admin-webui exec tsc --noEmit -p tsconfig.test.json`
+and root `pnpm typecheck` pass, eight focused Issuer tests pass, and the editor
+reports no errors. Other packages retain their existing typecheck scopes; this
+does not claim new all-test coverage for every package. Changes remain local.
+
+Earlier type-diagnostic follow-up: removed unsupported `exact` options from Testing
+Library ByRole queries in four WebUI test files; string `name` matching remains
+exact. The App PATCH fake now reads from a typed, non-null local parsed payload
+before retaining it for assertions. Editor diagnostics are clear for all four
+files and their 55 tests pass. At that point the WebUI typecheck included only
+`src`; the subsequent no-emit test configuration above closes that coverage gap.
+These follow-up edits are local, after published refinement commit `11dc74a`.
+
 #### Checkpoint on 2026-09-16
 
 This record accompanies the user-requested commit of the Console refinements
