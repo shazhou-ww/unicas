@@ -34,6 +34,21 @@ recorded. The user must now complete authentication directly in the browser;
 after the Console returns, continue UserAcceptance steps 3 through 5 and record
 only non-secret results.
 
+The initial administrator subsequently completed real Google login. Production
+Console showed the expected App membership, App creation control, and Platform
+Administration entry. After refreshing an expired local CLI session through
+the production PKCE flow, live `principal`, App listing, and protected platform
+access listing passed. The repository stdio MCP server exposed 47 tools and a
+live `get_current_principal` call returned the same effective authorities. No
+production mutation was made by these checks.
+
+Testing an unentitled secondary account is blocked in the VS Code embedded
+Electron browser: Google rejects that browser before returning to UniCAS with a
+generic JavaScript-disabled message. An in-page check confirmed JavaScript is
+running; this is not an UniCAS admission result. Next: use ordinary Chrome or
+Edge to sign in as the secondary account at the production Console and report
+whether UniCAS denies admission. Do not treat the Google rejection as a pass.
+
 ### Production reset and release
 
 Reset execution completed on 2026-09-16 and supersedes the initial preflight

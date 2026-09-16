@@ -85,3 +85,12 @@ Acceptance resumed on 2026-09-16: the production restricted-login page loaded
 and redirected to the real Google account identifier prompt. Authentication is
 awaiting direct user interaction in the browser; no identity or OAuth values
 were retained in this record. After login, resume at step 3.
+
+The initial administrator then passed real-provider Console login. Live CLI
+login/read checks and an authenticated stdio MCP `get_current_principal` call
+also passed against production, with consistent current authorities and no
+write. A secondary-account attempt in the VS Code embedded Electron browser was
+rejected by Google before the UniCAS callback with a generic JavaScript-disabled
+message even though JavaScript execution was confirmed. This is not a UniCAS
+deny-by-default result. Resume step 3 in ordinary Chrome or Edge with the
+secondary account, then continue invitation and revocation checks.
