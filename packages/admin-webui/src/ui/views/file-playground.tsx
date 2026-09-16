@@ -33,6 +33,7 @@ import { PlaygroundCacheContext } from "../playground-cache.js";
 import { Button } from "@/components/ui/button.js";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.js";
 import { Input } from "@/components/ui/input.js";
+import { Checkbox } from "@/components/ui/checkbox.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
 import {
   Table,
@@ -88,6 +89,7 @@ function FilePlayground({ appId, onOpenManagedIssuer }: { appId: string; onOpenM
   const capabilityRef = useRef<ManagedSpaceCapability | null>(null);
   const capabilityRequestRef = useRef<Promise<ManagedSpaceCapability> | null>(null);
   const rootCache = useRef(new Map<string, TenantFileRoot>());
+  const uploadInput = useRef<HTMLInputElement>(null);
   const [roots, setRoots] = useState<readonly TenantFileRootInfo[]>([]);
   const [selection, setSelection] = useState<string>("usage");
   const [openedRoot, setOpenedRoot] = useState<TenantFileRoot | null>(null);
@@ -422,7 +424,7 @@ function FilePlayground({ appId, onOpenManagedIssuer }: { appId: string; onOpenM
       </div>
     );
   }
-  
+
   if (!issuer) {
     return error ? (
       <div className="file-playground">
@@ -433,7 +435,7 @@ function FilePlayground({ appId, onOpenManagedIssuer }: { appId: string; onOpenM
       </div>
     ) : null;
   }
-  
+
   if (issuer.status !== "active") return (
     <section aria-label="Playground unavailable">
       <h2>Managed issuer required</h2>
@@ -507,14 +509,14 @@ function FilePlayground({ appId, onOpenManagedIssuer }: { appId: string; onOpenM
         </div>
         <nav className="file-root-nav">
           {roots.map((root) => (
-            <button key={root.rootId} type="button" disabled={running} aria-current={selection === root.rootId ? "true" : undefined} className={selection === root.rootId ? "active" : ""} onClick={() => void openRoot(root.rootId)}>
+            <Button variant="ghost" key={root.rootId} type="button" disabled={running} aria-current={selection === root.rootId ? "true" : undefined} className={selection === root.rootId ? "active" : ""} onClick={() => void openRoot(root.rootId)}>
               <HardDrive size={16} /><span>{root.name}</span><small>r{root.revision}</small>
-            </button>
+            </Button>
           ))}
           {roots.length === 0 ? <p className="muted file-root-empty">No roots yet.</p> : null}
-          <button type="button" disabled={running} className={selection === "usage" ? "active" : ""} onClick={() => { setSelection("usage"); setOpenedRoot(null); }}>
+          <Button variant="ghost" type="button" disabled={running} className={selection === "usage" ? "active" : ""} onClick={() => { setSelection("usage"); setOpenedRoot(null); }}>
             <Activity size={16} /><span>Usage</span>
-          </button>
+          </Button>
         </nav>
       </aside>
 
@@ -546,7 +548,7 @@ function FilePlayground({ appId, onOpenManagedIssuer }: { appId: string; onOpenM
                 <label htmlFor="playground-gc-limit">Maximum nodes to examine</label>
                 <Input id="playground-gc-limit" type="number" min="1" value={gcMaxNodes} onChange={(event) => setGcMaxNodes(event.target.value)} />
               </div>
-              <label className="playground-check"><input type="checkbox" checked={gcConfirmed} onChange={(event) => setGcConfirmed(event.target.checked)} /> I understand that unreferenced, expired nodes may be deleted</label>
+              <label className="playground-check"><Checkbox checked={gcConfirmed} onCheckedChange={checked => setGcConfirmed(checked === true)} /> I understand that unreferenced, expired nodes may be deleted</label>
               <Button variant="destructive" size="sm" onClick={() => void collectGarbage()} disabled={!gcConfirmed || running || !Number.isSafeInteger(Number(gcMaxNodes)) || Number(gcMaxNodes) < 1}>
                 <Trash2 size={15} />
                 Run garbage collection
@@ -557,26 +559,27 @@ function FilePlayground({ appId, onOpenManagedIssuer }: { appId: string; onOpenM
         ) : openedRoot ? (
           <div className="file-explorer" aria-busy={running}>
             <div className="file-pathbar">
-              <button type="button" className="file-icon-button" title="Parent folder" aria-label="Parent folder" disabled={running || directory === "/"} onClick={() => void run(() => refreshFiles(openedRoot, parentPath(directory)))}><ArrowUp size={16} /></button>
+              <Button variant="ghost" size="icon" type="button" className="file-icon-button" title="Parent folder" aria-label="Parent folder" disabled={running || directory === "/"} onClick={() => void run(() => refreshFiles(openedRoot, parentPath(directory)))}><ArrowUp size={16} /></Button>
               <nav className="file-breadcrumbs" aria-label="Folder path">
-                <button type="button" disabled={running} aria-current={directory === "/" ? "page" : undefined} onClick={() => void run(() => refreshFiles(openedRoot, "/"))}><HardDrive size={16} /><span>{openedRoot.info.name}</span></button>
+                <Button variant="ghost" size="sm" type="button" disabled={running} aria-current={directory === "/" ? "page" : undefined} onClick={() => void run(() => refreshFiles(openedRoot, "/"))}><HardDrive size={16} /><span>{openedRoot.info.name}</span></Button>
                 {directory.split("/").filter(Boolean).map((segment, index, parts) => (
                   <span key={parts.slice(0, index + 1).join("/")}>
                     <ChevronRight size={14} />
-                    <button type="button" disabled={running} aria-current={index === parts.length - 1 ? "page" : undefined} onClick={() => void run(() => refreshFiles(openedRoot, `/${parts.slice(0, index + 1).join("/")}`))}>{segment}</button>
+                    <Button variant="ghost" size="sm" type="button" disabled={running} aria-current={index === parts.length - 1 ? "page" : undefined} onClick={() => void run(() => refreshFiles(openedRoot, `/${parts.slice(0, index + 1).join("/")}`))}>{segment}</Button>
                   </span>
                 ))}
               </nav>
-              <button type="button" className="file-icon-button" title="Refresh files" aria-label="Refresh files" disabled={running} onClick={() => void openRoot(openedRoot.info.rootId, true)}><RefreshCw size={16} className={running ? "file-refreshing" : undefined} /></button>
-              <button type="button" className="file-icon-button" title="Rename root" aria-label="Rename root" disabled={running} onClick={() => void renameRoot()}><Pencil size={16} /></button>
-              <button type="button" className="file-icon-button file-danger" title="Delete root" aria-label="Delete root" disabled={running} onClick={() => void deleteRoot()}><Trash2 size={16} /></button>
+              <Button variant="ghost" size="icon" type="button" className="file-icon-button" title="Refresh files" aria-label="Refresh files" disabled={running} onClick={() => void openRoot(openedRoot.info.rootId, true)}><RefreshCw size={16} className={running ? "file-refreshing" : undefined} /></Button>
+              <Button variant="ghost" size="icon" type="button" className="file-icon-button" title="Rename root" aria-label="Rename root" disabled={running} onClick={() => void renameRoot()}><Pencil size={16} /></Button>
+              <Button variant="ghost" size="icon" type="button" className="file-icon-button file-danger" title="Delete root" aria-label="Delete root" disabled={running} onClick={() => void deleteRoot()}><Trash2 size={16} /></Button>
             </div>
             <div className="file-toolbar" role="toolbar" aria-label="File actions">
               <Button size="sm" disabled={running || folderDraft !== null} onClick={() => { setError(null); setSelectedPaths([]); folderDraftAttempt.current = null; folderDraftCancelled.current = false; setFolderDraft(""); }}>
                 <FolderPlus size={16} />
                 New folder
               </Button>
-              <label className="btn file-upload-button"><Upload size={15} /><span>Upload</span><input aria-label="Upload files" type="file" multiple onChange={(event) => {
+              <Button variant="outline" size="sm" disabled={running} onClick={() => uploadInput.current?.click()}><Upload size={15} />Upload</Button>
+              <input ref={uploadInput} hidden aria-label="Upload files" type="file" multiple onChange={(event) => {
                 const files = Array.from(event.target.files ?? []);
                 if (files.some((file) => entries.some((entry) => entry.name === file.name)) && !window.confirm("Replace existing files with the same names?")) {
                   event.target.value = "";
@@ -591,29 +594,29 @@ function FilePlayground({ appId, onOpenManagedIssuer }: { appId: string; onOpenM
                   }
                 });
                 event.target.value = "";
-              }} disabled={running} /></label>
+              }} disabled={running} />
               <span className="file-toolbar-divider" />
-              <button type="button" className="file-icon-button" title="Download selected files" aria-label="Download selected files" disabled={running || !selectedEntries.length || selectedEntries.some((entry) => entry.type === "directory")} onClick={() => void run(async () => { for (const entry of selectedEntries) await downloadEntry(entry); })}><Download size={16} /></button>
-              <button type="button" className="file-icon-button" title="Rename selected item" aria-label="Rename selected item" disabled={running || selectedEntries.length !== 1} onClick={() => void renameEntry()}><Pencil size={16} /></button>
-              <button type="button" className="file-icon-button" title="Copy selected items" aria-label="Copy selected items" disabled={running || !selectedEntries.length} onClick={() => void transferEntries("copy")}><Copy size={16} /></button>
-              <button type="button" className="file-icon-button" title="Move selected items" aria-label="Move selected items" disabled={running || !selectedEntries.length} onClick={() => void transferEntries("move")}><Move size={16} /></button>
-              <button type="button" className="file-icon-button file-danger" title="Delete selected items" aria-label="Delete selected items" disabled={running || !selectedEntries.length} onClick={() => {
+              <Button variant="ghost" size="icon" type="button" className="file-icon-button" title="Download selected files" aria-label="Download selected files" disabled={running || !selectedEntries.length || selectedEntries.some((entry) => entry.type === "directory")} onClick={() => void run(async () => { for (const entry of selectedEntries) await downloadEntry(entry); })}><Download size={16} /></Button>
+              <Button variant="ghost" size="icon" type="button" className="file-icon-button" title="Rename selected item" aria-label="Rename selected item" disabled={running || selectedEntries.length !== 1} onClick={() => void renameEntry()}><Pencil size={16} /></Button>
+              <Button variant="ghost" size="icon" type="button" className="file-icon-button" title="Copy selected items" aria-label="Copy selected items" disabled={running || !selectedEntries.length} onClick={() => void transferEntries("copy")}><Copy size={16} /></Button>
+              <Button variant="ghost" size="icon" type="button" className="file-icon-button" title="Move selected items" aria-label="Move selected items" disabled={running || !selectedEntries.length} onClick={() => void transferEntries("move")}><Move size={16} /></Button>
+              <Button variant="ghost" size="icon" type="button" className="file-icon-button file-danger" title="Delete selected items" aria-label="Delete selected items" disabled={running || !selectedEntries.length} onClick={() => {
                 if (window.confirm(`Delete ${selectedEntries.length} selected item(s)?`)) void commitMutation(async (root) => { for (const entry of selectedEntries) await root.remove(entry.path); });
-              }}><Trash2 size={16} /></button>
+              }}><Trash2 size={16} /></Button>
             </div>
             <div className="file-table-scroll">
               <Table className="file-table" aria-label="Folder contents">
                 <TableHeader>
                   <TableRow>
                     <TableHead className="file-selection">
-                      <input type="checkbox" aria-label="Select all items" disabled={running || !entries.length} checked={entries.length > 0 && selectedPaths.length === entries.length} onChange={(event) => setSelectedPaths(event.target.checked ? entries.map((entry) => entry.path) : [])} />
+                      <Checkbox aria-label="Select all items" disabled={running || !entries.length} checked={entries.length > 0 && selectedPaths.length === entries.length ? true : selectedPaths.length > 0 ? "indeterminate" : false} onCheckedChange={checked => setSelectedPaths(checked === true ? entries.map((entry) => entry.path) : [])} />
                     </TableHead>
                     {(["name", "type", "size"] as const).map((column) => (
                       <TableHead key={column} className={`file-column-${column}`} aria-sort={sort.column === column ? sort.descending ? "descending" : "ascending" : "none"}>
-                        <button type="button" onClick={() => setSort({ column, descending: sort.column === column && !sort.descending })}>
+                        <Button variant="ghost" size="sm" type="button" onClick={() => setSort({ column, descending: sort.column === column && !sort.descending })}>
                           {column === "name" ? "Name" : column === "type" ? "Type" : "Size"}
                           {sort.column === column ? <ArrowUp size={12} style={{ transform: sort.descending ? "rotate(180deg)" : undefined }} /> : null}
-                        </button>
+                        </Button>
                       </TableHead>
                     ))}
                   </TableRow>
@@ -654,13 +657,13 @@ function FilePlayground({ appId, onOpenManagedIssuer }: { appId: string; onOpenM
                   {sortedEntries.map((entry) => (
                     <TableRow key={entry.path} aria-selected={selectedPaths.includes(entry.path)}>
                       <TableCell className="file-selection">
-                        <input type="checkbox" aria-label={`Select ${entry.name}`} disabled={running} checked={selectedPaths.includes(entry.path)} onChange={(event) => setSelectedPaths(event.target.checked ? [...selectedPaths, entry.path] : selectedPaths.filter((path) => path !== entry.path))} />
+                        <Checkbox aria-label={`Select ${entry.name}`} disabled={running} checked={selectedPaths.includes(entry.path)} onCheckedChange={checked => setSelectedPaths(checked === true ? [...selectedPaths, entry.path] : selectedPaths.filter((path) => path !== entry.path))} />
                       </TableCell>
                       <TableCell>
-                        <button type="button" className="file-entry" title={entry.type === "directory" ? `Open ${entry.name}` : `Download ${entry.name}`} disabled={running} onClick={() => void run(() => entry.type === "directory" ? refreshFiles(openedRoot, entry.path) : downloadEntry(entry))}>
+                        <Button variant="ghost" size="sm" type="button" className="file-entry" title={entry.type === "directory" ? `Open ${entry.name}` : `Download ${entry.name}`} disabled={running} onClick={() => void run(() => entry.type === "directory" ? refreshFiles(openedRoot, entry.path) : downloadEntry(entry))}>
                           {entry.type === "directory" ? <Folder size={17} /> : <File size={17} />}
                           <span>{entry.name}</span>
-                        </button>
+                        </Button>
                       </TableCell>
                       <TableCell className="file-column-type" title={entry.mediaType}>
                         {entry.type === "directory" ? "Folder" : entry.mediaType ?? "File"}

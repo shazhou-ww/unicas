@@ -7,6 +7,32 @@ const member = { kind: "member", joinedAt: 1, membership: { appId: "cas_one", pr
 const invitation = { kind: "invitation", invitation: { invitationId: "invite-1", emailConstraint: "same@example.test", status: "pending", expiresAt: 4102444800000, createdAt: 2, revision: 7 } };
 const response = (body: unknown) => Response.json(body);
 
+test("Platform Members renders its toolbar without statistics or summary requests", async () => {
+  const fetcher = vi.fn(async () => response({ items: [], nextCursor: null }));
+  vi.stubGlobal("fetch", fetcher);
+  render(<PeopleView scope={{ platform: true }} />);
+  await screen.findByText("No people found.");
+  expect(screen.getByRole("button", { name: "Invite", exact: true })).toBeVisible();
+  expect(screen.getByRole("table")).toBeVisible();
+  expect(screen.getByRole("region", { name: "Platform people" }).querySelector("dl")).toBeNull();
+  expect(fetcher.mock.calls.every(([url]) => !String(url).includes("access-summary"))).toBe(true);
+});
+
+test("restores focus to the Invite and member action triggers on dismissal", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => response({ items: [member], nextCursor: null })));
+  const user = userEvent.setup();
+  render(<PeopleView scope={{ appId: "cas_one", appRevision: 3, onChanged: vi.fn() }} />);
+  await screen.findByText("Alice");
+  const invite = screen.getByRole("button", { name: "Invite", exact: true });
+  await user.click(invite);
+  await user.keyboard("{Escape}");
+  await waitFor(() => expect(invite).toHaveFocus());
+  const remove = screen.getByTitle("Remove member");
+  await user.click(remove);
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  await waitFor(() => expect(remove).toHaveFocus());
+});
+
 test("one App table renders distinct members and invitations, filtering and paging on the server", async () => {
   const requests: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: string) => { requests.push(input); return response({ items: input.includes("cursor=") ? [] : [member, invitation], nextCursor: input.includes("cursor=") ? null : "page-two" }); }));

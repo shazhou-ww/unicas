@@ -1,4 +1,5 @@
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs.js";
+import type { ReactNode } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs.js";
 import type { AppSection } from "../router.js";
 
 const APP_TABS: readonly { id: AppSection; label: string }[] = [
@@ -6,6 +7,27 @@ const APP_TABS: readonly { id: AppSection; label: string }[] = [
   { id: "members", label: "Members" },
   { id: "change-logs", label: "Change Logs" },
 ];
+
+export function WorkspaceDetailHeader({ title, value, onValueChange, navigationLabel, children, content }: {
+  title: string;
+  value: string;
+  onValueChange: (value: string) => void;
+  navigationLabel: string;
+  children: ReactNode;
+  content: ReactNode;
+}) {
+  return (
+    <Tabs value={value} onValueChange={onValueChange}>
+      <div className="console-app-detail-header">
+        <h1 className="console-app-detail-title" title={title}>{title}</h1>
+        <TabsList className="console-app-tabs" aria-label={navigationLabel}>
+          {children}
+        </TabsList>
+      </div>
+      <TabsContent value={value} className="mt-0">{content}</TabsContent>
+    </Tabs>
+  );
+}
 
 /**
  * App detail tab navigation using shadcn Tabs (line-style).
@@ -17,35 +39,36 @@ export function AppDetailTabs({
   activeSection,
   playgroundEnabled,
   onTabChange,
+  content,
 }: {
   appId: string;
   displayName: string;
   activeSection: AppSection;
   playgroundEnabled: boolean;
   onTabChange: (section: AppSection) => void;
+  content: ReactNode;
 }) {
   return (
-    <div className="console-app-detail-header">
-      <h1 className="console-app-detail-title" title={displayName}>
-        {displayName}
-      </h1>
-      <Tabs value={activeSection} onValueChange={(value) => onTabChange(value as AppSection)}>
-        <TabsList className="console-app-tabs">
-          {APP_TABS.map((tab) => (
-            <TabsTrigger key={tab.id} value={tab.id}>
-              {tab.label}
-            </TabsTrigger>
-          ))}
-          <TabsTrigger
-            value="playground"
-            className="console-playground-tab"
-            disabled={!playgroundEnabled}
-            title={playgroundEnabled ? "Playground" : "Enable the managed issuer to use Playground"}
-          >
-            Playground
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
-    </div>
+    <WorkspaceDetailHeader
+      title={displayName}
+      value={activeSection}
+      onValueChange={(value) => onTabChange(value as AppSection)}
+      navigationLabel="App sections"
+      content={content}
+    >
+      {APP_TABS.map((tab) => (
+        <TabsTrigger key={tab.id} value={tab.id}>
+          {tab.label}
+        </TabsTrigger>
+      ))}
+      <TabsTrigger
+        value="playground"
+        className="console-playground-tab"
+        disabled={!playgroundEnabled}
+        title={playgroundEnabled ? "Playground" : "Enable the managed issuer to use Playground"}
+      >
+        Playground
+      </TabsTrigger>
+    </WorkspaceDetailHeader>
   );
 }

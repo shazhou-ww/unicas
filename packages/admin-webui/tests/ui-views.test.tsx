@@ -213,10 +213,13 @@ describe("PlatformAuditView", () => {
     const user = userEvent.setup();
     render(<PlatformAuditView />);
 
-    await screen.findByText("No events.");
+    await screen.findByText("No changes yet.");
+    expect(screen.getByRole("table")).toBeVisible();
+    expect(screen.getByRole("region", { name: "Change Logs" }).querySelector(".bg-card")).toBeNull();
     await user.type(screen.getByLabelText("Actor Principal ref"), "actor-ref");
     await user.click(screen.getByRole("button", { name: "Apply" }));
     expect(await screen.findByText("platform_invitation.created")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Change Logs" })).getByRole("table")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Load more" }));
     await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => String(path).includes("cursor=audit-next"))).toBe(true));
     const pagedPath = String(fetchMock.mock.calls.at(-1)?.[0]);

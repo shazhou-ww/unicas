@@ -19,6 +19,105 @@ Updated: 2026-09-16
 
 ## Current state
 
+### Latest continuation
+
+#### Checkpoint on 2026-09-16
+
+This record accompanies the user-requested commit of the Console refinements
+after `5be4ce7`: shared App/Platform headers, Members/Change Logs naming,
+unframed log tables, removal of Platform statistics, starter page, inline App
+creation with mouse and keyboard controls, sidebar refresh, App-switch draft
+isolation, mobile drawer closure, tabpanel semantics, dialog focus restoration,
+reduced motion, Playground shared controls, and migration-runbook preconditions.
+
+Final validation of this checkpoint: all 85 WebUI tests across 10 files pass;
+WebUI typecheck, production build, and `git diff --check` pass. Known non-failing
+Vite sourcemap and chunk-size warnings remain. Earlier whole-repository tests
+and browser evidence are retained below with their actual scope; they are not
+presented as a new full-repository run for these final UI changes.
+
+This is a partial implementation checkpoint, not completion or archival. Next:
+validate enabled Playground in an isolated runtime using local-only generated
+signing material; complete mobile inline creation browser coverage; then run
+the remaining release gates. Production bootstrap validation and explicit final
+delivery approval are still outstanding. No production operation was run.
+
+The App draft now includes inline confirm (Check) and cancel (X) buttons inside
+the input's right edge, with titles and accessible names. Input padding reserves
+their space. Focus moving from the input to either button remains inside the
+editor and does not trigger blur submission; leaving the entire editor retains
+the nonempty-submit/empty-cancel behavior. Mouse cancellation of a named draft
+does not create an App, confirmation submits once, and saving disables both
+buttons. All 25 draft/starter and shell tests pass; touched-file diagnostics
+are clear. Browser screenshot/geometry confirms both 24px controls fit inside
+the input with 64px text padding, and real mouse cancellation removes the draft
+and restores focus to the sidebar plus. No App was created by that browser test.
+
+Latest creation refinement: the no-selection page is now a minimal starter
+message with no duplicate App list, creation form, or extra fetch. The sidebar
+plus opens an autofocus draft at the top of the App list. Enter or nonempty
+blur creates through the existing API, with duplicate-submit protection and
+the same idempotency key on retry, then navigates to the returned App's overview
+and refreshes sidebar membership state. Local/server validation errors stay in
+an anchored floating hint; failed names remain editable. Escape cancels.
+Empty or whitespace-only blur cancels without a request, including after Enter
+has displayed the required-name hint. The latter behavior was explicitly
+confirmed by the user and covered by three new regressions. All ten draft/starter
+tests pass; the preceding shell/navigation run passed 26 tests and typecheck.
+Desktop browser inspection verified the starter, top draft, and anchored empty
+name hint without creating an App. Mobile creation browser validation remains
+pending after a viewport/navigation-trigger wait timed out.
+
+The user asked to continue the remaining task after the UI feedback, then
+requested removal of the Platform statistics blocks. The following changes
+are implemented locally after the published `0555cc0` checkpoint:
+
+- Both workspaces display Members and Change Logs using the App header style.
+  Both log pages are unframed tables, including table-based empty states. URL
+  and API identifiers remain unchanged for compatibility.
+- Removed Platform Members' statistics blocks and its access-summary request,
+  state, and refresh lifecycle. The existing protected statistics API remains
+  available to other clients. Eight focused tests pass; browser inspection
+  confirms zero statistics blocks/requests, one table, and no page overflow.
+- App creation refreshes the sidebar App list and membership count without
+  rebuilding the Playground cache session. App membership mutations refresh
+  navigation as well. Delayed App-switch regression prevents stale resource
+  revisions and unsaved drafts from rendering under another App's route.
+- Mobile navigation closes on App/Platform selection and returns focus to its
+  trigger. Invite/action dialogs and Principal details restore their opener's
+  focus, falling back to the list region when a row disappears.
+- Selected route tabs now own actual TabsContent panels. Axe initially found
+  dangling aria-controls; after repair, WCAG A/AA scans report zero violations
+  on Platform Members, App Overview/Members, both log pages, the App Invite
+  dialog, mobile navigation, and Principal detail. These are automated checks,
+  not a claim of comprehensive screen-reader certification.
+- Foreground browser testing resolved the earlier background-page limitation:
+  real Invite clicks, Tab focus containment, Escape focus return, App ID copy
+  success toast, mobile route selection/closure, and Principal detail focus
+  return passed. Clipboard readback requested extra permission and was cancelled;
+  no clipboard contents were read. Reduced-motion computes animation none and
+  transition 0s. The 375px Principal Sheet fits the viewport; the navigation
+  drawer spans 103..375px.
+- Playground buttons, upload trigger, and selection/GC checkboxes now use shared
+  primitives. Fourteen targeted workflow tests passed. The default local runtime
+  has no managed-issuer signing configuration, so enabled Playground end-to-end
+  browser validation remains outstanding; do not equate mocked tests with that
+  result.
+- The operations runbook now requires a completed App/Space physical cutover
+  before Platform Access migration and limits rollback to an App/Space-compatible
+  Worker. Auxiliary column renames are not a full Stack/Tenant migration. No
+  production operation was performed.
+- Before the final statistics removal, `pnpm test` passed all packages, including
+  75 WebUI, 247 Cloudflare, 117 service, 93 protocol, and 16 admin-client tests;
+  WebUI typecheck and touched-file diagnostics passed. The statistics removal
+  has its own focused eight-test/browser verification. A new build/publication
+  checkpoint is still pending for this continuation.
+
+Next concrete action: validate an enabled Playground in an isolated local
+runtime with generated local-only signing material, then rerun remaining release
+gates and update acceptance evidence. Production bootstrap verification and
+explicit final delivery acceptance still require the authorized human operator.
+
 Approval on 2026-09-16: after publication of the unified query/UI amendment
 as `83beb4b`, the requesting user explicitly directed "你继续去做吧" in
 response to the request to proceed with both read contracts. This approves
@@ -67,7 +166,8 @@ it does not assert production deployment or final delivery acceptance.
   expiry uses the existing effective-status projection; the cursor expires at
   the earliest pending invitation deadline. No storage schema migration needed.
 - App navigation is Overview, Members, Change Logs, with Playground on the right.
-  Platform navigation is People and Audit. Both use one shared table with search,
+  Platform navigation now displays Members and Change Logs; technical people/audit
+  routes remain stable. Both use one shared member table with search,
   filters, refresh, Invite Dialog, receipt copy, conditional revoke, and history.
   App removal uses both identity fields and the App ETag; Principal edits retain
   confirmation, self-block/last-admin errors, revision checks, and membership
@@ -105,6 +205,15 @@ rollback, break-glass, and encryption-key retention. No production action ran.
 
 Integration findings fixed during browser verification:
 
+- User requested a checkpoint before making Platform Administration match the
+  App visual style. The worktree was already clean at `5be4ce7`, with the
+  implementation checkpoint `0555cc0` on `origin/main`; no empty commit was
+  created. App and Platform now reuse `WorkspaceDetailHeader`, preserving the
+  App title size/spacing, full-width left-aligned line tabs, and selected
+  underline. Platform's former title-right button tabs are removed. Shared
+  people tables, permissions, filters, and page content are unchanged. All 17
+  App-shell/navigation tests pass; touched-file diagnostics are clear. Desktop
+  screenshot confirms the shared layout, and 375px geometry has no page overflow.
 - Latest user-requested refinement: extracted `CopyBubble` and a shared Sonner
   notification host. App ID uses the component with pointer cursor, hover/focus
   affordance, native keyboard activation, and floating success/failure messages.
@@ -160,7 +269,7 @@ Integration findings fixed during browser verification:
   several real Miniflare/D1 scenarios exceeded five seconds without assertion
   failures. The normal recursive test entry subsequently passed.
 
-### Latest validation
+### Earlier validation checkpoint
 
 On 2026-09-16, `pnpm exec repoledger doctor`, `pnpm test`, `pnpm build`,
 `pnpm typecheck`, `pnpm docs:build`, Worker Wrangler `deploy --dry-run`,
@@ -178,11 +287,11 @@ At 375px the Principal Sheet spans 0..375px; the navigation Sheet spans
 keyboard/focus/reduced-motion browser acceptance pass is still outstanding.
 Screenshots were inspected in the session, not committed as durable artifacts.
 
-Remaining acceptance work after human review:
+Remaining acceptance work (latest continuation above supersedes older gaps):
 
 - Recheck all Console migration criteria, including full existing workflows.
-- Verify creation updates sidebar memberships without requiring a reload;
-  the observed list refreshed while the sidebar still showed zero memberships.
+- Sidebar refresh and App-switch isolation are fixed and regression-tested;
+  finish mobile inline-creation browser validation.
 - Complete keyboard, focus-return, screen-reader labeling, and reduced-motion
   browser checks. Preserve current passing responsive layouts.
 - Review migration applicability: successful local startup is not evidence
@@ -205,12 +314,12 @@ constitute blanket approval of the broader task's checkpoints. They are included
 in the validated partial checkpoint accompanying this record; the unified-query
 amendment has its own explicit approval published as `23d8c52`.
 
-Next action: request review of the locally running unified lists, then continue
-the broader task's outstanding acceptance items (sidebar refresh, migration
-applicability, complete browser accessibility/clipboard checks, production
-runbook review). Publish implementation completion only once those criteria and
-required gates are met, then request separate delivery acceptance. The unified
-people slice is implemented, not a pending proposal; broader task gates remain.
+Next action: continue the concrete enabled-Playground/mobile validation in the
+latest checkpoint above. Sidebar refresh, shared naming, focus restoration, and
+foreground clipboard-write feedback are already verified. Publish implementation
+completion only once the remaining criteria and required gates are met, then
+request separate delivery acceptance. The unified people slice is implemented,
+not a pending proposal; broader task gates remain.
 
 ## Historical implementation checkpoint
 
@@ -279,6 +388,7 @@ audit reads.
 | --- | --- | --- |
 | Claim | `origin/main` commit `ff3c87e0318d4c30b76111d8cf96302a0b354fba`. | Published |
 | Unified people and Console partial checkpoint | `0555cc0`, verified reachable from refreshed `origin/main`; full tests, typecheck, OpenAPI and local build passed. | Published |
+| Console refinement partial checkpoint | Commit containing this record; 85 WebUI tests, typecheck, build, and diff checks pass. | Prepared for publication; not implementation complete |
 | Implementation complete | Not yet completed. | Pending |
 | Archive | Not yet archived. | Pending |
 
@@ -324,10 +434,10 @@ audit reads.
 
 - [x] Milestone 1: Tailwind CSS 4 + shadcn/ui infrastructure — installed 17 shadcn components, `cn()` helper, `@/*` path alias, `@tailwindcss/vite` plugin, `/admin/platform` proxy bypass.
 - [x] Milestone 2: Sidebar shell + two-column layout + routing — `app-sidebar.tsx` (brand, Apps list, Platform Admin, profile footer), `app-detail-tabs.tsx` (shadcn Tabs), `parseAppRoute`/`parsePlatformRoute` in router, `app.tsx` rewritten with two-column flex layout, `user-menu.tsx` migrated to shadcn DropdownMenu + Avatar. All 52 tests pass.
-- [ ] Milestone 3: Port Overview view to shadcn.
-- [ ] Milestone 4: Port Members, Invitations, and Change Logs.
-- [ ] Milestone 5: Port Playground to shadcn.
-- [ ] Milestone 6: Platform Administration views.
+- [x] Milestone 3: Port Overview view to shadcn, with copy bubble and metadata grid.
+- [x] Milestone 4: Port Members/Invitations to one table and Change Logs to an unframed table.
+- [x] Milestone 5: Port Playground controls to shadcn; enabled end-to-end browser validation remains a separate gate.
+- [x] Milestone 6: Platform Administration views with shared navigation and Members/Change Logs presentation.
 - [ ] Milestone 7: Cleanup old components, CSS, and tests.
 
 ## Blockers
@@ -339,5 +449,6 @@ audit reads.
 
 ## Outcome
 
-Ongoing, awaiting human review. Local implementation changes are preserved;
-final acceptance and implementation-complete publication remain pending.
+Ongoing. This validated refinement checkpoint is ready for the requested commit
+and normal publication. Enabled Playground/mobile validation, final acceptance,
+and implementation-complete publication remain pending.

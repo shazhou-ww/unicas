@@ -5,7 +5,6 @@ import { api } from "../../api.js";
 import { formatErrorSafe } from "../view-helpers.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.js";
 import { Input } from "@/components/ui/input.js";
 import { Label } from "@/components/ui/label.js";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.js";
@@ -62,7 +61,7 @@ export function PlatformAuditView() {
   }
 
   return (
-    <div className="space-y-4">
+    <section className="space-y-4" aria-label="Change Logs">
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_minmax(12rem,1fr)_minmax(12rem,1fr)_auto]">
         <div className="space-y-2"><Label htmlFor="platform-audit-action">Action</Label><Select value={action} onValueChange={setAction}><SelectTrigger id="platform-audit-action"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All actions</SelectItem>{actions.map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent></Select></div>
         <div className="space-y-2"><Label htmlFor="platform-audit-actor">Actor Principal ref</Label><Input id="platform-audit-actor" value={actorPrincipalRef} onChange={event => setActorPrincipalRef(event.target.value)} /></div>
@@ -73,29 +72,25 @@ export function PlatformAuditView() {
 
       {error ? <div className="text-sm text-destructive" role="alert">{error}</div> : null}
 
-      <Card>
-        <CardHeader><CardTitle>Platform audit</CardTitle></CardHeader>
-        <CardContent>
-          {items === null && loading ? <p className="text-sm text-muted-foreground" role="status">Loading events…</p> : null}
-          {items?.length === 0 ? <p className="text-sm text-muted-foreground">No events.</p> : null}
-          {items && items.length > 0 ? (
-            <>
-              <Table>
-                <TableHeader><TableRow><TableHead>Time</TableHead><TableHead>Action</TableHead><TableHead>Actor</TableHead><TableHead>Target</TableHead><TableHead>Result</TableHead><TableHead>Request</TableHead></TableRow></TableHeader>
-                <TableBody>{items.map(event => <TableRow key={event.eventId}>
-                  <TableCell className="whitespace-nowrap">{new Date(event.createdAt).toLocaleString()}</TableCell>
-                  <TableCell className="font-mono text-xs">{event.action}</TableCell>
-                  <TableCell className="font-mono text-xs">{event.actorPrincipalRef ?? `${event.actorPrincipal.issuer}:${event.actorPrincipal.subject}`}</TableCell>
-                  <TableCell className="font-mono text-xs">{event.targetPrincipalRef ?? event.targetInvitationId ?? "—"}</TableCell>
-                  <TableCell><Badge variant={event.result === "succeeded" ? "default" : "destructive"}>{event.result}</Badge></TableCell>
-                  <TableCell className="font-mono text-xs">{event.requestId ?? "—"}</TableCell>
-                </TableRow>)}</TableBody>
-              </Table>
-              {nextCursor ? <div className="mt-4 flex justify-center"><Button variant="outline" onClick={() => void load(nextCursor)} disabled={loading}>Load more</Button></div> : null}
-            </>
-          ) : null}
-        </CardContent>
-      </Card>
-    </div>
+      {items === null && loading ? <p className="text-sm text-muted-foreground" role="status">Loading events…</p> : null}
+      {items !== null ? (
+        <>
+          <Table>
+            <TableHeader><TableRow><TableHead>Time</TableHead><TableHead>Action</TableHead><TableHead>Actor</TableHead><TableHead>Target</TableHead><TableHead>Result</TableHead><TableHead>Request</TableHead></TableRow></TableHeader>
+            <TableBody>
+              {items.length === 0 ? <TableRow><TableCell colSpan={6} className="text-muted-foreground">No changes yet.</TableCell></TableRow> : null}
+              {items.map(event => <TableRow key={event.eventId}>
+                <TableCell className="whitespace-nowrap">{new Date(event.createdAt).toLocaleString()}</TableCell>
+                <TableCell className="font-mono text-xs">{event.action}</TableCell>
+                <TableCell className="font-mono text-xs">{event.actorPrincipalRef ?? `${event.actorPrincipal.issuer}:${event.actorPrincipal.subject}`}</TableCell>
+                <TableCell className="font-mono text-xs">{event.targetPrincipalRef ?? event.targetInvitationId ?? "—"}</TableCell>
+                <TableCell><Badge variant={event.result === "succeeded" ? "default" : "destructive"}>{event.result}</Badge></TableCell>
+                <TableCell className="font-mono text-xs">{event.requestId ?? "—"}</TableCell>
+              </TableRow>)}</TableBody>
+          </Table>
+          {nextCursor ? <div className="mt-4 flex justify-center"><Button variant="outline" onClick={() => void load(nextCursor)} disabled={loading}>Load more</Button></div> : null}
+        </>
+      ) : null}
+    </section>
   );
 }

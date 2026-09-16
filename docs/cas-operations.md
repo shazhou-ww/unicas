@@ -189,6 +189,25 @@ Platform authorization is deny-by-default and keyed only by exact OIDC
 for Principal records or authorities. An App membership grants administrator
 access only to that App. `platform.admin` and `apps.create` are independent.
 
+This procedure assumes the separate App/Space physical cutover is complete.
+Before applying Platform Access, inspect only schema metadata:
+
+```sql
+SELECT name FROM sqlite_master WHERE type = 'table'
+   AND name IN ('cas_apps', 'cas_app_members', 'cas_stacks', 'cas_stack_members')
+   ORDER BY name;
+PRAGMA table_info(cas_apps);
+PRAGMA table_info(cas_app_members);
+```
+
+The authoritative tables must be `cas_apps` and `cas_app_members`, keyed by
+`app_id` and immutable Principal fields. If legacy Stack tables are still
+authoritative, or both families contain unresolved live data, stop and complete
+the separately reviewed physical cutover first. The runtime's compatibility
+rename of `stack_id` in OAuth inspections and control audit is not a migration
+of Stack memberships, issuer registries, tenant nodes, or object storage.
+Never infer successful data migration merely from a successful Worker startup.
+
 Use this two-phase cutover so the enforcing Worker never starts without an
 active Platform Admin:
 
@@ -272,7 +291,10 @@ invitation/idempotency records sealed by them have expired.
 
 #### Rollback
 
-The migration is additive. Before the rollback window closes, retain the old
+The Platform Access migration on the supported App/Space schema is additive.
+The rollback target must be an App/Space-compatible Worker from before Platform
+Access enforcement, not a pre-physical-cutover Stack/Tenant Worker.
+Before the rollback window closes, retain the old
 Worker version and `ADMIN_EMAIL_ALLOWLIST`. A Worker rollback reactivates the
 old allowlist behavior and ignores the new D1 tables; it must not delete grants,
 invitations, or platform audit. If the secret was already removed, restore it

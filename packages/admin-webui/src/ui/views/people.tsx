@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { RefreshCw, Search, UserMinus, UserPlus, X } from "lucide-react";
-import type { AppPerson, PlatformPerson, PlatformPrincipalDetail, PlatformAccessSummary, PeoplePage } from "@unicas/admin-client";
+import type { AppPerson, PlatformPerson, PlatformPrincipalDetail, PeoplePage } from "@unicas/admin-client";
 import { api, ifMatch } from "../api.js";
 import { formatErrorSafe } from "./view-helpers.js";
 import { CopyBubble } from "../components/copy-bubble.js";
@@ -39,9 +39,12 @@ function PeoplePanel({ scope, initialFilter = "current" }: Props) {
   const [cursor, setCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [summary, setSummary] = useState<PlatformAccessSummary | null>(null);
   const [version, setVersion] = useState(0);
   const requestVersion = useRef(0);
+  const regionRef = useRef<HTMLElement>(null);
+  const inviteTrigger = useRef<HTMLButtonElement>(null);
+  const actionTrigger = useRef<HTMLButtonElement | null>(null);
+  const detailTrigger = useRef<HTMLButtonElement | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [authorities, setAuthorities] = useState<string[]>([]);
@@ -65,15 +68,6 @@ function PeoplePanel({ scope, initialFilter = "current" }: Props) {
     void load(undefined, request);
     return () => { requestVersion.current += 1; };
   }, [base, filters, version]);
-
-  useEffect(() => {
-    if (!platform) return;
-    let active = true;
-    api<PlatformAccessSummary>("/admin/platform/access-summary")
-      .then(result => { if (active) setSummary(result); })
-      .catch(() => { if (active) setSummary(null); });
-    return () => { active = false; };
-  }, [platform, version]);
 
   useEffect(() => {
     if (!principalRef) return;
@@ -141,10 +135,13 @@ function PeoplePanel({ scope, initialFilter = "current" }: Props) {
     finally { setMutationBusy(false); }
   }
 
-  return <section className="space-y-4" aria-label={platform ? "Platform people" : "App members"}>
-    {summary ? <dl className="grid grid-cols-2 gap-4 border-b pb-4 lg:grid-cols-4">
-      {[["Active Principals", summary.activePrincipalCount], ["Platform Admins", summary.platformAdminCount], ["App Creators", summary.appCreatorCount], ["Blocked Principals", summary.blockedPrincipalCount]].map(([label, count]) => <div key={label}><dt className="text-sm text-muted-foreground">{label}</dt><dd className="text-xl font-semibold">{count}</dd></div>)}
-    </dl> : null}
+  function restoreFocus(event: Event, target: HTMLButtonElement | null) {
+    event.preventDefault();
+    if (target?.isConnected && !target.disabled) target.focus();
+    else regionRef.current?.focus();
+  }
+
+  return <section ref={regionRef} tabIndex={-1} className="space-y-4" aria-label={platform ? "Platform people" : "App members"}>
     <form className="flex flex-wrap items-center gap-2" onSubmit={event => { event.preventDefault(); setFilters({ ...draft, query: draft.query.trim() }); }}>
       <Input className="min-w-0 flex-[1_1_14rem]" aria-label="Search people" placeholder="Search name, email or Principal" value={draft.query} onChange={event => setDraft({ ...draft, query: event.target.value })} />
       <Select value={draft.filter} onValueChange={filter => setDraft({ ...draft, filter })}>
@@ -158,7 +155,7 @@ function PeoplePanel({ scope, initialFilter = "current" }: Props) {
       <Button type="submit" variant="outline"><Search />Apply</Button>
       <div className="ml-auto flex gap-2">
         <Button type="button" variant="outline" size="icon" title="Refresh people" onClick={refresh} disabled={busy}><RefreshCw /></Button>
-        <Button type="button" onClick={openInvite}><UserPlus />Invite</Button>
+        <Button ref={inviteTrigger} type="button" onClick={openInvite}><UserPlus />Invite</Button>
       </div>
     </form>
     {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
@@ -175,21 +172,21 @@ function PeoplePanel({ scope, initialFilter = "current" }: Props) {
           const grants = person.kind === "principal" ? person.principal.authorities : person.kind === "invitation" && "authorities" in person.invitation ? person.invitation.authorities : [];
           return <TableRow key={personKey(person)}>
             <TableCell className="min-w-48 max-w-sm break-words">
-              {person.kind === "principal" ? <Button variant="link" className="h-auto max-w-full whitespace-normal p-0 text-left" aria-label={`Open Principal details for ${name}`} onClick={() => setPrincipalRef(person.principal.principalRef)}>{name}</Button> : <span className="font-medium">{name}</span>}
+              {person.kind === "principal" ? <Button variant="link" className="h-auto max-w-full whitespace-normal p-0 text-left" aria-label={`Open Principal details for ${name}`} onClick={event => { detailTrigger.current = event.currentTarget; setPrincipalRef(person.principal.principalRef); }}>{name}</Button> : <span className="font-medium">{name}</span>}
               {identity ? <><div className="text-xs text-muted-foreground">{identity.profile.emailForDisplay}</div><div className="break-all font-mono text-xs text-muted-foreground">{identity.principal.issuer} / {identity.principal.subject}</div></> : null}
             </TableCell>
             <TableCell><Badge variant={state === "blocked" ? "destructive" : "secondary"}>{state}</Badge>{person.kind === "principal" ? <div className="text-xs text-muted-foreground">Principal</div> : person.kind === "invitation" ? <div className="text-xs text-muted-foreground">Invitation</div> : null}</TableCell>
             {platform ? <><TableCell><div className="flex flex-wrap gap-1">{grants.map(grant => <Badge key={grant} variant="outline">{grant}</Badge>)}{grants.length === 0 ? "-" : null}</div></TableCell><TableCell>{person.kind === "principal" ? person.principal.appMembershipCount : "-"}</TableCell></> : null}
             <TableCell>{new Date(time).toLocaleString()}</TableCell>
             <TableCell>{person.kind === "invitation" ? new Date(person.invitation.expiresAt).toLocaleString() : "-"}</TableCell>
-            <TableCell>{person.kind === "member" || (person.kind === "invitation" && person.invitation.status === "pending" && person.invitation.expiresAt > Date.now()) ? <Button variant="ghost" size="icon" title={person.kind === "member" ? "Remove member" : "Revoke invitation"} onClick={() => { setConfirming(person); setMutationError(null); }}>{person.kind === "member" ? <UserMinus /> : <X />}</Button> : null}</TableCell>
+            <TableCell>{person.kind === "member" || (person.kind === "invitation" && person.invitation.status === "pending" && person.invitation.expiresAt > Date.now()) ? <Button variant="ghost" size="icon" title={person.kind === "member" ? "Remove member" : "Revoke invitation"} onClick={event => { actionTrigger.current = event.currentTarget; setConfirming(person); setMutationError(null); }}>{person.kind === "member" ? <UserMinus /> : <X />}</Button> : null}</TableCell>
           </TableRow>;
         })}
       </TableBody>
     </Table>
     {cursor ? <div className="flex justify-center"><Button variant="outline" disabled={busy} onClick={() => void load(cursor)}>Load more</Button></div> : null}
     <Dialog open={inviteOpen} onOpenChange={open => { if (!mutationBusy) setInviteOpen(open); }}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto" onCloseAutoFocus={event => restoreFocus(event, inviteTrigger.current)}>
         <DialogHeader><DialogTitle>{receipt ? "Invitation created" : platform ? "Invite to platform" : "Invite App member"}</DialogTitle><DialogDescription>{receipt ? "Share this one-time URL through a trusted channel." : platform ? "Grant platform authorities to a verified email." : "Invite an administrator to this App."}</DialogDescription></DialogHeader>
         {receipt ? <><CopyBubble label="Invitation URL" value={receipt.acceptUrl} /><p className="text-xs text-muted-foreground">Expires {new Date(receipt.expiresAt).toLocaleString()}</p></> : <>
           <div className="space-y-2"><Label htmlFor="people-invite-email">{platform ? "Email" : "Email constraint (optional)"}</Label><Input id="people-invite-email" type="email" value={email} onChange={event => setEmail(event.target.value)} /></div>
@@ -200,12 +197,12 @@ function PeoplePanel({ scope, initialFilter = "current" }: Props) {
       </DialogContent>
     </Dialog>
     <Dialog open={confirming !== null} onOpenChange={open => { if (!open && !mutationBusy) setConfirming(null); }}>
-      <DialogContent><DialogHeader><DialogTitle>{confirming?.kind === "member" ? "Remove member" : "Revoke invitation"}</DialogTitle><DialogDescription>{confirming?.kind === "member" ? "Remove this Principal's App membership?" : "Prevent this invitation from being accepted?"}</DialogDescription></DialogHeader>
+      <DialogContent onCloseAutoFocus={event => restoreFocus(event, actionTrigger.current)}><DialogHeader><DialogTitle>{confirming?.kind === "member" ? "Remove member" : "Revoke invitation"}</DialogTitle><DialogDescription>{confirming?.kind === "member" ? "Remove this Principal's App membership?" : "Prevent this invitation from being accepted?"}</DialogDescription></DialogHeader>
         {mutationError ? <p role="alert" className="text-sm text-destructive">{mutationError}</p> : null}
         <DialogFooter><Button variant="outline" disabled={mutationBusy} onClick={() => setConfirming(null)}>Cancel</Button><Button variant="destructive" disabled={mutationBusy} onClick={() => void remove()}>Confirm {confirming?.kind === "member" ? "removal" : "revoke"}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
-    <Sheet open={principalRef !== null} onOpenChange={open => { if (!open) setPrincipalRef(null); }}><SheetContent className="w-full max-w-full overflow-y-auto sm:max-w-[540px]" aria-describedby={undefined}><SheetTitle>Principal Details</SheetTitle>
+    <Sheet open={principalRef !== null} onOpenChange={open => { if (!open) setPrincipalRef(null); }}><SheetContent className="w-full max-w-full overflow-y-auto sm:max-w-[540px]" aria-describedby={undefined} onCloseAutoFocus={event => restoreFocus(event, detailTrigger.current)}><SheetTitle>Principal Details</SheetTitle>
       {detailError ? <p role="alert">{detailError}</p> : principal ? <PrincipalDetailEditor key={principal.principalRef} principal={principal} onSaved={() => { setPrincipalRef(null); refresh(); }} /> : <p role="status">Loading Principal...</p>}
     </SheetContent></Sheet>
   </section>;

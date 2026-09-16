@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Menu, Plus, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet.js";
 import type { App, AppAdminMeResponse } from "@unicas/admin-client";
 import { UserMenu } from "../user-menu.js";
+import { AppCreateRow } from "./app-create-row.js";
 
 export interface AppSidebarProps {
   apps: App[];
@@ -11,7 +12,7 @@ export interface AppSidebarProps {
   me: AppAdminMeResponse | null;
   canCreateApps: boolean;
   hasPlatformAdmin: boolean;
-  onCreateApp: () => void;
+  onCreateApp: (appId: string) => void;
   onOpenMcp: () => void;
   onLogout: () => void;
 }
@@ -27,10 +28,14 @@ export function AppSidebar({
   onLogout,
 }: AppSidebarProps) {
   const [isMobile, setIsMobile] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [creatingApp, setCreatingApp] = useState(false);
+  const createTrigger = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 900);
+      if (window.innerWidth >= 900) setMobileOpen(false);
     };
     checkMobile();
     window.addEventListener("resize", checkMobile);
@@ -63,10 +68,12 @@ export function AppSidebar({
             <span className="console-sidebar-section-title">Apps</span>
             {canCreateApps && (
               <Button
+                ref={createTrigger}
                 variant="ghost"
                 size="icon"
                 className="console-sidebar-create-button"
-                onClick={onCreateApp}
+                onClick={() => setCreatingApp(true)}
+                disabled={creatingApp}
                 title="Create App"
               >
                 <Plus className="h-4 w-4" />
@@ -75,12 +82,18 @@ export function AppSidebar({
           </div>
 
           <div className="console-sidebar-app-list">
+            {creatingApp && canCreateApps ? <AppCreateRow
+              onCreated={appId => { setCreatingApp(false); setMobileOpen(false); onCreateApp(appId); }}
+              onCancel={() => { setCreatingApp(false); requestAnimationFrame(() => createTrigger.current?.focus()); }}
+            /> : null}
             {sortedApps.map((app) => {
               const isSelected = selectedAppId === app.appId;
               return (
                 <a
                   key={app.appId}
                   href={`#/apps/${app.appId}/overview`}
+                  onClick={() => setMobileOpen(false)}
+                  aria-current={isSelected ? "page" : undefined}
                   className={`console-sidebar-app-item ${isSelected ? "console-sidebar-app-item-selected" : ""
                     }`}
                 >
@@ -108,6 +121,7 @@ export function AppSidebar({
             </div>
             <a
               href="#/platform/people"
+              onClick={() => setMobileOpen(false)}
               className="console-sidebar-admin-item"
             >
               <ShieldCheck className="h-4 w-4" />
@@ -122,7 +136,7 @@ export function AppSidebar({
         <div className="console-sidebar-footer">
           <UserMenu
             me={me}
-            onOpenMcpConfiguration={onOpenMcp}
+            onOpenMcpConfiguration={() => { setMobileOpen(false); onOpenMcp(); }}
             onLogout={onLogout}
           />
         </div>
@@ -132,7 +146,7 @@ export function AppSidebar({
 
   if (isMobile) {
     return (
-      <Sheet>
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetTrigger asChild>
           <Button
             variant="ghost"
@@ -143,7 +157,7 @@ export function AppSidebar({
             <Menu className="h-5 w-5" />
           </Button>
         </SheetTrigger>
-        <SheetContent side="right" className="p-0 w-[17rem]">
+        <SheetContent side="right" className="p-0 w-[17rem]" aria-describedby={undefined}>
           <SheetTitle className="sr-only">Navigation</SheetTitle>
           {sidebarContent}
         </SheetContent>

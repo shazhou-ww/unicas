@@ -4,7 +4,7 @@ import type { App as AppResource, AppAdminMeResponse, AppOAuthIssuer } from "@un
 import { api } from "./api.js";
 import { navigate, parseAppRoute, parsePlatformRoute, useHashRoute, matchRoute } from "./router.js";
 import { AppSidebar } from "./components/app-sidebar.js";
-import { AppDetailTabs } from "./components/app-detail-tabs.js";
+import { AppDetailTabs, WorkspaceDetailHeader } from "./components/app-detail-tabs.js";
 import { CopyNotifications } from "./components/copy-bubble.js";
 import { McpConfigurationDialog } from "./mcp-configuration-dialog.js";
 import { MyAppsView } from "./views/my-stacks.js";
@@ -20,7 +20,7 @@ import { PlaygroundCacheContext, createPlaygroundCacheSession, type PlaygroundCa
 import { formatErrorSafe } from "./views/view-helpers.js";
 import { PlatformAuditView } from "./views/platform/audit.js";
 import { PlatformInvitationAcceptanceView } from "./views/platform-invitation-acceptance.js";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs.js";
+import { TabsTrigger } from "@/components/ui/tabs.js";
 
 export function App() {
   const route = useHashRoute();
@@ -61,6 +61,20 @@ export function App() {
     });
     return () => { active = false; session?.close(); };
   }, [inviteToken]);
+
+  async function refreshNavigation() {
+    try {
+      const [meResponse, appsResponse] = await Promise.all([
+        api<AppAdminMeResponse>("/admin/me"),
+        api<{ items: AppResource[] }>("/admin/apps"),
+      ]);
+      setMe(meResponse);
+      setApps(appsResponse.items);
+      setError(null);
+    } catch (caught) {
+      setError(formatErrorSafe(caught));
+    }
+  }
 
   async function logout() {
     setMe(null);
@@ -140,7 +154,7 @@ export function App() {
           </div>
         </div>
       );
-    } else if (!currentApp) {
+    } else if (!currentApp || currentApp.appId !== appRoute.appId) {
       detail = (
         <div className="page">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -155,7 +169,7 @@ export function App() {
           case "overview":
             return (
               <div className="space-y-6">
-                <AppOverviewView app={currentApp} onChanged={() => setReloadKey((k) => k + 1)} />
+                <AppOverviewView key={currentApp.appId} app={currentApp} onChanged={() => setReloadKey((k) => k + 1)} />
                 <IssuerView
                   appId={appRoute.appId}
                   focusManagedIssuer={focusManagedIssuer}
@@ -165,7 +179,7 @@ export function App() {
               </div>
             );
           case "members":
-            return <PeopleView scope={{ appId: appRoute.appId, appRevision: currentApp.revision, onChanged: () => setReloadKey((k) => k + 1) }} initialFilter={appRoute.peopleFilter} />;
+            return <PeopleView scope={{ appId: appRoute.appId, appRevision: currentApp.revision, onChanged: () => { setReloadKey((k) => k + 1); void refreshNavigation(); } }} initialFilter={appRoute.peopleFilter} />;
           case "invitations":
             return null;
           case "playground":
@@ -187,8 +201,8 @@ export function App() {
             displayName={currentApp.displayName}
             playgroundEnabled={playgroundAccess?.appId === appRoute.appId && playgroundAccess.enabled}
             onTabChange={(section) => navigate(`/apps/${encodeURIComponent(appRoute.appId)}/${section}`)}
+            content={renderSection()}
           />
-          {renderSection()}
         </div>
       );
     }
@@ -214,16 +228,16 @@ export function App() {
       };
       detail = (
         <div>
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-            <h1 className="text-2xl font-semibold tracking-tight">Platform Administration</h1>
-            <Tabs value={platformRoute.section} onValueChange={value => navigate(`/platform/${value}`)}>
-              <TabsList aria-label="Platform Administration sections" className="rounded-none border-b bg-transparent p-0">
-                <TabsTrigger value="people">People</TabsTrigger>
-                <TabsTrigger value="audit">Audit</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-          {renderPlatformSection()}
+          <WorkspaceDetailHeader
+            title="Platform Administration"
+            value={platformRoute.section}
+            onValueChange={value => navigate(`/platform/${value}`)}
+            navigationLabel="Platform Administration sections"
+            content={renderPlatformSection()}
+          >
+            <TabsTrigger value="people">Members</TabsTrigger>
+            <TabsTrigger value="audit">Change Logs</TabsTrigger>
+          </WorkspaceDetailHeader>
         </div>
       );
     }
@@ -265,7 +279,7 @@ export function App() {
         me={me}
         canCreateApps={canCreateApps}
         hasPlatformAdmin={hasPlatformAdmin}
-        onCreateApp={() => navigate("/")}
+        onCreateApp={appId => { navigate(`/apps/${encodeURIComponent(appId)}/overview`); void refreshNavigation(); }}
         onOpenMcp={() => setMcpOpen(true)}
         onLogout={() => void logout()}
       />

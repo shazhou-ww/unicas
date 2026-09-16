@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { App } from "../src/ui/index.js";
@@ -67,6 +67,59 @@ beforeEach(() => {
 });
 
 describe("current App shell", () => {
+  test("does not render stale App details or drafts while switching Apps", async () => {
+    const other = { ...currentApp, appId: "cas_two", displayName: "Second App", description: "Second description", revision: 8 };
+    let resolveOther!: (response: Response) => void;
+    const pending = new Promise<Response>(resolve => { resolveOther = resolve; });
+    const original = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const path = new URL(String(input), "http://localhost").pathname;
+      if (path === "/admin/apps") return json({ items: [currentApp, other] });
+      if (path === "/admin/apps/cas_two") return pending;
+      return original(input, init);
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.type(await screen.findByLabelText("Description"), "unsaved first App draft");
+    const otherLink = document.querySelector<HTMLAnchorElement>('.console-sidebar a[href="#/apps/cas_two/overview"]')!;
+    await user.click(otherLink);
+    expect(await screen.findByText("Loading app…")).toBeVisible();
+    expect(screen.queryByLabelText("Description")).not.toBeInTheDocument();
+    await act(async () => { resolveOther(json(other)); });
+    expect(await screen.findByLabelText("Description")).toHaveValue("Second description");
+    expect(screen.getByRole("heading", { name: "Second App" })).toBeVisible();
+  });
+
+  test("refreshes sidebar Apps and membership count immediately after creation", async () => {
+    window.location.hash = "#/";
+    let created = false;
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), "http://localhost");
+      if (url.pathname === "/admin/me") return json({ ...me, memberships: created ? me.memberships : [] });
+      if (url.pathname === "/admin/apps" && init?.method === "POST") {
+        created = true;
+        return json({ appId: currentApp.appId }, 201);
+      }
+      if (url.pathname === "/admin/apps") return json({ items: created ? [currentApp] : [] });
+      if (url.pathname === `/admin/apps/${currentApp.appId}`) return json(currentApp);
+      if (url.pathname.endsWith("/managed-issuer")) return json(managedIssuer());
+      if (url.pathname.endsWith("/oauth-issuer")) return json(null);
+      throw new Error(`Unexpected request: ${url.pathname}`);
+    }));
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByText("0 App memberships")).toBeVisible();
+    expect(screen.getByRole("region", { name: "Get started" })).toHaveTextContent("Select an App");
+    await user.click(screen.getByTitle("Create App"));
+    await user.type(screen.getByLabelText("App display name"), currentApp.displayName);
+    await user.keyboard("{Enter}");
+    expect(await screen.findByText("1 App membership")).toBeVisible();
+    const sidebarLink = document.querySelector(`.console-sidebar a[href="#/apps/${currentApp.appId}/overview"]`);
+    expect(sidebarLink).toHaveTextContent(currentApp.displayName);
+    expect(window.location.hash).toBe("#/apps/cas_one/overview");
+    expect(await screen.findByRole("heading", { name: currentApp.displayName })).toBeVisible();
+  });
+
   test("redirects old App invitations links to Members with pending selection", async () => {
     window.location.hash = "#/apps/cas_one/invitations";
     render(<App />);

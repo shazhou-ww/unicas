@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, test, vi } from "vitest";
 import { App } from "../src/ui/index.js";
@@ -147,7 +147,15 @@ describe("AI tool connection", () => {
     }));
 
     render(<App />);
-    const peopleTab = await screen.findByRole("tab", { name: "People" });
+    const peopleTab = await screen.findByRole("tab", { name: "Members" });
+    const panel = screen.getByRole("tabpanel", { name: "Members" });
+    expect(peopleTab.getAttribute("aria-controls")).toBe(panel.id);
+    expect(screen.getByRole("tab", { name: "Change Logs" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "People" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Audit" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Platform Administration" })).toHaveClass("console-app-detail-title");
+    expect(screen.getByRole("tablist", { name: "Platform Administration sections" })).toHaveClass("console-app-tabs");
+    expect(peopleTab.closest(".console-app-detail-header")).toContainElement(screen.getByRole("heading", { name: "Platform Administration" }));
     await waitFor(() => expect(window.location.hash).toBe("#/platform/people?filter=principals"));
     peopleTab.focus();
     await userEvent.setup().keyboard("{ArrowRight}");
@@ -177,6 +185,12 @@ describe("AI tool connection", () => {
     const drawer = await screen.findByRole("dialog", { name: "Navigation" });
     expect(drawer.className).toContain("right-0");
     await user.keyboard("{Escape}");
+    await waitFor(() => expect(trigger).toHaveFocus());
+    await user.click(trigger);
+    const reopened = await screen.findByRole("dialog", { name: "Navigation" });
+    await user.click(within(reopened).getByRole("link", { name: /An extremely long App name/ }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Navigation" })).not.toBeInTheDocument());
+    expect(window.location.hash).toBe("#/apps/app-1/overview");
     await waitFor(() => expect(trigger).toHaveFocus());
     Object.defineProperty(window, "innerWidth", { configurable: true, value: previousWidth });
   });

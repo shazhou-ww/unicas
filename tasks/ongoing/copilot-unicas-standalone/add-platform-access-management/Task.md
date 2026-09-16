@@ -62,12 +62,23 @@ customized for UniCAS, and makes the App list the primary navigation.
   the managed issuer is active, including while its state is unavailable.
 - Merge App members and pending invitations into one Members table with search,
   lifecycle filters, history, and an Invite action above the table. Apply the
-  same presentation to Platform Principals and invitations in People; keep
-  Platform Audit separate. Preserve row identity, permission boundaries, old
+  same presentation to Platform Principals and invitations under Members; keep
+  Change Logs separate. Both workspaces use the App-style header and unframed
+  log tables. Platform Members has no statistics blocks or summary request.
+  Preserve row identity, permission boundaries, old
   deep links, and coherent server-side combined pagination. The proposed read
   contract is in [API design](./ApiDesign.md#unified-people-query-amendment).
 - Put the signed-in user at the bottom of the left navigation and move
   Documentation, Connect AI tools, and Sign out into its profile menu.
+- When no App is selected, render a minimal starter message. The sidebar plus
+  opens a temporary App name row above the list; Enter or nonempty blur creates
+  and selects the new App. Empty/whitespace blur and Escape cancel without a
+  write. Invalid names remain in place with a floating validation hint.
+  Inline confirm/cancel icons inside the input allow mouse-only operation;
+  moving focus to these controls does not submit until the chosen action runs
+  or focus leaves the entire editor.
+- Keep the signed-in user's
+  profile actions accessible on mobile as well as desktop.
 - Show the Platform Administration navigation entry only when `/admin/me`
   reports effective Platform Admin authority, while retaining server-side route
   authorization as the security boundary.
