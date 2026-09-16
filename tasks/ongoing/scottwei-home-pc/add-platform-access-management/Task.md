@@ -155,51 +155,51 @@ below is a design coverage inventory, not a claim that every choice is still ope
   invitations in one server-paged, searchable table per workspace, with
   Invite toolbar actions, history filters, distinct permission boundaries,
   unchanged conditional writes, and compatible legacy links.
-- [ ] A Google-authenticated Principal without a platform grant, an eligible
+- [x] A Google-authenticated Principal without a platform grant, an eligible
       pending invitation, or an existing App membership is denied Console, CLI,
       and remote MCP access without an authorization record being created
       implicitly.
-- [ ] A Platform Admin can list effective platform access and grant or revoke
+- [x] A Platform Admin can list effective platform access and grant or revoke
       Platform Admin and App-creation authority through protected APIs and the
       Platform Admin Console workspace.
-- [ ] App creation succeeds only for a Principal with effective App-creation
+- [x] App creation succeeds only for a Principal with effective App-creation
       authority; an App member without that authority is denied by the server
       and is not offered App creation in the Console.
-- [ ] An invited Principal outside the internal creator group can authenticate,
+- [x] An invited Principal outside the internal creator group can authenticate,
       accept an eligible invitation, and access only Apps authorized by its
       memberships without receiving platform or App-creation authority.
-- [ ] Platform Admin APIs and UI routes fail closed for non-Platform Admins even
+- [x] Platform Admin APIs and UI routes fail closed for non-Platform Admins even
       when they hold valid App memberships or delegated OAuth scopes.
-- [ ] Revoking a platform grant or App membership takes effect within a defined,
+- [x] Revoking a platform grant or App membership takes effect within a defined,
       tested bound for existing browser sessions and MCP access; revocation does
       not rely on hiding client-side controls.
-- [ ] Platform grants, revocations, denied App-creation attempts, and relevant
+- [x] Platform grants, revocations, denied App-creation attempts, and relevant
       invitation transitions produce audit evidence keyed by immutable Principal
       identity and do not expose invitation tokens or authentication secrets.
-- [ ] The production bootstrap and migration procedure establishes at least one
+- [x] The production bootstrap and migration procedure establishes at least one
       Platform Admin, replaces the static allowlist as an authorization source
       without an access gap, and documents rollback and emergency recovery.
-- [ ] The existing Console remains the single human frontend while App and
+- [x] The existing Console remains the single human frontend while App and
       Platform Admin workspaces retain separate route, code, and server-side
       permission boundaries.
-- [ ] The Console uses reviewed, source-owned shadcn/ui primitives customized
+- [x] The Console uses reviewed, source-owned shadcn/ui primitives customized
   with UniCAS theme tokens; the previous generic component layer and
   superseded layout styles are removed rather than maintained in parallel.
-- [ ] Desktop and mobile Console navigation make the App list primary, expose
+- [x] Desktop and mobile Console navigation make the App list primary, expose
   Platform Administration only to effective Platform Admins, and keep the
   signed-in profile and its Documentation, Connect AI tools, and Sign out
   actions at the navigation bottom.
-- [ ] Selecting an App renders Overview, Members, and Change Logs
+- [x] Selecting an App renders Overview, Members, and Change Logs
   as top detail navigation in that order, with Playground independently
   right-aligned and disabled unless the managed issuer is active. Preserve
   direct-linkable route state with no global top Header or second App switcher.
-- [ ] Existing App creation, App settings, issuer, usage, Playground, member,
+- [x] Existing App creation, App settings, issuer, usage, Playground, member,
   invitation, audit, login-error, and logout workflows remain functionally
   covered after the component and navigation rewrite.
-- [ ] Keyboard navigation, focus management, screen-reader semantics, reduced
+- [x] Keyboard navigation, focus management, screen-reader semantics, reduced
   motion, narrow mobile viewports, long App names, and overflow behavior are
   verified for the new Sidebar, Tabs, menus, dialogs, tables, and states.
-- [ ] Focused authorization, protocol, client, BFF, MCP, WebUI, migration, and
+- [x] Focused authorization, protocol, client, BFF, MCP, WebUI, migration, and
       audit tests cover allowed, denied, invitation, revocation, and privilege-
       escalation paths, and the relevant repository validation commands pass.
 
@@ -211,15 +211,15 @@ the user accepted the current management Console and requested release of the
 implemented revision at `8ef3391`, deferring remaining Playground layout polish
 to backlog. This approves the current scope/interface/model/architecture and
 implementation, not production verification or retrospective authorization.
-See [Progress](./Progress.md#release-request-and-blocking-preflight) for the
-release blocker and actual evidence. Final operational closure remains pending.
+See [Progress](./Progress.md) for the final production evidence and explicit
+second-administrator waiver. Delivery acceptance remains pending.
 
 | Checkpoint | Review artifact and decision | Gate |
 | --- | --- | --- |
-| Scope alignment | Goal, Scope, exclusions, and acceptance criteria above; current gaps in [Progress](./Progress.md). | Confirm the current scope before further implementation. |
-| Interface alignment | [UI design](./UiDesign.md), [API design](./ApiDesign.md), and current browser/API observations in [Progress](./Progress.md). | Confirm Console, HTTP, CLI, and MCP behavior before further interface changes. |
-| Business and data model alignment | [API design](./ApiDesign.md) and the authority, invitation, migration, and bootstrap evidence in [Progress](./Progress.md). | Confirm independent grants, immutable identity, limited sessions, and migration impact. |
-| Architecture alignment | Package ownership and local integration findings in [Progress](./Progress.md). | Confirm protocol/client/presentation/service/adapter responsibilities. |
+| Scope alignment | Accepted by the requesting user with Playground polish deferred to its backlog task; production acceptance evidence is in [Progress](./Progress.md). | Passed. |
+| Interface alignment | Accepted Console, HTTP, CLI, and MCP behavior; live provider checks and the denied-access follow-up passed. | Passed. |
+| Business and data model alignment | Accepted independent grants, immutable identity, invitation-limited sessions, bootstrap, and revocation behavior. A second administrator is explicitly waived for now. | Passed. |
+| Architecture alignment | Accepted protocol/client/presentation/service/adapter ownership; package and deployment boundaries passed repository validation. | Passed. |
 | Delivery acceptance | A future published implementation revision, final criteria, and validation evidence in [Progress](./Progress.md). | Obtain explicit acceptance before completion and separate archive publication. |
 
 ## Constraints

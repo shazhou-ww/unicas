@@ -14,7 +14,7 @@ Updated: 2026-09-16
 - [x] Rebuild Console with source-owned shadcn primitives and two-column navigation.
 - [x] Remove verified obsolete UI styles and synchronize design/runner documentation (Milestone 7).
 - [x] Validate local bootstrap/migration tests, workflows, scoped accessibility checks, and repository gates.
-- [ ] Complete operator production cutover and real-provider verification in [UserAcceptance](./UserAcceptance.md).
+- [x] Complete operator production cutover and real-provider verification in [UserAcceptance](./UserAcceptance.md).
 - [ ] Publish implementation completion after required reviews and remaining acceptance checks.
 - [ ] Obtain explicit human delivery acceptance.
 - [ ] Publish archive as a separate final integration.
@@ -75,10 +75,8 @@ Validation for this follow-up passes: 17 admin-client tests, 46 admin-CLI tests,
 247 service-cloudflare tests, affected package typechecks, the Cloudflare
 production build, focused 63-test BFF/adapter checks, editor diagnostics, and
 `git diff --check`. The source fixes are published as `c171901` and verified on
-`origin/main`, but are not yet deployed. After release, verify the denied-account
-page and a compressed App read's strong ETag. The
-remaining operator acceptance item is establishing a second Platform Admin
-through the protected workflow before final delivery acceptance.
+`origin/main`, deployed as `production-20260916-108`, and verified through the
+denied-account page and a compressed App read's strong ETag.
 
 The follow-up was merged from `main` to `release` by
 [PR #3](https://github.com/shazhou-ww/unicas/pull/3) as `19dd7ef`. Production
@@ -89,6 +87,16 @@ checks, and production tagging. The deployed revision is tagged
 account page renders No management access with a Sign in with another Google
 account action. An authenticated App read returned strong ETag `"1"` with
 `Cache-Control: no-store, no-transform`; the edge did not compress or weaken it.
+
+On 2026-09-16 the user explicitly waived establishing a second Platform Admin
+for now and asked to close the remaining work. This replaces the earlier
+deferral blocker; the deployed system retains one verified Platform Admin and
+the documented recovery procedure. Production audit reads confirmed one denied
+App-creation event plus invitation-created, invitation-accepted, and
+member-removed events, with no invitation token fields exposed. All Task
+acceptance criteria and the operator procedure now pass with that recorded
+operational waiver. The implementation-complete milestone is ready to publish;
+delivery acceptance remains a separate decision after publication.
 
 ### Production reset and release
 
@@ -716,7 +724,7 @@ audit reads.
 | Managed issuer CopyBubble and editor integration | `1e97284`; issuer regressions, no-emit check, and built desktop preview verified. | Published |
 | Ownership handoff to `scottwei-home-pc` | `d16ddb7`, verified reachable from refreshed `origin/main`. | Published |
 | Denied-login guidance and strong ETag follow-up | `c171901`; PR #3 merged as `19dd7ef`; run 35099365111 passed and tagged `production-20260916-108`; direct production page/ETag checks passed. | Published |
-| Implementation complete | Not yet completed. | Pending |
+| Implementation complete | All acceptance criteria and operator checks pass with the explicit second-administrator waiver; publication pending. | Pending |
 | Archive | Not yet archived. | Pending |
 
 ## Validation
@@ -771,17 +779,15 @@ audit reads.
 
 - The production bootstrap and release blocker is resolved by the reset,
   bootstrap, and successful release recorded under Current state.
-- The follow-up production release and direct post-release checks are complete.
-  On 2026-09-16 the user explicitly chose not to grant Neko persistent
-  `platform.admin` authority. Establishment of a second Platform Admin through
-  the protected workflow therefore remains deferred, not failed. Final delivery
-  approval remains pending. Playground visual polish is intentionally deferred
-  to its backlog task.
+- No implementation or operator-acceptance blocker remains. The user explicitly
+  waived a second Platform Admin for now. Final delivery approval remains
+  pending after implementation-complete publication. Playground visual polish
+  is intentionally deferred to its backlog task.
 
 ## Outcome
 
-Ongoing. Production reset/bootstrap, both releases, real-provider App
-invitation/revocation checks, and denied-login/strong-ETag post-release checks
-are complete. Second-Platform-Admin verification, explicit delivery acceptance,
-and separate archive publication remain pending. Playground layout polish is
-deferred to its backlog task.
+Ongoing, ready for implementation-complete publication. All acceptance criteria,
+production releases, real-provider checks, and post-release checks are complete
+with the explicit second-administrator waiver. Delivery acceptance and separate
+archive publication remain pending. Playground layout polish is deferred to its
+backlog task.

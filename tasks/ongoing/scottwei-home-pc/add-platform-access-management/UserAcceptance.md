@@ -12,8 +12,8 @@ cannot establish, without treating deployment as implicitly authorized.
 
 ## Test target
 
-- Target: deployed revision `955ec4c9690d820966c5aae942a1223a554c275d`, tagged
-   `production-20260916-99`, at `https://console.unicas.work/admin/`.
+- Target: deployed revision `19dd7ef122c55953505ac4f2610b6b3536327277`, tagged
+   `production-20260916-108`, at `https://console.unicas.work/admin/`.
    Local mock and production release evidence are documented in [Progress](./Progress.md).
 
 ## Preconditions
@@ -61,6 +61,9 @@ authorized, report `Not run: awaiting authorized release`; this is not a pass.
 Final delivery approval must be explicit and separate from these test results.
 
 ## Status
+
+The final operator result at the end of this section supersedes earlier
+chronological statements that individual checks were pending.
 
 Update, 2026-09-16: the user authorized clearing all prelaunch test data,
 explicitly waived backup, and selected both initial administrator authorities.
@@ -120,3 +123,11 @@ The user explicitly declined to grant Neko persistent `platform.admin`
 authority on 2026-09-16. This defers step 2 rather than failing it. Keep the task
 ongoing unless a second administrator is established through the protected
 workflow or the acceptance requirement is explicitly revised.
+
+Final operator result, 2026-09-16: **Accepted with an explicit operational
+waiver for a second Platform Admin.** The user subsequently confirmed that a
+second administrator is not required for now and asked to close the remaining
+work. At least one verified Platform Admin remains active, recovery is
+documented, and steps 1 and 3 through 5 passed against production. Production
+audit reads confirmed denied App creation and the invitation/acceptance/removal
+lifecycle without exposing invitation token fields.
