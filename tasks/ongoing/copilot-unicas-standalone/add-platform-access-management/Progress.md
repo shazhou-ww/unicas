@@ -21,7 +21,46 @@ Updated: 2026-09-16
 
 ## Current state
 
-### Full production reset preparation
+### Production reset and release
+
+Reset execution completed on 2026-09-16 and supersedes the initial preflight
+blocker below. The user explicitly waived backup and selected both authorities.
+The validated [one-time reset script](./reset-production.mjs) matched the
+browser-verified Google identity in memory, deployed a maintenance Worker,
+verified maintenance on both origins, removed 4 R2 objects (413 bytes), dropped
+all 21 old application tables, and rebuilt current tables from source migrations.
+All reconstructed application tables were verified empty before seeding. KV was
+empty; all 7 DO instances reported no stored data through fully paginated reads.
+Fresh seed verification returned one active administrator with both authorities,
+one bootstrap audit event, one smoke App/member fixture, and zero sessions.
+No backup was made, no invitation was created, and no old profile/session or
+file content was retained. The existing public smoke issuer configuration was
+re-established for the CI fixture; it is not an old business-data restore.
+
+Preparation was published as `1eeb12a`. The normal release promotion is
+[PR #2](https://github.com/shazhou-ww/unicas/pull/2). A history-only merge of the
+previous release into main (`25baf19`) satisfies the up-to-date branch rule.
+GitHub auto-merge is disabled; the PR was merged normally after required checks
+passed. No branch-protection bypass or force push was used.
+
+Production release completed at `955ec4c9690d820966c5aae942a1223a554c275d`, tagged
+`production-20260916-99`. [Release CI run 35077282282](https://github.com/shazhou-ww/unicas/actions/runs/35077282282)
+attempt 1 uploaded the service but failed its first edge health assertion with
+HTTP 503. A subsequent uncached health read returned HTTP 200 with the expected
+UniCAS payload and no maintenance marker, consistent with transient deployment
+propagation. The original run's failed jobs were retried without code changes
+or bypassing smoke. Attempt 2 passed validation, canonical smoke, all three
+Worker deployments, all four public-origin checks, and the production tag job.
+Maintenance has ended. The production Console reload showed the expected login
+page because the reset removed old sessions.
+
+Next: the user logs in again with the verified Google account and completes the
+remaining real-provider acceptance checks in [UserAcceptance](./UserAcceptance.md).
+Do not mark invitation/revocation, CLI/MCP, or final human delivery checks as
+passed solely because CI succeeded. Keep the task ongoing until those gates
+and the separate completion/archive publications are satisfied.
+
+#### Reset preparation history
 
 On 2026-09-16 the user explicitly authorized clearing all current production
 data because the system is not yet in use. Scope is the `unicas.work`
@@ -50,7 +89,7 @@ persistent storage. The implementations use D1/R2 and in-memory coordination.
 The reset must recreate the public smoke App/issuer fixture required by CI,
 invalidate old sessions, and bootstrap the verified account before release.
 
-### Release request and blocking preflight
+### Initial release preflight (resolved)
 
 On 2026-09-16 the requesting user accepted the management Console ("剩下的都没问题")
 and explicitly requested a release, while deferring remaining Playground layout
@@ -72,13 +111,10 @@ before the runbook bootstrap, or administrators could lose Platform Access
 management and App-creation authority. The preflight returned schema names
 only; no Principal values or credentials were read or written.
 
-**Release has not been triggered.** Next required action: an authorized operator
-backs up production D1, provisions the chosen verified immutable Principal via
-the [bootstrap runbook](/docs/cas-operations.md#platform-access-bootstrap-and-migration),
-and reports readiness without posting secrets or Principal identifiers. Then
-recheck the active-admin count, refresh branch/CI state, trigger the approved
-release, and record the deployment and real-provider verification outcome.
-Do not infer administrator identity from email or deploy around this gate.
+At this initial preflight, release had not been triggered and bootstrap was
+required. The subsequent explicit disposable-data reset and backup waiver,
+verified immutable-identity bootstrap, and successful production release above
+resolve that blocker. No administrator identity was inferred from email.
 
 The installed repoledger CLI does not implement `status`; backlog and ongoing
 positions were inspected directly as the documented fallback. Concurrent task

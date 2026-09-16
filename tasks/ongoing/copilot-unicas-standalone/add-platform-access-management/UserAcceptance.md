@@ -12,17 +12,19 @@ cannot establish, without treating deployment as implicitly authorized.
 
 ## Test target
 
-- Target: the reviewed implementation on `origin/main`, with the exact deployed
-  revision recorded by the operator. No production deployment occurred in the
-  coding session. Local mock acceptance is documented in [Progress](./Progress.md).
+- Target: deployed revision `955ec4c9690d820966c5aae942a1223a554c275d`, tagged
+   `production-20260916-99`, at `https://console.unicas.work/admin/`.
+   Local mock and production release evidence are documented in [Progress](./Progress.md).
 
 ## Preconditions
 
 - Reviewer: the requesting user or an authorized UniCAS production operator.
 - Follow the [Platform Access runbook](/docs/cas-operations.md#platform-access-bootstrap-and-migration).
   Production deployment/bootstrap requires a separately authorized release window,
-  verified backup, exact verified OIDC Principals, and an App/Space-compatible
-  rollback version. Do not post identity values, tokens, keys, SQL containing
+   verified backup, exact verified OIDC Principals, and an App/Space-compatible
+   rollback version. For this one prelaunch test-data reset only, the user
+   explicitly waived backup; no data-restoration guarantee is claimed.
+   Do not post identity values, tokens, keys, SQL containing
   identities, invitation URLs, or private profile information in this task.
 
 ## Steps
@@ -60,13 +62,21 @@ Final delivery approval must be explicit and separate from these test results.
 
 ## Status
 
-Blocked before release on 2026-09-16. The user accepted the current management
-Console and requested release, with further Playground layout polish deferred
-to [backlog](/tasks/backlog/refine-playground-layout/Task.md). This is separate
-from production test execution.
+Update, 2026-09-16: the user authorized clearing all prelaunch test data,
+explicitly waived backup, and selected both initial administrator authorities.
+The authenticated Google account was verified without storing its identity
+values. The one-time reset completed under a maintenance Worker: application
+tables were recreated empty, R2/KV were verified empty, and DOs had no persistent
+data. Fresh audited bootstrap and the CI smoke fixture were then verified;
+all old sessions were removed. [Release PR #2](https://github.com/shazhou-ww/unicas/pull/2)
+was merged after required checks. [Production CI](https://github.com/shazhou-ww/unicas/actions/runs/35077282282)
+attempt 1 failed its immediate post-deploy health check with HTTP 503. Health
+subsequently returned HTTP 200; retrying the failed jobs passed canonical smoke,
+all deployments, four public-origin checks, and production tagging on attempt 2.
+Maintenance has ended and the Console login page renders correctly.
 
-Agent read-only production schema preflight found `cas_apps` and
-`cas_app_members`, but no `cas_platform_principals`. The operator must complete
-the backup and out-of-band bootstrap before the enforcing release can proceed.
-No production writes/deployment or real-provider acceptance test was performed;
-no successful operator result has been reported.
+Post-release real-provider login and the remaining operator tests are pending.
+Log in again because the old session was intentionally invalidated. The initial
+bootstrap blocker is resolved, but production CI is not evidence of successful
+human invitation, revocation, CLI/MCP, or final delivery acceptance. Playground
+layout polish remains [backlog](/tasks/backlog/refine-playground-layout/Task.md).
