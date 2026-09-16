@@ -181,6 +181,20 @@ boundaries here.
 - Use forward migrations and an explicitly tested rollback/compatibility plan;
   do not rewrite immutable audit history or merge existing accounts by email.
 
+## Human review checkpoints
+
+Task creation and this checkpoint plan do not record approval. Each required
+artifact must be prepared during execution, published with a pending decision,
+and explicitly approved before the protected work begins.
+
+| Checkpoint | Applicability | Reviewer | Planned review artifact | Approval required before |
+| --- | --- | --- | --- | --- |
+| Scope | Required | User or accountable owner | This task's goal, scope, out of scope, constraints, acceptance criteria, provider set, and dependency on the platform-access task. | Substantive implementation. |
+| Business and data model | Required | User or delegated identity/security owner | Task-owned account model and migration design covering Account, ExternalIdentity, verified-email evidence, invitation ownership, membership and platform grants, audit attribution, linking conflicts, retention, one-to-one migration, and rollback. | Changing persistent schemas, ownership keys, migration code, invitation rules, linking semantics, or authorization records. |
+| Architecture | Required | User or delegated architecture owner | Task-owned architecture and sequencing design covering provider adapters, `control-auth`, cloud-neutral service ports, Cloudflare persistence and BFF composition, session/account resolution, revocation, deployment order, and compatibility boundaries. | Changing module responsibilities, dependencies, provider composition, session architecture, or deployment wiring. |
+| Interface | Required | User or delegated product/API owner | Task-owned interface design for Console login and account management, callback and linking routes, administrator API contracts, CLI and MCP login behavior, error/privacy semantics, and compatibility with existing clients. | Implementing or changing affected GUI flows, HTTP contracts, CLI commands, or MCP behavior. |
+| Delivery acceptance | Required | User or accountable owner | Integrated revision, provider and migration test matrix, security and privacy evidence, validation results, deployment/rollback rehearsal, and required Console, CLI, and MCP manual test results. | Marking the task completed and archiving it. |
+
 ## References
 
 - [UniCAS terminology](/docs/terminology.md)
