@@ -11,7 +11,7 @@ primitives and one responsive two-column Console shell. The left navigation is
 the durable App and workspace context. The right pane is the selected App or
 Platform Administration detail.
 
-The interactive reference is [ConsoleMock.html](/tasks/ongoing/scottwei-home-pc/add-platform-access-management/ConsoleMock.html). It covers:
+The interactive reference is [ConsoleMock.html](/tasks/ongoing/copilot-unicas-standalone/add-platform-access-management/ConsoleMock.html). It covers:
 
 - selecting Apps from primary navigation;
 - switching Overview, Members, Invitations, Playground, and Change Logs in the

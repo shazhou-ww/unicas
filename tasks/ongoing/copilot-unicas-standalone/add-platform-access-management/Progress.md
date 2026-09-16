@@ -15,6 +15,12 @@ Updated: 2026-09-16
 
 ## Current state
 
+On 2026-09-16, the user requested handoff from `xiaoju-neko-vm` to the
+current worktree identity, `copilot-unicas-standalone`. The destination lane is
+verified on `origin/main`, and no overlapping backlog or ongoing task exists.
+This directory move is the handoff checkpoint; resume implementation only
+after it is published and verified on `origin/main`.
+
 Claim `ff3c87e0318d4c30b76111d8cf96302a0b354fba` is verified on `origin/main`.
 The shared platform authorization model, service guards, D1 tables, and atomic
 access mutation repository are implemented. The admission guard is integrated
