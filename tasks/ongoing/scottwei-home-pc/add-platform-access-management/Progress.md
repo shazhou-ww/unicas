@@ -16,7 +16,7 @@ Updated: 2026-09-16
 - [x] Validate local bootstrap/migration tests, workflows, scoped accessibility checks, and repository gates.
 - [x] Complete operator production cutover and real-provider verification in [UserAcceptance](./UserAcceptance.md).
 - [x] Publish implementation completion after required reviews and remaining acceptance checks.
-- [ ] Obtain explicit human delivery acceptance.
+- [x] Obtain explicit human delivery acceptance.
 - [ ] Publish archive as a separate final integration.
 
 ## Current state
@@ -97,6 +97,12 @@ member-removed events, with no invitation token fields exposed. All Task
 acceptance criteria and the operator procedure now pass with that recorded
 operational waiver. The implementation-complete milestone is ready to publish;
 delivery acceptance remains a separate decision after publication.
+
+After implementation-complete publication, the requesting user explicitly
+accepted the current delivery and authorized archival on 2026-09-16. This
+acceptance includes the recorded decision not to establish a second Platform
+Admin for now. The delivery decision must be published while the task remains
+ongoing before the separate archive integration.
 
 ### Production reset and release
 
@@ -725,6 +731,7 @@ audit reads.
 | Ownership handoff to `scottwei-home-pc` | `d16ddb7`, verified reachable from refreshed `origin/main`. | Published |
 | Denied-login guidance and strong ETag follow-up | `c171901`; PR #3 merged as `19dd7ef`; run 35099365111 passed and tagged `production-20260916-108`; direct production page/ETag checks passed. | Published |
 | Implementation complete | `5cfc938`, verified reachable from refreshed `origin/main`; all acceptance criteria and operator checks pass with the explicit second-administrator waiver. | Published |
+| Delivery acceptance | Explicitly accepted by the requesting user on 2026-09-16 after implementation-complete publication; publication pending. | Pending |
 | Archive | Not yet archived. | Pending |
 
 ## Validation
@@ -779,15 +786,14 @@ audit reads.
 
 - The production bootstrap and release blocker is resolved by the reset,
   bootstrap, and successful release recorded under Current state.
-- No implementation or operator-acceptance blocker remains. The user explicitly
-  waived a second Platform Admin for now. Final delivery approval remains
-  pending after implementation-complete publication. Playground visual polish
-  is intentionally deferred to its backlog task.
+- No implementation, operator-acceptance, or delivery blocker remains. The user
+  explicitly waived a second Platform Admin for now and accepted delivery.
+  Archive publication remains pending. Playground visual polish is intentionally
+  deferred to its backlog task.
 
 ## Outcome
 
-Ongoing, ready for implementation-complete publication. All acceptance criteria,
-production releases, real-provider checks, and post-release checks are complete
-with the explicit second-administrator waiver. Delivery acceptance and separate
-archive publication remain pending. Playground layout polish is deferred to its
-backlog task.
+Completed and accepted, pending only separate archive publication. All acceptance
+criteria, production releases, real-provider checks, and post-release checks are
+complete with the explicit second-administrator waiver. Playground layout polish
+is deferred to its backlog task.

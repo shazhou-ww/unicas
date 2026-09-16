@@ -220,7 +220,7 @@ second-administrator waiver. Delivery acceptance remains pending.
 | Interface alignment | Accepted Console, HTTP, CLI, and MCP behavior; live provider checks and the denied-access follow-up passed. | Passed. |
 | Business and data model alignment | Accepted independent grants, immutable identity, invitation-limited sessions, bootstrap, and revocation behavior. A second administrator is explicitly waived for now. | Passed. |
 | Architecture alignment | Accepted protocol/client/presentation/service/adapter ownership; package and deployment boundaries passed repository validation. | Passed. |
-| Delivery acceptance | A future published implementation revision, final criteria, and validation evidence in [Progress](./Progress.md). | Obtain explicit acceptance before completion and separate archive publication. |
+| Delivery acceptance | The requesting user explicitly accepted the published implementation and authorized archival on 2026-09-16 after reviewing the final production state and second-administrator waiver. | Passed; publish this decision before the separate archive integration. |
 
 ## Constraints
 
