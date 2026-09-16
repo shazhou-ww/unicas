@@ -632,9 +632,47 @@ a:focus-visible {
   opacity: 0;
 }
 
+.file-pathbar,
+.file-toolbar,
+.file-breadcrumbs,
+.file-breadcrumbs>span {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.file-pathbar,
+.file-toolbar {
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.file-breadcrumbs {
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.file-breadcrumbs button {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.file-toolbar-divider {
+  height: 1.5rem;
+  border-left: 1px solid var(--border);
+  margin-inline: 0.25rem;
+}
+
+.file-table th,
+.file-table th button {
+  color: var(--muted-strong);
+}
+
 .file-capability-status {
   margin: 0.7rem 0 0;
-  color: var(--muted);
+  color: var(--muted-strong);
   font-size: 0.72rem;
 }
 

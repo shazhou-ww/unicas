@@ -21,6 +21,58 @@ Updated: 2026-09-16
 
 ### Latest continuation
 
+#### Enabled Playground acceptance, 2026-09-16
+
+The typecheck changes were committed as `46e01cb`, pushed, and verified on
+refreshed `origin/main`. The preceding Console refinement checkpoint is
+`11dc74a`, also published. This section supersedes earlier statements that
+enabled Playground or mobile creation have not been exercised.
+
+- Added [acceptance-runtime.mjs](./acceptance-runtime.mjs). From the repository
+  root, first build `@unicas/service-cloudflare`, then run this module with Node.
+  It starts the built Console at `http://127.0.0.1:8892/admin/`, uses mock OIDC
+  on 8893, creates a unique OS temporary database directory, and generates the
+  managed-issuer private key only in process memory. SIGINT/SIGTERM disposes the
+  runtime and removes its own temporary directory. Do not use production secrets.
+- Initial `node --input-type=module -e` attempts stalled at Miniflare's D1 binding
+  proxy before bootstrap and consequently denied login. Normal `.mjs` execution
+  initialized correctly. Temporary diagnostic logs were removed; the shared
+  local runtime has no probe changes. No authentication bypass was introduced.
+- Real 375px browser flow passed: mock login, sidebar plus, name entry, inline
+  confirm, newly allocated App detail navigation, drawer closure, and membership
+  refresh. All created records belong only to the temporary acceptance database.
+- Real managed-issuer disable/enable correctly disabled/enabled Playground.
+  Created a Documents root, uploaded a synthetic 26-byte text file, created an
+  Archive directory, reloaded the page, and reopened the root with both entries
+  intact. Capability issuance and the actual CAS read/write path succeeded.
+- The download handler reconstructed the original filename and byte-for-byte
+  text payload. The integrated browser did not emit a native download completion
+  event, so a temporary anchor/object-URL probe verified the actual reconstructed
+  blob instead and was restored afterward. OS save-dialog completion is not
+  claimed. Partial selection reported `aria-checked=mixed`; real Usage returned
+  four nodes and no pending/reserved content. Confirmed GC completed with zero
+  deletions because the test nodes remained protected.
+- Enabled-page axe scans exposed low contrast in the Personal Space status
+  and sorting headers. Both now use `--muted-strong`. Missing pathbar/toolbar
+  flex rules were restored with responsive wrapping. Production CSS builds;
+  the isolated page was rechecked using the actual Vite-compiled stylesheet.
+  At 375/768/1280/1920px, the populated Playground had no page overflow and no
+  WCAG A/AA axe violations. Desktop and mobile screenshots were inspected in
+  this session; they are not committed screenshot artifacts.
+- Final checks pass: `pnpm test` (including 85 WebUI, 247 Cloudflare, 117 service,
+  93 admin-protocol, and 16 admin-client tests), `pnpm typecheck` (including
+  WebUI `tsc --noEmit`), `pnpm build`, Worker Wrangler deploy dry-run, product
+  site dry-run, documentation build/dry-run, and `git diff --check`.
+  Non-failing Vite sourcemap/chunk-size warnings remain. The editor's generic
+  CSS validator does not recognize Tailwind 4 at-rules; Vite compilation passes.
+
+Next action: operator review/verification of the production cutover procedure
+in [UserAcceptance](./UserAcceptance.md), plus the explicit outstanding human
+review decisions and final delivery acceptance. Do not execute production
+bootstrap/deployment automatically, mark production criteria passed, or archive
+based on this local validation. The prior broader review gates remain pending;
+the focused unified-query approval is already recorded below.
+
 Type-check coverage follow-up: added WebUI `tsconfig.test.json` covering `src`,
 all `tests`, and `vite.config.ts`, with noEmit enabled. The standard package
 typecheck now runs `tsc -b && tsc --noEmit -p tsconfig.test.json`, so root/CI
@@ -55,7 +107,7 @@ Vite sourcemap and chunk-size warnings remain. Earlier whole-repository tests
 and browser evidence are retained below with their actual scope; they are not
 presented as a new full-repository run for these final UI changes.
 
-This is a partial implementation checkpoint, not completion or archival. Next:
+Historical next action at that checkpoint (now superseded above):
 validate enabled Playground in an isolated runtime using local-only generated
 signing material; complete mobile inline creation browser coverage; then run
 the remaining release gates. Production bootstrap validation and explicit final
@@ -407,7 +459,8 @@ audit reads.
 | --- | --- | --- |
 | Claim | `origin/main` commit `ff3c87e0318d4c30b76111d8cf96302a0b354fba`. | Published |
 | Unified people and Console partial checkpoint | `0555cc0`, verified reachable from refreshed `origin/main`; full tests, typecheck, OpenAPI and local build passed. | Published |
-| Console refinement partial checkpoint | Commit containing this record; 85 WebUI tests, typecheck, build, and diff checks pass. | Prepared for publication; not implementation complete |
+| Console refinement partial checkpoint | `11dc74a`; 85 WebUI tests, typecheck, build, and diff checks passed and publication was verified. | Published |
+| Test typecheck coverage | `46e01cb`; explicit WebUI no-emit test/config checking and workspace typecheck passed. | Published |
 | Implementation complete | Not yet completed. | Pending |
 | Archive | Not yet archived. | Pending |
 
@@ -468,6 +521,6 @@ audit reads.
 
 ## Outcome
 
-Ongoing. This validated refinement checkpoint is ready for the requested commit
-and normal publication. Enabled Playground/mobile validation, final acceptance,
-and implementation-complete publication remain pending.
+Ongoing. Type fixes are published; enabled Playground and mobile creation are
+now locally verified as documented above. Production cutover verification,
+outstanding human review decisions, and final delivery acceptance remain pending.
