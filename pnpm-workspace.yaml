@@ -26,9 +26,7 @@ minimumReleaseAgeExclude:
   - '@codemirror/state'
   - '@tanstack/virtual-core'
   - '@tanstack/vue-virtual'
-  # The task validator is intentionally pinned; remove this after 0.1.0 clears
-  # the configured release-age window.
-  - repoledger@0.1.0
+  - repoledger@0.4.0
 overrides:
   '@jridgewell/sourcemap-codec': 1.5.5
 allowBuilds:

@@ -35,7 +35,7 @@ Pin the companion CLI in each adopting repository instead of resolving
 `latest` during CI:
 
 ```sh
-pnpm add --save-dev repoledger@0.3.1
+pnpm add --save-dev repoledger@0.4.0
 ```
 
 Track this `repoledger.json` at the repository root, adapting only the task
@@ -71,7 +71,7 @@ layout, and optional identity setup; add `--apply` only after reviewing that
 plan.
 
 The CLI never decides admission, ownership consent, acceptance, completion, or
-abandonment. Explicit `init --apply` and `plan ... --apply` operations may
+abandonment. Explicit `init --apply` and `task ... --apply` operations may
 modify local task files or worktree Git configuration after preflight. They
 never stage, commit, push, merge, force-update, or publish those changes. Keep
 the skill installed and required by project instructions.
@@ -190,7 +190,6 @@ moves. External URI references and fragment-only links remain unchanged. The
 validator rejects repository-root links back into the current task directory,
 resolves both allowed local forms without a project link-policy setting, and
 does not interpret external URIs as repository paths.
-
 
 ## Worktree identity setup
 

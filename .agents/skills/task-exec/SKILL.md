@@ -30,12 +30,12 @@ implementation files.
    ask for the smallest clarification. Never create a task; route new intake
    through `task-new`.
 4. Route by current status:
-    - **Backlog:** after semantic overlap review, preview and apply `plan claim`,
-       then publish before implementation.
+    - **Backlog:** after semantic overlap review, preview and apply
+       `task claim --update-all-refs`, then publish before implementation.
    - **Ongoing here:** resume from canonical task and progress state.
     - **Ongoing elsewhere:** coordinate explicitly; the receiving worktree may
-       then use `plan claim --take-from <source-identity>`. Never take over
-       implicitly.
+      then use `task claim --take-from <source-identity> --update-all-refs`.
+      Never take over implicitly.
    - **Archived:** report the recorded outcome and stop.
 
 ## Execute The Lifecycle
