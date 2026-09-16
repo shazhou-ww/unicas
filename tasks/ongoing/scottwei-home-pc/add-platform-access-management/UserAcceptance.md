@@ -94,3 +94,21 @@ rejected by Google before the UniCAS callback with a generic JavaScript-disabled
 message even though JavaScript execution was confirmed. This is not a UniCAS
 deny-by-default result. Resume step 3 in ordinary Chrome or Edge with the
 secondary account, then continue invitation and revocation checks.
+
+Steps 3 through 5 then passed with the secondary account in an ordinary browser.
+Before invitation, the real provider returned to UniCAS and admission was
+denied. An email-bound App invitation granted exactly one App membership and no
+platform authority. The Console omitted App creation and Platform Administration;
+live MCP calls independently denied both operations. After membership removal,
+the Principal had no effective access, and the next browser and MCP requests
+from existing sessions were denied.
+
+The revocation operation exposed a production edge defect: Brotli weakened the
+strong revision ETag, causing a conditional CLI write to fail before a local
+client compatibility fix was applied. Source fixes now normalize only numeric
+revision ETags weakened in transit, prohibit edge transformation of BFF revision
+responses, and show a dedicated no-management-access page with an account-switch
+action. These fixes passed focused and package validation but still require
+publication, production release, and post-release verification. Step 2 also
+still requires establishing a second Platform Admin through the protected
+workflow; do not report overall acceptance until both items complete.

@@ -1042,9 +1042,9 @@ describe("cas-admin-webui BFF", () => {
       expect(errorPage.status).toBe(200);
       expect(errorPage.headers.get("Location")).toBeNull();
       const errorHtml = await errorPage.text();
-      expect(errorHtml).toContain("Access restricted");
-      expect(errorHtml).toContain("not approved for this console");
-      expect(errorHtml).toContain("Choose another Google account");
+      expect(errorHtml).toContain("No management access");
+      expect(errorHtml).toContain("does not have management access to UniCAS");
+      expect(errorHtml).toContain("Sign in with another Google account");
       expect(errorHtml).not.toContain("Continue with Google");
     }
   }, 10_000);
@@ -1107,6 +1107,12 @@ describe("cas-admin-webui BFF", () => {
     expect(callback.headers.get("Location")).toBe("/admin/auth/login?error=access-denied");
     // Session cookie must not be set on denied login.
     expect(callback.headers.get("Set-Cookie")).toBeNull();
+
+    const deniedPage = await bff(new Request(`${PUBLIC_ORIGIN}${callback.headers.get("Location")!}`));
+    const deniedHtml = await deniedPage.text();
+    expect(deniedHtml).toContain("No management access");
+    expect(deniedHtml).toContain("Sign in with another Google account");
+    expect(deniedHtml).not.toContain("Continue with Google");
   }, 10_000);
 
   test("platform access granted: login succeeds when principal has an explicit grant", async () => {
@@ -1448,7 +1454,7 @@ describe("cas-admin-webui BFF", () => {
     });
     expect(response.status).toBe(204);
     expect(response.headers.get("ETag")).toBe('"2"');
-    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("Cache-Control")).toBe("no-store, no-transform");
     expect(await response.text()).toBe("");
     expect(fakeStacks.get(appId)?.status).toBe("suspended");
   });

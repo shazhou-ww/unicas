@@ -306,7 +306,11 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
     return response;
   };
 
-  const readEtag = (response: Response): string => response.headers.get(CasAdminETagHeader) ?? "";
+  const readEtag = (response: Response): string => {
+    const etag = response.headers.get(CasAdminETagHeader) ?? "";
+    const weakenedRevision = /^W\/("(?:0|[1-9][0-9]*)")$/.exec(etag);
+    return weakenedRevision?.[1] ?? etag;
+  };
   const queryString = (query: object | undefined): string => {
     if (query === undefined) return "";
     const params = new URLSearchParams();

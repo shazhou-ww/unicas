@@ -30,6 +30,7 @@ export async function handleAppAdminCompatibilityRequest(
     && typeof body.invitation.revision === "number") {
     const response = copyJsonResponse(legacyResponse, mapInvitationResponse(body), 201);
     response.headers.set("ETag", formatCasAdminETag(body.invitation.revision));
+    response.headers.set("Cache-Control", "no-store, no-transform");
     return response;
   }
   return copyJsonResponse(

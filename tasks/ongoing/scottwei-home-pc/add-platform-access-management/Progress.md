@@ -49,6 +49,36 @@ running; this is not an UniCAS admission result. Next: use ordinary Chrome or
 Edge to sign in as the secondary account at the production Console and report
 whether UniCAS denies admission. Do not treat the Google rejection as a pass.
 
+The secondary-account checks subsequently completed in an ordinary browser.
+Before invitation, Google returned successfully to UniCAS and the Console
+redirected to `/admin/auth/login?error=access-denied` without creating a session.
+An email-bound App invitation was created and accepted; the Principal gained
+exactly one App membership, remained at zero platform authorities, and saw
+neither App creation nor Platform Administration in the Console. The same
+Principal's stdio MCP session could read its membership but received
+`PLATFORM_ADMIN_REQUIRED` for platform listing and
+`APP_CREATION_AUTHORITY_REQUIRED` for App creation. No unauthorized App was
+created. Removing the membership changed effective access to `no_access`; the
+next requests from both the pre-existing browser and MCP sessions were denied.
+
+This live revocation exposed a production ETag transport defect. Cloudflare
+Brotli changed the App revision ETag from `"1"` to `W/"1"`, and the CLI then
+correctly encountered `If-Match header is malformed` because mutation inputs
+require strong ETags. The admin client now normalizes only transfer-weakened
+numeric revision ETags, and BFF revision responses use
+`Cache-Control: no-store, no-transform` to preserve the API's strong-ETag
+contract at the edge. The denied-login page now renders an explicit
+No management access state with a Sign in with another Google account action
+for both legacy allowlist denial and persisted platform-access denial.
+
+Validation for this follow-up passes: 17 admin-client tests, 46 admin-CLI tests,
+247 service-cloudflare tests, affected package typechecks, the Cloudflare
+production build, focused 63-test BFF/adapter checks, editor diagnostics, and
+`git diff --check`. The fixes are not yet published or deployed. After release,
+verify the denied-account page and a compressed App read's strong ETag. The
+remaining operator acceptance item is establishing a second Platform Admin
+through the protected workflow before final delivery acceptance.
+
 ### Production reset and release
 
 Reset execution completed on 2026-09-16 and supersedes the initial preflight
