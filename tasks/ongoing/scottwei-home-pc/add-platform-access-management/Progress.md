@@ -23,8 +23,9 @@ Updated: 2026-09-16
 
 Ownership transferred from `copilot-unicas-standalone` to
 `scottwei-home-pc` on 2026-09-16 at the requesting user's explicit direction.
-The transfer publication is pending. Product implementation and production
-release state are unchanged by this ledger-only handoff.
+The transfer is published as `d16ddb7` and verified on `origin/main`. Product
+implementation and production release state are unchanged by this ledger-only
+handoff.
 
 ### Production reset and release
 
@@ -650,7 +651,7 @@ audit reads.
 | Test typecheck coverage | `46e01cb`; explicit WebUI no-emit test/config checking and workspace typecheck passed. | Published |
 | Enabled Playground acceptance | `4827425`; isolated real CAS workflow, mobile creation, responsive checks, and release gates. | Published |
 | Managed issuer CopyBubble and editor integration | `1e97284`; issuer regressions, no-emit check, and built desktop preview verified. | Published |
-| Ownership handoff to `scottwei-home-pc` | Explicitly requested on 2026-09-16; publication pending. | Pending |
+| Ownership handoff to `scottwei-home-pc` | `d16ddb7`, verified reachable from refreshed `origin/main`. | Published |
 | Implementation complete | Not yet completed. | Pending |
 | Archive | Not yet archived. | Pending |
 
