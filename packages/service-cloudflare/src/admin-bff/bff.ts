@@ -90,6 +90,7 @@ const NOT_AVAILABLE_MESSAGE = "Root Ref audit reads are not yet available from t
 const CLI_CLIENT_ID = "unicas-cli";
 /** Lifetime of the one-time code handed to the CLI after Google sign-in. */
 const CLI_CODE_TTL_MS = 2 * 60 * 1000;
+const REVISION_CACHE_CONTROL = "no-store, no-transform";
 
 function isLoopbackRedirect(value: string | null): value is string {
   if (value === null) return false;
@@ -251,7 +252,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     const oidcUrl = new URL("/admin/auth/oidc", config.publicOrigin);
     if (returnTo) oidcUrl.searchParams.set("returnTo", returnTo);
     const error = url.searchParams.get("error");
-    const accessRestricted = error === "not-allowed";
+    const accessRestricted = error === "not-allowed" || error === "access-denied";
     const errorMessage = error === "oidc-failed"
       ? "Google sign-in could not be completed. Please try again."
       : null;
@@ -277,10 +278,10 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
         </div>
         <p class="login-eyebrow">UniCAS Admin</p>
-        <h1>Access restricted</h1>
-        <p class="login-copy" role="alert">This Google account is not approved for this console. Choose another account or contact the UniCAS team.</p>
+        <h1>No management access</h1>
+        <p class="login-copy" role="alert">This Google account does not have management access to UniCAS. Sign in with another account or contact the UniCAS team.</p>
         <div class="login-actions">
-          <a class="btn" href="${oidcUrl.pathname}${oidcUrl.search}">Choose another Google account</a>
+          <a class="btn" href="${oidcUrl.pathname}${oidcUrl.search}">Sign in with another Google account</a>
           ${testAccountLink}
         </div>` : `
         <p class="login-eyebrow">Restricted console</p>
@@ -857,7 +858,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       ifNoneMatch: request.headers.get("If-None-Match") ?? undefined,
     });
     return "error" in result ? json(transformAppAdminError({ ...result }), casAdminErrorHttpStatus[result.error])
-      : new Response(null, { status: 204, headers: { ETag: formatCasAdminETag(result.revision), "Cache-Control": "no-store" } });
+      : new Response(null, { status: 204, headers: { ETag: formatCasAdminETag(result.revision), "Cache-Control": REVISION_CACHE_CONTROL } });
   }
 
   async function handlePeople(request: Request, appId?: string): Promise<Response> {
@@ -895,7 +896,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         ifMatch: request.headers.get("If-Match") ?? undefined,
       });
       if ("error" in result) return json(transformAppAdminError({ ...result }), result.error === "INVITATION_NOT_PENDING" ? 409 : casAdminErrorHttpStatus[result.error]);
-      return new Response(null, { status: 204, headers: { ETag: formatCasAdminETag(result.revision), "Cache-Control": "no-store" } });
+      return new Response(null, { status: 204, headers: { ETag: formatCasAdminETag(result.revision), "Cache-Control": REVISION_CACHE_CONTROL } });
     }
     const params = queryFromUrl(new URL(request.url));
     const parsed = AppInvitationQuerySchema.safeParse({ ...params, ...(params.limit === undefined ? {} : { limit: Number(params.limit) }) });
@@ -918,7 +919,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     if ("error" in result) return json(transformAppAdminError({ ...result }), casAdminErrorHttpStatus[result.error]);
     return new Response(null, {
       status: 204,
-      headers: { ETag: formatCasAdminETag(result.revision), "Cache-Control": "no-store" },
+      headers: { ETag: formatCasAdminETag(result.revision), "Cache-Control": REVISION_CACHE_CONTROL },
     });
   }
 
@@ -1313,6 +1314,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
           const access = await platformAccess.getAccessState(actor, route.principalRef);
           const response = json(access, 200);
           response.headers.set("ETag", formatCasAdminETag(access.revision));
+          response.headers.set("Cache-Control", REVISION_CACHE_CONTROL);
           return response;
         }
         case "patchPlatformAccess": {
@@ -1322,7 +1324,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
           const { revision } = await platformAccess.patchAccess(actor, route.principalRef, body, ifMatch);
           return new Response(null, {
             status: 204,
-            headers: { ETag: formatCasAdminETag(revision), "Cache-Control": "no-store" },
+            headers: { ETag: formatCasAdminETag(revision), "Cache-Control": REVISION_CACHE_CONTROL },
           });
         }
         case "listPlatformInvitations": {
@@ -1345,6 +1347,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
             expiresAt: created.expiresAt,
           }, 201);
           response.headers.set("ETag", formatCasAdminETag(created.revision));
+          response.headers.set("Cache-Control", REVISION_CACHE_CONTROL);
           return response;
         }
         case "revokePlatformInvitation": {
@@ -1357,7 +1360,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
           );
           return new Response(null, {
             status: 204,
-            headers: { ETag: formatCasAdminETag(revoked.revision), "Cache-Control": "no-store" },
+            headers: { ETag: formatCasAdminETag(revoked.revision), "Cache-Control": REVISION_CACHE_CONTROL },
           });
         }
         case "listPlatformAuditEvents": {
@@ -1567,7 +1570,10 @@ function jsonWithEtag(result: unknown): Response {
   const headers: Record<string, string> = { "Cache-Control": "no-store" };
   if (typeof result === "object" && result !== null && "revision" in result) {
     const revision = (result as { revision: unknown }).revision;
-    if (typeof revision === "number") headers["ETag"] = formatCasAdminETag(revision);
+    if (typeof revision === "number") {
+      headers["ETag"] = formatCasAdminETag(revision);
+      headers["Cache-Control"] = REVISION_CACHE_CONTROL;
+    }
   }
   return Response.json(result, { status: 200, headers });
 }

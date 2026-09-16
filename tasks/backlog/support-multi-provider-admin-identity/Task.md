@@ -36,7 +36,7 @@ separately authenticated external identities attached to it.
 
 This work follows the Google-only invitation admission and deny-by-default
 platform authorization established by
-[Rebuild the Console with platform access management](/tasks/ongoing/copilot-unicas-standalone/add-platform-access-management/Task.md).
+[Rebuild the Console with platform access management](/tasks/ongoing/scottwei-home-pc/add-platform-access-management/Task.md).
 Finish and publish that task before changing its identity and invitation
 boundaries here.
 

@@ -63,6 +63,6 @@ does not invent an unreported defect list.
 
 ## References
 
-- [Platform Access task](/tasks/ongoing/copilot-unicas-standalone/add-platform-access-management/Task.md)
-- [Current UI design](/tasks/ongoing/copilot-unicas-standalone/add-platform-access-management/UiDesign.md)
+- [Platform Access task](/tasks/ongoing/scottwei-home-pc/add-platform-access-management/Task.md)
+- [Current UI design](/tasks/ongoing/scottwei-home-pc/add-platform-access-management/UiDesign.md)
 - [Playground implementation](/packages/admin-webui/src/ui/views/file-playground.tsx)

@@ -21,7 +21,105 @@ Updated: 2026-09-16
 
 ## Current state
 
-### Full production reset preparation
+Ownership transferred from `copilot-unicas-standalone` to
+`scottwei-home-pc` on 2026-09-16 at the requesting user's explicit direction.
+The transfer is published as `d16ddb7` and verified on `origin/main`. Product
+implementation and production release state are unchanged by this ledger-only
+handoff.
+
+Operator acceptance resumed on 2026-09-16. The production Console rendered its
+restricted login page and redirected through the configured real Google OIDC
+provider to the account identifier prompt. No identity or OAuth values were
+recorded. The user must now complete authentication directly in the browser;
+after the Console returns, continue UserAcceptance steps 3 through 5 and record
+only non-secret results.
+
+The initial administrator subsequently completed real Google login. Production
+Console showed the expected App membership, App creation control, and Platform
+Administration entry. After refreshing an expired local CLI session through
+the production PKCE flow, live `principal`, App listing, and protected platform
+access listing passed. The repository stdio MCP server exposed 47 tools and a
+live `get_current_principal` call returned the same effective authorities. No
+production mutation was made by these checks.
+
+Testing an unentitled secondary account is blocked in the VS Code embedded
+Electron browser: Google rejects that browser before returning to UniCAS with a
+generic JavaScript-disabled message. An in-page check confirmed JavaScript is
+running; this is not an UniCAS admission result. Next: use ordinary Chrome or
+Edge to sign in as the secondary account at the production Console and report
+whether UniCAS denies admission. Do not treat the Google rejection as a pass.
+
+The secondary-account checks subsequently completed in an ordinary browser.
+Before invitation, Google returned successfully to UniCAS and the Console
+redirected to `/admin/auth/login?error=access-denied` without creating a session.
+An email-bound App invitation was created and accepted; the Principal gained
+exactly one App membership, remained at zero platform authorities, and saw
+neither App creation nor Platform Administration in the Console. The same
+Principal's stdio MCP session could read its membership but received
+`PLATFORM_ADMIN_REQUIRED` for platform listing and
+`APP_CREATION_AUTHORITY_REQUIRED` for App creation. No unauthorized App was
+created. Removing the membership changed effective access to `no_access`; the
+next requests from both the pre-existing browser and MCP sessions were denied.
+
+This live revocation exposed a production ETag transport defect. Cloudflare
+Brotli changed the App revision ETag from `"1"` to `W/"1"`, and the CLI then
+correctly encountered `If-Match header is malformed` because mutation inputs
+require strong ETags. The admin client now normalizes only transfer-weakened
+numeric revision ETags, and BFF revision responses use
+`Cache-Control: no-store, no-transform` to preserve the API's strong-ETag
+contract at the edge. The denied-login page now renders an explicit
+No management access state with a Sign in with another Google account action
+for both legacy allowlist denial and persisted platform-access denial.
+
+Validation for this follow-up passes: 17 admin-client tests, 46 admin-CLI tests,
+247 service-cloudflare tests, affected package typechecks, the Cloudflare
+production build, focused 63-test BFF/adapter checks, editor diagnostics, and
+`git diff --check`. The source fixes are published as `c171901` and verified on
+`origin/main`, but are not yet deployed. After release, verify the denied-account
+page and a compressed App read's strong ETag. The
+remaining operator acceptance item is establishing a second Platform Admin
+through the protected workflow before final delivery acceptance.
+
+### Production reset and release
+
+Reset execution completed on 2026-09-16 and supersedes the initial preflight
+blocker below. The user explicitly waived backup and selected both authorities.
+The validated [one-time reset script](./reset-production.mjs) matched the
+browser-verified Google identity in memory, deployed a maintenance Worker,
+verified maintenance on both origins, removed 4 R2 objects (413 bytes), dropped
+all 21 old application tables, and rebuilt current tables from source migrations.
+All reconstructed application tables were verified empty before seeding. KV was
+empty; all 7 DO instances reported no stored data through fully paginated reads.
+Fresh seed verification returned one active administrator with both authorities,
+one bootstrap audit event, one smoke App/member fixture, and zero sessions.
+No backup was made, no invitation was created, and no old profile/session or
+file content was retained. The existing public smoke issuer configuration was
+re-established for the CI fixture; it is not an old business-data restore.
+
+Preparation was published as `1eeb12a`. The normal release promotion is
+[PR #2](https://github.com/shazhou-ww/unicas/pull/2). A history-only merge of the
+previous release into main (`25baf19`) satisfies the up-to-date branch rule.
+GitHub auto-merge is disabled; the PR was merged normally after required checks
+passed. No branch-protection bypass or force push was used.
+
+Production release completed at `955ec4c9690d820966c5aae942a1223a554c275d`, tagged
+`production-20260916-99`. [Release CI run 35077282282](https://github.com/shazhou-ww/unicas/actions/runs/35077282282)
+attempt 1 uploaded the service but failed its first edge health assertion with
+HTTP 503. A subsequent uncached health read returned HTTP 200 with the expected
+UniCAS payload and no maintenance marker, consistent with transient deployment
+propagation. The original run's failed jobs were retried without code changes
+or bypassing smoke. Attempt 2 passed validation, canonical smoke, all three
+Worker deployments, all four public-origin checks, and the production tag job.
+Maintenance has ended. The production Console reload showed the expected login
+page because the reset removed old sessions.
+
+Next: the user logs in again with the verified Google account and completes the
+remaining real-provider acceptance checks in [UserAcceptance](./UserAcceptance.md).
+Do not mark invitation/revocation, CLI/MCP, or final human delivery checks as
+passed solely because CI succeeded. Keep the task ongoing until those gates
+and the separate completion/archive publications are satisfied.
+
+#### Reset preparation history
 
 On 2026-09-16 the user explicitly authorized clearing all current production
 data because the system is not yet in use. Scope is the `unicas.work`
@@ -50,7 +148,7 @@ persistent storage. The implementations use D1/R2 and in-memory coordination.
 The reset must recreate the public smoke App/issuer fixture required by CI,
 invalidate old sessions, and bootstrap the verified account before release.
 
-### Release request and blocking preflight
+### Initial release preflight (resolved)
 
 On 2026-09-16 the requesting user accepted the management Console ("剩下的都没问题")
 and explicitly requested a release, while deferring remaining Playground layout
@@ -72,13 +170,10 @@ before the runbook bootstrap, or administrators could lose Platform Access
 management and App-creation authority. The preflight returned schema names
 only; no Principal values or credentials were read or written.
 
-**Release has not been triggered.** Next required action: an authorized operator
-backs up production D1, provisions the chosen verified immutable Principal via
-the [bootstrap runbook](/docs/cas-operations.md#platform-access-bootstrap-and-migration),
-and reports readiness without posting secrets or Principal identifiers. Then
-recheck the active-admin count, refresh branch/CI state, trigger the approved
-release, and record the deployment and real-provider verification outcome.
-Do not infer administrator identity from email or deploy around this gate.
+At this initial preflight, release had not been triggered and bootstrap was
+required. The subsequent explicit disposable-data reset and backup waiver,
+verified immutable-identity bootstrap, and successful production release above
+resolve that blocker. No administrator identity was inferred from email.
 
 The installed repoledger CLI does not implement `status`; backlog and ongoing
 positions were inspected directly as the documented fallback. Concurrent task
@@ -609,6 +704,8 @@ audit reads.
 | Test typecheck coverage | `46e01cb`; explicit WebUI no-emit test/config checking and workspace typecheck passed. | Published |
 | Enabled Playground acceptance | `4827425`; isolated real CAS workflow, mobile creation, responsive checks, and release gates. | Published |
 | Managed issuer CopyBubble and editor integration | `1e97284`; issuer regressions, no-emit check, and built desktop preview verified. | Published |
+| Ownership handoff to `scottwei-home-pc` | `d16ddb7`, verified reachable from refreshed `origin/main`. | Published |
+| Denied-login guidance and strong ETag follow-up | `c171901`, verified reachable from refreshed `origin/main`; release pending. | Published |
 | Implementation complete | Not yet completed. | Pending |
 | Archive | Not yet archived. | Pending |
 
@@ -662,15 +759,22 @@ audit reads.
 
 ## Blockers
 
-- Production Platform Admin bootstrap is absent: read-only D1 preflight found
-  no `cas_platform_principals` table. Await the authorized operator's out-of-band
-  bootstrap before triggering release. No production writes or deployment ran.
-- Real-provider/post-release verification and final task closure remain pending.
-  Remaining Playground visual polish is intentionally deferred to its backlog task.
+- The production bootstrap and release blocker is resolved by the reset,
+  bootstrap, and successful release recorded under Current state.
+- Publishing the follow-up release PR is externally blocked: the VS Code GitHub
+  identity is not a repository collaborator, the browser is not signed in to
+  GitHub, and the local `gh` token for the repository owner is invalid. Next:
+  authenticate as a collaborator and create the `main` to `release` PR from
+  `https://github.com/shazhou-ww/unicas/compare/release...main?expand=1`.
+- Post-release verification, establishment of a second Platform Admin, and final
+  delivery approval remain pending. Playground visual polish is intentionally
+  deferred to its backlog task.
 
 ## Outcome
 
-Ongoing, implementation accepted for release with Playground layout polish
-deferred. Release is authorized but not triggered because the production
-Platform Admin bootstrap precondition is missing. Production verification and
-task closure remain pending; this is not a failed CI or an implicit release.
+Ongoing. The initial production reset/bootstrap/release and real-provider App
+invitation/revocation checks are complete. The denied-login and strong-ETag
+follow-up is published on `main` but awaits release authentication, deployment,
+post-release verification, second-Platform-Admin verification, explicit delivery
+acceptance, and separate archive publication. Playground layout polish is
+deferred to its backlog task.

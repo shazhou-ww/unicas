@@ -28,6 +28,7 @@ class MockAdminService {
   };
   session = true;
   appVocabulary = false;
+  appResponseEtag = '"3"';
   fileRoot = {
     rootId: "root-1",
     name: "Files",
@@ -186,7 +187,7 @@ class MockAdminService {
       return Response.json(this.app, { status: 201, headers: { ETag: '"3"' } });
     }
     if (path === appAdminRoutes.app({ appId: APP }) && request.method === "GET") {
-      return Response.json(this.app, { headers: { ETag: '"3"' } });
+      return Response.json(this.app, { headers: { ETag: this.appResponseEtag } });
     }
     if (path === appAdminRoutes.app({ appId: APP }) && request.method === "PATCH") {
       this.app.revision += 1;
@@ -498,6 +499,15 @@ describe("functional admin client", () => {
         ifMatch: '"4"',
       }),
     ]));
+  });
+
+  it("normalizes a transfer-weakened numeric revision ETag before reuse", async () => {
+    service.appResponseEtag = 'W/"3"';
+    const { etag } = await client.getApp({ appId: APP });
+    expect(etag).toBe('"3"');
+
+    await client.patchApp({ appId: APP }, { description: "Production" }, etag);
+    expect(service.requests.at(-1)).toMatchObject({ method: "PATCH", ifMatch: '"3"' });
   });
 
   it("transports platform access and invitation operations with minimal receipts", async () => {
