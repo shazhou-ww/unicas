@@ -21,6 +21,35 @@ Updated: 2026-09-16
 
 ## Current state
 
+### Full production reset preparation
+
+On 2026-09-16 the user explicitly authorized clearing all current production
+data because the system is not yet in use. Scope is the `unicas.work`
+deployment's D1, R2, OAuth KV, and Durable Object state, not the frozen legacy
+environment or preview resources. The user proposed rebuilding tables and
+issuing an invitation. Invitations still require an existing Platform Admin;
+the first administrator must be bootstrapped from a verified immutable identity.
+The designated Google account was verified through the authenticated production
+`/admin/me` response without recording its identity values here.
+
+Preparation is read-only so far; no production reset, bootstrap, invitation,
+or release has been executed. The agent committed to presenting the actual
+deletion inventory for final confirmation after backups. The existing
+`reset-smoke.mjs` is explicitly pre-cutover Stack/Tenant-only and must not be
+used against current App/Space production. Next: inventory all bound stores,
+establish a verified off-machine backup destination and a supported Durable
+Object reset path, and plan smoke-fixture recreation before any deletion.
+The user subsequently explicitly waived backups because all existing data is
+test data, requested direct cleanup, and selected both `platform.admin` and
+`apps.create` for the verified account. This overrides the normal backup step
+for this one disposable-data reset only; no backup or restore guarantee is
+claimed. Read-only inventory found 13 control tables, 8 data tables, 4 R2
+objects totaling 413 bytes, and zero OAuth KV entries. Paginated DO inventory
+ended on empty pages: 4 CAS instances and 3 domain instances, all reporting no
+persistent storage. The implementations use D1/R2 and in-memory coordination.
+The reset must recreate the public smoke App/issuer fixture required by CI,
+invalidate old sessions, and bootstrap the verified account before release.
+
 ### Release request and blocking preflight
 
 On 2026-09-16 the requesting user accepted the management Console ("剩下的都没问题")
