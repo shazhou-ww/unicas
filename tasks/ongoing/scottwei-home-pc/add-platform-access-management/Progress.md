@@ -21,6 +21,11 @@ Updated: 2026-09-16
 
 ## Current state
 
+Ownership transferred from `copilot-unicas-standalone` to
+`scottwei-home-pc` on 2026-09-16 at the requesting user's explicit direction.
+The transfer publication is pending. Product implementation and production
+release state are unchanged by this ledger-only handoff.
+
 ### Production reset and release
 
 Reset execution completed on 2026-09-16 and supersedes the initial preflight
@@ -645,6 +650,7 @@ audit reads.
 | Test typecheck coverage | `46e01cb`; explicit WebUI no-emit test/config checking and workspace typecheck passed. | Published |
 | Enabled Playground acceptance | `4827425`; isolated real CAS workflow, mobile creation, responsive checks, and release gates. | Published |
 | Managed issuer CopyBubble and editor integration | `1e97284`; issuer regressions, no-emit check, and built desktop preview verified. | Published |
+| Ownership handoff to `scottwei-home-pc` | Explicitly requested on 2026-09-16; publication pending. | Pending |
 | Implementation complete | Not yet completed. | Pending |
 | Archive | Not yet archived. | Pending |
 
@@ -698,15 +704,16 @@ audit reads.
 
 ## Blockers
 
-- Production Platform Admin bootstrap is absent: read-only D1 preflight found
-  no `cas_platform_principals` table. Await the authorized operator's out-of-band
-  bootstrap before triggering release. No production writes or deployment ran.
-- Real-provider/post-release verification and final task closure remain pending.
-  Remaining Playground visual polish is intentionally deferred to its backlog task.
+- The production bootstrap and release blocker is resolved by the reset,
+  bootstrap, and successful release recorded under Current state.
+- Real-provider/post-release verification requires the user to authenticate
+  with the verified Google account and complete [UserAcceptance](./UserAcceptance.md).
+  Final delivery approval remains pending after those checks. Remaining
+  Playground visual polish is intentionally deferred to its backlog task.
 
 ## Outcome
 
-Ongoing, implementation accepted for release with Playground layout polish
-deferred. Release is authorized but not triggered because the production
-Platform Admin bootstrap precondition is missing. Production verification and
-task closure remain pending; this is not a failed CI or an implicit release.
+Ongoing. Production reset, bootstrap, and release are complete. Real-provider
+acceptance, implementation-complete publication, explicit delivery acceptance,
+and separate archive publication remain pending. Playground layout polish is
+deferred to its backlog task.
