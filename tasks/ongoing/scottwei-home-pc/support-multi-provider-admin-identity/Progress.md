@@ -5,7 +5,7 @@ Updated: 2026-09-16
 ## Checklist
 
 - [x] Publish the claim to the shared primary branch.
-- [ ] Obtain scope approval before substantive implementation.
+- [x] Obtain scope approval before substantive implementation.
 - [ ] Complete each applicable interface, business and data model, and
       architecture approval before the affected implementation.
 - [ ] Commit and publish substantive work at meaningful checkpoints.
@@ -27,14 +27,15 @@ The claim and its evidence record are published on `origin/main`; refreshed
 `origin/main` and local `HEAD` both resolved to evidence commit
 `448478c177b4dc78d657649d17225bb1e3633973` before this blocker update.
 
-The scope review artifact is the canonical [Task](./Task.md): its goal, scope,
-out-of-scope boundaries, constraints, acceptance criteria, provider set, and
-prerequisite are ready for review. Substantive implementation is blocked until
-that scope receives an explicit human decision.
+The requesting user approved the scope review artifact, the canonical
+[Task](./Task.md), on 2026-09-16 in direct response to the explicit scope
+approval request. This approves its goal, scope, out-of-scope boundaries,
+constraints, acceptance criteria, provider set, and prerequisite.
 
-Next: obtain an explicit scope decision from the user or accountable owner. If
-approved, record and publish that decision before preparing the remaining
-business/data-model, architecture, and interface review artifacts.
+Next: publish the scope approval, then research, prepare, and publish the
+business/data-model, architecture, and interface review artifacts. Do not begin
+the implementation protected by any of those checkpoints before its explicit
+approval.
 
 ## Decisions
 
@@ -45,12 +46,15 @@ business/data-model, architecture, and interface review artifacts.
   focused `check --task`, or claim mutation commands.
 - Treat the canonical `Task.md` as the scope review artifact; task creation and
   this execution invocation are not approval.
+- Record the user's direct 2026-09-16 response that the scope has no issues as
+  explicit approval of the requested Scope checkpoint only; it does not approve
+  review artifacts that have not yet been prepared and presented.
 
 ## Human approvals
 
 | Checkpoint | Status | Review artifact and decision evidence |
 | --- | --- | --- |
-| Scope | Pending | Review the goal, scope, out of scope, constraints, acceptance criteria, provider set, and prerequisite in [Task](./Task.md). Explicit user or accountable-owner approval is required before substantive implementation. |
+| Scope | Approved | Requesting user, 2026-09-16: explicitly responded that there were no issues after being asked to approve or reject the goal, scope, out of scope, constraints, acceptance criteria, provider set, and prerequisite in [Task](./Task.md). |
 | Business and data model | Pending | Prepare and publish the task-owned account model and migration design before changing persistent schemas, ownership keys, migration code, profile projections, invitation rules, linking semantics, or authorization records. |
 | Architecture | Pending | Prepare and publish the task-owned provider, service-port, persistence, BFF/session, revocation, alias-resolution, deployment, and compatibility design before structural implementation. |
 | Interface | Pending | Prepare and publish the Console, callback/linking route, administrator API, CLI/MCP, conflict, privacy, and compatibility design before affected interface implementation. |
@@ -89,8 +93,9 @@ business/data-model, architecture, and interface review artifacts.
 
 ## Blockers
 
-- Scope approval is pending. Do not begin substantive implementation until the
-  published scope artifact receives an explicit decision.
+- Business/data-model, architecture, and interface approvals are pending. Their
+  review artifacts must be prepared and published before requesting decisions;
+  do not begin implementation protected by those checkpoints.
 
 ## Outcome
 
