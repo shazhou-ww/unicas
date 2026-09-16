@@ -278,7 +278,7 @@ audit reads.
 | Milestone | Evidence | Status |
 | --- | --- | --- |
 | Claim | `origin/main` commit `ff3c87e0318d4c30b76111d8cf96302a0b354fba`. | Published |
-| Unified people and Console partial checkpoint | The implementation commit containing this updated record; full tests, typecheck, OpenAPI and local build passed. | Publication to be verified against origin/main |
+| Unified people and Console partial checkpoint | `0555cc0`, verified reachable from refreshed `origin/main`; full tests, typecheck, OpenAPI and local build passed. | Published |
 | Implementation complete | Not yet completed. | Pending |
 | Archive | Not yet archived. | Pending |
 
