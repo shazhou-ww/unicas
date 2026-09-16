@@ -27,6 +27,13 @@ The transfer is published as `d16ddb7` and verified on `origin/main`. Product
 implementation and production release state are unchanged by this ledger-only
 handoff.
 
+Operator acceptance resumed on 2026-09-16. The production Console rendered its
+restricted login page and redirected through the configured real Google OIDC
+provider to the account identifier prompt. No identity or OAuth values were
+recorded. The user must now complete authentication directly in the browser;
+after the Console returns, continue UserAcceptance steps 3 through 5 and record
+only non-secret results.
+
 ### Production reset and release
 
 Reset execution completed on 2026-09-16 and supersedes the initial preflight
