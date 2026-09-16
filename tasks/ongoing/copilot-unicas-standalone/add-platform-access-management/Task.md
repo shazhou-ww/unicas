@@ -172,6 +172,20 @@ customized for UniCAS, and makes the App list the primary navigation.
       audit tests cover allowed, denied, invitation, revocation, and privilege-
       escalation paths, and the relevant repository validation commands pass.
 
+## Human review checkpoints
+
+Reviewer: the requesting user. This task predates the checkpoint plan; prior
+task execution and individual policy decisions are not retroactive approval
+of the complete current implementation. All five checkpoints remain pending.
+
+| Checkpoint | Review artifact and decision | Gate |
+| --- | --- | --- |
+| Scope alignment | Goal, Scope, exclusions, and acceptance criteria above; current gaps in [Progress](./Progress.md). | Confirm the current scope before further implementation. |
+| Interface alignment | [UI design](./UiDesign.md), [API design](./ApiDesign.md), and current browser/API observations in [Progress](./Progress.md). | Confirm Console, HTTP, CLI, and MCP behavior before further interface changes. |
+| Business and data model alignment | [API design](./ApiDesign.md) and the authority, invitation, migration, and bootstrap evidence in [Progress](./Progress.md). | Confirm independent grants, immutable identity, limited sessions, and migration impact. |
+| Architecture alignment | Package ownership and local integration findings in [Progress](./Progress.md). | Confirm protocol/client/presentation/service/adapter responsibilities. |
+| Delivery acceptance | A future published implementation revision, final criteria, and validation evidence in [Progress](./Progress.md). | Obtain explicit acceptance before completion and separate archive publication. |
+
 ## Constraints
 
 - Authoritative identity remains `(issuer, subject)`; verified email may

@@ -9,12 +9,90 @@ Updated: 2026-09-16
 - [x] Implement persistent deny-by-default admission, authorities, and audit.
 - [x] Implement protected platform APIs (list principals, get principal, patch access, access summary).
 - [x] Implement email-bound App invitation-limited login and browser/MCP revocation.
-- [ ] Implement platform invitations, complete Principal detail, and platform audit reads.
+- [x] Implement platform invitations, complete Principal detail, and platform audit reads.
 - [ ] Rebuild Console with source-owned shadcn primitives and two-column navigation.
 - [ ] Validate bootstrap/migration, workflows, accessibility, and repository gates.
-- [ ] Publish validated implementation and archive.
+- [ ] Publish implementation completion after required reviews and remaining acceptance checks.
+- [ ] Obtain explicit human delivery acceptance.
+- [ ] Publish archive as a separate final integration.
 
 ## Current state
+
+Local implementation is validated but not implementation-complete or approved
+for archival. The latest source changes remain uncommitted. This progress
+update supersedes the historical checkpoint notes below.
+
+Platform invitations, Principal filtering/detail, platform audit, typed client,
+CLI and remote/stdio MCP surfaces are implemented. The Console uses shared
+shadcn primitives with a two-column shell, authority-driven navigation,
+Platform tabs, invitation dialogs, and a right-side mobile navigation Sheet.
+Operations documentation covers out-of-band bootstrap, allowlist cutover,
+rollback, break-glass, and encryption-key retention. No production action ran.
+
+Integration findings fixed during browser verification:
+
+- Vite preserves the browser Host so the Worker public-origin check accepts
+  local requests. `/admin/me` changed from Worker 404 to expected 401/login.
+- The App compatibility adapter passes Platform routes through unchanged;
+  previously its response switch converted valid BFF JSON into an empty body.
+  The focused adapter suite passes all 10 tests.
+- Tailwind 4 now maps existing semantic theme tokens; Sheet/Dialog backgrounds
+  are opaque and borders use the intended gray. The obsolete icon grid track
+  in the App concept guide was removed, and the Principal Sheet fits 375px.
+- Schema migration renames legacy `stack_id` columns in OAuth inspections and
+  control audit before App indexes are created. A legacy fixture preserves
+  rows across two migrations; all five schema tests pass. Original local
+  persistence starts and mock login plus Principal list return 200. This does
+  not prove migration of all legacy stack or tenant data.
+- Cloudflare package tests now have a finite 15-second default timeout after
+  several real Miniflare/D1 scenarios exceeded five seconds without assertion
+  failures. The normal recursive test entry subsequently passed.
+
+### Latest validation
+
+On 2026-09-16, `pnpm exec repoledger doctor`, `pnpm test`, `pnpm build`,
+`pnpm typecheck`, `pnpm docs:build`, Worker Wrangler `deploy --dry-run`,
+`pnpm deploy:site:plan`, and `pnpm deploy:docs:plan` passed. Tests include
+6 task-policy, 114 repository, 92 admin-protocol, 15 admin-client, 116 service,
+245 service-cloudflare, and 62 WebUI checks. The recursive test run includes
+the CLI and remaining workspace packages as well.
+
+Browser screenshots and geometry checks covered 375, 768, 1280, and 1920px.
+Observed no page-level horizontal overflow; narrow tables scroll locally.
+Verified mock OIDC, long App names, Principal detail, invitation creation,
+revoke confirmation cancellation, audit rows, and right-side navigation.
+At 375px the Principal Sheet spans 0..375px; the navigation Sheet spans
+103..375px. Reduced-motion CSS and focus rules were inspected, but a complete
+keyboard/focus/reduced-motion browser acceptance pass is still outstanding.
+Screenshots were inspected in the session, not committed as durable artifacts.
+
+Remaining acceptance work after human review:
+
+- Recheck all Console migration criteria, including full existing workflows.
+- Verify creation updates sidebar memberships without requiring a reload;
+  the observed list refreshed while the sidebar still showed zero memberships.
+- Complete keyboard, focus-return, screen-reader labeling, and reduced-motion
+  browser checks. Preserve current passing responsive layouts.
+- Review migration applicability: successful local startup is not evidence
+  that all historical stack data has been converted to App tables.
+- Obtain the operator's review of the production runbook; do not perform
+  production bootstrap implicitly or mark it executed based on mock tests.
+
+### Human review state
+
+All five review categories now have a task-specific plan in [Task](./Task.md).
+Scope, interface, business/data model, and architecture alignment await the
+requesting user's explicit review of the current artifacts and implementation
+state. Earlier individual policy decisions below remain evidence only for
+those decisions. Delivery acceptance is pending a published final revision and
+completion of the outstanding criteria. No retrospective approval is inferred.
+
+Next action: publish this pending review plan and progress update, ask the user
+to confirm or revise the first four checkpoints, and stop further implementation
+until that decision is recorded. Then resolve the remaining acceptance items,
+publish implementation completion, and request separate delivery acceptance.
+
+## Historical implementation checkpoint
 
 Handoff from `xiaoju-neko-vm` to `copilot-unicas-standalone` is published as
 `ae10e7d20b357647a52c9036bd7a636463ff13a5` and verified on `origin/main`. No
@@ -70,9 +148,10 @@ audit reads.
   delegated operation classes and do not substitute for current authority.
 - All three prerequisite implementations and archives are published on main;
   preserve their accepted minimal write contracts and legacy boundaries.
-- `emailAllowlist` remains the first gate for ordinary login; an email-bound
-  invitation continuation is the explicit exception for an external invitee.
-  Full admission is still rechecked from authorities or App membership.
+- Persisted admission replaces allowlist-first authorization when the platform
+  repository is configured; otherwise invited members could not reauthenticate.
+  The allowlist remains only a rollback fallback. Current admission is rechecked
+  from authorities or App membership.
 
 ## Publication milestones
 
@@ -132,10 +211,12 @@ audit reads.
 
 ## Blockers
 
-- None for implementation. Production bootstrap execution requires an operator
-  with a Cloudflare token and verified initial Principal; no production action
-  is performed implicitly by this task session.
+- Pending human scope, interface, model, and architecture review. Do not cross
+  further implementation gates or archive without the required decisions.
+- Production bootstrap execution requires an operator with a Cloudflare token
+  and verified initial Principal; no production action ran in this session.
 
 ## Outcome
 
-In progress.
+Ongoing, awaiting human review. Local implementation changes are preserved;
+final acceptance and implementation-complete publication remain pending.
