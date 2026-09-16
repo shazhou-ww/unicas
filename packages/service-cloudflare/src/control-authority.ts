@@ -25,7 +25,7 @@ export class AuthorityRepository implements StackAuthorityResolver {
    *  unknown. The issuer value is unique across stacks (registry invariant). */
   async resolveIssuer(issuer: string): Promise<ResolvedStackAuthority | null> {
     const oauthRow = await readIssuer(this.#db, issuer);
-    if (!oauthRow) return null;
+    if (!oauthRow || oauthRow.app_status !== "active") return null;
     return toAuthority(oauthRow);
   }
 }
@@ -42,6 +42,7 @@ export class AppAuthorityRepository implements AppAuthorityResolver {
     if (!row) return null;
     return {
       appId: row.app_id,
+      appStatus: row.app_status,
       issuer: row.issuer,
       audience: row.audience,
       jwksUri: row.jwks_uri,
@@ -63,11 +64,19 @@ function toAuthority(row: IssuerRow): ResolvedStackAuthority {
 function readIssuer(db: D1Database, issuer: string): Promise<IssuerRow | null> {
   return db
     .prepare(
-      `SELECT app_id, issuer, audience, jwks_uri, capability_max_lifetime_seconds
-       FROM cas_app_oauth_issuers WHERE issuer = ? AND status = 'active' AND mode = 'external'
+            `SELECT issuer_record.app_id, issuer_record.issuer, issuer_record.audience,
+              issuer_record.jwks_uri, issuer_record.capability_max_lifetime_seconds,
+              app.status AS app_status
+        FROM cas_app_oauth_issuers AS issuer_record
+        JOIN cas_apps AS app ON app.app_id = issuer_record.app_id
+        WHERE issuer_record.issuer = ? AND issuer_record.status = 'active' AND issuer_record.mode = 'external'
        UNION ALL
-       SELECT app_id, issuer, audience, jwks_uri, capability_max_lifetime_seconds
-       FROM cas_app_managed_issuers WHERE issuer = ? AND status = 'active'
+        SELECT issuer_record.app_id, issuer_record.issuer, issuer_record.audience,
+              issuer_record.jwks_uri, issuer_record.capability_max_lifetime_seconds,
+              app.status AS app_status
+        FROM cas_app_managed_issuers AS issuer_record
+        JOIN cas_apps AS app ON app.app_id = issuer_record.app_id
+        WHERE issuer_record.issuer = ? AND issuer_record.status = 'active'
        LIMIT 1`,
     )
     .bind(issuer, issuer)
@@ -76,6 +85,7 @@ function readIssuer(db: D1Database, issuer: string): Promise<IssuerRow | null> {
 
 interface IssuerRow {
   readonly app_id: string;
+  readonly app_status: "active" | "suspended";
   readonly issuer: string;
   readonly audience: string;
   readonly jwks_uri: string;

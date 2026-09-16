@@ -31,6 +31,8 @@ import { AppAuthorityRepository, AuthorityRepository } from "./control-authority
 import { migrateControlSchema } from "./control-schema.js";
 import { createControlPlaneOperations } from "./control-operations.js";
 import { ControlSessionStore } from "./control-sessions.js";
+import { D1PlatformAccessRepository } from "./platform-access-repository.js";
+import { D1PeopleRepository } from "./people-repository.js";
 import { CloudflareOAuthDiscoveryPort } from "./oauth-discovery.js";
 import { CloudflareManagedIssuer } from "./managed-issuer.js";
 import {
@@ -249,15 +251,21 @@ function matchStackProtectedResourcePath(pathname: string): string | null {
 
 async function stackProtectedResourceMetadata(env: Env, stackId: string): Promise<Response> {
   const result = await env.CAS_CONTROL_DB.prepare(
-    `SELECT issuer, 0 AS priority FROM cas_app_oauth_issuers
-     WHERE app_id = ? AND status = 'active' AND mode = 'external'
+    `SELECT issuer_record.issuer, 0 AS priority FROM cas_app_oauth_issuers AS issuer_record
+     JOIN cas_apps AS app ON app.app_id = issuer_record.app_id
+     WHERE issuer_record.app_id = ? AND issuer_record.status = 'active'
+       AND issuer_record.mode = 'external' AND app.status = 'active'
      UNION ALL
-     SELECT issuer, 1 AS priority FROM cas_app_managed_issuers
-     WHERE app_id = ? AND status = 'active'
+     SELECT issuer_record.issuer, 1 AS priority FROM cas_app_managed_issuers AS issuer_record
+     JOIN cas_apps AS app ON app.app_id = issuer_record.app_id
+     WHERE issuer_record.app_id = ? AND issuer_record.status = 'active' AND app.status = 'active'
      ORDER BY priority`,
   ).bind(stackId, stackId).all<{ issuer: string; priority: number }>();
   const issuers = (result.results ?? []).map((row) => row.issuer);
-  if (issuers.length === 0) return Response.json({ error: "OAUTH_ISSUER_NOT_ACTIVE" }, { status: 404 });
+  if (issuers.length === 0) return Response.json({ error: "OAUTH_ISSUER_NOT_ACTIVE" }, {
+    status: 404,
+    headers: { "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" },
+  });
   const configuredOrigin = env.CAS_PUBLIC_ORIGIN ?? env.PUBLIC_ORIGIN;
   if (!configuredOrigin) {
     return Response.json({ error: "PUBLIC_ORIGIN_NOT_CONFIGURED" }, { status: 503 });
@@ -304,10 +312,13 @@ async function managedIssuerDocument(env: Env, route: ManagedIssuerDocumentRoute
   const authority = managedIssuerFor(env);
   if (!authority) return Response.json({ error: "MANAGED_ISSUER_NOT_CONFIGURED" }, { status: 503 });
   const binding = await env.CAS_CONTROL_DB.prepare(
-    "SELECT issuer FROM cas_app_managed_issuers WHERE app_id = ? AND status = 'active'",
+    "SELECT issuer_record.issuer FROM cas_app_managed_issuers AS issuer_record JOIN cas_apps AS app ON app.app_id = issuer_record.app_id WHERE issuer_record.app_id = ? AND issuer_record.status = 'active' AND app.status = 'active'",
   ).bind(route.stackId).first<{ issuer: string }>();
   if (!binding || binding.issuer !== authority.issuer(route.stackId)) {
-    return Response.json({ error: "MANAGED_ISSUER_NOT_ACTIVE" }, { status: 404 });
+    return Response.json({ error: "MANAGED_ISSUER_NOT_ACTIVE" }, {
+      status: 404,
+      headers: { "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" },
+    });
   }
   const body = route.document === "jwks"
     ? await authority.jwks()
@@ -357,12 +368,17 @@ function adminHandlerFor(env: Env): Promise<(request: Request) => Promise<Respon
       await ensureControlSchema(env);
       const config = configFromEnv(env);
       const now = config.now ?? (() => Date.now());
+      const platformRepository = new D1PlatformAccessRepository(env.CAS_CONTROL_DB);
       return createAdminBff({
         config,
         controlPlane: controlPlaneFor(env, now),
         sessionStore: new ControlSessionStore(env.CAS_CONTROL_DB, now),
         auditReader: localAuditReader(env),
         assets: uiAssets,
+        platformAccessRepository: platformRepository,
+        platformInvitationRepository: platformRepository,
+        platformAuditRepository: platformRepository,
+        peopleRepository: new D1PeopleRepository(env.CAS_CONTROL_DB),
       });
     })();
     adminHandlers.set(key, handler);

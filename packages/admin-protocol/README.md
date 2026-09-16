@@ -6,7 +6,7 @@ frozen Stack v1 compatibility surface.
 The package exports the existing request/response types, route helpers, and
 matchers together with Zod resource schemas. `appAdminApiContract` is the App
 v2 contract; `casAdminApiContract` remains the frozen Stack v1 contract. The
-package also owns the shared 23-tool App MCP catalog used by remote and stdio
+package also owns the shared 32-tool App/platform MCP catalog used by remote and stdio
 servers. It contains no transport or service implementation.
 
 Derive an implementation or client type from the shared contract:

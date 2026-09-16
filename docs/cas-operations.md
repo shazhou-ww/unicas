@@ -27,6 +27,7 @@ in vars or source. Deployment credentials are supplied through
 | Service p95 latency (live) | < 500 ms | Worker request duration | — |
 | Space node read p95 (cached/DB) | < 200 ms | node metadata/content reads | — |
 | Key rotation effectiveness | new key ≤ 60 s, revoked key ≤ 60 s | JWKS cache bounds (30 s TTL / 60 s hard stale) | — |
+| Administrator revocation | denied on the next browser, CLI, or MCP request; never later than 60 s | focused authorization probes and platform audit | — |
 | Backup freshness | RPO ≤ 24 h | last successful D1 export timestamp | — |
 | Restore | RTO ≤ 30 min | restore drill from exported SQL | — |
 
@@ -150,6 +151,240 @@ key in a later product-site deployment. The issuer URL and audience do not
 change during signer rotation, so no new control-plane activation is needed.
 Rotate Worker runtime secrets separately with `wrangler secret put`; never
 copy them into GitHub deployment configuration.
+
+### App invitation management
+
+App members can inspect invitation history with
+`GET /admin/apps/{appId}/member-invitations`, filtering by
+`status=pending|accepted|expired|revoked` and traversing `{ items, nextCursor }`
+pages with `limit` (1..1000). Cursors bind the App, status filter, and control
+snapshot. Restart traversal after `INVALID_CURSOR`; current membership is
+checked for every page. Reads never return bearer tokens, token hashes, or
+accept URLs.
+
+`DELETE /admin/apps/{appId}/member-invitations/{invitationId}` requires that
+invitation's exact `If-Match`, not the App revision. A pending, unexpired
+invitation becomes revoked and returns `204` with its new ETag. A revoked
+record with a current ETag is a no-op; a stale version returns `412`, and an
+accepted or expired invitation returns `409 INVITATION_NOT_PENDING`.
+
+List, accept, and revoke operations reconcile elapsed pending invitations to
+durable expired state. Accepted, revoked, and expired transitions advance the
+invitation revision and append immutable-actor audit evidence. Acceptance and
+revocation race under one atomic storage precondition, so they cannot both
+succeed. Records remain available for history rather than being deleted.
+
+V2 creation returns only `{ invitationId, acceptUrl, expiresAt }` and the
+invitation ETag. Acceptance returns only `{ appId }` for navigation. The
+Console's Members section includes Administrators and Invitations views with
+filtering, refresh, paging, and revoke confirmation. A freshly created URL is
+copyable only from that creation result and is cleared when switching Apps;
+the invitation list cannot recover it. Legacy creation/acceptance response
+shapes remain unchanged.
+
+### Platform Access bootstrap and migration
+
+Platform authorization is deny-by-default and keyed only by exact OIDC
+`(issuer, subject)`. `ADMIN_EMAIL_ALLOWLIST` is a legacy fallback, not a source
+for Principal records or authorities. An App membership grants administrator
+access only to that App. `platform.admin` and `apps.create` are independent.
+
+This procedure assumes the separate App/Space physical cutover is complete.
+Before applying Platform Access, inspect only schema metadata:
+
+```sql
+SELECT name FROM sqlite_master WHERE type = 'table'
+   AND name IN ('cas_apps', 'cas_app_members', 'cas_stacks', 'cas_stack_members')
+   ORDER BY name;
+PRAGMA table_info(cas_apps);
+PRAGMA table_info(cas_app_members);
+```
+
+The authoritative tables must be `cas_apps` and `cas_app_members`, keyed by
+`app_id` and immutable Principal fields. If legacy Stack tables are still
+authoritative, or both families contain unresolved live data, stop and complete
+the separately reviewed physical cutover first. The runtime's compatibility
+rename of `stack_id` in OAuth inspections and control audit is not a migration
+of Stack memberships, issuer registries, tenant nodes, or object storage.
+Never infer successful data migration merely from a successful Worker startup.
+
+Use this two-phase cutover so the enforcing Worker never starts without an
+active Platform Admin:
+
+1. Export `unicas-control` and verify the backup before any write.
+2. Resolve each initial administrator's exact verified OIDC issuer and subject
+   out of band. Do not derive subject from email or store production identity
+   values in this repository, tickets, chat, or logs.
+3. Generate opaque `prn_` and `evt_` identifiers locally. Put the SQL below in
+   a restricted temporary file outside the checkout, replace every placeholder,
+   and delete the file after verification. Never put the Cloudflare token or
+   Principal values on a command line.
+4. Execute the SQL against remote `unicas-control` while the old Worker and
+   allowlist are still serving traffic.
+5. Verify `active_admins >= 1` with the count-only query below, then deploy the
+   new Worker. Verify Console login, `unicas principal`, a Platform Access read,
+   and a denied App creation from a Principal lacking `apps.create`.
+6. Establish a second Platform Admin through the protected API before relying
+   on the final-administrator guard. Keep `ADMIN_EMAIL_ALLOWLIST` provisioned
+   through the rollback window; the new Worker ignores it as authorization
+   when Platform Access is configured.
+7. After the rollback window and invitation/re-login checks pass, delete the
+   legacy secret with Wrangler. Do not manufacture grants from its email list.
+
+Bootstrap SQL template:
+
+```sql
+BEGIN TRANSACTION;
+CREATE TABLE IF NOT EXISTS cas_platform_principals (
+  principal_ref TEXT PRIMARY KEY,
+  identity_issuer TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('active','blocked')),
+  platform_admin INTEGER NOT NULL DEFAULT 0 CHECK(platform_admin IN (0,1)),
+  apps_create INTEGER NOT NULL DEFAULT 0 CHECK(apps_create IN (0,1)),
+  revision INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(identity_issuer, subject)
+);
+CREATE TABLE IF NOT EXISTS cas_platform_audit_events (
+  event_id TEXT PRIMARY KEY,
+  actor_issuer TEXT NOT NULL,
+  actor_subject TEXT NOT NULL,
+  target_issuer TEXT,
+  target_subject TEXT,
+  target_invitation_id TEXT,
+  action TEXT NOT NULL,
+  result TEXT NOT NULL CHECK(result IN ('succeeded','denied')),
+  request_id TEXT,
+  created_at INTEGER NOT NULL,
+  details_json TEXT NOT NULL DEFAULT '{}'
+);
+INSERT INTO cas_platform_principals
+  (principal_ref, identity_issuer, subject, status, platform_admin,
+   apps_create, revision, created_at, updated_at)
+VALUES
+  ('<generated-principal-ref>', '<exact-oidc-issuer>', '<exact-oidc-subject>',
+   'active', 1, <0-or-1-for-app-creation>, 1, <epoch-ms>, <epoch-ms>);
+INSERT INTO cas_platform_audit_events
+  (event_id, actor_issuer, actor_subject, target_issuer, target_subject,
+   target_invitation_id, action, result, request_id, created_at, details_json)
+VALUES
+  ('<generated-event-id>', '<exact-oidc-issuer>', '<exact-oidc-subject>',
+   '<exact-oidc-issuer>', '<exact-oidc-subject>', NULL,
+   'platform_access.authority_changed', 'succeeded', NULL, <epoch-ms>,
+   '{"source":"out-of-band-bootstrap"}');
+COMMIT;
+```
+
+Execute and verify without selecting Principal data:
+
+```powershell
+pnpm --filter @unicas/service-cloudflare exec wrangler d1 execute unicas-control --remote --file <secure-temporary-sql-file>
+pnpm --filter @unicas/service-cloudflare exec wrangler d1 execute unicas-control --remote --command "SELECT COUNT(*) AS active_admins FROM cas_platform_principals WHERE status = 'active' AND platform_admin = 1"
+```
+
+The application never exposes a bootstrap endpoint. Platform invitation
+idempotency replay stores its bearer token only as AES-256-GCM JWE under
+`SESSION_ENCRYPTION_KEYS`; retain old keys until both sessions and pending
+invitation/idempotency records sealed by them have expired.
+
+#### Rollback
+
+The Platform Access migration on the supported App/Space schema is additive.
+The rollback target must be an App/Space-compatible Worker from before Platform
+Access enforcement, not a pre-physical-cutover Stack/Tenant Worker.
+Before the rollback window closes, retain the old
+Worker version and `ADMIN_EMAIL_ALLOWLIST`. A Worker rollback reactivates the
+old allowlist behavior and ignores the new D1 tables; it must not delete grants,
+invitations, or platform audit. If the secret was already removed, restore it
+interactively before rolling back. After recovery, diagnose and redeploy the
+new authorization path rather than keeping two authorization sources active.
+
+#### Break-glass
+
+Use break-glass only when no active Platform Admin can use the protected API.
+The operator needs direct D1 edit permission through a narrowly scoped
+Cloudflare API token. Supply that token through the normal Wrangler credential
+environment, never as an argument or through chat. Back up D1 first, then run a
+restricted temporary SQL transaction that upserts one verified immutable
+Principal to `status='active', platform_admin=1`, increments its revision, and
+adds a `platform_access.restored` audit event with
+`{"source":"operator-break-glass"}`. Do not change App memberships or use
+email as the key. Verify only the active-admin count, sign in, establish a
+second administrator through the normal API, and remove any temporary
+authority through the normal conditional workflow.
+
+Break-glass SQL template:
+
+```sql
+BEGIN TRANSACTION;
+INSERT INTO cas_platform_principals
+   (principal_ref, identity_issuer, subject, status, platform_admin,
+    apps_create, revision, created_at, updated_at)
+VALUES
+   ('<generated-principal-ref>', '<exact-oidc-issuer>', '<exact-oidc-subject>',
+    'active', 1, <0-or-1-for-app-creation>, 1, <epoch-ms>, <epoch-ms>)
+ON CONFLICT(identity_issuer, subject) DO UPDATE SET
+   status = 'active',
+   platform_admin = 1,
+   apps_create = MAX(cas_platform_principals.apps_create, excluded.apps_create),
+   revision = cas_platform_principals.revision + 1,
+   updated_at = excluded.updated_at;
+INSERT INTO cas_platform_audit_events
+   (event_id, actor_issuer, actor_subject, target_issuer, target_subject,
+    target_invitation_id, action, result, request_id, created_at, details_json)
+VALUES
+   ('<generated-event-id>', '<exact-oidc-issuer>', '<exact-oidc-subject>',
+    '<exact-oidc-issuer>', '<exact-oidc-subject>', NULL,
+    'platform_access.restored', 'succeeded', NULL, <epoch-ms>,
+    '{"source":"operator-break-glass"}');
+COMMIT;
+```
+
+If D1 is unavailable, authorization intentionally fails closed. Restore D1
+reachability or use the documented Worker rollback; there is no header, OAuth
+scope, environment flag, or client-side control that bypasses Platform Access.
+
+### Suspend and restore an App
+
+An App member can pause all App Space data-plane operations without deleting
+data or changing memberships, issuer configuration, or Root Ref retention:
+
+```text
+unicas apps update <appId> --status suspended --etag '"4"'
+unicas apps update <appId> --status active --etag '"5"'
+```
+
+Read the current App with `unicas apps get <appId>` before selecting an ETag.
+The HTTP operation is `PATCH /admin/apps/{appId}` with `If-Match`; success is
+`204 No Content` with the resulting App ETag. CLI and MCP return only
+`{ etag }`. A current same-value update is a no-op; stale preconditions fail
+with `412 REVISION_MISMATCH`. Actual transitions append `app.suspended` or
+`app.restored` control audit events with the immutable actor identity.
+
+Suspension rejects reads, metadata reads, leases, Root Ref reads/updates,
+usage, and GC with `403 APP_SUSPENDED` once the verifier observes the change.
+External and managed capabilities issued before suspension are both covered.
+Issuer authority refreshes after 30 seconds and fails closed at 60 seconds
+since its last successful read if registry refresh fails. Failure must never
+preserve old access beyond that hard bound; requests then fail with registry
+unavailability until current state can be read. An in-flight operation already
+authorized before the boundary is not rolled back.
+
+Protected-resource metadata and managed issuer metadata/JWKS are served only
+for active Apps; suspended Apps return an unavailable-issuer response. Prior
+positive discovery responses may remain cached for at most their 60-second
+max-age, but do not override capability verification. Managed Space capability
+issuance rejects suspended Apps immediately on its authoritative App read.
+
+App administrator reads and recovery mutations remain available, including
+metadata repair, membership and invitation administration, issuer repair,
+audit, and Restore. Suspension neither releases Root Refs nor initiates GC.
+Restore leaves data and configuration intact; verifiers observe it on refresh.
+The existing authorization event stream records suspension denials without
+recording bearer capabilities. Frozen v1 issuer resolution also refuses a
+suspended owning App so it cannot bypass this operational stop.
 
 ### Rollback
 

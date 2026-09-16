@@ -4,6 +4,8 @@ import {
   parseCasAdminETag,
 } from "@unicas/admin-protocol";
 import type {
+  AppMemberInvitation,
+  CasAdminPageQuery,
   CasAdminAcceptMemberInvitationRequest,
   CasAdminAcceptMemberInvitationResponse,
   CasAdminActivateOAuthIssuerRequest,
@@ -65,6 +67,7 @@ import {
   generateInvitationToken,
   generateNonce,
   generateOAuthInspectionId,
+  generatePrincipalRef,
   generateStackId,
 } from "./control-ids.js";
 import {
@@ -193,6 +196,7 @@ export interface ControlPatchStackPlan {
   readonly expectedRevision: number;
   readonly displayName: string;
   readonly description: string;
+  readonly status: ControlStackRecord["status"];
   readonly nextRevision: number;
   readonly audit: ControlAuditRecord;
 }
@@ -215,6 +219,7 @@ export interface ControlAcceptMemberInvitationPlan {
   readonly invitationId: string;
   readonly stackId: string;
   readonly tokenHash: string;
+  readonly principalRef: string;
   readonly now: number;
   readonly identity: ControlIdentityRecord;
   readonly membership: ControlMembershipRecord & { readonly joinedAt: number };
@@ -286,6 +291,7 @@ export interface ControlOAuthIssuerInspectionRecord {
 }
 
 export interface ControlInspectOAuthIssuerPlan {
+  readonly candidateOnly?: boolean;
   readonly issuer: ControlOAuthIssuerRecord;
   readonly inspection: ControlOAuthIssuerInspectionRecord;
   readonly keys: readonly DiscoveredOAuthJwk[];
@@ -299,7 +305,8 @@ export type ControlInspectOAuthIssuerCommitResult =
 export interface ControlActivateOAuthIssuerPlan {
   readonly stackId: string;
   readonly inspectionId: string;
-  readonly expectedIssuerRevision: number;
+  readonly expectedIssuerRevision: number | null;
+  readonly candidateIssuer?: ControlOAuthIssuerRecord;
   readonly activatedAt: number;
   readonly audit: ControlAuditRecord;
 }
@@ -319,7 +326,7 @@ export type ControlPatchManagedIssuerCommitResult =
 
 export type ControlActivateOAuthIssuerCommitResult =
   | { readonly kind: "activated" }
-  | { readonly kind: "unavailable" | "revision-mismatch" };
+  | { readonly kind: "unavailable" | "revision-mismatch" | "issuer-conflict" };
 
 export type ControlCreateStackCommitResult =
   | { readonly kind: "created" }
@@ -386,6 +393,22 @@ export interface ControlPlaneAdminRepository {
     readonly now: number;
   }): Promise<ControlIdempotencyRecord<T> | null>;
   getInvitationByTokenHash(tokenHash: string): Promise<ControlMemberInvitationRecord | null>;
+  getMemberInvitation(stackId: string, invitationId: string): Promise<Omit<ControlMemberInvitationRecord, "tokenHash"> | null>;
+  listMemberInvitations(input: {
+    readonly stackId: string;
+    readonly status?: ControlMemberInvitationRecord["status"];
+    readonly expiresAtOrBefore?: number;
+    readonly afterInvitationId: string;
+    readonly limit: number;
+  }): Promise<readonly Omit<ControlMemberInvitationRecord, "tokenHash">[]>;
+  commitInvitationTransition(input: {
+    readonly stackId: string;
+    readonly invitationId: string;
+    readonly expectedRevision: number;
+    readonly status: "revoked" | "expired";
+    readonly now: number;
+    readonly audit: ControlAuditRecord;
+  }): Promise<"updated" | "unavailable">;
   commitCreateStack(plan: ControlCreateStackPlan): Promise<ControlCreateStackCommitResult>;
   commitPatchStack(plan: ControlPatchStackPlan): Promise<ControlPatchStackCommitResult>;
   commitCreateMemberInvitation(plan: ControlCreateMemberInvitationPlan): Promise<ControlCreateMemberInvitationCommitResult>;
@@ -423,6 +446,7 @@ export interface ControlPlaneAdminServiceOptions {
   readonly generateEventId?: () => string;
   readonly generateInvitationId?: () => string;
   readonly generateInvitationToken?: () => string;
+  readonly generatePrincipalRef?: () => string;
   readonly generateNonce?: () => string;
   readonly invitationTtlMs?: number;
   readonly oauthDiscovery?: OAuthDiscoveryPort;
@@ -443,6 +467,7 @@ export class ControlPlaneAdminService {
   readonly #generateEventId: () => string;
   readonly #generateInvitationId: () => string;
   readonly #generateInvitationToken: () => string;
+  readonly #generatePrincipalRef: () => string;
   readonly #generateNonce: () => string;
   readonly #invitationTtlMs: number;
   readonly #oauthDiscovery: OAuthDiscoveryPort | null;
@@ -460,6 +485,7 @@ export class ControlPlaneAdminService {
     this.#generateEventId = options.generateEventId ?? generateEventId;
     this.#generateInvitationId = options.generateInvitationId ?? generateInvitationId;
     this.#generateInvitationToken = options.generateInvitationToken ?? generateInvitationToken;
+    this.#generatePrincipalRef = options.generatePrincipalRef ?? generatePrincipalRef;
     this.#generateNonce = options.generateNonce ?? generateNonce;
     this.#invitationTtlMs = options.invitationTtlMs ?? INVITATION_TTL_MS;
     this.#oauthDiscovery = options.oauthDiscovery ?? null;
@@ -679,6 +705,102 @@ export class ControlPlaneAdminService {
     });
   }
 
+  listAppMemberInvitations(
+    ctx: ControlPlaneCallContext,
+    appId: string,
+    query: CasAdminPageQuery & { readonly status?: AppMemberInvitation["status"] },
+  ): Promise<{ readonly items: readonly AppMemberInvitation[]; readonly nextCursor: string | null } | CasAdminErrorResponse> {
+    return this.#guard(async () => {
+      await this.#requireMember(ctx.identity, appId);
+      if (query.status !== undefined && !["pending", "accepted", "expired", "revoked"].includes(query.status)) {
+        throw new ControlPlaneError(CasAdminErrorCodes.INVALID_REQUEST, "invalid invitation status");
+      }
+      const limit = this.#listLimit(query.limit);
+      const cursor = this.#cursor(query.cursor);
+      let afterInvitationId = "";
+      if (cursor) {
+        let binding: unknown;
+        try { binding = JSON.parse(cursor.last); } catch { binding = null; }
+        if (!Array.isArray(binding) || binding.length !== 3 || binding[0] !== appId
+          || binding[1] !== (query.status ?? null) || typeof binding[2] !== "string" || binding[2].length === 0) {
+          throw new ControlPlaneError(CasAdminErrorCodes.INVALID_CURSOR, "invitation cursor scope or filter mismatch");
+        }
+        afterInvitationId = binding[2];
+      }
+      const now = this.#now();
+      await this.#reconcileInvitationExpiry(ctx, appId, now);
+      const snapshot = await this.#repository.readSnapshot();
+      if (cursor && cursor.snapshot !== snapshot) {
+        throw new ControlPlaneError(CasAdminErrorCodes.INVALID_CURSOR, "invitation snapshot changed");
+      }
+      const rows = await this.#repository.listMemberInvitations({ stackId: appId, status: query.status, afterInvitationId, limit: limit + 1 });
+      if (await this.#repository.readSnapshot() !== snapshot) {
+        throw new ControlPlaneError(CasAdminErrorCodes.INVALID_CURSOR, "control data changed while listing");
+      }
+      const items = rows.slice(0, limit).map(row => ({
+        appId,
+        invitationId: row.invitationId,
+        status: row.status,
+        emailConstraint: row.emailConstraint,
+        expiresAt: row.expiresAt,
+        createdAt: row.createdAt,
+        revision: row.revision,
+      }));
+      return {
+        items,
+        nextCursor: rows.length > limit
+          ? encodeControlListCursor({ version: 1, snapshot, last: JSON.stringify([appId, query.status ?? null, items.at(-1)!.invitationId]) })
+          : null,
+      };
+    });
+  }
+
+  revokeAppMemberInvitation(
+    ctx: ControlPlaneCallContext,
+    appId: string,
+    invitationId: string,
+    mutation: ServiceMutationInput,
+  ): Promise<{ readonly revision: number } | CasAdminErrorResponse | { readonly error: "INVITATION_NOT_PENDING" }> {
+    return this.#guard(async () => {
+      await this.#requireMember(ctx.identity, appId);
+      const invitation = await this.#repository.getMemberInvitation(appId, invitationId);
+      if (!invitation) throw new ControlPlaneError(CasAdminErrorCodes.NOT_FOUND, "invitation not found");
+      this.#requireIfMatch(mutation.ifMatch, invitation.revision);
+      if (invitation.status === "revoked") return { revision: invitation.revision };
+      const now = this.#now();
+      if (invitation.status !== "pending" || invitation.expiresAt <= now) {
+        if (invitation.status === "pending") await this.#expireInvitation(ctx, invitation, now);
+        return { error: "INVITATION_NOT_PENDING" as const };
+      }
+      const result = await this.#repository.commitInvitationTransition({
+        stackId: appId, invitationId, expectedRevision: invitation.revision, status: "revoked", now,
+        audit: this.#audit(ctx, ControlAuditActions.memberInvitationRevoked, invitationId, appId),
+      });
+      if (result !== "updated") {
+        throw new ControlPlaneError(CasAdminErrorCodes.REVISION_MISMATCH, "invitation changed during revocation");
+      }
+      return { revision: invitation.revision + 1 };
+    });
+  }
+
+  async #expireInvitation(ctx: ControlPlaneCallContext, invitation: Omit<ControlMemberInvitationRecord, "tokenHash">, now: number): Promise<void> {
+    await this.#repository.commitInvitationTransition({
+      stackId: invitation.stackId, invitationId: invitation.invitationId,
+      expectedRevision: invitation.revision, status: "expired", now,
+      audit: this.#audit(ctx, ControlAuditActions.memberInvitationExpired, invitation.invitationId, invitation.stackId),
+    });
+  }
+
+  async #reconcileInvitationExpiry(ctx: ControlPlaneCallContext, appId: string, now: number): Promise<void> {
+    let afterInvitationId = "";
+    while (true) {
+      const expired = await this.#repository.listMemberInvitations({ stackId: appId, status: "pending", expiresAtOrBefore: now, afterInvitationId, limit: 100 });
+      for (const invitation of expired) await this.#expireInvitation(ctx, invitation, now);
+      if (expired.length < 100) return;
+      afterInvitationId = expired.at(-1)!.invitationId;
+    }
+  }
+
   acceptMemberInvitation(
     ctx: ControlPlaneCallContext,
     request: CasAdminAcceptMemberInvitationRequest,
@@ -689,6 +811,9 @@ export class ControlPlaneAdminService {
       const tokenHash = await sha256Hex(request.path.token);
       const invitation = await this.#repository.getInvitationByTokenHash(tokenHash);
       const now = this.#now();
+      if (invitation?.status === "pending" && invitation.expiresAt <= now) {
+        await this.#expireInvitation(ctx, invitation, now);
+      }
       if (!invitation || invitation.status !== "pending" || invitation.expiresAt <= now) {
         throw new ControlPlaneError(CasAdminErrorCodes.NOT_FOUND, "invitation not found, expired, or already used");
       }
@@ -709,10 +834,11 @@ export class ControlPlaneAdminService {
         invitationId: invitation.invitationId,
         stackId: invitation.stackId,
         tokenHash,
+        principalRef: this.#generatePrincipalRef(),
         now,
         identity,
         membership,
-        audit: this.#audit(ctx, ControlAuditActions.memberInvitationAccepted, invitation.stackId, invitation.stackId),
+        audit: this.#audit(ctx, ControlAuditActions.memberInvitationAccepted, invitation.invitationId, invitation.stackId),
       });
       if (result.kind === "unavailable") {
         throw new ControlPlaneError(CasAdminErrorCodes.NOT_FOUND, "invitation not found, expired, or already used");
@@ -822,12 +948,12 @@ export class ControlPlaneAdminService {
   mintManagedSpaceCapability(
     ctx: ControlPlaneCallContext,
     appId: string,
-  ): Promise<ManagedSpaceCapability | CasAdminErrorResponse> {
+  ): Promise<ManagedSpaceCapability | CasAdminErrorResponse | { readonly error: "APP_SUSPENDED"; readonly message: string }> {
     return this.#guard(async () => {
       await this.#requireMember(ctx.identity, appId);
       const app = await this.#requireStack(appId);
       if (app.status !== "active") {
-        throw new ControlPlaneError(CasAdminErrorCodes.INVALID_REQUEST, "app is suspended");
+        return { error: "APP_SUSPENDED" as const, message: "App is suspended" };
       }
       const issuer = await this.#repository.getManagedOAuthIssuer(app.stackId);
       if (!issuer || issuer.mode !== "managed" || issuer.status !== "active") {
@@ -843,6 +969,24 @@ export class ControlPlaneAdminService {
   inspectOAuthIssuer(
     ctx: ControlPlaneCallContext,
     request: CasAdminInspectOAuthIssuerRequest,
+  ): Promise<CasAdminInspectOAuthIssuerResponse> {
+    return this.#inspectOAuthIssuer(ctx, request, false);
+  }
+
+  async inspectAppOAuthIssuer(ctx: ControlPlaneCallContext, appId: string, issuer: string) {
+    const result = await this.#inspectOAuthIssuer(ctx, { path: { stackId: appId }, body: { issuer } }, true);
+    if ("error" in result) return result;
+    return {
+      inspectionId: result.inspectionId, metadataUrl: result.metadataUrl, jwksUri: result.jwksUri,
+      challenge: result.challenge, expiresAt: result.expiresAt,
+      keys: result.keys.map(({ kid, algorithm }) => ({ kid, algorithm })),
+    };
+  }
+
+  #inspectOAuthIssuer(
+    ctx: ControlPlaneCallContext,
+    request: CasAdminInspectOAuthIssuerRequest,
+    candidateOnly: boolean,
   ): Promise<CasAdminInspectOAuthIssuerResponse> {
     return this.#guard(async () => {
       await this.#requireMember(ctx.identity, request.path.stackId);
@@ -867,7 +1011,7 @@ export class ControlPlaneAdminService {
         throw new ControlPlaneError(CasAdminErrorCodes.ISSUER_CONFLICT, "issuer is already registered to another stack");
       }
       const existing = await this.#repository.getOAuthIssuer(request.path.stackId);
-      if (existing?.status === "active") {
+      if (!candidateOnly && existing?.status === "active") {
         throw new ControlPlaneError(CasAdminErrorCodes.INVALID_REQUEST, "active OAuth issuer must be refreshed, not reinspected");
       }
 
@@ -924,6 +1068,7 @@ export class ControlPlaneAdminService {
         revision: 1,
       };
       const result = await this.#repository.commitInspectOAuthIssuer({
+        candidateOnly,
         issuer: issuerRecord,
         inspection,
         keys: discovered.keys,
@@ -957,19 +1102,54 @@ export class ControlPlaneAdminService {
     request: Omit<CasAdminActivateOAuthIssuerRequest, "headers">,
     mutation: ServiceMutationInput,
   ): Promise<CasAdminActivateOAuthIssuerResponse> {
+    return this.#activateOAuthIssuer(ctx, request, mutation, false);
+  }
+
+  async activateAppOAuthIssuer(
+    ctx: ControlPlaneCallContext,
+    appId: string,
+    body: { readonly inspectionId: string; readonly activationProof: string },
+    mutation: ServiceMutationInput,
+  ): Promise<{ readonly revision: number } | CasAdminErrorResponse> {
+    const result = await this.#activateOAuthIssuer(ctx, { path: { stackId: appId }, body }, mutation, true);
+    return "error" in result ? result : { revision: result.revision };
+  }
+
+  #activateOAuthIssuer(
+    ctx: ControlPlaneCallContext,
+    request: Omit<CasAdminActivateOAuthIssuerRequest, "headers">,
+    mutation: ServiceMutationInput,
+    appMutation: boolean,
+  ): Promise<CasAdminActivateOAuthIssuerResponse> {
     return this.#guard(async () => {
       await this.#requireMember(ctx.identity, request.path.stackId);
       const current = await this.#repository.getOAuthIssuer(request.path.stackId);
-      if (!current || current.status !== "pending") {
+      if (!appMutation && (!current || current.status !== "pending")) {
         throw new ControlPlaneError(CasAdminErrorCodes.NOT_FOUND, "pending OAuth issuer is not configured");
       }
-      this.#requireIfMatch(mutation.ifMatch, current.revision);
+      if (appMutation) {
+        if (mutation.ifMatch === undefined && mutation.ifNoneMatch === undefined) {
+          throw new ControlPlaneError(CasAdminErrorCodes.PRECONDITION_REQUIRED, "issuer precondition is required");
+        }
+        if (mutation.ifMatch !== undefined && mutation.ifNoneMatch !== undefined
+          || mutation.ifNoneMatch !== undefined && mutation.ifNoneMatch !== "*") {
+          throw new ControlPlaneError(CasAdminErrorCodes.INVALID_REQUEST, "provide exactly one valid issuer precondition");
+        }
+        if (mutation.ifNoneMatch === "*") {
+          if (current) throw new ControlPlaneError(CasAdminErrorCodes.REVISION_MISMATCH, "issuer already exists");
+        } else {
+          if (!current) throw new ControlPlaneError(CasAdminErrorCodes.REVISION_MISMATCH, "issuer does not exist");
+          this.#requireIfMatch(mutation.ifMatch, current.revision);
+        }
+      } else {
+        this.#requireIfMatch(mutation.ifMatch, current!.revision);
+      }
       const inspection = await this.#repository.getOAuthIssuerInspection(request.body.inspectionId);
       const now = this.#now();
       if (!inspection || inspection.stackId !== request.path.stackId || inspection.usedAt !== null || inspection.expiresAt <= now) {
         throw new ControlPlaneError(CasAdminErrorCodes.INVALID_REQUEST, "OAuth issuer inspection is unavailable");
       }
-      if (inspection.issuer !== current.issuer
+      if (!appMutation && current && (inspection.issuer !== current.issuer
         || inspection.audience !== current.audience
         || inspection.metadataUrl !== current.metadataUrl
         || inspection.metadataType !== current.metadataType
@@ -980,7 +1160,7 @@ export class ControlPlaneAdminService {
         || !sameStrings(inspection.scopesSupported, current.scopesSupported)
         || !sameStrings(inspection.codeChallengeMethodsSupported, current.codeChallengeMethodsSupported)
         || inspection.jwksDigest !== current.jwksDigest
-        || inspection.capabilityMaxLifetimeSeconds !== current.capabilityMaxLifetimeSeconds) {
+        || inspection.capabilityMaxLifetimeSeconds !== current.capabilityMaxLifetimeSeconds)) {
         throw new ControlPlaneError(CasAdminErrorCodes.REVISION_MISMATCH, "OAuth issuer inspection is no longer current");
       }
       const challenge = extractJwsPayload(request.body.activationProof);
@@ -1008,13 +1188,24 @@ export class ControlPlaneAdminService {
         })) {
         throw new ControlPlaneError(CasAdminErrorCodes.INVALID_REQUEST, "activation proof signature is invalid");
       }
+      const candidateIssuer: ControlOAuthIssuerRecord = {
+        ...inspection, mode: "external", status: "active", verifiedAt: now,
+        lastRefreshAt: now, lastRefreshError: null, revision: (current?.revision ?? 0) + 1,
+      };
+      if (appMutation && await this.#repository.hasOAuthIssuerElsewhere(inspection.issuer, request.path.stackId)) {
+        throw new ControlPlaneError(CasAdminErrorCodes.ISSUER_CONFLICT, "issuer is registered to another App");
+      }
       const result = await this.#repository.commitActivateOAuthIssuer({
         stackId: request.path.stackId,
         inspectionId: inspection.inspectionId,
-        expectedIssuerRevision: current.revision,
+        expectedIssuerRevision: current?.revision ?? null,
+        ...(appMutation ? { candidateIssuer } : {}),
         activatedAt: now,
-        audit: this.#audit(ctx, ControlAuditActions.oauthIssuerActivated, current.issuer, request.path.stackId),
+        audit: this.#audit(ctx, appMutation && current?.status === "active" ? ControlAuditActions.oauthIssuerReplaced : ControlAuditActions.oauthIssuerActivated, inspection.issuer, request.path.stackId),
       });
+      if (result.kind === "issuer-conflict") {
+        throw new ControlPlaneError(CasAdminErrorCodes.ISSUER_CONFLICT, "issuer is registered to another App");
+      }
       if (result.kind === "unavailable") {
         throw new ControlPlaneError(CasAdminErrorCodes.INVALID_REQUEST, "OAuth issuer inspection is unavailable");
       }
@@ -1022,10 +1213,10 @@ export class ControlPlaneAdminService {
         throw new ControlPlaneError(CasAdminErrorCodes.REVISION_MISMATCH, "OAuth issuer resource revision has changed");
       }
       return toCasStackOAuthIssuer({
-        ...current,
+        ...(appMutation ? candidateIssuer : current!),
         status: "active",
         verifiedAt: now,
-        revision: current.revision + 1,
+        revision: (current?.revision ?? 0) + 1,
       });
     });
   }
@@ -1180,13 +1371,35 @@ export class ControlPlaneAdminService {
     request: Omit<CasAdminPatchStackRequest, "headers">,
     mutation: ServiceMutationInput,
   ): Promise<CasAdminPatchStackResponse> {
+    return this.#patchAppSettings(ctx, request, mutation, false);
+  }
+
+  async patchApp(
+    ctx: ControlPlaneCallContext,
+    appId: string,
+    patch: Readonly<Partial<Pick<ControlStackRecord, "displayName" | "description" | "status">>>,
+    mutation: ServiceMutationInput,
+  ): Promise<{ readonly revision: number } | CasAdminErrorResponse> {
+    const result = await this.#patchAppSettings(ctx, { path: { stackId: appId }, body: patch }, mutation, true);
+    return "error" in result ? result : { revision: result.revision };
+  }
+
+  #patchAppSettings(
+    ctx: ControlPlaneCallContext,
+    request: Omit<CasAdminPatchStackRequest, "headers"> & {
+      readonly body: { readonly status?: ControlStackRecord["status"] };
+    },
+    mutation: ServiceMutationInput,
+    appMutation: boolean,
+  ): Promise<CasAdminPatchStackResponse> {
     return this.#guard(async () => {
       await this.#requireMember(ctx.identity, request.path.stackId);
       const stack = await this.#requireStack(request.path.stackId);
       this.#requireIfMatch(mutation.ifMatch, stack.revision);
       const rawName = request.body.displayName;
       const rawDescription = request.body.description;
-      if (rawName === undefined && rawDescription === undefined) {
+      const rawStatus = appMutation ? request.body.status : undefined;
+      if (rawName === undefined && rawDescription === undefined && rawStatus === undefined) {
         throw new ControlPlaneError(CasAdminErrorCodes.INVALID_REQUEST, "no change requested");
       }
       if (rawName !== undefined) {
@@ -1196,9 +1409,14 @@ export class ControlPlaneAdminService {
       if (rawDescription !== undefined && (typeof rawDescription !== "string" || rawDescription.length > 2_000)) {
         throw new ControlPlaneError(CasAdminErrorCodes.INVALID_REQUEST, "description must be a string of at most 2000 characters");
       }
+      if (rawStatus !== undefined && rawStatus !== "active" && rawStatus !== "suspended") {
+        throw new ControlPlaneError(CasAdminErrorCodes.INVALID_REQUEST, "status must be active or suspended");
+      }
       const displayName = rawName?.trim() ?? stack.displayName;
       const description = rawDescription?.trim() ?? stack.description;
-      if (displayName === stack.displayName && description === stack.description) {
+      const status = rawStatus ?? stack.status;
+      if (displayName === stack.displayName && description === stack.description && status === stack.status) {
+        if (appMutation) return toCasStack(stack);
         throw new ControlPlaneError(CasAdminErrorCodes.INVALID_REQUEST, "no change requested");
       }
       const result = await this.#repository.commitPatchStack({
@@ -1206,14 +1424,17 @@ export class ControlPlaneAdminService {
         expectedRevision: stack.revision,
         displayName,
         description,
+        status,
         nextRevision: stack.revision + 1,
-        audit: this.#audit(ctx, ControlAuditActions.stackPatched, stack.stackId, stack.stackId),
+        audit: this.#audit(ctx, status !== stack.status
+          ? status === "suspended" ? ControlAuditActions.appSuspended : ControlAuditActions.appRestored
+          : ControlAuditActions.stackPatched, stack.stackId, stack.stackId),
       });
       if (result.kind === "not-found") throw new ControlPlaneError(CasAdminErrorCodes.NOT_FOUND, "stack not found");
       if (result.kind === "revision-mismatch") {
         throw new ControlPlaneError(CasAdminErrorCodes.REVISION_MISMATCH, "resource revision has changed");
       }
-      return toCasStack({ ...stack, displayName, description, revision: stack.revision + 1 });
+      return toCasStack({ ...stack, displayName, description, status, revision: stack.revision + 1 });
     });
   }
 

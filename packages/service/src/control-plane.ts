@@ -1,4 +1,7 @@
 import type {
+  App,
+  AppMemberInvitation,
+  CasAdminPageQuery,
   CasAdminAcceptMemberInvitationRequest,
   CasAdminAcceptMemberInvitationResponse,
   CasAdminActivateOAuthIssuerRequest,
@@ -40,6 +43,7 @@ import type {
   CasAdminPatchManagedIssuerRequest,
   CasAdminPatchManagedIssuerResponse,
   CasOperatorIdentityKey,
+  AppOAuthIssuerInspection,
   ManagedSpaceCapability,
 } from "@unicas/admin-protocol";
 import type { ControlAuditAction } from "./control-audit.js";
@@ -63,6 +67,7 @@ export interface ControlPlaneCallContext {
 
 /** Service-level mutation input: raw precondition headers, parsed by the service. */
 export interface ServiceMutationInput {
+  readonly ifNoneMatch?: string;
   /** Raw `If-Match` header value; absent means "no precondition". */
   readonly ifMatch?: string;
   /** Raw `Idempotency-Key` header value for creation endpoints. */
@@ -71,6 +76,11 @@ export interface ServiceMutationInput {
 
 /** Cloud-neutral control-plane operations consumed by admin presentation layers. */
 export interface ControlPlaneOperations {
+  inspectAppOAuthIssuer(ctx: ControlPlaneCallContext, appId: string, issuer: string): Promise<AppOAuthIssuerInspection | CasAdminErrorResponse>;
+  activateAppOAuthIssuer(
+    ctx: ControlPlaneCallContext, appId: string,
+    body: { readonly inspectionId: string; readonly activationProof: string }, mutation: ServiceMutationInput,
+  ): Promise<{ readonly revision: number } | CasAdminErrorResponse>;
   me(ctx: ControlPlaneCallContext): Promise<CasAdminMeResponse | CasAdminErrorResponse>;
   listStacks(ctx: ControlPlaneCallContext, request: CasAdminListStacksRequest): Promise<CasAdminListStacksResponse>;
   createStack(
@@ -84,6 +94,12 @@ export interface ControlPlaneOperations {
     request: Omit<CasAdminPatchStackRequest, "headers">,
     mutation: ServiceMutationInput,
   ): Promise<CasAdminPatchStackResponse>;
+  patchApp(
+    ctx: ControlPlaneCallContext,
+    appId: string,
+    patch: Readonly<Partial<Pick<App, "displayName" | "description" | "status">>>,
+    mutation: ServiceMutationInput,
+  ): Promise<{ readonly revision: number } | CasAdminErrorResponse>;
   listMembers(ctx: ControlPlaneCallContext, request: CasAdminListMembersRequest): Promise<CasAdminListMembersResponse>;
   listPlaygroundFileRoots(ctx: ControlPlaneCallContext, request: CasAdminListPlaygroundFileRootsRequest): Promise<CasAdminListPlaygroundFileRootsResponse>;
   createPlaygroundFileRoot(ctx: ControlPlaneCallContext, request: CasAdminCreatePlaygroundFileRootRequest): Promise<CasAdminCreatePlaygroundFileRootResponse>;
@@ -107,6 +123,17 @@ export interface ControlPlaneOperations {
     request: Omit<CasAdminCreateMemberInvitationRequest, "headers">,
     mutation?: ServiceMutationInput,
   ): Promise<CasAdminCreateMemberInvitationResponse>;
+  listAppMemberInvitations(
+    ctx: ControlPlaneCallContext,
+    appId: string,
+    query: CasAdminPageQuery & { readonly status?: AppMemberInvitation["status"] },
+  ): Promise<{ readonly items: readonly AppMemberInvitation[]; readonly nextCursor: string | null } | CasAdminErrorResponse>;
+  revokeAppMemberInvitation(
+    ctx: ControlPlaneCallContext,
+    appId: string,
+    invitationId: string,
+    mutation: ServiceMutationInput,
+  ): Promise<{ readonly revision: number } | CasAdminErrorResponse | { readonly error: "INVITATION_NOT_PENDING" }>;
   acceptMemberInvitation(
     ctx: ControlPlaneCallContext,
     request: CasAdminAcceptMemberInvitationRequest,
@@ -131,7 +158,7 @@ export interface ControlPlaneOperations {
   mintManagedSpaceCapability(
     ctx: ControlPlaneCallContext,
     appId: string,
-  ): Promise<ManagedSpaceCapability | CasAdminErrorResponse>;
+  ): Promise<ManagedSpaceCapability | CasAdminErrorResponse | { readonly error: "APP_SUSPENDED"; readonly message: string }>;
   inspectOAuthIssuer(
     ctx: ControlPlaneCallContext,
     request: CasAdminInspectOAuthIssuerRequest,

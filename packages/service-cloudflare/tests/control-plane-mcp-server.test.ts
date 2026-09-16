@@ -1,13 +1,15 @@
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import type { D1Database } from "@cloudflare/workers-types";
 import { CLIENT_CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, PROTOCOL_VERSION_META_KEY } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { APP_ADMIN_MCP_TOOL_LIST } from "@unicas/admin-protocol";
+import { PlatformAccessService, PlatformAuditService, PlatformInvitationService } from "@unicas/service";
 import { createControlPlaneMcpServer } from "../src/mcp/server.js";
 import type { ControlPlaneMcpGrantProps } from "../src/mcp/server.js";
 import { migrateControlSchema } from "../src/control-schema.js";
 import { createControlPlaneOperations } from "../src/control-operations.js";
+import { D1PlatformAccessRepository } from "../src/platform-access-repository.js";
 
 let miniflare: Miniflare;
 let db: D1Database;
@@ -70,6 +72,31 @@ describe("adapter-hosted control-plane MCP server", () => {
     })).content[0]?.text).toContain("disabled by deployment policy");
   });
 
+  test("requires apps.create authority in addition to the delegated write scope", async () => {
+    const authorizePlatformOperation = vi.fn(async () => ({
+      error: "APP_CREATION_AUTHORITY_REQUIRED" as const,
+    }));
+    const handler = handlerFor(grant(["control:write"]), {
+      mutationsEnabled: true,
+      authorizePlatformOperation,
+    });
+
+    const denied = await callTool(handler, "create_app", {
+      displayName: "Denied App",
+      idempotencyKey: "denied-app-1",
+    });
+
+    expect(denied).toMatchObject({
+      isError: true,
+      structuredContent: { error: "APP_CREATION_AUTHORITY_REQUIRED" },
+    });
+    expect(authorizePlatformOperation).toHaveBeenCalledWith(
+      expect.objectContaining({ subject: "alice-sub" }),
+      "apps.create",
+    );
+    expect(await db.prepare("SELECT COUNT(*) AS count FROM cas_apps").first()).toEqual({ count: 0 });
+  });
+
   test("creates idempotent stacks, records MCP audit attribution, and guards writes with ETags", async () => {
     const handler = handlerFor(grant(["control:read", "control:write"]), { mutationsEnabled: true });
     const first = await callTool(handler, "create_stack", { displayName: "Operations", idempotencyKey: "create-ops-1" });
@@ -98,10 +125,8 @@ describe("adapter-hosted control-plane MCP server", () => {
       displayName: "Documents",
       idempotencyKey: "create-app-1",
     });
-    expect(created.structuredContent).toMatchObject({
+    expect(created.structuredContent).toEqual({
       appId: expect.any(String),
-      displayName: "Documents",
-      revision: 1,
       etag: '"1"',
     });
     expect(created.structuredContent).not.toHaveProperty("stackId");
@@ -116,22 +141,123 @@ describe("adapter-hosted control-plane MCP server", () => {
       description: "Production documents",
       etag: '"1"',
     });
-    expect(updated.structuredContent).toMatchObject({
-      appId,
-      description: "Production documents",
-      revision: 2,
-      etag: '"2"',
-    });
+    expect(updated.structuredContent).toEqual({ etag: '"2"' });
+    expect((await callTool(handler, "get_app", { appId })).structuredContent)
+      .toMatchObject({ appId, description: "Production documents", revision: 2 });
+    expect((await callTool(handler, "update_app", { appId, status: "suspended", etag: '"2"' })).structuredContent)
+      .toEqual({ etag: '"3"' });
+    expect((await callTool(handler, "get_app", { appId })).structuredContent).toMatchObject({ status: "suspended" });
+    expect((await callTool(handler, "update_app", { appId, status: "suspended", etag: '"3"' })).structuredContent)
+      .toEqual({ etag: '"3"' });
+    expect((await callTool(handler, "update_app", { appId, status: "active", etag: '"2"' })).structuredContent)
+      .toMatchObject({ error: "REVISION_MISMATCH" });
+    expect((await callTool(handler, "update_app", { appId, status: "active", etag: '"3"' })).structuredContent)
+      .toEqual({ etag: '"4"' });
+    expect((await callTool(handler, "get_app", { appId })).structuredContent).toMatchObject({ status: "active" });
 
     const audit = await callTool(handler, "list_app_control_audit_events", { appId, limit: 10 });
     const events = audit.structuredContent.items as Array<Record<string, unknown>>;
     expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ action: "app.suspended" }),
+      expect.objectContaining({ action: "app.restored" }),
       expect.objectContaining({
         appId,
         actor: { issuer: "https://accounts.google.com", subject: "alice-sub" },
       }),
     ]));
     expect(events.every((event) => !("stackId" in event))).toBe(true);
+  });
+
+  test("lists and revokes App invitations with security scope and exact confirmation", async () => {
+    const handler = handlerFor(grant(["control:read", "control:write", "control:security"]), { mutationsEnabled: true });
+    const created = await callTool(handler, "create_app", { displayName: "Invitations", idempotencyKey: "inv-app-create" });
+    const appId = String(created.structuredContent.appId);
+    const invitation = await callTool(handler, "invite_app_member", { appId, email: "synthetic@example.test", confirmEmail: "synthetic@example.test", idempotencyKey: "inv-create" });
+    const invitationId = String(invitation.structuredContent.invitationId);
+    const list = await callTool(handler, "list_app_member_invitations", { appId, status: "pending" });
+    expect(list.structuredContent).toMatchObject({ items: [{ invitationId, status: "pending" }] });
+    expect(JSON.stringify(list.structuredContent)).not.toMatch(/tokenHash|acceptUrl/);
+    expect((await callTool(handlerFor(grant(["control:read"])), "list_app_member_invitations", { appId })).content[0]?.text).toContain("control:security");
+    expect((await callTool(handler, "revoke_app_member_invitation", { appId, invitationId, confirmInvitationId: "wrong", etag: '"1"' })).isError).toBe(true);
+    expect((await callTool(handler, "revoke_app_member_invitation", { appId, invitationId, confirmInvitationId: invitationId, etag: '"1"' })).structuredContent).toEqual({ etag: '"2"' });
+    expect((await callTool(handler, "list_app_member_invitations", { appId, status: "revoked" })).structuredContent).toMatchObject({ items: [{ invitationId, status: "revoked" }] });
+  });
+
+  test("creates, lists, and revokes platform invitations with current platform authority", async () => {
+    await db.prepare("INSERT INTO cas_platform_principals (principal_ref, identity_issuer, subject, status, platform_admin, apps_create, revision, created_at, updated_at) VALUES ('alice-ref', ?, ?, 'active', 1, 0, 1, 1, 1)")
+      .bind("https://accounts.google.com", "alice-sub").run();
+    await db.prepare("INSERT INTO cas_platform_principals (principal_ref, identity_issuer, subject, status, platform_admin, apps_create, revision, created_at, updated_at) VALUES ('target-ref', ?, 'target-sub', 'active', 0, 0, 1, 1, 1)")
+      .bind("https://accounts.google.com").run();
+    const repository = new D1PlatformAccessRepository(db);
+    const platformAccess = new PlatformAccessService(repository);
+    const platformInvitations = new PlatformInvitationService(
+      repository,
+      platformAccess,
+      { seal: async token => `sealed:${token}`, open: async sealed => sealed.slice(7) },
+    );
+    const handler = handlerFor(grant(["control:security"]), {
+      mutationsEnabled: true,
+      publicOrigin: "https://console.unicas.work",
+      platformInvitations,
+      platformAudit: new PlatformAuditService(repository, platformAccess),
+      platformAccess,
+    });
+
+    expect((await callTool(handler, "create_platform_invitation", {
+      email: "developer@example.com",
+      confirmEmail: "wrong@example.com",
+      authorities: ["apps.create"],
+      idempotencyKey: "platform-invite-1",
+    })).isError).toBe(true);
+    const created = await callTool(handler, "create_platform_invitation", {
+      email: "developer@example.com",
+      confirmEmail: "developer@example.com",
+      authorities: ["apps.create"],
+      idempotencyKey: "platform-invite-1",
+    });
+    expect(created.structuredContent).toMatchObject({
+      invitationId: expect.any(String),
+      acceptUrl: expect.stringMatching(/^https:\/\/console\.unicas\.work\/admin\/platform-invitations\//),
+      etag: '"1"',
+    });
+    const invitationId = String(created.structuredContent.invitationId);
+    expect((await callTool(handler, "list_platform_principals", { authority: "platform.admin" })).structuredContent)
+      .toMatchObject({ items: [{ principalRef: "alice-ref" }] });
+    expect((await callTool(handler, "get_platform_principal", { principalRef: "target-ref" })).structuredContent)
+      .toMatchObject({ principalRef: "target-ref", authorities: [] });
+    expect((await callTool(handler, "update_platform_access", {
+      principalRef: "target-ref",
+      confirmPrincipalRef: "wrong",
+      authorities: ["apps.create"],
+      etag: '"1"',
+    })).isError).toBe(true);
+    expect((await callTool(handler, "update_platform_access", {
+      principalRef: "target-ref",
+      confirmPrincipalRef: "target-ref",
+      authorities: ["apps.create"],
+      etag: '"1"',
+    })).structuredContent).toEqual({ etag: '"2"' });
+    const listed = await callTool(handler, "list_platform_invitations", { status: "pending" });
+    expect(listed.structuredContent).toMatchObject({
+      items: [{ invitationId, emailConstraint: "developer@example.com", authorities: ["apps.create"] }],
+    });
+    expect(JSON.stringify(listed.structuredContent)).not.toMatch(/acceptUrl|tokenHash|sealedToken/);
+    expect((await callTool(handler, "list_platform_audit_events", {
+      action: "platform_invitation.created",
+      limit: 10,
+    })).structuredContent).toMatchObject({
+      items: [{ action: "platform_invitation.created", targetInvitationId: invitationId }],
+    });
+    expect((await callTool(handler, "revoke_platform_invitation", {
+      invitationId,
+      confirmInvitationId: "wrong",
+      etag: '"1"',
+    })).isError).toBe(true);
+    expect((await callTool(handler, "revoke_platform_invitation", {
+      invitationId,
+      confirmInvitationId: invitationId,
+      etag: '"1"',
+    })).structuredContent).toEqual({ etag: '"2"' });
   });
 
   test("serves App memberships and Principal-owned Playground records", async () => {
@@ -150,7 +276,8 @@ describe("adapter-hosted control-plane MCP server", () => {
       confirmEmail: "bob@example.com",
       idempotencyKey: "invite-bob-app-1",
     });
-    expect(invitation.structuredContent).toMatchObject({ invitation: { appId, status: "pending" } });
+    expect(invitation.structuredContent).toMatchObject({ invitationId: expect.any(String), expiresAt: expect.any(Number), etag: '"1"' });
+    expect(invitation.structuredContent).not.toHaveProperty("invitation");
     const token = String(invitation.structuredContent.acceptUrl).split("/").pop()!;
 
     const bobHandler = handlerFor({
@@ -160,11 +287,7 @@ describe("adapter-hosted control-plane MCP server", () => {
       emailForDisplay: "bob@example.com",
     }, { mutationsEnabled: true });
     expect((await callTool(bobHandler, "accept_app_member_invitation", { token })).structuredContent)
-      .toMatchObject({
-        appId,
-        principal: { issuer: "https://accounts.google.com", subject: "bob-sub" },
-        profile: { displayName: "Bob", emailForDisplay: "bob@example.com" },
-      });
+      .toEqual({ appId });
 
     const members = await callTool(aliceHandler, "list_app_members", { appId, limit: 10 });
     expect(members.structuredContent.items).toEqual([

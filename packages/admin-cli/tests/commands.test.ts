@@ -13,6 +13,9 @@ import { logoutCommand } from "../src/commands/logout.js";
 import { membersCommand } from "../src/commands/members.js";
 import { oauthIssuerCommand } from "../src/commands/oauth-issuer.js";
 import { principalCommand } from "../src/commands/principal.js";
+import { platformInvitationsCommand } from "../src/commands/platform-invitations.js";
+import { platformAuditCommand } from "../src/commands/platform-audit.js";
+import { platformAccessCommand } from "../src/commands/platform-access.js";
 import { stacksCommand } from "../src/commands/stacks.js";
 import { statusCommand } from "../src/commands/status.js";
 import { whoamiCommand } from "../src/commands/whoami.js";
@@ -131,16 +134,106 @@ describe("command layer", () => {
     const server = new FakeAdminApi({ adminVocabulary: "app" });
     ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
     const { writes } = captureStdout();
-    await appsCommand(ctx, "update", ["cas_app_a", "Renamed", "--description", "Production"]);
-    expect(JSON.parse(writes.join(""))).toMatchObject({
-      appId: "cas_app_a",
-      displayName: "Renamed",
-      description: "Production",
-      revision: 4,
-    });
+    await appsCommand(ctx, "update", ["cas_app_a", "Renamed", "--description", "Production", "--status", "suspended"]);
+    expect(JSON.parse(writes.join(""))).toEqual({ etag: '"rev-4"' });
     expect(server.requests).toEqual([
       expect.objectContaining({ pathname: "/admin/apps/cas_app_a", method: "GET" }),
-      expect.objectContaining({ pathname: "/admin/apps/cas_app_a", method: "PATCH", ifMatch: '"rev-3"' }),
+      expect.objectContaining({
+        pathname: "/admin/apps/cas_app_a",
+        method: "PATCH",
+        ifMatch: '"rev-3"',
+        body: { displayName: "Renamed", description: "Production", status: "suspended" },
+      }),
+    ]);
+  });
+
+  test("App invitation commands filter history and confirm a revision-specific revocation", async () => {
+    await seedLoggedIn(ctx.store);
+    const server = new FakeAdminApi({ adminVocabulary: "app" });
+    ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
+    const { writes } = captureStdout();
+    await appMembersCommand(ctx, "invitations", ["cas_app_a", "--status", "pending"]);
+    expect(JSON.parse(writes.join(""))).toMatchObject({ items: [{ invitationId: "inv-app-1" }] });
+    writes.length = 0;
+    await appMembersCommand(ctx, "revoke-invitation", ["cas_app_a", "inv-app-1", "--etag", '"1"', "--confirm-invitation-id", "inv-app-1"]);
+    expect(JSON.parse(writes.join(""))).toEqual({ etag: '"2"' });
+    expect(server.requests.at(-1)).toMatchObject({ method: "DELETE", pathname: "/admin/apps/cas_app_a/member-invitations/inv-app-1", ifMatch: '"1"' });
+  });
+
+  test("platform invitation commands list, create with authorities, and conditionally revoke", async () => {
+    await seedLoggedIn(ctx.store);
+    const server = new FakeAdminApi({ adminVocabulary: "app" });
+    ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
+    const { writes } = captureStdout();
+
+    await platformInvitationsCommand(ctx, "list", ["--status", "pending", "--limit", "10"]);
+    expect(JSON.parse(writes.join(""))).toMatchObject({ items: [{ invitationId: "platform-invite-1" }] });
+    writes.length = 0;
+    await platformInvitationsCommand(ctx, "create", [
+      "developer@example.com",
+      "--authority", "apps.create",
+      "--authority", "platform.admin",
+    ]);
+    expect(JSON.parse(writes.join(""))).toMatchObject({ invitationId: "platform-invite-new", etag: '"1"' });
+    expect(server.requests.at(-1)).toMatchObject({
+      pathname: "/admin/platform/invitations",
+      method: "POST",
+      idempotencyKey: expect.stringMatching(/^unicas-cli:/),
+      body: { emailConstraint: "developer@example.com", authorities: ["apps.create", "platform.admin"] },
+    });
+    writes.length = 0;
+    await platformInvitationsCommand(ctx, "revoke", [
+      "platform-invite-1",
+      "--etag", '"1"',
+      "--confirm-invitation-id", "platform-invite-1",
+    ]);
+    expect(JSON.parse(writes.join(""))).toEqual({ etag: '"2"' });
+    expect(server.requests.at(-1)).toMatchObject({
+      pathname: "/admin/platform/invitations/platform-invite-1",
+      method: "DELETE",
+      ifMatch: '"1"',
+    });
+  });
+
+  test("platform audit forwards exact filters and pagination", async () => {
+    await seedLoggedIn(ctx.store);
+    const server = new FakeAdminApi({ adminVocabulary: "app" });
+    ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
+    const { writes } = captureStdout();
+
+    await platformAuditCommand(ctx, [
+      "--action", "platform_invitation.created",
+      "--actor-principal-ref", "principal-1",
+      "--created-after", "10",
+      "--limit", "10",
+      "--cursor", "next",
+    ]);
+
+    expect(JSON.parse(writes.join(""))).toMatchObject({ items: [{ eventId: "platform-event-1" }] });
+    expect(server.requests[0]).toMatchObject({
+      pathname: "/admin/platform/audit-events",
+      search: "?action=platform_invitation.created&actorPrincipalRef=principal-1&createdAfter=10&limit=10&cursor=next",
+    });
+  });
+
+  test("platform access lists filters, gets detail, and updates with the current ETag", async () => {
+    await seedLoggedIn(ctx.store);
+    const server = new FakeAdminApi({ adminVocabulary: "app" });
+    ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
+    const { writes } = captureStdout();
+
+    await platformAccessCommand(ctx, "list", ["--authority", "apps.create", "--effective-access", "active", "--limit", "10"]);
+    expect(JSON.parse(writes.join(""))).toMatchObject({ items: [{ principalRef: "principal-1" }] });
+    expect(server.requests.at(-1)?.search).toBe("?effectiveAccess=active&authority=apps.create&limit=10");
+    writes.length = 0;
+    await platformAccessCommand(ctx, "get", ["principal-1"]);
+    expect(JSON.parse(writes.join(""))).toMatchObject({ principalRef: "principal-1", memberships: [] });
+    writes.length = 0;
+    await platformAccessCommand(ctx, "update", ["principal-1", "--clear-authorities"]);
+    expect(JSON.parse(writes.join(""))).toEqual({ etag: '"2"' });
+    expect(server.requests.slice(-2)).toEqual([
+      expect.objectContaining({ pathname: "/admin/platform/principals/principal-1/access", method: "GET" }),
+      expect.objectContaining({ pathname: "/admin/platform/principals/principal-1/access", method: "PATCH", ifMatch: '"1"', body: { authorities: [] } }),
     ]);
   });
 
@@ -174,7 +267,7 @@ describe("command layer", () => {
       "--idempotency-key",
       "invite-app-1",
     ]);
-    expect(JSON.parse(writes.join(""))).toMatchObject({ invitation: { appId: "cas_app_a" } });
+    expect(JSON.parse(writes.join(""))).toEqual({ invitationId: "inv-app-1", expiresAt: 1_800_000_000, acceptUrl: `${FAKE_ORIGIN}/admin/invitations/inv-app-1`, etag: '"1"' });
     expect(server.requests[0]).toMatchObject({
       pathname: "/admin/apps/cas_app_a/member-invitations",
       method: "POST",
@@ -309,14 +402,14 @@ describe("command layer", () => {
     ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
     const { writes } = captureStdout();
     await appOAuthIssuerCommand(ctx, "inspect", ["cas_app_a", "https://issuer.example"]);
-    expect(JSON.parse(writes.join(""))).toMatchObject({ appId: "cas_app_a", inspectionId: "oinsp_app", status: "pending" });
+    expect(JSON.parse(writes.join(""))).toMatchObject({ inspectionId: "oinsp_app", challenge: expect.any(String) });
+    expect(JSON.parse(writes.join(""))).not.toHaveProperty("revision");
     writes.length = 0;
-    await appOAuthIssuerCommand(ctx, "activate", ["cas_app_a", "oinsp_app", "--activation-proof", "proof"]);
-    expect(JSON.parse(writes.join(""))).toMatchObject({ appId: "cas_app_a", status: "active", revision: 2 });
+    await appOAuthIssuerCommand(ctx, "activate", ["cas_app_a", "oinsp_app", "--activation-proof", "proof", "--if-none-match", "*"]);
+    expect(JSON.parse(writes.join(""))).toEqual({ etag: '"1"' });
     expect(server.requests).toEqual(expect.arrayContaining([
       expect.objectContaining({ pathname: "/admin/apps/cas_app_a/oauth-issuer/inspections", method: "POST" }),
-      expect.objectContaining({ pathname: "/admin/apps/cas_app_a/oauth-issuer", method: "GET" }),
-      expect.objectContaining({ pathname: "/admin/apps/cas_app_a/oauth-issuer", method: "PUT", ifMatch: '"rev-1"' }),
+      expect.objectContaining({ pathname: "/admin/apps/cas_app_a/oauth-issuer", method: "PUT", ifNoneMatch: "*", ifMatch: null }),
     ]));
   });
 

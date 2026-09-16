@@ -72,6 +72,7 @@ export default {
         aud: body.get("client_id"),
         nonce: entry.nonce,
         email: `${entry.sub}@example.com`,
+        email_verified: true,
         name: "Local Operator",
       })
         .setProtectedHeader({ alg: "RS256", kid: "local-mock" })

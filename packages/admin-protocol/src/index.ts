@@ -1,3 +1,5 @@
+export { AppPeopleQuerySchema, PlatformPeopleQuerySchema } from "./people.js";
+export type { AppPeopleQuery, PlatformPeopleQuery, AppPerson, PlatformPerson, PeoplePage } from "./people.js";
 export type {
   App,
   AppAdminMeResponse,
@@ -83,11 +85,18 @@ export {
 export {
   AppAdminApiBasePath,
   AppAdminApiErrorMap,
+  PatchAppRequestSchema,
+  AppInvitationQuerySchema,
+  InspectAppIssuerRequestSchema,
+  ActivateAppIssuerRequestSchema,
+  AppIssuerPreconditionSchema,
   appAdminApiContract,
 } from "./app-v2-contract.js";
 export type { AppAdminApiContract } from "./app-v2-contract.js";
 
 export { APP_ADMIN_MCP_TOOLS, APP_ADMIN_MCP_TOOL_LIST } from "./app-mcp-catalog.js";
+export { PlatformAuthoritySchema, PlatformPrincipalQuerySchema, PlatformAuditActionSchema, PlatformAuditQuerySchema, CreatePlatformInvitationSchema, PlatformInvitationQuerySchema, PatchPlatformAccessSchema, effectivePlatformAccess, hasPlatformAuthority } from "./platform-access.js";
+export type { PlatformAuthority, PlatformAccessStatus, EffectivePlatformAccess, PlatformAccessState, CurrentPlatformAccess, PlatformPrincipal, PlatformPrincipalListItem, PlatformPrincipalDetail, PlatformPrincipalPage, PlatformAccessSummary, PlatformInvitationStatus, PlatformInvitation, PlatformInvitationPage, PlatformAuditAction, PlatformAuditEvent, PlatformAuditPage } from "./platform-access.js";
 export type { AppAdminMcpToolDefinition, AppAdminMcpToolName, AppAdminMcpToolScope } from "./app-mcp-catalog.js";
 
 export {
@@ -180,5 +189,6 @@ export {
   casAdminRoutes,
   matchAppAdminRoute,
   matchCasAdminRoute,
+  matchPlatformAdminRoute,
 } from "./routes.js";
 export type { AppAdminRoute, CasAdminRoute } from "./routes.js";

@@ -1,4 +1,4 @@
-import type { AppAdminRoute } from "@unicas/admin-protocol";
+import { formatCasAdminETag, type AppAdminRoute } from "@unicas/admin-protocol";
 
 type AdminHandler = (request: Request) => Promise<Response>;
 type JsonRecord = Record<string, unknown>;
@@ -8,7 +8,13 @@ export async function handleAppAdminCompatibilityRequest(
   route: AppAdminRoute,
   legacyHandler: AdminHandler,
 ): Promise<Response> {
-  if (route.operation === "mintManagedCapability") {
+  const pathname = new URL(request.url).pathname;
+  if (pathname.startsWith("/admin/platform/") || pathname.startsWith("/admin/platform-invitations/")) {
+    return legacyHandler(request);
+  }
+  if (route.operation === "listPeople" || route.operation === "mintManagedCapability" || route.operation === "patchApp"
+    || route.operation === "listMemberInvitations" || route.operation === "revokeMemberInvitation"
+    || route.operation === "inspectOAuthIssuer" || route.operation === "activateOAuthIssuer") {
     return legacyHandler(request);
   }
 
@@ -20,7 +26,17 @@ export async function handleAppAdminCompatibilityRequest(
   if (isRecord(body) && typeof body.error === "string") {
     return copyJsonResponse(legacyResponse, transformAppAdminError(body));
   }
-  return copyJsonResponse(legacyResponse, transformAppAdminResponse(route, body));
+  if (route.operation === "createMemberInvitation" && isRecord(body) && isRecord(body.invitation)
+    && typeof body.invitation.revision === "number") {
+    const response = copyJsonResponse(legacyResponse, mapInvitationResponse(body), 201);
+    response.headers.set("ETag", formatCasAdminETag(body.invitation.revision));
+    return response;
+  }
+  return copyJsonResponse(
+    legacyResponse,
+    transformAppAdminResponse(route, body),
+    route.operation === "createApp" ? 201 : undefined,
+  );
 }
 
 export function transformAppAdminError(value: JsonRecord): JsonRecord {
@@ -62,15 +78,19 @@ export function transformAppAdminResponse(route: AppAdminRoute, body: unknown): 
     case "listApps":
       return mapPage(body, mapApp);
     case "createApp":
+      return mapCreateApp(body);
     case "getApp":
-    case "patchApp":
       return mapApp(body);
+    case "patchApp":
+    case "listMemberInvitations":
+    case "revokeMemberInvitation":
+      return body;
     case "listMembers":
       return mapPage(body, mapMembership);
     case "createMemberInvitation":
       return mapInvitationResponse(body);
     case "acceptMemberInvitation":
-      return mapMembership(body);
+      return isRecord(body) ? { appId: body.stackId } : body;
     case "getOAuthIssuer":
     case "getManagedIssuer":
     case "patchManagedIssuer":
@@ -107,12 +127,21 @@ function mapMe(value: unknown): unknown {
       displayName: value.identity.displayName,
       emailForDisplay: value.identity.emailForDisplay,
     },
+    ...("platformAccess" in value ? { platformAccess: value.platformAccess } : {}),
     memberships: value.memberships.map(mapMembership),
   };
 }
 
 function mapApp(value: unknown): unknown {
   return renameField(value, "stackId", "appId");
+}
+
+function mapCreateApp(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+  return {
+    appId: value.stackId,
+    ...(typeof value.etag === "string" ? { etag: value.etag } : {}),
+  };
 }
 
 function mapMembership(value: unknown): unknown {
@@ -125,10 +154,11 @@ function mapMembership(value: unknown): unknown {
 }
 
 function mapInvitationResponse(value: unknown): unknown {
-  if (!isRecord(value)) return value;
+  if (!isRecord(value) || !isRecord(value.invitation)) return value;
   return {
-    ...value,
-    invitation: renameField(value.invitation, "stackId", "appId"),
+    invitationId: value.invitation.invitationId,
+    acceptUrl: value.acceptUrl,
+    expiresAt: value.invitation.expiresAt,
   };
 }
 
@@ -168,11 +198,11 @@ function renameField(value: unknown, from: string, to: string): unknown {
   return { ...rest, [to]: renamed };
 }
 
-function copyJsonResponse(source: Response, body: unknown): Response {
+function copyJsonResponse(source: Response, body: unknown, status = source.status): Response {
   const headers = new Headers(source.headers);
   headers.delete("Content-Length");
   return new Response(JSON.stringify(body), {
-    status: source.status,
+    status,
     statusText: source.statusText,
     headers,
   });

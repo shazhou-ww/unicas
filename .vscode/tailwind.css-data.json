@@ -1,0 +1,25 @@
+{
+  "version": 1.1,
+  "atDirectives": [
+    {
+      "name": "@custom-variant",
+      "description": "Defines a custom Tailwind CSS variant.",
+      "references": [
+        {
+          "name": "Tailwind CSS custom variants",
+          "url": "https://tailwindcss.com/docs/functions-and-directives#custom-variant-directive"
+        }
+      ]
+    },
+    {
+      "name": "@theme",
+      "description": "Defines Tailwind CSS theme variables and generated utilities.",
+      "references": [
+        {
+          "name": "Tailwind CSS theme variables",
+          "url": "https://tailwindcss.com/docs/functions-and-directives#theme-directive"
+        }
+      ]
+    }
+  ]
+}

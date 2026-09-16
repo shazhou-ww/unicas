@@ -72,24 +72,30 @@ async function appsUpdate(ctx: CliContext, argv: string[]): Promise<void> {
     args: argv,
     options: {
       description: { type: "string" },
+      status: { type: "string" },
       etag: { type: "string" },
     },
     allowPositionals: true,
   });
   const [appId, displayName] = positionals;
-  if (!appId || (!displayName && values.description === undefined)) {
-    throw new Error("usage: unicas apps update <appId> [displayName] [--description D] [--etag E]");
+  const status = values.status;
+  if (status !== undefined && status !== "active" && status !== "suspended") {
+    throw new Error("status must be active or suspended");
+  }
+  if (!appId || (!displayName && values.description === undefined && status === undefined)) {
+    throw new Error("usage: unicas apps update <appId> [displayName] [--description D] [--status active|suspended] [--etag E]");
   }
   await withAdminClient(ctx, async (admin) => {
     const etag = values.etag ?? (await resolveAppEtag(admin, appId));
-    const { value } = await admin.patchApp(
+    const result = await admin.patchApp(
       { appId },
       {
         ...(displayName !== undefined ? { displayName } : {}),
         ...(values.description !== undefined ? { description: values.description } : {}),
+        ...(status !== undefined ? { status } : {}),
       },
       etag,
     );
-    printJson(value);
+    printJson(result);
   });
 }

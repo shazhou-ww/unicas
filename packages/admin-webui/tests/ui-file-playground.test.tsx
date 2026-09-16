@@ -66,7 +66,7 @@ test("switches cached roots and folders without requests and preserves each root
   expect(screen.getByRole("table", { name: "Folder contents" }).closest(".card")).toBeNull();
   expect(screen.queryByRole("tree")).not.toBeInTheDocument();
   const initialRequests = fetchMock.mock.calls.length;
-  await user.click(screen.getByRole("button", { name: "Documents", exact: true }));
+  await user.click(screen.getByRole("button", { name: "Documents" }));
   expect(await screen.findByRole("button", { name: "Notes.txt" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Photo.png" })).not.toBeInTheDocument();
   expect(fetchMock).toHaveBeenCalledTimes(initialRequests);
@@ -106,7 +106,7 @@ test("creates folders, copies within a folder, renames and deletes selected entr
   await selectRoot(user, "Alpha");
   await user.click(screen.getByRole("button", { name: "New folder" }));
   await user.type(screen.getByRole("textbox", { name: "Folder name" }), "Archive{Enter}");
-  expect(await screen.findByRole("button", { name: "Archive", exact: true })).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: "Archive" })).toBeInTheDocument();
   expect(screen.queryByRole("textbox", { name: "Folder name" })).not.toBeInTheDocument();
   await user.click(screen.getByRole("checkbox", { name: "Select Photo.png" }));
   prompt.mockReturnValue("/");
@@ -167,7 +167,7 @@ test("commits the temporary row on blur exactly once", async () => {
   expect(screen.getByRole("button", { name: "New folder" })).toBeDisabled();
   await user.type(within(row).getByRole("textbox"), "Blur folder");
   await user.tab();
-  expect(await screen.findByRole("button", { name: "Blur folder", exact: true })).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: "Blur folder" })).toBeInTheDocument();
   expect(screen.queryByRole("row", { name: "New folder" })).not.toBeInTheDocument();
   expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "PATCH")).toHaveLength(1);
 });
@@ -202,7 +202,7 @@ test("retains a failed blur draft and allows explicit retry", async () => {
   failCommit = false;
   await user.click(screen.getByRole("textbox", { name: "Folder name" }));
   await user.keyboard("{Enter}");
-  expect(await screen.findByRole("button", { name: "Retry folder", exact: true })).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: "Retry folder" })).toBeInTheDocument();
   expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "PATCH")).toHaveLength(2);
 });
 

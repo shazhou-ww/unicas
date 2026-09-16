@@ -2,12 +2,12 @@
 
 UniCAS control-plane management CLI. Logs in through the control-plane BFF:
 the browser opens the BFF's `/admin/auth/cli/authorize`, the BFF runs the
-Google OIDC flow (client secret held server-side) and the email allowlist,
-then redirects the browser back to the CLI's loopback with a one-time code
+Google OIDC flow (client secret held server-side) and verifies current
+Platform Access, then redirects the browser back to the CLI's loopback with a one-time code
 that the CLI exchanges (PKCE) for a session cookie + CSRF token, persisted
 locally. The CLI never talks to Google and needs no client id or secret.
 Commands call the typed `@unicas/admin-client` over the `/admin` HTTP API;
-`unicas mcp` exposes the same 38-tool contract (23 App tools plus 15 frozen v1
+`unicas mcp` exposes the same 47-tool contract (32 App/platform tools plus 15 frozen v1
 tools) as the MCP ingress hosted by
 `@unicas/service-cloudflare` as a stdio MCP server backed by that client (for
 clients whose MCP support cannot do OAuth, for example DeepSeek Harness).
@@ -49,8 +49,9 @@ pnpm --filter @unicas/admin-cli unicas login
    `${UNICAS_ADMIN_URL}/admin/auth/cli/authorize` (fixed public client id
    `unicas-cli`, S256 PKCE, loopback redirect).
 2. The BFF redirects to Google (its own confidential client + secret,
-   server-side), the operator signs in and consents, and the BFF enforces the
-   email allowlist.
+   server-side), the operator signs in and consents, and the BFF verifies
+   current Platform Access by immutable Principal. The email allowlist is only
+   a pre-migration fallback when Platform Access is not configured.
 3. The BFF redirects the browser back to the CLI's loopback with a one-time
    code; the CLI validates `state`, then POSTs `{ code, codeVerifier }` to
    `/admin/auth/cli/exchange` and receives the session cookie + CSRF token.
@@ -76,6 +77,13 @@ pnpm --filter @unicas/admin-cli unicas login
 | `unicas app-audit control <appId> [--limit N] [--cursor C] [--after ID]` | `list_app_control_audit_events` |
 | `unicas app-audit root-domain-refs <appId> <refDomain> [--space-id S] [--limit N] [--cursor C]` | `list_space_root_domain_refs` |
 | `unicas app-audit root-domain-events <appId> <refDomain> [--space-id S] [--after N] [--limit N]` | `list_space_root_domain_events` |
+| `unicas platform-access list [--query Q] [--effective-access active\|blocked\|no_access] [--authority platform.admin\|apps.create\|none] [--limit N] [--cursor C]` | `list_platform_principals` |
+| `unicas platform-access get <principalRef>` | `get_platform_principal` |
+| `unicas platform-access update <principalRef> ... [--etag E]` | `update_platform_access` |
+| `unicas platform-invitations list [--query Q] [--status S] [--limit N] [--cursor C]` | `list_platform_invitations` |
+| `unicas platform-invitations create <email> --authority A [--authority A] [--idempotency-key K]` | `create_platform_invitation` |
+| `unicas platform-invitations revoke <invitationId> --etag E --confirm-invitation-id <invitationId>` | `revoke_platform_invitation` |
+| `unicas platform-audit [--action A] [--actor-principal-ref R] [--target-principal-ref R] [--created-after MS] [--limit N] [--cursor C]` | `list_platform_audit_events` |
 | `unicas logout` | RFC 7009 revocation + clears the session |
 | `unicas status` | Local session summary (no network) |
 | `unicas mcp` | Run as a stdio MCP server |
@@ -93,6 +101,9 @@ diagnostics go to stderr.
 - **ETags.** App update, member removal, issuer activation, and MCP Playground mutations
   need the current ETag. When `--etag` is omitted the CLI reads it first
   (`get_app` / `get_app_oauth_issuer`).
+- **Platform authority.** Every platform command requires current
+  `platform.admin`; `apps create` separately requires current `apps.create`.
+  A valid session or MCP scope alone is insufficient.
 - **Confirmations.** Destructive operations require their `--confirm-*` flag
   to exactly match the target. Without the flag and a TTY, the CLI prompts;
   without the flag and no TTY (scripts), the command fails.

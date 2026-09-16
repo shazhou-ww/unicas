@@ -13,7 +13,7 @@ import {
 import { parseBoundedLimit } from "./stacks.js";
 
 export async function appMembersCommand(ctx: CliContext, subcommand: string | undefined, argv: string[]): Promise<void> {
-  requireSubcommand(subcommand, "usage: unicas app-members list|invite|remove", ["list", "invite", "remove"]);
+  requireSubcommand(subcommand, "usage: unicas app-members list|invite|remove|invitations|revoke-invitation", ["list", "invite", "remove", "invitations", "revoke-invitation"]);
   switch (subcommand) {
     case "list":
       return appMembersList(ctx, argv);
@@ -21,9 +21,37 @@ export async function appMembersCommand(ctx: CliContext, subcommand: string | un
       return appMembersInvite(ctx, argv);
     case "remove":
       return appMembersRemove(ctx, argv);
+    case "invitations":
+      return appInvitationsList(ctx, argv);
+    case "revoke-invitation":
+      return appInvitationRevoke(ctx, argv);
     default:
       throw new Error("usage: unicas app-members list|invite|remove");
   }
+}
+
+async function appInvitationsList(ctx: CliContext, argv: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({ args: argv, options: { status: { type: "string" }, limit: { type: "string" }, cursor: { type: "string" } }, allowPositionals: true });
+  const appId = positionals[0];
+  if (!appId) throw new Error("usage: unicas app-members invitations <appId> [--status pending|accepted|expired|revoked] [--limit N] [--cursor C]");
+  const status = values.status;
+  if (status !== undefined && status !== "pending" && status !== "accepted" && status !== "expired" && status !== "revoked") throw new Error("invalid invitation status");
+  const limit = values.limit === undefined ? undefined : Number(values.limit);
+  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 1000)) throw new Error("limit must be 1..1000");
+  await withAdminClient(ctx, async admin => {
+    printJson(await admin.listAppMemberInvitations({ appId }, { status, limit, cursor: values.cursor }));
+  });
+}
+
+async function appInvitationRevoke(ctx: CliContext, argv: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({ args: argv, options: { etag: { type: "string" }, "confirm-invitation-id": { type: "string" } }, allowPositionals: true });
+  const [appId, invitationId] = positionals;
+  const etag = values.etag;
+  if (!appId || !invitationId || !etag) throw new Error("usage: unicas app-members revoke-invitation <appId> <invitationId> --etag E [--confirm-invitation-id ID]");
+  await confirmOrPrompt({ flag: values["confirm-invitation-id"], expected: invitationId, label: "confirm-invitation-id" });
+  await withAdminClient(ctx, async admin => {
+    printJson(await admin.revokeAppMemberInvitation({ appId, invitationId }, etag));
+  });
 }
 
 async function appMembersList(ctx: CliContext, argv: string[]): Promise<void> {

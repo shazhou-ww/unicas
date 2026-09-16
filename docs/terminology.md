@@ -11,6 +11,9 @@ Status: accepted terminology
 | **Principal** | An authenticated human or service identity, keyed by `(issuer, subject)` |
 | **Profile** | Non-authoritative display metadata such as display name and email |
 | **Member** | A Principal granted equal administrator authority over an App |
+| **Platform Access** | Persistent administrator-plane admission state for a Principal; active authority or App membership grants admission, while blocked denies it |
+| **Platform Admin** | A Principal with the independent `platform.admin` authority, permitted to manage Platform Access and platform invitations |
+| **App Creator** | A Principal with the independent `apps.create` authority, permitted to create Apps |
 
 App replaces the earlier public term Stack. Space replaces the earlier public
 term Tenant in the new API contract.
@@ -44,6 +47,11 @@ Only `(issuer, subject)` is authoritative Principal identity. Profile fields
 may change and never alter App membership, Space ownership, authorization, or
 audit identity.
 
+Platform authorities are independent. `platform.admin` does not imply
+`apps.create`, and App membership implies neither. An email may constrain an
+invitation or an out-of-band bootstrap procedure, but it is never the durable
+authorization key.
+
 Capability authorization preserves these invariants:
 
 1. An issuer resolves to exactly one App authority.
@@ -67,6 +75,11 @@ App
     ├── Root Ref balances and events
     ├── usage accounting
     └── garbage collection
+
+Platform administration
+├── Principal access state and authorities
+├── verified-email platform invitations
+└── platform authorization audit
 ```
 
 Every data-plane operation is scoped by both App and Space. Root Ref revision

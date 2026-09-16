@@ -95,6 +95,9 @@ semantics.
 | **Principal** | 由 `(issuer, subject)` 唯一标识的已认证人或服务身份。 | Immutable authorization identity. A Principal may administer Apps or receive Space capabilities. |
 | **Profile** | display name 与 display email 等非权威展示元数据。 | Profile changes never alter Principal identity, App membership, or Space authorization. |
 | **Member** | 获得某个 App 同等管理员权限的 Principal。 | Membership depends on Principal, not mutable Profile fields. |
+| **Platform Access** | Principal 在管理员平面的持久准入状态与独立权限集合。 | Active authority or App membership admits; `blocked` overrides both. |
+| **Platform Admin** | 持有 `platform.admin` 权限、可管理平台准入与平台邀请的 Principal。 | Does not imply `apps.create`. |
+| **App Creator** | 持有 `apps.create` 权限、可创建 App 的 Principal。 | App membership does not imply this authority. |
 | **control plane** | 管理 App、成员、邀请、issuer 与审计的管理面。 | Served through UniCAS Admin APIs and clients. Do not call Space content operations “admin APIs”. |
 | **data plane** | Space 内容寻址存储的读写与生命周期操作面。 | V2 routes are scoped by both App and Space. The `cas:manage` permission is a data-plane permission. |
 | **capability** | 对 Principal、Space、权限和可选 Root Ref domain 进行约束的已签名授权声明。 | V2 uses `ver: 2`, `spaceId`, and `spaces:{spaceId}:cas:*`. A capability authorizes an operation; it is not a public document identifier. |

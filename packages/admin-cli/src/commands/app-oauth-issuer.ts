@@ -35,28 +35,31 @@ async function appOAuthIssuerInspect(ctx: CliContext, argv: string[]): Promise<v
   }
   await withAdminClient(ctx, async (admin) => {
     const result = await admin.inspectAppOAuthIssuer({ appId }, { issuer });
-    printJson({ ...result.value, etag: result.etag });
+    printJson(result);
   });
 }
 
 async function appOAuthIssuerActivate(ctx: CliContext, argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({
     args: argv,
-    options: { etag: { type: "string" }, "activation-proof": { type: "string" } },
+    options: { etag: { type: "string" }, "if-none-match": { type: "string" }, "activation-proof": { type: "string" } },
     allowPositionals: true,
   });
   const [appId, inspectionId] = positionals;
   const activationProof = values["activation-proof"];
+  if (values["if-none-match"] !== undefined && (values["if-none-match"] !== "*" || values.etag !== undefined)) {
+    throw new Error("use either --if-none-match '*' for initial activation or --etag for replacement");
+  }
   if (!appId || !inspectionId || !activationProof) {
     throw new Error("usage: unicas app-oauth-issuer activate <appId> <inspectionId> --activation-proof <jws> [--etag E]");
   }
   await withAdminClient(ctx, async (admin) => {
-    const etag = values.etag ?? await resolveAppOAuthIssuerEtag(admin, appId);
+    const precondition = values["if-none-match"] === "*" ? { ifNoneMatch: "*" as const } : values.etag ?? await resolveAppOAuthIssuerEtag(admin, appId);
     const result = await admin.activateAppOAuthIssuer(
       { appId },
       { inspectionId, activationProof },
-      etag,
+      precondition,
     );
-    printJson({ ...result.value, etag: result.etag });
+    printJson(result);
   });
 }

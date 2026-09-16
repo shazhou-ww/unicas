@@ -1,4 +1,6 @@
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import path from "path";
 import { defineConfig } from "vitest/config";
 
 /**
@@ -9,40 +11,48 @@ import { defineConfig } from "vitest/config";
  */
 export default defineConfig({
   base: "/admin/",
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
   server: {
     host: "127.0.0.1",
     port: 4070,
     proxy: {
       "/admin": {
         target: "http://localhost:8792",
-        changeOrigin: true,
+        changeOrigin: false,
         // Proxy ONLY the BFF-owned paths; everything else (the SPA shell,
-        // assets, Vite module graph: /admin/src/*, /admin/@vite/*,
+        // Vite module graph: /admin/src/*, /admin/@vite/*,
         // /admin/@react-refresh, pre-bundled deps) is served by Vite.
         bypass: (req) => {
           const path = req.url ?? "";
           const isBffRoute =
             path === "/admin/me"
+            || path.startsWith("/admin/assets/")
+            || path.startsWith("/admin/apps")
             || path.startsWith("/admin/stacks")
             || path.startsWith("/admin/member-invitations")
             || path.startsWith("/admin/auth/")
-            || path.startsWith("/admin/invitations/");
+            || path.startsWith("/admin/invitations/")
+            || path.startsWith("/admin/platform");
           if (isBffRoute) return undefined; // forward to the BFF worker
           return path; // serve from Vite
         },
       },
       "/stacks": {
         target: "http://localhost:8794",
-        changeOrigin: true,
+        changeOrigin: false,
       },
       "/managed-issuers": {
         target: "http://localhost:8794",
-        changeOrigin: true,
+        changeOrigin: false,
       },
       "/.well-known": {
         target: "http://localhost:8794",
-        changeOrigin: true,
+        changeOrigin: false,
       },
     },
   },
@@ -60,7 +70,7 @@ export default defineConfig({
     },
   },
   test: {
-    environment: "node",
+    environment: "jsdom",
     setupFiles: ["./tests/setup.ts"],
   },
 });

@@ -70,6 +70,7 @@ async function fixture(): Promise<{
     privateKey,
     appResolver: new StubAppAuthorityResolver({
       appId: APP,
+      appStatus: "active",
       issuer: ISSUER,
       audience: AUDIENCE,
       jwksUri,
@@ -110,6 +111,103 @@ function request(token: string): Request {
 }
 
 describe("AppSpaceCapabilityVerifier", () => {
+  test("denies every Space operation for a suspended App", async () => {
+    const { now, privateKey, appResolver } = await fixture();
+    const events: Array<{ kind: string; reason?: string }> = [];
+    const verifier = new AppSpaceCapabilityVerifier({
+      repository: new StubAppAuthorityResolver({ ...appResolver.authority, appStatus: "suspended" }),
+      now: () => now,
+      onEvent: (event) => events.push(event),
+    });
+    const token = await issue(privateKey, now, {
+      ver: 2,
+      spaceId: SPACE,
+      permissions: [spaceCasReadPermission(SPACE), spaceCasWritePermission(SPACE), spaceCasManagePermission(SPACE)],
+      refDomain: "doc",
+    });
+    const routes: AppSpaceRoute[] = [
+      APP_ROUTE,
+      { ...APP_ROUTE, operation: "readMetadata" },
+      { ...APP_ROUTE, operation: "lease" },
+      { operation: "listRootRefs", appId: APP, spaceId: SPACE },
+      { operation: "updateRootRefs", appId: APP, spaceId: SPACE },
+      { operation: "usage", appId: APP, spaceId: SPACE },
+      { operation: "gc", appId: APP, spaceId: SPACE },
+    ];
+    for (const route of routes) {
+      await expect(verifier.verify(request(token), route)).rejects.toMatchObject({ status: 403, code: "APP_SUSPENDED" });
+    }
+    expect(events).toHaveLength(routes.length);
+    expect(events.every((event) => event.kind === "rejected" && event.reason === "App is suspended")).toBe(true);
+    expect(JSON.stringify(events)).not.toContain(token);
+  });
+
+  test("suspends and restores previously issued capabilities after authority refresh", async () => {
+    const { now, privateKey, appResolver } = await fixture();
+    let currentTime = now;
+    let authority = appResolver.authority;
+    const verifier = new AppSpaceCapabilityVerifier({
+      repository: { resolveIssuer: async () => authority },
+      now: () => currentTime,
+    });
+    const token = await issue(privateKey, now, { ver: 2, spaceId: SPACE, permissions: [spaceCasReadPermission(SPACE)] });
+    await expect(verifier.verify(request(token), APP_ROUTE)).resolves.toBeDefined();
+    authority = { ...authority, appStatus: "suspended" };
+    currentTime = now + 30_000;
+    await expect(verifier.verify(request(token), APP_ROUTE)).rejects.toMatchObject({ code: "APP_SUSPENDED" });
+    authority = { ...authority, appStatus: "active" };
+    currentTime = now + 60_000;
+    await expect(verifier.verify(request(token), APP_ROUTE)).resolves.toBeDefined();
+  });
+
+  test("replaced issuer authority cannot survive cache refresh or the hard stale bound", async () => {
+    const { now, privateKey, appResolver } = await fixture();
+    let currentTime = now;
+    let replaced = false;
+    let unavailable = false;
+    const repository = { resolveIssuer: async () => {
+      if (unavailable) throw new Error("Registry unavailable");
+      return replaced ? null : appResolver.authority;
+    } };
+    const token = await issue(privateKey, now, { ver: 2, spaceId: SPACE, permissions: [spaceCasReadPermission(SPACE)] });
+    const refreshed = new AppSpaceCapabilityVerifier({ repository, now: () => currentTime });
+    const stale = new AppSpaceCapabilityVerifier({ repository, now: () => currentTime });
+    await refreshed.verify(request(token), APP_ROUTE);
+    await stale.verify(request(token), APP_ROUTE);
+    replaced = true;
+    currentTime = now + 30_000;
+    await expect(refreshed.verify(request(token), APP_ROUTE)).rejects.toMatchObject({ code: "unknown_issuer" });
+    unavailable = true;
+    currentTime = now + 59_999;
+    await expect(stale.verify(request(token), APP_ROUTE)).resolves.toBeDefined();
+    currentTime = now + 60_000;
+    await expect(stale.verify(request(token), APP_ROUTE)).rejects.toMatchObject({ code: "registry_unavailable" });
+  });
+
+  test("registry failure cannot preserve pre-suspension authority beyond 60 seconds", async () => {
+    const { now, privateKey, appResolver } = await fixture();
+    let currentTime = now;
+    let unavailable = false;
+    let authority = appResolver.authority;
+    const verifier = new AppSpaceCapabilityVerifier({
+      repository: { resolveIssuer: async () => {
+        if (unavailable) throw new Error("Registry unavailable");
+        return authority;
+      } },
+      now: () => currentTime,
+    });
+    const token = await issue(privateKey, now, { ver: 2, spaceId: SPACE, permissions: [spaceCasReadPermission(SPACE)] });
+    await expect(verifier.verify(request(token), APP_ROUTE)).resolves.toBeDefined();
+    authority = { ...authority, appStatus: "suspended" };
+    unavailable = true;
+    currentTime = now + 59_999;
+    await expect(verifier.verify(request(token), APP_ROUTE)).resolves.toBeDefined();
+    currentTime = now + 60_000;
+    await expect(verifier.verify(request(token), APP_ROUTE)).rejects.toMatchObject({ code: "registry_unavailable" });
+    unavailable = false;
+    await expect(verifier.verify(request(token), APP_ROUTE)).rejects.toMatchObject({ code: "APP_SUSPENDED" });
+  });
+
   test("verifies issuer-derived App, Space scope, and exact operation permission", async () => {
     const { now, privateKey, appResolver } = await fixture();
     const verifier = new AppSpaceCapabilityVerifier({

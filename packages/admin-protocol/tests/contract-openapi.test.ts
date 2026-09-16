@@ -21,6 +21,9 @@ import {
   CasStackSchema,
   PrincipalSchema,
   ProfileSchema,
+  PatchAppRequestSchema,
+  AppIssuerPreconditionSchema,
+  AppOAuthIssuerInspectionSchema,
   ManagedSpaceCapabilitySchema,
   SpaceRootRefBalanceSchema,
   appAdminApiContract,
@@ -40,6 +43,24 @@ function operations(document: Awaited<ReturnType<typeof generateAdminOpenApiDocu
 }
 
 describe("CAS admin schemas", () => {
+  test("distinguishes issuer activation preconditions and rejects full inspection echoes", () => {
+    expect(AppIssuerPreconditionSchema.safeParse({ "if-none-match": "*" }).success).toBe(true);
+    expect(AppIssuerPreconditionSchema.safeParse({ "if-match": '"4"' }).success).toBe(true);
+    for (const headers of [{}, { "if-match": '"4"', "if-none-match": "*" }, { "if-match": "4" }]) {
+      expect(AppIssuerPreconditionSchema.safeParse(headers).success).toBe(false);
+    }
+    const receipt = { inspectionId: "candidate", metadataUrl: "https://issuer.example/metadata", jwksUri: "https://issuer.example/jwks", challenge: "synthetic", expiresAt: 1000, keys: [{ kid: "key", algorithm: "ES256" }] };
+    expect(AppOAuthIssuerInspectionSchema.safeParse(receipt).success).toBe(true);
+    expect(AppOAuthIssuerInspectionSchema.safeParse({ ...receipt, revision: 1, appId: "app" }).success).toBe(false);
+  });
+  test("validates strict nonempty App status patches", () => {
+    for (const status of ["active", "suspended"]) {
+      expect(PatchAppRequestSchema.safeParse({ status }).success).toBe(true);
+    }
+    for (const body of [{}, { status: "inactive" }, { status: null }, { unknown: true }, { status: "active", unknown: true }]) {
+      expect(PatchAppRequestSchema.safeParse(body).success).toBe(false);
+    }
+  });
   test("validates stack wire records", () => {
     expect(CasStackSchema.safeParse({
       stackId: "stack-1",
@@ -106,7 +127,7 @@ describe("CAS admin schemas", () => {
     expectTypeOf<MeResult["profile"]>().toEqualTypeOf<Profile>();
 
     expect(Object.keys(appAdminApiContract.apps)).toHaveLength(4);
-    expect(Object.keys(appAdminApiContract.members)).toHaveLength(4);
+    expect(Object.keys(appAdminApiContract.members)).toHaveLength(7);
   });
 
   test("defines issuer, capability, and audit resources for the complete App contract", () => {
@@ -164,7 +185,7 @@ describe("CAS admin schemas", () => {
     expect(SpaceRootRefBalanceSchema.safeParse(balance).success).toBe(true);
     const operationCount = Object.values(appAdminApiContract)
       .reduce((count, group) => count + Object.keys(group).length, 0);
-    expect(operationCount).toBe(23);
+    expect(operationCount).toBe(37);
   });
 });
 
@@ -190,9 +211,33 @@ describe("CAS admin OpenAPI", () => {
     const document = await generateAppAdminOpenApiDocument();
     const allOperations = operations(document);
     const serialized = JSON.stringify(document);
-    expect(Object.keys(document.paths ?? {})).toHaveLength(16);
-    expect(allOperations).toHaveLength(23);
+    expect(Object.keys(document.paths ?? {})).toHaveLength(27);
+    expect(allOperations).toHaveLength(37);
+    expect(document.paths?.["/admin/apps/{appId}/people"]?.get).toBeDefined();
+    expect(document.paths?.["/admin/platform/people"]?.get).toBeDefined();
+    expect(document.paths?.["/admin/platform/access-summary"]?.get).toBeDefined();
+    expect(document.paths?.["/admin/platform/principals"]?.get).toBeDefined();
+    expect(document.paths?.["/admin/platform/principals/{principalRef}"]?.get).toBeDefined();
+    expect(document.paths?.["/admin/platform/principals/{principalRef}/access"]?.get).toBeDefined();
+    expect(document.paths?.["/admin/platform/principals/{principalRef}/access"]?.patch).toBeDefined();
+    expect(document.paths?.["/admin/platform/invitations"]?.get).toBeDefined();
+    expect(document.paths?.["/admin/platform/invitations"]?.post).toBeDefined();
+    expect(document.paths?.["/admin/platform/invitations/{invitationId}"]?.delete).toBeDefined();
+    expect(document.paths?.["/admin/platform-invitations/{token}/accept"]?.post).toBeDefined();
+    expect(document.paths?.["/admin/platform/audit-events"]?.get).toBeDefined();
+    expect(document.paths?.["/admin/apps/{appId}/member-invitations"]?.get?.operationId).toBe("listAppMemberInvitations");
+    const revoke = document.paths?.["/admin/apps/{appId}/member-invitations/{invitationId}"]?.delete;
+    expect(revoke?.responses?.["204"]).toHaveProperty("headers.ETag.required", true);
+    expect(revoke?.responses?.["204"]).not.toHaveProperty("content");
+    expect(revoke?.responses).toHaveProperty("412");
     expect(document.paths?.["/admin/apps/{appId}"]?.get).toHaveProperty("operationId", "getApp");
+    const patch = document.paths?.["/admin/apps/{appId}"]?.patch;
+    expect(patch?.responses?.["204"]).toHaveProperty("headers.ETag.required", true);
+    expect(patch?.responses?.["204"]).not.toHaveProperty("content");
+    expect(patch?.responses).not.toHaveProperty("200");
+    const activate = document.paths?.["/admin/apps/{appId}/oauth-issuer"]?.put;
+    expect(activate?.responses?.["204"]).toHaveProperty("headers.ETag.required", true);
+    expect(activate?.responses?.["204"]).not.toHaveProperty("content");
     expect(serialized).not.toMatch(/stackId|tenantId|Stack|Tenant/);
   });
 

@@ -23,6 +23,7 @@ export interface RecordedRequest {
   readonly cookie: string | null;
   readonly csrf: string | null;
   readonly ifMatch: string | null;
+  readonly ifNoneMatch: string | null;
   readonly idempotencyKey: string | null;
 }
 
@@ -109,6 +110,7 @@ export class FakeAdminApi {
       cookie,
       csrf,
       ifMatch: headers.get("If-Match"),
+      ifNoneMatch: headers.get("If-None-Match"),
       idempotencyKey: headers.get("Idempotency-Key"),
     });
     this.#options.onRequest?.(this.requests[this.requests.length - 1]);
@@ -167,6 +169,7 @@ export class FakeAdminApi {
         return json({
           principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
           profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+          platformAccess: { principalRef: "principal-1", status: "active", authorities: ["platform.admin", "apps.create"], revision: 1 },
           memberships: [{
             appId: "cas_stack_a",
             principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
@@ -178,6 +181,88 @@ export class FakeAdminApi {
         identity: { identityIssuer: "https://accounts.google.com", subject: "sub-1", displayName: "Alice", emailForDisplay: "alice@example.com" },
         memberships: [{ stackId: "cas_stack_a", identityIssuer: "https://accounts.google.com", subject: "sub-1", displayName: "Alice", emailForDisplay: "alice@example.com" }],
       });
+    }
+    if (url.pathname === appAdminRoutes.platformInvitations() && method === "GET") {
+      return json({ items: [{
+        invitationId: "platform-invite-1",
+        emailConstraint: "developer@example.com",
+        authorities: ["apps.create"],
+        status: "pending",
+        expiresAt: 1_800_000_000,
+        createdAt: 1,
+        createdBy: { issuer: "https://accounts.google.com", subject: "sub-1" },
+        revision: 1,
+      }], nextCursor: null });
+    }
+    if (url.pathname === appAdminRoutes.platformInvitations() && method === "POST") {
+      return Response.json({
+        invitationId: "platform-invite-new",
+        acceptUrl: `${FAKE_ORIGIN}/admin/platform-invitations/platform-token`,
+        expiresAt: 1_800_000_000,
+      }, { status: 201, headers: { ETag: '"1"' } });
+    }
+    if (url.pathname === appAdminRoutes.platformInvitation({ invitationId: "platform-invite-1" }) && method === "DELETE") {
+      return new Response(null, { status: 204, headers: { ETag: '"2"' } });
+    }
+    if (url.pathname === appAdminRoutes.platformAuditEvents() && method === "GET") {
+      return json({ items: [{
+        eventId: "platform-event-1",
+        action: "platform_invitation.created",
+        actorPrincipalRef: "principal-1",
+        actorPrincipal: { issuer: "https://accounts.google.com", subject: "sub-1" },
+        targetPrincipalRef: null,
+        targetPrincipal: null,
+        targetInvitationId: "platform-invite-1",
+        result: "succeeded",
+        requestId: "request-1",
+        createdAt: 100,
+        details: {},
+      }], nextCursor: null });
+    }
+    if (url.pathname === appAdminRoutes.platformPrincipals() && method === "GET") {
+      return json({ items: [{
+        principalRef: "principal-1",
+        principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
+        profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+        status: "active",
+        authorities: ["platform.admin", "apps.create"],
+        revision: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        effectiveAccess: "active",
+        appMembershipCount: 1,
+        lastActiveAt: 1,
+      }], nextCursor: null });
+    }
+    if (url.pathname === appAdminRoutes.platformPrincipal({ principalRef: "principal-1" }) && method === "GET") {
+      return json({
+        principalRef: "principal-1",
+        principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
+        profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+        status: "active",
+        authorities: ["platform.admin", "apps.create"],
+        revision: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        effectiveAccess: "active",
+        appMembershipCount: 1,
+        lastActiveAt: 1,
+        memberships: [],
+      });
+    }
+    if (url.pathname === appAdminRoutes.platformPrincipalAccess({ principalRef: "principal-1" }) && method === "GET") {
+      return Response.json({
+        principalRef: "principal-1",
+        principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
+        status: "active",
+        authorities: ["platform.admin", "apps.create"],
+        revision: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      }, { headers: { ETag: '"1"' } });
+    }
+    if (url.pathname === appAdminRoutes.platformPrincipalAccess({ principalRef: "principal-1" }) && method === "PATCH") {
+      return new Response(null, { status: 204, headers: { ETag: '"2"' } });
     }
     // Apps
     if (url.pathname === appAdminRoutes.apps() && method === "GET") {
@@ -225,31 +310,23 @@ export class FakeAdminApi {
       return json({ ok: true });
     }
     if (url.pathname === appAdminRoutes.memberInvitations({ appId: "cas_app_a" }) && method === "POST") {
-      return json({
-        invitation: {
-          invitationId: "inv-app-1",
-          appId: "cas_app_a",
-          status: "pending",
-          emailConstraint: body?.emailConstraint ?? null,
-          expiresAt: 1_800_000_000,
-          createdAt: 1,
-          revision: 1,
-        },
+      return Response.json({
+        invitationId: "inv-app-1",
+        expiresAt: 1_800_000_000,
         acceptUrl: `${FAKE_ORIGIN}/admin/invitations/inv-app-1`,
-      });
+      }, { status: 201, headers: { ETag: '"1"' } });
+    }
+    if (url.pathname === appAdminRoutes.memberInvitations({ appId: "cas_app_a" }) && method === "GET") {
+      return json({ items: [{ invitationId: "inv-app-1", appId: "cas_app_a", status: "pending", emailConstraint: null, expiresAt: 1_800_000_000, createdAt: 1, revision: 1 }], nextCursor: null });
+    }
+    if (url.pathname === appAdminRoutes.memberInvitation({ appId: "cas_app_a", invitationId: "inv-app-1" }) && method === "DELETE") {
+      return new Response(null, { status: 204, headers: { ETag: '"2"' } });
     }
     if (url.pathname === appAdminRoutes.oauthIssuerInspections({ appId: "cas_app_a" }) && method === "POST") {
-      const record = {
-        issuer: String(body?.issuer ?? ""),
-        audience: "https://cas.example/stacks/cas_app_a",
-        status: "pending" as const,
-        revision: 1,
-      };
-      this.appOAuthIssuer.set("cas_app_a", record);
-      return jsonWithEtag({
+      return json({
         inspectionId: "oinsp_app",
-        appId: "cas_app_a",
-        ...record,
+        metadataUrl: "https://issuer.example/metadata",
+        jwksUri: "https://issuer.example/jwks",
         challenge: "cas-oauth-issuer-inspection-v1\\nchallenge",
         expiresAt: 1_800_000_000,
         keys: [],
@@ -261,10 +338,10 @@ export class FakeAdminApi {
     }
     if (url.pathname === appAdminRoutes.oauthIssuer({ appId: "cas_app_a" }) && method === "PUT") {
       const current = this.appOAuthIssuer.get("cas_app_a");
-      if (!current) return json({ error: "NOT_FOUND" }, 404);
-      const record = { ...current, status: "active" as const, revision: current.revision + 1 };
+      if (!current && headers.get("If-None-Match") !== "*") return json({ error: "REVISION_MISMATCH" }, 412);
+      const record = { issuer: "https://issuer.example", audience: "https://cas.example/stacks/cas_app_a", ...current, status: "active" as const, revision: (current?.revision ?? 0) + 1 };
       this.appOAuthIssuer.set("cas_app_a", record);
-      return jsonWithEtag({ appId: "cas_app_a", ...record });
+      return new Response(null, { status: 204, headers: { ETag: `"${record.revision}"` } });
     }
     if (url.pathname === appAdminRoutes.refDomains({ appId: "cas_app_a" })) {
       return json({ domains: [{ appId: "cas_app_a", refDomain: "doc", revision: 1 }] });

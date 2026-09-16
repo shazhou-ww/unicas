@@ -127,19 +127,15 @@ export const AppOAuthIssuerSchema: z.ZodType<AppOAuthIssuer> = z.object({
 
 export const AppOAuthIssuerInspectionSchema: z.ZodType<AppOAuthIssuerInspection> = z.object({
   inspectionId: NonEmptyStringSchema,
-  ...AppOAuthIssuerShape,
-  metadataDigest: NonEmptyStringSchema,
-  jwksDigest: NonEmptyStringSchema,
-  capabilityMaxLifetimeSeconds: z.number().int().positive(),
+  metadataUrl: z.url(),
+  jwksUri: z.url(),
   challenge: NonEmptyStringSchema,
   expiresAt: TimestampSchema,
   keys: z.array(z.object({
     kid: NonEmptyStringSchema,
     algorithm: NonEmptyStringSchema,
-    publicJwk: z.record(z.string(), z.unknown()).readonly(),
   }).readonly()).readonly(),
-  revision: RevisionSchema,
-}).readonly().meta({ id: "AppOAuthIssuerInspection" });
+}).strict().readonly().meta({ id: "AppOAuthIssuerInspection" });
 
 export const ManagedSpaceCapabilitySchema: z.ZodType<ManagedSpaceCapability> = z.object({
   accessToken: NonEmptyStringSchema,

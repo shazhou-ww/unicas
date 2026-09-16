@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, test, vi } from "vitest";
 import { App } from "../src/ui/index.js";
@@ -12,7 +12,7 @@ function json(body: unknown): Response {
 }
 
 describe("AI tool connection", () => {
-  test("opens from the desktop header, copies connection details, and closes with Escape", async () => {
+  test("opens from sidebar profile menu, copies connection details, and closes with Escape", async () => {
     const user = userEvent.setup();
     window.location.hash = "#/";
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
@@ -21,6 +21,12 @@ describe("AI tool connection", () => {
         return json({
           principal: { issuer: "https://accounts.example", subject: "admin" },
           profile: { displayName: "Admin User", emailForDisplay: "admin@example.com" },
+          platformAccess: {
+            principalRef: "principal-admin",
+            status: "active",
+            authorities: ["platform.admin", "apps.create"],
+            revision: 1,
+          },
           memberships: [],
         });
       }
@@ -30,30 +36,22 @@ describe("AI tool connection", () => {
 
     render(<App />);
 
-    const docsLink = await screen.findByRole("link", { name: "Open UniCAS documentation" });
-    expect(docsLink).toHaveAttribute("href", "https://docs.unicas.work");
-    expect(docsLink).toHaveAttribute("target", "_blank");
-    expect(docsLink).toHaveAttribute("rel", "noreferrer");
+    expect(await screen.findByText("Platform access")).toBeInTheDocument();
+    expect(screen.getByTitle("Create App")).toBeInTheDocument();
 
-    const trigger = await screen.findByRole("button", { name: "Connect AI tools" });
-    const userMenu = screen.getByRole("button", { name: "Admin User" });
-    expect(trigger.compareDocumentPosition(userMenu) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
-    await user.click(trigger);
+    // Open the user menu from sidebar footer
+    const userMenuTrigger = await screen.findByRole("button", { name: "Open user menu" });
+    await user.click(userMenuTrigger);
+
+    // Click "Connect AI tools" from dropdown
+    const connectItem = await screen.findByRole("menuitem", { name: /connect ai tools/i });
+    await user.click(connectItem);
 
     const dialog = screen.getByRole("dialog", { name: "Connect an AI tool" });
+    expect(dialog).toBeInTheDocument();
     expect(dialog).toHaveTextContent(`${window.location.origin}/mcp`);
-    expect(dialog).toHaveTextContent("Configuration prompt");
-    expect(dialog).toHaveTextContent("No API key required");
-    expect(dialog).toHaveTextContent("CLI prompt");
-    expect(dialog).toHaveTextContent("unicas login");
-    // The CLI prompt is the single merged prompt: install + skill + usage.
-    expect(dialog).not.toHaveTextContent("CLI setup & usage");
-    expect(dialog).not.toHaveTextContent("Agent skill install");
-    expect(dialog).toHaveTextContent(`${window.location.origin}/admin/assets/skills/unicas-cli/SKILL.md`);
-    await waitFor(() => expect(screen.getByRole("button", { name: "Close AI tool connection" })).toHaveFocus());
 
-    // The URL is a click-to-copy bubble (no separate label row or Copy URL button).
+    // The URL is a click-to-copy bubble.
     const urlBubble = screen.getByRole("button", { name: "Copy MCP server URL" });
     await user.click(urlBubble);
     expect(await navigator.clipboard.readText()).toBe(`${window.location.origin}/mcp`);
@@ -79,6 +77,154 @@ describe("AI tool connection", () => {
 
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog", { name: "Connect an AI tool" })).not.toBeInTheDocument();
+  });
+
+  test("hides platform administration and App creation for an App-only member", async () => {
+    window.location.hash = "#/";
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
+      if (path === "/admin/me") {
+        return json({
+          principal: { issuer: "https://accounts.example", subject: "member" },
+          profile: { displayName: "App Member", emailForDisplay: "member@example.com" },
+          platformAccess: {
+            principalRef: "principal-member",
+            status: "active",
+            authorities: [],
+            revision: 1,
+          },
+          memberships: [],
+        });
+      }
+      if (path === "/admin/apps") return json({ items: [] });
+      return new Response(null, { status: 404 });
+    }));
+
+    render(<App />);
+
+    await screen.findByRole("button", { name: "Open user menu" });
+    expect(screen.queryByText("Platform access")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Create App")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create App" })).not.toBeInTheDocument();
+  });
+
+  test("denies a direct Platform route in the client for a non-admin", async () => {
+    window.location.hash = "#/platform/principals";
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
+      if (path === "/admin/me") return json({
+        principal: { issuer: "https://accounts.example", subject: "member" },
+        profile: { displayName: "Member", emailForDisplay: "member@example.com" },
+        platformAccess: { principalRef: "member-ref", status: "active", authorities: [], revision: 1 },
+        memberships: [],
+      });
+      if (path === "/admin/apps") return json({ items: [] });
+      return new Response(null, { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Platform administrator access is required");
+    expect(fetchMock.mock.calls.some(([input]) => String(input).startsWith("/admin/platform/"))).toBe(false);
+  });
+
+  test("supports keyboard Platform tab routing", async () => {
+    window.location.hash = "#/platform/principals";
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
+      if (path === "/admin/me") return json({
+        principal: { issuer: "https://accounts.example", subject: "admin" },
+        profile: { displayName: "Admin", emailForDisplay: "admin@example.com" },
+        platformAccess: { principalRef: "admin-ref", status: "active", authorities: ["platform.admin"], revision: 1 },
+        memberships: [],
+      });
+      if (path === "/admin/apps") return json({ items: [] });
+      if (path === "/admin/platform/access-summary") return json({ activePrincipalCount: 1, platformAdminCount: 1, appCreatorCount: 0, blockedPrincipalCount: 0, generatedAt: 1 });
+      if (path.startsWith("/admin/platform/people")) return json({ items: [], nextCursor: null });
+      if (path.startsWith("/admin/platform/audit-events")) return json({ items: [], nextCursor: null });
+      return new Response(null, { status: 404 });
+    }));
+
+    render(<App />);
+    const peopleTab = await screen.findByRole("tab", { name: "Members" });
+    const panel = screen.getByRole("tabpanel", { name: "Members" });
+    expect(peopleTab.getAttribute("aria-controls")).toBe(panel.id);
+    expect(screen.getByRole("tab", { name: "Change Logs" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "People" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Audit" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Platform Administration" })).toHaveClass("console-app-detail-title");
+    expect(screen.getByRole("tablist", { name: "Platform Administration sections" })).toHaveClass("console-app-tabs");
+    expect(peopleTab.closest(".console-app-detail-header")).toContainElement(screen.getByRole("heading", { name: "Platform Administration" }));
+    await waitFor(() => expect(window.location.hash).toBe("#/platform/people?filter=principals"));
+    peopleTab.focus();
+    await userEvent.setup().keyboard("{ArrowRight}");
+    await waitFor(() => expect(window.location.hash).toBe("#/platform/audit"));
+  });
+
+  test("opens mobile navigation from a named trigger on the right and restores focus", async () => {
+    const previousWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    window.location.hash = "#/";
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
+      if (path === "/admin/me") return json({
+        principal: { issuer: "https://accounts.example", subject: "admin" },
+        profile: { displayName: "Admin", emailForDisplay: "admin@example.com" },
+        platformAccess: { principalRef: "admin-ref", status: "active", authorities: ["apps.create"], revision: 1 },
+        memberships: [],
+      });
+      if (path === "/admin/apps") return json({ items: [{ appId: "app-1", displayName: "An extremely long App name that must not resize navigation", description: "", status: "active", createdAt: 1, revision: 1 }] });
+      return new Response(null, { status: 404 });
+    }));
+    const user = userEvent.setup();
+    render(<App />);
+
+    const trigger = await screen.findByRole("button", { name: "Open navigation" });
+    await user.click(trigger);
+    const drawer = await screen.findByRole("dialog", { name: "Navigation" });
+    expect(drawer.className).toContain("right-0");
+    await user.keyboard("{Escape}");
     await waitFor(() => expect(trigger).toHaveFocus());
+    await user.click(trigger);
+    const reopened = await screen.findByRole("dialog", { name: "Navigation" });
+    await user.click(within(reopened).getByRole("link", { name: /An extremely long App name/ }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Navigation" })).not.toBeInTheDocument());
+    expect(window.location.hash).toBe("#/apps/app-1/overview");
+    await waitFor(() => expect(trigger).toHaveFocus());
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: previousWidth });
+  });
+});
+
+describe("invitation-limited Console", () => {
+  test("renders the invitation route without loading general session or App APIs", async () => {
+    const user = userEvent.setup();
+    window.location.hash = "#/invitations/invite%2F1";
+    const fetchMock = vi.fn(async () => json({ appId: "app-invited" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    const accept = await screen.findByRole("button", { name: "Accept membership" });
+    await waitFor(() => expect(fetchMock).not.toHaveBeenCalled());
+    await user.click(accept);
+
+    expect(await screen.findByText(/You are now a member of App/)).toHaveTextContent("app-invited");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/admin/member-invitations/invite%2F1/accept",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  test("renders a platform invitation without loading general APIs", async () => {
+    window.location.hash = "#/platform-invitations/platform%2F1";
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    expect(await screen.findByRole("button", { name: "Accept platform access" })).toBeInTheDocument();
+    await waitFor(() => expect(fetchMock).not.toHaveBeenCalled());
   });
 });

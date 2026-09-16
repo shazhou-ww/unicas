@@ -2,7 +2,7 @@ import { createServer } from "node:net";
 import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import * as esbuild from "esbuild";
 import {
   convertV4MiniflareOptions,
@@ -151,6 +151,17 @@ export async function startLocalUnicasRuntime({
   }));
 
   await mf.ready;
+  if (!useGoogle) {
+    const { migrateControlSchema } = await import(pathToFileURL(
+      join(ROOT, "packages", "service-cloudflare", "dist", "control-schema.js"),
+    ).href);
+    const controlDb = await mf.getD1Database("CAS_CONTROL_DB", "unicas-service");
+    await migrateControlSchema(controlDb);
+    const now = Date.now();
+    await controlDb.prepare(
+      "INSERT OR IGNORE INTO cas_platform_principals (principal_ref, identity_issuer, subject, status, platform_admin, apps_create, revision, created_at, updated_at) VALUES ('prn_local_operator', ?, 'local-operator', 'active', 1, 1, 1, ?, ?)",
+    ).bind(`http://${publicHost}:${ports.mockOidc}`, now, now).run();
+  }
   return {
     mf,
     urls: Object.fromEntries(Object.entries(ports).map(

@@ -163,18 +163,142 @@ export const APP_ADMIN_MCP_TOOLS = {
       annotations: { destructiveHint: false, idempotentHint: true },
     },
   }),
+  list_platform_principals: tool({
+    name: "list_platform_principals",
+    requiredScope: "control:security",
+    registration: {
+      description: "List platform Principals with effective-access and authority filters.",
+      inputSchema: z.object({
+        query: z.string().max(254).optional(),
+        effectiveAccess: z.enum(["active", "blocked", "no_access"]).optional(),
+        authority: z.enum(["platform.admin", "apps.create", "none"]).optional(),
+        limit: z.number().int().min(1).max(1000).optional(),
+        cursor: cursor.optional(),
+      }),
+      annotations: { readOnlyHint: true, destructiveHint: false },
+    },
+  }),
+  get_platform_principal: tool({
+    name: "get_platform_principal",
+    requiredScope: "control:security",
+    registration: {
+      description: "Read one platform Principal, current authorities, status, and App memberships.",
+      inputSchema: z.object({ principalRef: z.string().min(1) }),
+      annotations: { readOnlyHint: true, destructiveHint: false },
+    },
+  }),
+  update_platform_access: tool({
+    name: "update_platform_access",
+    requiredScope: "control:security",
+    registration: {
+      description: "Conditionally replace Platform Access fields using the current ETag and exact Principal ref confirmation.",
+      inputSchema: z.object({
+        principalRef: z.string().min(1),
+        confirmPrincipalRef: z.string().min(1),
+        status: z.enum(["active", "blocked"]).optional(),
+        authorities: z.array(z.enum(["platform.admin", "apps.create"])).optional(),
+        etag,
+      }),
+      annotations: { destructiveHint: true, idempotentHint: true },
+    },
+  }),
+  list_platform_invitations: tool({
+    name: "list_platform_invitations",
+    requiredScope: "control:security",
+    registration: {
+      description: "List platform invitation lifecycle records without bearer tokens or accept URLs.",
+      inputSchema: z.object({
+        query: z.string().max(254).optional(),
+        status: z.enum(["pending", "accepted", "expired", "revoked"]).optional(),
+        limit: z.number().int().min(1).max(1000).optional(),
+        cursor: cursor.optional(),
+      }),
+      annotations: { readOnlyHint: true, destructiveHint: false },
+    },
+  }),
+  create_platform_invitation: tool({
+    name: "create_platform_invitation",
+    requiredScope: "control:security",
+    registration: {
+      description: "Create a verified-email invitation carrying explicit platform authorities.",
+      inputSchema: z.object({
+        email,
+        confirmEmail: email,
+        authorities: z.array(z.enum(["platform.admin", "apps.create"])).min(1),
+        idempotencyKey,
+      }),
+      annotations: { destructiveHint: false, idempotentHint: true },
+    },
+  }),
+  revoke_platform_invitation: tool({
+    name: "revoke_platform_invitation",
+    requiredScope: "control:security",
+    registration: {
+      description: "Revoke a pending platform invitation using its current ETag and exact ID confirmation.",
+      inputSchema: z.object({
+        invitationId: z.string().min(1),
+        confirmInvitationId: z.string().min(1),
+        etag,
+      }),
+      annotations: { destructiveHint: true, idempotentHint: true },
+    },
+  }),
+  list_platform_audit_events: tool({
+    name: "list_platform_audit_events",
+    requiredScope: "control:security",
+    registration: {
+      description: "List durable platform authorization audit events with exact filters and opaque pagination.",
+      inputSchema: z.object({
+        action: z.enum([
+          "platform_invitation.created",
+          "platform_invitation.revoked",
+          "platform_invitation.accepted",
+          "platform_access.authority_changed",
+          "platform_access.blocked",
+          "platform_access.restored",
+          "platform_access.change_denied",
+          "app.create_denied",
+        ]).optional(),
+        actorPrincipalRef: z.string().min(1).optional(),
+        targetPrincipalRef: z.string().min(1).optional(),
+        createdAfter: z.number().int().nonnegative().optional(),
+        limit: z.number().int().min(1).max(1000).optional(),
+        cursor: cursor.optional(),
+      }),
+      annotations: { readOnlyHint: true, destructiveHint: false },
+    },
+  }),
+  list_app_member_invitations: tool({
+    name: "list_app_member_invitations",
+    requiredScope: "control:security",
+    registration: {
+      description: "List App invitation lifecycle records without bearer tokens or accept URLs.",
+      inputSchema: z.object({ appId, status: z.enum(["pending", "accepted", "expired", "revoked"]).optional(), limit: z.number().int().min(1).max(1000).optional(), cursor: cursor.optional() }),
+      annotations: { readOnlyHint: true, destructiveHint: false },
+    },
+  }),
+  revoke_app_member_invitation: tool({
+    name: "revoke_app_member_invitation",
+    requiredScope: "control:security",
+    registration: {
+      description: "Revoke a pending App invitation with its own current ETag and exact invitation ID confirmation; return only the resulting ETag.",
+      inputSchema: z.object({ appId, invitationId: z.string().min(1), confirmInvitationId: z.string().min(1), etag }),
+      annotations: { destructiveHint: true, idempotentHint: true },
+    },
+  }),
   update_app: tool({
     name: "update_app",
     requiredScope: "control:write",
     registration: {
-      description: "Update App metadata using its current ETag.",
+      description: "Update App metadata or suspend/restore it using its current ETag; returns only the resulting ETag.",
       inputSchema: z.object({
         appId,
         displayName: displayName.optional(),
         description: description.optional(),
+        status: z.enum(["active", "suspended"]).optional(),
         etag,
       }),
-      annotations: { destructiveHint: false, idempotentHint: false },
+      annotations: { destructiveHint: true, idempotentHint: true },
     },
   }),
   invite_app_member: tool({
@@ -241,7 +365,7 @@ export const APP_ADMIN_MCP_TOOLS = {
     name: "inspect_app_oauth_issuer",
     requiredScope: "control:security",
     registration: {
-      description: "Discover and persist a validated App OAuth issuer snapshot and control challenge.",
+      description: "Create an independent candidate issuer inspection without changing current App authority; returns only proof inputs and discovery review data.",
       inputSchema: z.object({ appId, issuer: url }).strict(),
       annotations: { destructiveHint: false, idempotentHint: false },
     },
@@ -250,14 +374,15 @@ export const APP_ADMIN_MCP_TOOLS = {
     name: "activate_app_oauth_issuer",
     requiredScope: "control:security",
     registration: {
-      description: "Activate an inspected App OAuth issuer using a compact-JWS control proof and current ETag.",
+      description: "Atomically activate or replace a verified App issuer. Use ifNoneMatch '*' for initial activation or the current issuer etag for replacement; returns only the resulting ETag.",
       inputSchema: z.object({
         appId,
         inspectionId: z.string().min(1),
         activationProof: z.string().min(1),
         etag: etag.optional(),
-      }),
-      annotations: { destructiveHint: false, idempotentHint: false },
+        ifNoneMatch: z.literal("*").optional(),
+      }).refine(input => !(input.etag !== undefined && input.ifNoneMatch !== undefined)),
+      annotations: { destructiveHint: true, idempotentHint: false },
     },
   }),
   update_app_managed_issuer: tool({

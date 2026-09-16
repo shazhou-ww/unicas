@@ -1,4 +1,5 @@
 import type { AppId } from "@unicas/tenant-protocol";
+import type { CurrentPlatformAccess } from "./platform-access.js";
 
 /**
  * Content-addressed node digest wire shape.
@@ -54,6 +55,7 @@ export interface AppMembership {
 export interface AppAdminMeResponse {
   readonly principal: Principal;
   readonly profile: Profile;
+  readonly platformAccess: CurrentPlatformAccess;
   readonly memberships: readonly AppMembership[];
 }
 
@@ -93,24 +95,11 @@ export interface AppOAuthIssuer {
 
 export interface AppOAuthIssuerInspection {
   readonly inspectionId: string;
-  readonly appId: AppId;
-  readonly issuer: string;
-  readonly audience: string;
   readonly metadataUrl: string;
-  readonly metadataType: "oauth" | "oidc";
-  readonly authorizationEndpoint: string;
-  readonly tokenEndpoint: string;
   readonly jwksUri: string;
-  readonly registrationEndpoint: string | null;
-  readonly scopesSupported: readonly string[];
-  readonly codeChallengeMethodsSupported: readonly string[];
-  readonly metadataDigest: string;
-  readonly jwksDigest: string;
-  readonly capabilityMaxLifetimeSeconds: number;
   readonly challenge: string;
   readonly expiresAt: number;
-  readonly keys: readonly CasOAuthIssuerInspectionKey[];
-  readonly revision: number;
+  readonly keys: readonly { readonly kid: string; readonly algorithm: string }[];
 }
 
 export interface ManagedSpaceCapability {

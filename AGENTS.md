@@ -7,8 +7,10 @@ For Issue triage and all planned or multi-step work, load and follow the
 Then apply the UniCAS-specific profile in [`tasks/README.md`](tasks/README.md).
 
 - Resolve the current identity from the worktree-scoped Git key
-  `task-ledger.identity` and verify its lane exists on `origin/main`; never
-  infer it from the path, branch, user, or agent.
+  `task-ledger.identity`; the device-global `task-ledger.defaultIdentity` may
+  suggest a value during setup but never replaces the explicit binding. Verify
+  the resolved lowercase kebab-case identity's lane exists on `origin/main`;
+  never infer it from the path, branch, user, or agent.
 - Inspect `tasks/ongoing/<identity>/` and `tasks/backlog/` before creating or
   claiming related work.
 - Create accepted new work under `tasks/backlog/<task-name>/Task.md`.
@@ -17,6 +19,8 @@ Then apply the UniCAS-specific profile in [`tasks/README.md`](tasks/README.md).
 - Before the first implementation edit, claim the task with `git mv` under the
   worktree's registered `tasks/ongoing/<identity>/` lane and create
   `Progress.md`.
+- Run `pnpm exec repoledger doctor` locally before claiming or resuming work to
+  refresh `origin/main` and validate the real worktree-scoped identity.
 - Keep the `Progress.md` checklist, current state, decisions, validation, and
   blockers current after meaningful milestones.
 - Before finishing or pausing a session, leave the next concrete action in
@@ -49,7 +53,10 @@ Then apply the UniCAS-specific profile in [`tasks/README.md`](tasks/README.md).
 
 ## Validation
 
-- Run `pnpm check:tasks` after changing task files or repository instructions.
+- `pnpm check:tasks` runs the pinned `repoledger check` followed by focused
+  UniCAS policy tests. Keep it as the CI and repository validation entry point.
+- Use `pnpm exec repoledger doctor` as a separate local readiness check. Do not
+  run `doctor` in CI because CI is identity-independent.
 - Run the narrowest relevant executable test after implementation edits.
 - Before archiving a completed task, run the validation required by its
   acceptance criteria and record the results in `Progress.md`.

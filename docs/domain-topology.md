@@ -11,16 +11,17 @@ workflows, and documentation by origin:
 | --- | --- | --- |
 | `https://unicas.work` | Developers and evaluators | Product overview, quick start, and links to source, console, and docs |
 | `https://api.unicas.work` | Services, SDKs, CLIs, and agents | App/Space data API, managed issuers, OAuth/MCP, discovery, and health |
-| `https://console.unicas.work` | App administrators | Administrator WebUI, BFF, invitations, and CLI login |
+| `https://console.unicas.work` | App administrators and Platform Admins | Administrator WebUI, BFF, invitations, Platform Administration, and CLI login |
 | `https://docs.unicas.work` | Developers and operators | Product, protocol, deployment, and operations documentation |
 
 UniCAS has no end-user application surface. Integrating Apps own end-user
 identity, Space mapping, and business workflows. The console is for people who
 administer a UniCAS App.
 
-Use `console.unicas.work`, not `admin.unicas.work`, for the human product. The
-word console describes an App-operator surface without implying a separate
-platform-superuser authority.
+Use `console.unicas.work`, not `admin.unicas.work`, for the human product. App
+and Platform Administration workspaces share this deployment and origin but
+retain separate server-side authorization checks. Platform authority does not
+create a second frontend or identity provider.
 
 ## Origin ownership
 

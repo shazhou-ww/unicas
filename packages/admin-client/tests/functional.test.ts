@@ -51,6 +51,7 @@ class MockAdminService {
       origin: request.headers.get("Origin"),
       csrf,
       ifMatch: request.headers.get("If-Match"),
+      ifNoneMatch: request.headers.get("If-None-Match"),
       idempotencyKey: request.headers.get("Idempotency-Key"),
       body,
     });
@@ -63,11 +64,16 @@ class MockAdminService {
     }
     const path = url.pathname;
 
+    if (path === appAdminRoutes.people({ appId: APP }) || path === appAdminRoutes.platformPeople()) {
+      return Response.json({ items: [], nextCursor: null });
+    }
+
     if (path === casAdminRoutes.me()) {
       if (this.appVocabulary) {
         return Response.json({
           principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
           profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+          platformAccess: { principalRef: "principal-1", status: "active", authorities: ["platform.admin", "apps.create"], revision: 1 },
           memberships: [{
             appId: APP,
             principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
@@ -81,10 +87,96 @@ class MockAdminService {
       });
     }
     if (path === appAdminRoutes.acceptMemberInvitation({ token: "invite-1" }) && request.method === "POST") {
+      return Response.json({ appId: APP });
+    }
+    if (path === appAdminRoutes.accessSummary()) {
+      return Response.json({ activePrincipalCount: 1, platformAdminCount: 1, appCreatorCount: 1, blockedPrincipalCount: 0, generatedAt: 1 });
+    }
+    if (path === appAdminRoutes.platformPrincipals() && request.method === "GET") {
       return Response.json({
-        appId: APP,
+        items: [{
+          principalRef: "principal-1",
+          principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
+          profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+          status: "active",
+          authorities: ["platform.admin", "apps.create"],
+          revision: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          effectiveAccess: "active",
+          appMembershipCount: 1,
+          lastActiveAt: 1,
+        }], nextCursor: null
+      });
+    }
+    if (path === appAdminRoutes.platformPrincipal({ principalRef: "principal-1" })) {
+      return Response.json({
+        principalRef: "principal-1",
         principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
         profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+        status: "active",
+        authorities: ["platform.admin", "apps.create"],
+        revision: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        effectiveAccess: "active",
+        appMembershipCount: 1,
+        lastActiveAt: 1,
+        memberships: [],
+      });
+    }
+    if (path === appAdminRoutes.platformPrincipalAccess({ principalRef: "principal-1" }) && request.method === "PATCH") {
+      return new Response(null, { status: 204, headers: { ETag: '"2"' } });
+    }
+    if (path === appAdminRoutes.platformPrincipalAccess({ principalRef: "principal-1" }) && request.method === "GET") {
+      return Response.json({
+        principalRef: "principal-1",
+        principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
+        status: "active",
+        authorities: ["platform.admin", "apps.create"],
+        revision: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      }, { headers: { ETag: '"1"' } });
+    }
+    if (path === appAdminRoutes.platformInvitations() && request.method === "GET") {
+      return Response.json({
+        items: [{
+          invitationId: "platform-invite-1",
+          emailConstraint: "developer@example.com",
+          authorities: ["apps.create"],
+          status: "pending",
+          expiresAt: 1000,
+          createdAt: 1,
+          createdBy: { issuer: "https://accounts.google.com", subject: "sub-1" },
+          revision: 1,
+        }], nextCursor: null
+      });
+    }
+    if (path === appAdminRoutes.platformInvitations() && request.method === "POST") {
+      return Response.json({ invitationId: "platform-invite-1", acceptUrl: "https://admin.test/admin/platform-invitations/token-1", expiresAt: 1000 }, { status: 201, headers: { ETag: '"1"' } });
+    }
+    if (path === appAdminRoutes.platformInvitation({ invitationId: "platform-invite-1" }) && request.method === "DELETE") {
+      return new Response(null, { status: 204, headers: { ETag: '"2"' } });
+    }
+    if (path === appAdminRoutes.acceptPlatformInvitation({ token: "platform-token" }) && request.method === "POST") {
+      return new Response(null, { status: 204 });
+    }
+    if (path === appAdminRoutes.platformAuditEvents()) {
+      return Response.json({
+        items: [{
+          eventId: "platform-event-1",
+          action: "platform_invitation.created",
+          actorPrincipalRef: "principal-1",
+          actorPrincipal: { issuer: "https://accounts.google.com", subject: "sub-1" },
+          targetPrincipalRef: null,
+          targetPrincipal: null,
+          targetInvitationId: "platform-invite-1",
+          result: "succeeded",
+          requestId: "request-1",
+          createdAt: 1,
+          details: {},
+        }], nextCursor: null
       });
     }
     if (path === appAdminRoutes.apps() && request.method === "GET") {
@@ -98,7 +190,7 @@ class MockAdminService {
     }
     if (path === appAdminRoutes.app({ appId: APP }) && request.method === "PATCH") {
       this.app.revision += 1;
-      return Response.json(this.app, { headers: { ETag: `"${this.app.revision}"` } });
+      return new Response(null, { status: 204, headers: { ETag: `"${this.app.revision}"` } });
     }
     if (path === appAdminRoutes.members({ appId: APP }) && request.method === "GET") {
       return Response.json({
@@ -115,17 +207,16 @@ class MockAdminService {
     }
     if (path === appAdminRoutes.memberInvitations({ appId: APP }) && request.method === "POST") {
       return Response.json({
-        invitation: {
-          invitationId: "invite-1",
-          appId: APP,
-          status: "pending",
-          emailConstraint: "alice@example.com",
-          expiresAt: 1000,
-          createdAt: 1,
-          revision: 1,
-        },
+        invitationId: "invite-1",
+        expiresAt: 1000,
         acceptUrl: "https://admin.test/admin/invitations/invite-1",
-      }, { status: 201 });
+      }, { status: 201, headers: { ETag: '"1"' } });
+    }
+    if (path === appAdminRoutes.memberInvitations({ appId: APP }) && request.method === "GET") {
+      return Response.json({ items: [{ invitationId: "invite-1", appId: APP, status: "pending", emailConstraint: null, expiresAt: 1000, createdAt: 1, revision: 1 }], nextCursor: null });
+    }
+    if (path === appAdminRoutes.memberInvitation({ appId: APP, invitationId: "invite-1" }) && request.method === "DELETE") {
+      return new Response(null, { status: 204, headers: { ETag: '"2"' } });
     }
     if (path === appAdminRoutes.playgroundFileRoots({ appId: APP }) && request.method === "GET") {
       return Response.json({ items: [this.fileRoot] });
@@ -165,18 +256,17 @@ class MockAdminService {
       return Response.json(appIssuer, { headers: { ETag: '"4"' } });
     }
     if (path === appAdminRoutes.oauthIssuer({ appId: APP }) && request.method === "PUT") {
-      return Response.json({ ...appIssuer, revision: 5 }, { headers: { ETag: '"5"' } });
+      return new Response(null, { status: 204, headers: { ETag: '"5"' } });
     }
     if (path === appAdminRoutes.oauthIssuerInspections({ appId: APP }) && request.method === "POST") {
       return Response.json({
         inspectionId: "inspection-1",
-        ...appIssuer,
-        metadataDigest: "metadata",
+        metadataUrl: appIssuer.metadataUrl,
+        jwksUri: appIssuer.jwksUri,
         challenge: "challenge",
         expiresAt: 1000,
         keys: [],
-        revision: 1,
-      }, { status: 201, headers: { ETag: '"1"' } });
+      }, { status: 201 });
     }
     if (path === appAdminRoutes.managedIssuer({ appId: APP }) && request.method === "GET") {
       return Response.json(appIssuer, { headers: { ETag: '"4"' } });
@@ -311,6 +401,15 @@ function sessionOf(): Promise<AdminClientSession> {
 }
 
 describe("functional admin client", () => {
+  it("exposes typed unified people reads with filters and cursors", async () => {
+    const service = new MockAdminService();
+    const client = createAdminClient({ baseUrl: "https://admin.test", getSession: sessionOf, fetcher: service.fetch });
+    expect(await client.listAppPeople({ appId: APP }, { filter: "pending", query: "alice", cursor: "next" })).toEqual({ items: [], nextCursor: null });
+    expect(service.requests.at(-1)?.search).toContain("cursor=next");
+    expect(await client.listPlatformPeople({ authority: "platform.admin", effectiveAccess: "blocked" })).toEqual({ items: [], nextCursor: null });
+    expect(service.requests.at(-1)?.search).toContain("effectiveAccess=blocked");
+  });
+
   let service: MockAdminService;
   let client: ReturnType<typeof createAdminClient>;
 
@@ -336,7 +435,7 @@ describe("functional admin client", () => {
     expect(current.memberships[0]!.appId).toBe(APP);
 
     const membership = await client.acceptAppMemberInvitation({ token: "invite-1" });
-    expect(membership).toMatchObject({ appId: APP, principal: { subject: "sub-1" } });
+    expect(membership).toEqual({ appId: APP });
 
     const capability = await client.mintManagedSpaceCapability({ appId: APP });
     expect(capability).toMatchObject({
@@ -365,8 +464,8 @@ describe("functional admin client", () => {
       { idempotencyKey: "create-app-1" },
     )).toMatchObject({ value: { appId: APP }, etag: '"3"' });
     expect(await client.getApp({ appId: APP })).toMatchObject({ value: { appId: APP }, etag: '"3"' });
-    expect(await client.patchApp({ appId: APP }, { description: "Production" }, '"3"'))
-      .toMatchObject({ value: { revision: 4 }, etag: '"4"' });
+    expect(await client.patchApp({ appId: APP }, { description: "Production", status: "suspended" }, '"3"'))
+      .toEqual({ etag: '"4"' });
     expect(await client.listAppMembers({ appId: APP }, { limit: 10 })).toMatchObject({
       items: [{ appId: APP, principal: { subject: "sub-1" } }],
     });
@@ -379,18 +478,61 @@ describe("functional admin client", () => {
       { appId: APP },
       { emailConstraint: "alice@example.com" },
       { idempotencyKey: "invite-app-1" },
-    )).toMatchObject({ invitation: { appId: APP, status: "pending" } });
+    )).toEqual({ invitationId: "invite-1", expiresAt: 1000, acceptUrl: "https://admin.test/admin/invitations/invite-1", etag: '"1"' });
+    expect(await client.listAppMemberInvitations({ appId: APP }, { status: "pending", limit: 50 })).toMatchObject({ items: [{ invitationId: "invite-1" }], nextCursor: null });
+    expect(await client.revokeAppMemberInvitation({ appId: APP, invitationId: "invite-1" }, '"1"')).toEqual({ etag: '"2"' });
 
     expect(service.requests).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: "/admin/apps", search: "?limit=5&cursor=next" }),
       expect.objectContaining({ path: "/admin/apps", method: "POST", origin: "https://admin.test", csrf: "csrf-1", idempotencyKey: "create-app-1" }),
-      expect.objectContaining({ path: `/admin/apps/${APP}`, method: "PATCH", ifMatch: '"3"' }),
+      expect.objectContaining({
+        path: `/admin/apps/${APP}`,
+        method: "PATCH",
+        ifMatch: '"3"',
+        body: JSON.stringify({ description: "Production", status: "suspended" }),
+      }),
       expect.objectContaining({
         path: `/admin/apps/${APP}/members`,
         search: "?issuer=https%3A%2F%2Faccounts.google.com&subject=sub-1",
         method: "DELETE",
         ifMatch: '"4"',
       }),
+    ]));
+  });
+
+  it("transports platform access and invitation operations with minimal receipts", async () => {
+    expect(await client.getPlatformAccessSummary()).toMatchObject({ platformAdminCount: 1 });
+    expect(await client.listPlatformPrincipals({ limit: 10 })).toMatchObject({ items: [{ principalRef: "principal-1" }] });
+    expect(await client.getPlatformPrincipal({ principalRef: "principal-1" })).toMatchObject({ memberships: [] });
+    expect(await client.getPlatformAccess({ principalRef: "principal-1" })).toMatchObject({ value: { principalRef: "principal-1" }, etag: '"1"' });
+    expect(await client.patchPlatformAccess({ principalRef: "principal-1" }, { authorities: ["apps.create"] }, '"1"'))
+      .toEqual({ etag: '"2"' });
+    expect(await client.listPlatformInvitations({ status: "pending", limit: 10 })).toMatchObject({
+      items: [{ invitationId: "platform-invite-1" }],
+    });
+    expect(await client.createPlatformInvitation({
+      emailConstraint: "developer@example.com",
+      authorities: ["apps.create"],
+    }, "platform-create-1")).toEqual({
+      invitationId: "platform-invite-1",
+      acceptUrl: "https://admin.test/admin/platform-invitations/token-1",
+      expiresAt: 1000,
+      etag: '"1"',
+    });
+    expect(await client.revokePlatformInvitation({ invitationId: "platform-invite-1" }, '"1"'))
+      .toEqual({ etag: '"2"' });
+    await expect(client.acceptPlatformInvitation({ token: "platform-token" })).resolves.toBeUndefined();
+    expect(await client.listPlatformAuditEvents({ action: "platform_invitation.created", createdAfter: 0, limit: 10 }))
+      .toMatchObject({ items: [{ eventId: "platform-event-1" }] });
+
+    expect(service.requests).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: "/admin/platform/principals", search: "?limit=10" }),
+      expect.objectContaining({ path: "/admin/platform/principals/principal-1/access", method: "PATCH", ifMatch: '"1"' }),
+      expect.objectContaining({ path: "/admin/platform/invitations", search: "?status=pending&limit=10" }),
+      expect.objectContaining({ path: "/admin/platform/invitations", method: "POST", idempotencyKey: "platform-create-1" }),
+      expect.objectContaining({ path: "/admin/platform/invitations/platform-invite-1", method: "DELETE", ifMatch: '"1"' }),
+      expect.objectContaining({ path: "/admin/platform-invitations/platform-token/accept", method: "POST" }),
+      expect.objectContaining({ path: "/admin/platform/audit-events", search: "?action=platform_invitation.created&createdAfter=0&limit=10" }),
     ]));
   });
 
@@ -421,12 +563,14 @@ describe("functional admin client", () => {
     expect(await client.inspectAppOAuthIssuer(
       { appId: APP },
       { issuer: "https://issuer.example/oauth" },
-    )).toMatchObject({ value: { inspectionId: "inspection-1", appId: APP }, etag: '"1"' });
+    )).toEqual({ inspectionId: "inspection-1", metadataUrl: "https://cas.example/metadata", jwksUri: "https://cas.example/jwks", challenge: "challenge", expiresAt: 1000, keys: [] });
     expect(await client.activateAppOAuthIssuer(
       { appId: APP },
       { inspectionId: "inspection-1", activationProof: "proof" },
       '"4"',
-    )).toMatchObject({ value: { revision: 5 }, etag: '"5"' });
+    )).toEqual({ etag: '"5"' });
+    await client.activateAppOAuthIssuer({ appId: APP }, { inspectionId: "inspection-1", activationProof: "proof" }, { ifNoneMatch: "*" });
+    expect(service.requests.at(-1)).toMatchObject({ ifMatch: null, ifNoneMatch: "*" });
     expect(service.requests).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: `/admin/apps/${APP}/oauth-issuer`, search: "?optional=true" }),
       expect.objectContaining({ path: `/admin/apps/${APP}/managed-issuer`, method: "PATCH", csrf: "csrf-1", ifMatch: '"4"' }),

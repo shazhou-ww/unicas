@@ -246,6 +246,26 @@ describe("ControlPlaneAdminService", () => {
     );
   });
 
+  test("App suspension requires membership and exact revisions while preserving recovery", async () => {
+    const { repository, service } = fixture();
+    const created = await service.createStack(context(), { body: { displayName: "App" } });
+    if ("error" in created) throw new Error(created.error);
+    expectError(await service.patchApp(context(), created.stackId, { status: "suspended" }, {}), CasAdminErrorCodes.PRECONDITION_REQUIRED);
+    expectError(await service.patchApp(context(bob, "Bob"), created.stackId, { status: "suspended" }, { ifMatch: '"1"' }), CasAdminErrorCodes.STACK_MEMBERSHIP_REQUIRED);
+    expect(await service.patchApp(context(), created.stackId, { status: "suspended" }, { ifMatch: '"1"' })).toEqual({ revision: 2 });
+    expect(repository.audits.at(-1)).toMatchObject({ action: "app.suspended", subject: alice.subject });
+    expect(await service.getStack(context(), { path: { stackId: created.stackId } })).toMatchObject({ status: "suspended" });
+    expect(await service.mintManagedSpaceCapability(context(), created.stackId)).toMatchObject({ error: "APP_SUSPENDED" });
+    expect(await service.listMembers(context(), { path: { stackId: created.stackId } })).toHaveProperty("items");
+    expectError(await service.patchApp(context(), created.stackId, { status: "active" }, { ifMatch: '"1"' }), CasAdminErrorCodes.REVISION_MISMATCH);
+    expect(await service.patchApp(context(), created.stackId, { status: "suspended" }, { ifMatch: '"2"' })).toEqual({ revision: 2 });
+    expect(repository.patchPlans).toHaveLength(1);
+    expect(await service.patchApp(context(), created.stackId, { description: "Repair" }, { ifMatch: '"2"' })).toEqual({ revision: 3 });
+    expect(await service.patchApp(context(), created.stackId, { status: "active" }, { ifMatch: '"3"' })).toEqual({ revision: 4 });
+    expect(repository.audits.at(-1)).toMatchObject({ action: "app.restored", subject: alice.subject });
+    expect(await service.getStack(context(), { path: { stackId: created.stackId } })).toMatchObject({ status: "active", description: "Repair" });
+  });
+
   test("enforces patch preconditions, rejects no-ops, and commits one revision with audit", async () => {
     const { repository, service } = fixture();
     const created = await service.createStack(context(), { body: { displayName: "Stack" } });
@@ -619,15 +639,15 @@ class MemoryControlAdminRepository implements ControlPlaneAdminRepository {
     plan: ControlInspectOAuthIssuerPlan,
   ): Promise<ControlInspectOAuthIssuerCommitResult> {
     const existing = this.oauthIssuers.get(plan.issuer.stackId);
-    const expectedRevision = plan.preserveActiveIssuer ? plan.issuer.revision : plan.issuer.revision - 1;
-    if (existing && existing.revision !== expectedRevision) {
+    const expectedRevision = plan.issuer.revision - 1;
+    if (!plan.candidateOnly && existing && existing.revision !== expectedRevision) {
       return Promise.resolve({ kind: "revision-mismatch" });
     }
     if ([...this.oauthIssuers.values()].some((record) =>
       record.issuer === plan.issuer.issuer && record.stackId !== plan.issuer.stackId)) {
       return Promise.resolve({ kind: "issuer-conflict" });
     }
-    if (!plan.preserveActiveIssuer) this.oauthIssuers.set(plan.issuer.stackId, plan.issuer);
+    if (!plan.candidateOnly) this.oauthIssuers.set(plan.issuer.stackId, plan.issuer);
     this.inspections.push(plan.inspection);
     this.audits.push(plan.audit);
     this.snapshot += 1;
@@ -678,6 +698,7 @@ class MemoryControlAdminRepository implements ControlPlaneAdminRepository {
       ...current,
       displayName: plan.displayName,
       description: plan.description,
+      status: plan.status,
       revision: plan.nextRevision,
     });
     this.audits.push(plan.audit);
@@ -715,12 +736,40 @@ class MemoryControlAdminRepository implements ControlPlaneAdminRepository {
     return Promise.resolve({ kind: index >= 0 ? "deleted" : "not-member" });
   }
 
+  async getMemberInvitation(stackId: string, invitationId: string): Promise<Omit<ControlMemberInvitationRecord, "tokenHash"> | null> {
+    const invitation = this.invitations.get(invitationId);
+    if (!invitation || invitation.stackId !== stackId) return null;
+    const { tokenHash: _tokenHash, ...view } = invitation;
+    return view;
+  }
+
+  async listMemberInvitations(input: Parameters<ControlPlaneAdminRepository["listMemberInvitations"]>[0]): Promise<readonly Omit<ControlMemberInvitationRecord, "tokenHash">[]> {
+    return [...this.invitations.values()]
+      .filter(invitation => invitation.stackId === input.stackId && invitation.invitationId > input.afterInvitationId
+        && (input.status === undefined || invitation.status === input.status)
+        && (input.expiresAtOrBefore === undefined || invitation.expiresAt <= input.expiresAtOrBefore))
+      .sort((left, right) => left.invitationId < right.invitationId ? -1 : left.invitationId > right.invitationId ? 1 : 0)
+      .slice(0, input.limit)
+      .map(({ tokenHash: _tokenHash, ...view }) => view);
+  }
+
+  async commitInvitationTransition(input: Parameters<ControlPlaneAdminRepository["commitInvitationTransition"]>[0]): Promise<"updated" | "unavailable"> {
+    const invitation = this.invitations.get(input.invitationId);
+    if (!invitation || invitation.stackId !== input.stackId || invitation.status !== "pending"
+      || invitation.revision !== input.expectedRevision
+      || (input.status === "expired" ? invitation.expiresAt > input.now : invitation.expiresAt <= input.now)) return "unavailable";
+    this.invitations.set(input.invitationId, { ...invitation, status: input.status, revision: invitation.revision + 1 });
+    this.audits.push(input.audit);
+    this.snapshot += 1;
+    return "updated";
+  }
+
   commitAcceptMemberInvitation(plan: ControlAcceptMemberInvitationPlan): Promise<ControlAcceptMemberInvitationCommitResult> {
     const invitation = this.invitations.get(plan.invitationId);
     if (!invitation || invitation.tokenHash !== plan.tokenHash || invitation.status !== "pending" || invitation.expiresAt <= plan.now) {
       return Promise.resolve({ kind: "unavailable" });
     }
-    this.invitations.set(plan.invitationId, { ...invitation, status: "accepted" });
+    this.invitations.set(plan.invitationId, { ...invitation, status: "accepted", revision: invitation.revision + 1 });
     this.identities.set(identityKey(plan.identity), plan.identity);
     if (!this.memberships.some((member) => member.stackId === plan.stackId && sameIdentity(member, plan.identity))) {
       this.memberships.push(plan.membership);

@@ -22,6 +22,41 @@ async function invoke(
 }
 
 describe("App admin physical compatibility adapter", () => {
+  test("forwards Platform Admin responses without consuming or rewriting them", async () => {
+    const upstream = Response.json({ items: [{ principalRef: "principal-1" }], nextCursor: null }, {
+      headers: { ETag: '"7"', "Cache-Control": "no-store" },
+    });
+    const handler = vi.fn(async () => upstream);
+    const response = await handleAppAdminCompatibilityRequest(
+      request("/admin/platform/principals"),
+      { operation: "listPlatformPrincipals" },
+      handler,
+    );
+
+    expect(response).toBe(upstream);
+    expect(response.headers.get("ETag")).toBe('"7"');
+    await expect(response.json()).resolves.toEqual({
+      items: [{ principalRef: "principal-1" }],
+      nextCursor: null,
+    });
+  });
+
+  test("forwards App mutations without legacy rewriting and preserves no-content responses", async () => {
+    const handler = vi.fn(async () => new Response(null, {
+      status: 204,
+      headers: { ETag: '"4"', "Cache-Control": "no-store" },
+    }));
+    const response = await handleAppAdminCompatibilityRequest(
+      request("/admin/apps/app-1", { method: "PATCH", body: JSON.stringify({ status: "suspended" }) }),
+      { operation: "patchApp", appId: "app-1" },
+      handler,
+    );
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ url: "https://console.unicas.work/admin/apps/app-1" }));
+    expect(response.status).toBe(204);
+    expect(response.headers.get("ETag")).toBe('"4"');
+    expect(await response.text()).toBe("");
+  });
+
   test("maps the shared current-administrator response to Principal and Profile", async () => {
     const { response, legacyHandler } = await invoke(
       { operation: "me" },
@@ -32,6 +67,12 @@ describe("App admin physical compatibility adapter", () => {
           subject: "alice",
           displayName: "Alice",
           emailForDisplay: "alice@example.com",
+        },
+        platformAccess: {
+          principalRef: "principal-1",
+          status: "active",
+          authorities: ["platform.admin"],
+          revision: 3,
         },
         memberships: [{
           stackId: "app-1",
@@ -48,6 +89,12 @@ describe("App admin physical compatibility adapter", () => {
     await expect(response.json()).resolves.toEqual({
       principal: { issuer: "https://accounts.example", subject: "alice" },
       profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+      platformAccess: {
+        principalRef: "principal-1",
+        status: "active",
+        authorities: ["platform.admin"],
+        revision: 3,
+      },
       memberships: [{
         appId: "app-1",
         principal: { issuer: "https://accounts.example", subject: "alice" },
@@ -56,7 +103,7 @@ describe("App admin physical compatibility adapter", () => {
     });
   });
 
-  test("maps shared invitation acceptance to an App membership", async () => {
+  test("maps shared invitation acceptance to only the target App identifier", async () => {
     const { response, legacyHandler } = await invoke(
       { operation: "acceptMemberInvitation", token: "invite-1" },
       "/admin/member-invitations/invite-1/accept",
@@ -71,11 +118,26 @@ describe("App admin physical compatibility adapter", () => {
     expect(legacyHandler).toHaveBeenCalledWith(expect.objectContaining({
       url: "https://console.unicas.work/admin/member-invitations/invite-1/accept",
     }));
-    await expect(response.json()).resolves.toEqual({
-      appId: "app-1",
-      principal: { issuer: "https://accounts.example", subject: "alice" },
-      profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
-    });
+    await expect(response.json()).resolves.toEqual({ appId: "app-1" });
+  });
+
+  test("maps App creation to a 201 identifier receipt without echoing the resource", async () => {
+    const { response } = await invoke(
+      { operation: "createApp" },
+      "/admin/apps",
+      {
+        stackId: "app-1",
+        displayName: "App 1",
+        description: "",
+        status: "active",
+        createdAt: 1,
+        revision: 1,
+      },
+    );
+
+    expect(response.status).toBe(201);
+    expect(response.headers.get("ETag")).toBe('"3"');
+    await expect(response.json()).resolves.toEqual({ appId: "app-1" });
   });
 
   test("maps legacy membership errors to the App contract", async () => {

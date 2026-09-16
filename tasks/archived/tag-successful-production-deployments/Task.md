@@ -53,24 +53,24 @@ name does not repeat the commit hash.
 
 ## Acceptance criteria
 
-- [ ] A successful `release` push creates exactly one tag named
+- [x] A successful `release` push creates exactly one tag named
       `production-YYYYMMDD-<workflow-run-number>` after deployment, smoke, and
       every public-origin check pass.
-- [ ] The tag targets the exact deployed `github.sha`; its date is the UTC date
+- [x] The tag targets the exact deployed `github.sha`; its date is the UTC date
       of the workflow run's original creation time, and its run-number segment
       is `github.run_number` without a commit hash in the name.
-- [ ] Rerunning the same workflow is idempotent when the tag already targets
+- [x] Rerunning the same workflow is idempotent when the tag already targets
       the deployed commit and fails without moving the tag if it does not.
-- [ ] Validation failures, deployment failures, pull requests, non-`release`
+- [x] Validation failures, deployment failures, pull requests, non-`release`
       pushes, and manual recovery runs create no production tag.
-- [ ] Validation and deployment retain `contents: read`; only the post-success
+- [x] Validation and deployment retain `contents: read`; only the post-success
       tagging job receives `contents: write`, using the workflow's GitHub token
       rather than a PAT or new long-lived secret.
-- [ ] Creating the tag does not trigger a recursive deployment or validation
+- [x] Creating the tag does not trigger a recursive deployment or validation
       loop.
-- [ ] Repository policy prevents updates and deletions in the `production-*`
+- [x] Repository policy prevents updates and deletions in the `production-*`
       tag namespace without preventing creation by the successful workflow.
-- [ ] Workflow regression tests, repository checks, documentation checks, and
+- [x] Workflow regression tests, repository checks, documentation checks, and
       GitHub CI pass, including one observed successful automatic tag.
 
 ## Constraints
@@ -87,7 +87,7 @@ name does not repeat the commit hash.
 
 ## References
 
-- [GitHub Actions workflow](../../../../.github/workflows/ci.yml)
-- [Deployment and local configuration](../../../../docs/deployment-and-local-configuration.md)
-- [Operations guide](../../../../docs/cas-operations.md)
-- [Deployment regression tests](../../../../tests/deploy-plan.test.mjs)
+- [GitHub Actions workflow](/.github/workflows/ci.yml)
+- [Deployment and local configuration](/docs/deployment-and-local-configuration.md)
+- [Operations guide](/docs/cas-operations.md)
+- [Deployment regression tests](/tests/deploy-plan.test.mjs)

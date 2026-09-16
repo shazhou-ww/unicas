@@ -25,6 +25,10 @@ export function generateInvitationId(): string {
   return `inv_${randomBase64Url(12)}`;
 }
 
+export function generatePrincipalRef(): string {
+  return `prn_${randomBase64Url(16)}`;
+}
+
 export function generateEventId(): string {
   return `evt_${randomBase64Url(12)}`;
 }

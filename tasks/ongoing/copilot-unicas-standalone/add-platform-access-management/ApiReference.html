@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UniCAS Platform Access API Proposal</title>
+  <style>
+    :root {
+      color-scheme: light;
+    }
+
+    html,
+    body,
+    #app {
+      min-height: 100%;
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.68.0"></script>
+  <script>
+    Scalar.createApiReference("#app", {
+      url: "./PlatformAccess.openapi.json",
+      theme: "default",
+      layout: "modern",
+      darkMode: false,
+      hideClientButton: true,
+      hideDarkModeToggle: true,
+      hideDownloadButton: false,
+      showSidebar: true,
+      defaultOpenAllTags: false,
+      customCss: `
+        :root {
+          --scalar-color-accent: #2f696b;
+          --scalar-background-1: #ffffff;
+          --scalar-background-2: #f5f6f7;
+          --scalar-background-3: #edf0f1;
+          --scalar-border-color: #dfe3e6;
+          --scalar-radius: 7px;
+          --scalar-font: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+          --scalar-font-code: "Cascadia Code", Consolas, monospace;
+        }
+      `,
+      metaData: {
+        title: "UniCAS Platform Access API Proposal"
+      }
+    });
+  </script>
+</body>
+</html>

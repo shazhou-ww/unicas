@@ -25,7 +25,11 @@ const oauthRequest: AuthRequest = {
 describe("control-plane MCP OAuth authorization", () => {
   test("authenticates with Google, requires consent, and completes a scoped grant", async () => {
     const fixture = createFixture();
-    const handler = createOAuthAuthorizationHandler({ oidcFactory: () => fixture.oidc });
+    const authorizePrincipal = vi.fn(async () => "allowed" as const);
+    const handler = createOAuthAuthorizationHandler({
+      oidcFactory: () => fixture.oidc,
+      authorizePrincipal,
+    });
 
     const started = await handler.fetch(new Request("https://cas.example/oauth/authorize"), fixture.env);
     expect(started.status).toBe(302);
@@ -55,6 +59,10 @@ describe("control-plane MCP OAuth authorization", () => {
     expect(callback.headers.get("Content-Security-Policy"))
       .toContain("form-action https://cas.example https://vscode.dev");
     expect(callback.headers.get("Referrer-Policy")).toBe("no-referrer");
+    expect(authorizePrincipal).toHaveBeenCalledWith(fixture.env, {
+      issuer: "https://accounts.example",
+      subject: "alice-sub",
+    });
     const consentId = hiddenValue(consentHtml, "consent_id");
     const csrfToken = hiddenValue(consentHtml, "csrf_token");
     const consentCookie = cookieFrom(callback);
@@ -109,6 +117,45 @@ describe("control-plane MCP OAuth authorization", () => {
 
     expect(callback.status).toBe(403);
     expect(fixture.completeAuthorization).not.toHaveBeenCalled();
+  });
+
+  test("current platform admission replaces the legacy email allowlist for MCP grants", async () => {
+    const fixture = createFixture({ allowlist: "operator@example.com" });
+    const handler = createOAuthAuthorizationHandler({
+      oidcFactory: () => fixture.oidc,
+      authorizePrincipal: async () => "allowed",
+    });
+    const started = await handler.fetch(new Request("https://cas.example/oauth/authorize"), fixture.env);
+    const transactionId = new URL(started.headers.get("Location")!).searchParams.get("state")!;
+    const callback = await handler.fetch(new Request(
+      `https://cas.example/oauth/google/callback?code=google-code&state=${transactionId}`,
+      { headers: { Cookie: cookieFrom(started) } },
+    ), fixture.env);
+
+    expect(callback.status).toBe(200);
+    expect(await callback.text()).toContain("GitHub Copilot");
+  });
+
+  test("denies consent when current platform admission is absent or unavailable", async () => {
+    for (const [authorization, expectedStatus] of [
+      ["denied", 403],
+      ["unavailable", 503],
+    ] as const) {
+      const fixture = createFixture();
+      const handler = createOAuthAuthorizationHandler({
+        oidcFactory: () => fixture.oidc,
+        authorizePrincipal: async () => authorization,
+      });
+      const started = await handler.fetch(new Request("https://cas.example/oauth/authorize"), fixture.env);
+      const transactionId = new URL(started.headers.get("Location")!).searchParams.get("state")!;
+      const callback = await handler.fetch(new Request(
+        `https://cas.example/oauth/google/callback?code=google-code&state=${transactionId}`,
+        { headers: { Cookie: cookieFrom(started) } },
+      ), fixture.env);
+
+      expect(callback.status).toBe(expectedStatus);
+      expect(fixture.completeAuthorization).not.toHaveBeenCalled();
+    }
   });
 
   test("rejects unsupported scopes before starting Google authentication", async () => {

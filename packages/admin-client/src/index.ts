@@ -1,3 +1,4 @@
+export type { AppPeopleQuery, PlatformPeopleQuery, AppPerson, PlatformPerson, PeoplePage } from "@unicas/admin-protocol";
 /**
  * @unicas/admin-client — Typed HTTP client for the CAS stack control plane.
  *
@@ -47,4 +48,20 @@ export type {
   CasStackMember,
   CasStackOAuthIssuer,
   CasManagedCapability,
+  PlatformAuthority,
+  PlatformAccessStatus,
+  EffectivePlatformAccess,
+  PlatformAccessState,
+  CurrentPlatformAccess,
+  PlatformPrincipal,
+  PlatformPrincipalListItem,
+  PlatformPrincipalDetail,
+  PlatformPrincipalPage,
+  PlatformAccessSummary,
+  PlatformInvitationStatus,
+  PlatformInvitation,
+  PlatformInvitationPage,
+  PlatformAuditAction,
+  PlatformAuditEvent,
+  PlatformAuditPage,
 } from "@unicas/admin-protocol";

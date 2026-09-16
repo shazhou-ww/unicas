@@ -208,6 +208,81 @@ describe("unicas mcp (stdio server)", () => {
       structuredContent: { refs: [{ spaceId: "space-1", count: 1 }] },
     });
 
+    stdin.write(`${JSON.stringify({
+      jsonrpc: "2.0",
+      id: 5,
+      method: "tools/call",
+      params: { name: "update_app", arguments: { appId: "cas_app_a", status: "suspended", etag: '"rev-3"' } },
+    })}\n`);
+    const updated = await reader.next();
+    expect(updated.result).toMatchObject({ isError: false, structuredContent: { etag: '"rev-4"' } });
+    expect((updated.result as { structuredContent: object }).structuredContent).toEqual({ etag: '"rev-4"' });
+    expect(server.requests.at(-1)).toMatchObject({ method: "PATCH", body: { status: "suspended" }, ifMatch: '"rev-3"' });
+
+    stdin.write(`${JSON.stringify({
+      jsonrpc: "2.0",
+      id: 6,
+      method: "tools/call",
+      params: {
+        name: "create_platform_invitation",
+        arguments: {
+          email: "developer@example.com",
+          confirmEmail: "developer@example.com",
+          authorities: ["apps.create"],
+          idempotencyKey: "platform-invite-1",
+        },
+      },
+    })}\n`);
+    expect((await reader.next()).result).toMatchObject({
+      isError: false,
+      structuredContent: { invitationId: "platform-invite-new", etag: '"1"' },
+    });
+
+    stdin.write(`${JSON.stringify({
+      jsonrpc: "2.0",
+      id: 7,
+      method: "tools/call",
+      params: { name: "list_platform_invitations", arguments: { status: "pending" } },
+    })}\n`);
+    expect((await reader.next()).result).toMatchObject({
+      isError: false,
+      structuredContent: { items: [{ invitationId: "platform-invite-1" }] },
+    });
+
+    stdin.write(`${JSON.stringify({
+      jsonrpc: "2.0",
+      id: 8,
+      method: "tools/call",
+      params: {
+        name: "revoke_platform_invitation",
+        arguments: { invitationId: "platform-invite-1", confirmInvitationId: "platform-invite-1", etag: '"1"' },
+      },
+    })}\n`);
+    expect((await reader.next()).result).toMatchObject({
+      isError: false,
+      structuredContent: { etag: '"2"' },
+    });
+
+    stdin.write(`${JSON.stringify({
+      jsonrpc: "2.0",
+      id: 9,
+      method: "tools/call",
+      params: { name: "list_platform_audit_events", arguments: { action: "platform_invitation.created", limit: 10 } },
+    })}\n`);
+    expect((await reader.next()).result).toMatchObject({
+      isError: false,
+      structuredContent: { items: [{ eventId: "platform-event-1" }] },
+    });
+
+    stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "list_platform_principals", arguments: { authority: "platform.admin" } } })}\n`);
+    expect((await reader.next()).result).toMatchObject({ isError: false, structuredContent: { items: [{ principalRef: "principal-1" }] } });
+
+    stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 11, method: "tools/call", params: { name: "get_platform_principal", arguments: { principalRef: "principal-1" } } })}\n`);
+    expect((await reader.next()).result).toMatchObject({ isError: false, structuredContent: { principalRef: "principal-1" } });
+
+    stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 12, method: "tools/call", params: { name: "update_platform_access", arguments: { principalRef: "principal-1", confirmPrincipalRef: "principal-1", authorities: ["apps.create"], etag: '"1"' } } })}\n`);
+    expect((await reader.next()).result).toMatchObject({ isError: false, structuredContent: { etag: '"2"' } });
+
     stdin.end();
     await done;
   });
