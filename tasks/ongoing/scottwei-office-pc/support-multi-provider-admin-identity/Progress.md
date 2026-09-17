@@ -38,6 +38,15 @@ direct regression assertions prove `/admin/auth/oidc`, `/admin/auth/callback`,
 and `/oauth/google/callback` return `404`. The callback fixture completion was
 rebased over concurrent `main` work and published on 2026-09-17.
 
+The next implementation slice is identified but not started: add Account-keyed
+App list/create operations to `AccountService` and `D1AccountRepository`, then
+direct v2 `GET/POST /admin/apps` to those operations instead of rewriting them
+to Principal-keyed `/admin/stacks`. Do not delete `cas_operator_identities` or
+the legacy membership columns before every remaining App operation has migrated.
+For handoff, `scottwei-home-pc` must run `pnpm exec repoledger doctor`, fetch
+`origin/main`, use the ledger's supported task-transfer flow from
+`scottwei-office-pc`, and publish the transfer before modifying implementation.
+
 Claim commit `1b33a29c6ebcc9e7ed66fe273b4ca7c020e43584` initially assigned the
 task to `scottwei-home-pc`. On 2026-09-17, the requesting user explicitly
 directed `copilot-unicas-standalone` to take over the task. The validated
