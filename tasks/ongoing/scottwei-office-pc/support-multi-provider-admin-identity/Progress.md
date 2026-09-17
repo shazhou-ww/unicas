@@ -173,9 +173,20 @@ provider rows, fresh-auth link/unlink dialogs, and final-identity protection.
 The slice is published on `origin/main` as
 `46a6381eb61a89f84de87635cde52145e4d30fb6`.
 
-Next: replace remaining Principal-keyed administrator relationship commands
-and projections with Account-keyed contracts while retaining compatibility
-routes during migration.
+The ninth implementation slice is published. App member list, People, current-
+administrator, remove, CLI, and stdio/remote MCP surfaces now project and target
+stable Accounts. The v2 remove command accepts only `accountId`, is idempotent,
+does not use an App revision, and atomically enforces actor membership and the
+last-member invariant while writing Account-attributed audit evidence. Ordinary
+member payloads and search text no longer expose or index exact issuer/subject.
+The shared `/admin/me` response is Account-first while retaining deprecated
+Principal/Profile aliases, and `unicas account` plus `get_current_account`
+provide identity-safe replacements. Legacy v1 Stack member commands retain
+their identity locator during the compatibility period. The slice is published
+on `origin/main` as `e0a852a1eba092a1af23ee9bed441ed95b16c0f8`.
+
+Next: implement Account-keyed platform People, authority grant/revoke, and
+block/restore commands without whole-set replacement or client revisions.
 
 ## Decisions
 
@@ -459,6 +470,21 @@ routes during migration.
 - `pnpm check:tasks` passed all 17 ledger tasks and all 6 policy tests before
   publication. Account self-service commit
   `46a6381eb61a89f84de87635cde52145e4d30fb6` was pushed and verified reachable
+  from refreshed `origin/main`.
+- Account service tests cover snapshot-bound member listing, Account summaries,
+  actor authorization, idempotent remove, and last-member denial. The full
+  `@unicas/service` suite passed all 136 tests across 18 files.
+- Miniflare tests prove Account-keyed D1 projection, atomic remove/audit,
+  repeated-remove no-op behavior, BFF routing, Account-only People search,
+  shared `/admin/me` enrichment, and stdio/remote MCP list/remove behavior. The
+  full `@unicas/service-cloudflare` suite passed all 265 tests across 29 files.
+- `@unicas/admin-protocol` passed all 102 tests, `@unicas/admin-client` all 18,
+  `@unicas/admin-cli` all 47, and `@unicas/admin-webui` all 91. The v2 OpenAPI
+  document was regenerated and all 4 drift checks passed. All 13 workspace
+  package typechecks passed.
+- `pnpm check:tasks` passed all 17 ledger tasks and all 6 policy tests before
+  publication. Account-keyed App membership commit
+  `e0a852a1eba092a1af23ee9bed441ed95b16c0f8` was pushed and verified reachable
   from refreshed `origin/main`.
 
 ## Blockers
