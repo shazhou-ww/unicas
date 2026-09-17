@@ -99,8 +99,8 @@ The second implementation slice is complete locally. A cloud-neutral
 alias traversal, blocked-account denial, credential-version checks, active
 identity ownership, and atomic Account creation without email inference. The
 D1 adapter implements the semantic repository against the additive tables; it
-is not yet wired into the existing Principal authorization path. The slice
-awaits checkpoint publication.
+is not yet wired into the existing Principal authorization path. The slice is
+published on `origin/main` as `aae52af5ba6c514650f2e7135640ac52d8c48f7b`.
 
 Next: publish the Account service/repository checkpoint, then implement the
 one-to-one legacy Principal migration and shadow reconciliation.
@@ -303,6 +303,8 @@ one-to-one legacy Principal migration and shadow reconciliation.
   `@unicas/service-cloudflare` suite passed all 251 tests across 26 files and
   typecheck passed. Editor diagnostics reported no errors in the second-slice
   files.
+- Account service/repository commit `aae52af5ba6c514650f2e7135640ac52d8c48f7b`
+  was pushed and verified reachable from refreshed `origin/main`.
 
 ## Blockers
 
