@@ -7,6 +7,15 @@
 import { createLocalJWKSet, jwtVerify } from "jose";
 import type { JSONWebKeySet } from "jose";
 
+export {
+  OAuthAuthorizationCodeClient,
+  OAuthError,
+} from "./oauth.js";
+export type {
+  OAuthAccessToken,
+  OAuthAuthorizationCodeClientConfig,
+} from "./oauth.js";
+
 export interface OidcDiscovery {
   readonly issuer: string;
   readonly authorization_endpoint: string;
@@ -19,6 +28,10 @@ export interface VerifiedOidcIdentity {
   readonly email: string | null;
   readonly emailVerified: boolean;
   readonly name: string | null;
+  readonly picture: string | null;
+  readonly preferredUsername: string | null;
+  readonly tenantId: string | null;
+  readonly version: string | null;
 }
 
 export interface OidcClientOptions {
@@ -182,6 +195,12 @@ export class OidcClient {
       email: typeof payload.email === "string" && payload.email.length > 0 ? payload.email : null,
       emailVerified: payload.email_verified === true,
       name: typeof payload.name === "string" && payload.name.length > 0 ? payload.name : null,
+      picture: typeof payload.picture === "string" && payload.picture.length > 0 ? payload.picture : null,
+      preferredUsername: typeof payload.preferred_username === "string" && payload.preferred_username.length > 0
+        ? payload.preferred_username
+        : null,
+      tenantId: typeof payload.tid === "string" && payload.tid.length > 0 ? payload.tid : null,
+      version: typeof payload.ver === "string" && payload.ver.length > 0 ? payload.ver : null,
     };
   }
 

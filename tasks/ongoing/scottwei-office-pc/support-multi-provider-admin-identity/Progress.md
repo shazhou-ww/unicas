@@ -112,8 +112,19 @@ failures are recorded in the migration journal; reconciliation blocks cutover
 for any count, authority, membership, or Playground mismatch. The slice is
 published on `origin/main` as `e87c8841dac918ccc91fc179af66a32f8f0c2bcb`.
 
-Next: publish the legacy migration checkpoint, then add shadow Account
-resolution to sessions and current authorization composition.
+The fourth implementation slice is complete locally. `@unicas/control-auth`
+adds a generic authorization-code + PKCE client that accepts only configured
+HTTPS provider endpoints. `@unicas/service` adds the immutable ProviderRegistry,
+normalized provider result contract, and fresh invitation-email evidence rules.
+Cloudflare adapters now implement Google, Microsoft personal-account, and
+GitHub behavior: Google emits evidence only for `email_verified=true`, Microsoft
+requires consumers-tenant v2 claims and emits no token-email evidence, and
+GitHub keys identity by numeric `/user.id` while accepting only verified Emails
+API entries. The adapters are not yet routed from the BFF. The slice awaits
+checkpoint publication.
+
+Next: publish the provider foundation checkpoint, then switch the BFF login,
+CLI, and callback routes to the configured provider registry.
 
 ## Decisions
 
@@ -326,6 +337,17 @@ resolution to sessions and current authorization composition.
   typecheck passed; editor diagnostics reported no migration errors.
 - Legacy identity migration commit `e87c8841dac918ccc91fc179af66a32f8f0c2bcb`
   was pushed and verified reachable from refreshed `origin/main`.
+- `@unicas/control-auth` passed all 6 tests across its OIDC and generic OAuth
+  suites and typecheck passed. OAuth tests verify pinned HTTPS endpoints, PKCE
+  token exchange, and redacted failures.
+- The cloud-neutral authentication suite passed 5 tests for closed provider
+  selection and fresh, exact-address evidence, including Microsoft challenge-
+  only admission. The full `@unicas/service` suite passed all 129 tests.
+- Cloudflare provider adapters passed 4 focused tests for Google verified-email
+  behavior, Microsoft consumers-v2 validation, GitHub numeric identity and
+  Emails API filtering, and provider token/private-email redaction. The full
+  Cloudflare suite passed all 257 tests across 28 files; all four affected
+  packages passed typecheck.
 
 ## Blockers
 

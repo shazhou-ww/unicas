@@ -1,5 +1,22 @@
 export { PeopleService } from "./people.js";
 export type { PeopleRepository, PeopleScope, PeopleEntry } from "./people.js";
+export {
+  AUTHENTICATION_FLOW_TTL_MS,
+  EmailEvidenceError,
+  normalizeEmail,
+  ProviderRegistry,
+  requireInvitationEmailEvidence,
+  verifiedProviderEmailEvidence,
+} from "./authentication.js";
+export type {
+  AuthenticatedProviderResult,
+  EmailEvidenceErrorCode,
+  ProviderAdapter,
+  ProviderCallbackInput,
+  ProviderFlowContext,
+  ProviderFlowPurpose,
+  VerifiedEmailEvidence,
+} from "./authentication.js";
 export { AccountService, AccountServiceError } from "./account.js";
 export type {
   AccountCreateInput,
