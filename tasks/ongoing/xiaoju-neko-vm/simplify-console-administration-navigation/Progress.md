@@ -66,7 +66,7 @@ Changes made (5 files, +25 -47):
 
 | Milestone | Evidence | Status |
 | --- | --- | --- |
-| Claim | Branch `feat/simplify-console-admin-navigation`. | Pending |
+| Claim | PR #4 opened. | Pending |
 | Implementation complete | Pending. | Pending |
 | Archive | Pending. | Pending |
 
