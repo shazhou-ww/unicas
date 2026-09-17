@@ -66,7 +66,7 @@ Changes made (5 files, +25 -47):
 
 | Milestone | Evidence | Status |
 | --- | --- | --- |
-| Claim | Branch `feat/simplify-console-admin-navigation`, commit `d684a95`. | Published |
+| Claim | Branch `feat/simplify-console-admin-navigation`, commit `b1ad2ed`. | Published |
 | Implementation complete | Pending. | Pending |
 | Archive | Pending. | Pending |
 
