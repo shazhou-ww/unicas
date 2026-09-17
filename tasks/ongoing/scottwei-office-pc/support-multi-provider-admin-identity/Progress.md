@@ -86,7 +86,7 @@ approves the revised business/data model, architecture, and interface artifacts.
 The approval gate is published on `origin/main` as
 `3be539500b757a7c3cec4c732a6397b4a31ef0e9`.
 
-The first implementation slice is complete locally. It adds strict additive
+The first implementation slice adds strict additive
 Account protocol types and schemas while retaining the existing Principal
 contracts, a 128-bit `acct_` ID generator, and additive D1 tables for Account,
 Profile, ExternalIdentity, AccountPlatformAuthority, AccountAlias, the permanent
@@ -94,8 +94,16 @@ legacy identity map, and the migration journal. Existing Principal-keyed tables
 and runtime paths remain active. The slice is published on `origin/main` as
 `354894e0791e8bc76982920078d0997a20d89135`.
 
-Next: publish the Account foundation checkpoint, then implement the cloud-neutral
-Account service and D1 repository behind compatibility-safe ports.
+The second implementation slice is complete locally. A cloud-neutral
+`AccountService` now owns exact external-identity resolution, bounded/cycle-safe
+alias traversal, blocked-account denial, credential-version checks, active
+identity ownership, and atomic Account creation without email inference. The
+D1 adapter implements the semantic repository against the additive tables; it
+is not yet wired into the existing Principal authorization path. The slice
+awaits checkpoint publication.
+
+Next: publish the Account service/repository checkpoint, then implement the
+one-to-one legacy Principal migration and shadow reconciliation.
 
 ## Decisions
 
@@ -284,6 +292,17 @@ Account service and D1 repository behind compatibility-safe ports.
   editor diagnostics reported no errors in the changed implementation files.
 - Account foundation commit `354894e0791e8bc76982920078d0997a20d89135`
   was pushed and verified reachable from refreshed `origin/main`.
+- The focused cloud-neutral Account service suite passed 6 tests covering exact
+  identity resolution without email, blocked and stale-version denial,
+  unlinked/cross-Account credential rejection, alias cycles, atomic creation,
+  and duplicate identity conflicts. The full `@unicas/service` suite passed all
+  124 tests across 17 files and typecheck passed.
+- The focused D1 Account repository suite passed 3 Miniflare tests proving exact
+  identity round-trip, duplicate active identity rollback without orphan
+  Account/Profile rows, and credential-version invalidation. The full
+  `@unicas/service-cloudflare` suite passed all 251 tests across 26 files and
+  typecheck passed. Editor diagnostics reported no errors in the second-slice
+  files.
 
 ## Blockers
 

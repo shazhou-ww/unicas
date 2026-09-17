@@ -1,5 +1,16 @@
 export { PeopleService } from "./people.js";
 export type { PeopleRepository, PeopleScope, PeopleEntry } from "./people.js";
+export { AccountService, AccountServiceError } from "./account.js";
+export type {
+  AccountCreateInput,
+  AccountProfileRecord,
+  AccountRecord,
+  AccountRepository,
+  AccountResolution,
+  AccountServiceErrorCode,
+  AccountWithIdentityCreate,
+  ExternalIdentityRecord,
+} from "./account.js";
 export { PlatformAccessService, PlatformAccessError } from "./platform-access.js";
 export type {
   AppInvitationAdmission,
@@ -172,6 +183,7 @@ export {
 export {
   generateAccountId,
   generateEventId,
+  generateExternalIdentityId,
   generateInvitationId,
   generateInvitationToken,
   generateNonce,

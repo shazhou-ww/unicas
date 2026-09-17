@@ -28,6 +28,12 @@ export function generateAccountId(): string {
   return `acct_${encodeBase64Url(bytes)}`;
 }
 
+export function generateExternalIdentityId(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return `ext_${encodeBase64Url(bytes)}`;
+}
+
 export function generateInvitationId(): string {
   return `inv_${randomBase64Url(12)}`;
 }
