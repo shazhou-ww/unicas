@@ -67,7 +67,7 @@ import type {
   IdentityMutationContinuation,
 } from "./session.js";
 import { checkCsrfToken, checkSameOrigin } from "./csrf.js";
-import { transformAppAdminError } from "../app-admin-adapter.js";
+import { transformAppAdminError, transformAppAdminResponse } from "../app-admin-adapter.js";
 import { InvitationTokenCrypto } from "../invitation-token-crypto.js";
 import { PeopleService, type PeopleRepository } from "@unicas/service";
 import {
@@ -312,6 +312,10 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     }
     if (appRoute?.operation === "listControlAuditEvents") {
       return handleAccountAppAudit(request, url, appRoute.appId);
+    }
+    if (appRoute?.operation === "listRefDomains" || appRoute?.operation === "listRootDomainRefs"
+      || appRoute?.operation === "listRootDomainEvents") {
+      return handleAccountAuditRead(request, url, appRoute);
     }
     if (appRoute?.operation === "listPeople") return handlePeople(request, appRoute.appId);
     if (appRoute?.operation === "mintManagedCapability") {
@@ -1808,6 +1812,56 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         return json({ error: error.code }, status);
       }
       throw error;
+    }
+  }
+
+  async function handleAccountAuditRead(
+    request: Request,
+    url: URL,
+    route: AppAdminRoute & { operation: "listRefDomains" | "listRootDomainRefs" | "listRootDomainEvents" },
+  ): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!accountService || !auth.payload.accountId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
+    }
+    try {
+      await accountService.requireAppMembership(auth.payload.accountId, route.appId);
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        return json({ error: error.code }, error.code === "APP_MEMBERSHIP_REQUIRED" ? 403 : 503);
+      }
+      throw error;
+    }
+    if (route.operation !== "listRefDomains") {
+      const domainError = validateAuditRefDomain(route.refDomain);
+      if (domainError) return adminErrorResponse(CasAdminErrorCodes.INVALID_REQUEST, domainError);
+    }
+    if (!options.auditReader) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, NOT_AVAILABLE_MESSAGE);
+    }
+    const rpcPath = route.operation === "listRefDomains"
+      ? "/_internal/audit/domains"
+      : route.operation === "listRootDomainRefs"
+        ? "/_internal/audit/refs"
+        : "/_internal/audit/events";
+    const rpcUrl = new URL(`https://cas-audit.internal${rpcPath}`);
+    rpcUrl.searchParams.set("stackId", route.appId);
+    if (route.operation !== "listRefDomains") rpcUrl.searchParams.set("refDomain", route.refDomain);
+    const query = queryFromUrl(url);
+    if (query.spaceId !== undefined) rpcUrl.searchParams.set("tenantId", query.spaceId);
+    if (query.limit !== undefined) rpcUrl.searchParams.set("limit", query.limit);
+    if (query.cursor !== undefined) rpcUrl.searchParams.set("cursor", query.cursor);
+    if (query.after !== undefined) rpcUrl.searchParams.set("after", query.after);
+    const headers: Record<string, string> = {};
+    if (config.auditReaderKey) headers["X-CAS-Audit-Reader-Key"] = config.auditReaderKey;
+    try {
+      const rpcResponse = await options.auditReader.fetch(rpcUrl.toString(), { headers });
+      const body = await rpcResponse.json();
+      const transformed = transformAppAdminResponse(route, body);
+      return json(transformed, rpcResponse.status);
+    } catch {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "audit reader is unavailable");
     }
   }
 

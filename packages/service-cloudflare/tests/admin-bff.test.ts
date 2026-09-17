@@ -2403,6 +2403,49 @@ describe("cas-admin-webui BFF", () => {
     expect(rpcCalls[0]!.searchParams.has("refDomain")).toBe(false);
   });
 
+  test("App root-ref audit reads authorize by Account without legacy Stack routing", async () => {
+    const provider = await createMockProvider();
+    const platform = new MemoryPlatformAccessRepository();
+    platform.grantViaMembership(ISSUER, "google-user-123");
+    const accounts = memoryAccountRepository(platform, "google-user-123");
+    const control = fakeControlPlane();
+    control.getStack = vi.fn(async () => { throw new Error("legacy Stack membership check called"); });
+    const rpcCalls: URL[] = [];
+    const auditReader = {
+      fetch: async (input: RequestInfo | URL) => {
+        const url = new URL(String(input));
+        rpcCalls.push(url);
+        if (url.pathname === "/_internal/audit/domains") {
+          return Response.json({ domains: [{ stackId: "cas_app", refDomain: "doc", revision: 2 }] });
+        }
+        return Response.json({
+          revision: 2,
+          refs: [{ tenantId: url.searchParams.get("tenantId"), hash: "a".repeat(64), count: 1 }],
+          nextCursor: null,
+        });
+      },
+    };
+    const bff = await createBff(
+      provider, auditReader, {}, platform, control, undefined, undefined, undefined, accounts,
+    );
+    const { cookie } = await signIn(bff, provider);
+
+    const domains = await authRequest(bff, "/admin/apps/cas_app/ref-domains", cookie);
+    expect(domains.status).toBe(200);
+    expect(await domains.json()).toEqual({ domains: [{ appId: "cas_app", refDomain: "doc", revision: 2 }] });
+    const refs = await authRequest(
+      bff,
+      "/admin/apps/cas_app/root-ref-domains/doc/refs?spaceId=space-1&limit=50",
+      cookie,
+    );
+    expect(refs.status).toBe(200);
+    expect(await refs.json()).toMatchObject({ refs: [{ spaceId: "space-1", count: 1 }] });
+    expect(rpcCalls[1]!.searchParams.get("stackId")).toBe("cas_app");
+    expect(rpcCalls[1]!.searchParams.get("tenantId")).toBe("space-1");
+    expect(rpcCalls[1]!.searchParams.has("spaceId")).toBe(false);
+    expect(control.getStack).not.toHaveBeenCalled();
+  });
+
   test("audit reads require stack membership before touching the reader", async () => {
     const provider = await createMockProvider();
     let readerCalls = 0;

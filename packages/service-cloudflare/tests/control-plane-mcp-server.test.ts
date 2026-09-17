@@ -340,6 +340,20 @@ describe("adapter-hosted control-plane MCP server", () => {
   });
 
   test("maps physical audit dimensions to App and Space MCP output", async () => {
+    const accountService = new AccountService(new D1AccountRepository(db), () => 1000);
+    const actor = await accountService.createForExternalIdentity({
+      provider: "google",
+      issuer: "https://accounts.google.com",
+      subject: "alice-sub",
+      displayName: "Alice",
+    });
+    const appId = "cas_audit_app";
+    await db.prepare(
+      "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES (?, 'Audit App', '', 'active', 1, 1)",
+    ).bind(appId).run();
+    await db.prepare(
+      "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES (?, ?, ?, 1, ?)",
+    ).bind(appId, actor.authenticatedIdentity.issuer, actor.authenticatedIdentity.subject, actor.account.accountId).run();
     const requests: URL[] = [];
     const auditReader = {
       fetch: async (input: RequestInfo | URL) => {
@@ -363,14 +377,9 @@ describe("adapter-hosted control-plane MCP server", () => {
       },
     };
     const handler = handlerFor(
-      grant(["control:read", "control:write"]),
-      { mutationsEnabled: true, auditReader },
+      grant(["control:read"]),
+      { auditReader, accountService },
     );
-    const app = await callTool(handler, "create_app", {
-      displayName: "Audit App",
-      idempotencyKey: "create-audit-app-1",
-    });
-    const appId = String(app.structuredContent.appId);
 
     expect((await callTool(handler, "list_app_ref_domains", { appId })).structuredContent)
       .toEqual({ domains: [{ appId, refDomain: "doc", revision: 2 }] });

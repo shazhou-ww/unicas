@@ -20,6 +20,8 @@ export async function handleAppAdminCompatibilityRequest(
     return legacyHandler(request);
   }
   if (route.operation === "listControlAuditEvents") return legacyHandler(request);
+  if (route.operation === "listRefDomains" || route.operation === "listRootDomainRefs"
+    || route.operation === "listRootDomainEvents") return legacyHandler(request);
   if (route.operation === "listPeople" || route.operation === "mintManagedCapability" || route.operation === "patchApp"
     || route.operation === "listMemberInvitations" || route.operation === "revokeMemberInvitation"
     || route.operation === "inspectOAuthIssuer" || route.operation === "activateOAuthIssuer") {
@@ -68,13 +70,6 @@ function rewriteRequest(request: Request, route: AppAdminRoute): Request {
     if (issuer !== null) {
       url.searchParams.delete("issuer");
       url.searchParams.set("identityIssuer", issuer);
-    }
-  }
-  if (route.operation === "listRootDomainRefs" || route.operation === "listRootDomainEvents") {
-    const spaceId = url.searchParams.get("spaceId");
-    if (spaceId !== null) {
-      url.searchParams.delete("spaceId");
-      url.searchParams.set("tenantId", spaceId);
     }
   }
   return new Request(url, request);

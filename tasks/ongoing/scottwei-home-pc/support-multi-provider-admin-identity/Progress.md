@@ -54,8 +54,16 @@ legacy service CRUD, repository port, and protocol types are deleted. The D1
 table and the managed-capability refDomain's internal legacy name remain only
 until the planned schema cleanup; neither is externally callable as Playground.
 
-Next: migrate the remaining App issuer, invitation, capability, and root-domain
-operations. After their consumers move, delete legacy HTTP contracts,
+The eighth no-legacy cleanup checkpoint is ready to publish. App ref-domain,
+Root Ref balance, and Root Ref event HTTP reads now bypass legacy `/admin/stacks`
+routing and authorize directly through stable `(accountId, appId)` membership.
+Remote MCP audit reads use the same Account authorization and no longer call
+Principal-keyed `getStack`. Physical `stackId` and `tenantId` names remain
+confined to the private audit-reader RPC boundary; public responses retain App
+and Space vocabulary.
+
+Next: migrate the remaining App issuer, invitation, and capability operations.
+After their consumers move, delete legacy HTTP contracts,
 identity-keyed columns/tables (including the retired Playground table), dual
 writes, and startup identity migration rather than adding compatibility flags.
 
@@ -468,6 +476,11 @@ cutover markers. Then complete the current-model and real-provider/email tests.
 
 ## Validation
 
+- Account-authorized root-domain reads passed the full 60-test BFF suite, the
+  full 8-test remote MCP suite, and the 10-test App adapter suite. Focused tests
+  make the legacy `getStack` membership path fail if called, verify v2 App/Space
+  response vocabulary, and prove Account membership gates both HTTP and MCP
+  audit reads. Editor diagnostics report no errors in the changed package.
 - Playground retirement passed 103 protocol tests, 18 admin-client tests, 49
   CLI/stdio MCP tests, 70 current Console tests, and 145 cloud-neutral service
   tests. Directly affected Worker groups passed 59 BFF, 16 control-service, 8

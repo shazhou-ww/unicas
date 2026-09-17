@@ -171,11 +171,11 @@ export function createControlPlaneMcpServer(
     APP_ADMIN_MCP_TOOLS.list_app_ref_domains.registration,
     async ({ appId }) => {
       const grant = requireGrantScope("control:read");
-      const context = serviceContext(grant, "list_app_ref_domains");
-      const membership = await controlPlane.getStack(context, { path: { stackId: appId } });
-      if ("error" in membership) return toolResult(membership);
-      const result = await auditReaderValue(options, "/_internal/audit/domains", { stackId: appId });
-      return appToolResult({ operation: "listRefDomains", appId }, result);
+      return accountAppToolResult({ operation: "listRefDomains", appId }, async () => {
+        const actor = await requireGrantAccount(grant, options);
+        await options.accountService!.requireAppMembership(actor.account.accountId, appId);
+        return auditReaderValue(options, "/_internal/audit/domains", { stackId: appId });
+      });
     },
   );
 
@@ -200,17 +200,17 @@ export function createControlPlaneMcpServer(
     APP_ADMIN_MCP_TOOLS.list_space_root_domain_refs.registration,
     async ({ appId, refDomain, spaceId, limit, cursor }) => {
       const grant = requireGrantScope("control:read");
-      const context = serviceContext(grant, "list_space_root_domain_refs");
-      const membership = await controlPlane.getStack(context, { path: { stackId: appId } });
-      if ("error" in membership) return toolResult(membership);
-      const result = await auditReaderValue(options, "/_internal/audit/refs", {
-        stackId: appId,
-        refDomain,
-        tenantId: spaceId,
-        limit: limit === undefined ? undefined : String(limit),
-        cursor,
+      return accountAppToolResult({ operation: "listRootDomainRefs", appId, refDomain }, async () => {
+        const actor = await requireGrantAccount(grant, options);
+        await options.accountService!.requireAppMembership(actor.account.accountId, appId);
+        return auditReaderValue(options, "/_internal/audit/refs", {
+          stackId: appId,
+          refDomain,
+          tenantId: spaceId,
+          limit: limit === undefined ? undefined : String(limit),
+          cursor,
+        });
       });
-      return appToolResult({ operation: "listRootDomainRefs", appId, refDomain }, result);
     },
   );
 
@@ -219,17 +219,17 @@ export function createControlPlaneMcpServer(
     APP_ADMIN_MCP_TOOLS.list_space_root_domain_events.registration,
     async ({ appId, refDomain, spaceId, after, limit }) => {
       const grant = requireGrantScope("control:read");
-      const context = serviceContext(grant, "list_space_root_domain_events");
-      const membership = await controlPlane.getStack(context, { path: { stackId: appId } });
-      if ("error" in membership) return toolResult(membership);
-      const result = await auditReaderValue(options, "/_internal/audit/events", {
-        stackId: appId,
-        refDomain,
-        tenantId: spaceId,
-        after: after === undefined ? undefined : String(after),
-        limit: limit === undefined ? undefined : String(limit),
+      return accountAppToolResult({ operation: "listRootDomainEvents", appId, refDomain }, async () => {
+        const actor = await requireGrantAccount(grant, options);
+        await options.accountService!.requireAppMembership(actor.account.accountId, appId);
+        return auditReaderValue(options, "/_internal/audit/events", {
+          stackId: appId,
+          refDomain,
+          tenantId: spaceId,
+          after: after === undefined ? undefined : String(after),
+          limit: limit === undefined ? undefined : String(limit),
+        });
       });
-      return appToolResult({ operation: "listRootDomainEvents", appId, refDomain }, result);
     },
   );
 
@@ -722,4 +722,13 @@ async function requireGrantAccount(
   const actor = await options.accountService.resolveExternalIdentity(grant.identityIssuer, grant.subject);
   if (!actor) throw new AccountServiceError("IDENTITY_NOT_FOUND");
   return actor;
+}
+
+async function accountAppToolResult(route: AppAdminRoute, operation: () => Promise<object>) {
+  try {
+    return appToolResult(route, await operation());
+  } catch (error) {
+    if (error instanceof AccountServiceError) return toolResult({ error: error.code });
+    return toolResult({ error: "SERVICE_UNAVAILABLE" });
+  }
 }
