@@ -197,8 +197,18 @@ Platform People rows and invitation rows no longer expose exact issuer/subject
 or creator identity. The slice is published on `origin/main` as
 `da175f65f604133f1511089cbebd99b45153b8d6`.
 
-Next: migrate App/platform audit projections and filters to Account IDs while
-retaining exact authenticated identity only in privileged event detail.
+The eleventh implementation slice is published. App and platform audit
+projections, filters, Console views, CLI commands, stdio MCP, and remote MCP now
+use stable Account IDs and summaries while retaining the exact authenticated
+ExternalIdentity only as privileged immutable event detail. New audit writes
+dual-write Account and ExternalIdentity attribution, migration backfills and
+reconciles persisted attribution, and historical unlinked identities remain
+resolvable. Strict v2 and MCP schemas reject Principal-shaped audit filters.
+The slice is published on `origin/main` as
+`5aab332157005820157497485dd4506dd136e211`.
+
+Next: implement the short-lived, single-use UniCAS email challenge required for
+personal Microsoft accounts to accept email-constrained invitations.
 
 ## Decisions
 
@@ -511,6 +521,19 @@ retaining exact authenticated identity only in privileged event detail.
   publication. Account-keyed platform access commit
   `da175f65f604133f1511089cbebd99b45153b8d6` was pushed and verified reachable
   from refreshed `origin/main`.
+- Account service and D1 tests cover snapshot-bound App/platform audit paging,
+  Account actor/target filters, immutable exact identity detail, unlinked
+  historical attribution, and migration reconciliation of persisted shadow
+  keys. BFF, Console, CLI, stdio MCP, and remote MCP tests cover Account-only
+  filters and authorization.
+- `@unicas/admin-protocol` passed all 110 tests, `@unicas/admin-client` all 19,
+  `@unicas/service` all 138, `@unicas/admin-cli` all 47,
+  `@unicas/admin-webui` all 91, and `@unicas/service-cloudflare` all 267. All
+  workspace package typechecks passed; the regenerated v2 OpenAPI passed all 4
+  drift checks and the production Console/Worker build passed.
+- Account-keyed audit commit `5aab332157005820157497485dd4506dd136e211`
+  was pushed and verified reachable from refreshed `origin/main` by
+  `repoledger doctor` and `git merge-base`.
 
 ## Blockers
 
