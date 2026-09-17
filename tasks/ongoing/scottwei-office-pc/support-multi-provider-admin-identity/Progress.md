@@ -70,9 +70,19 @@ refinement is published on `origin/main` as
 `72b7b4552a65057755aaadfa850b31acda85f1f9` and does not imply checkpoint
 approval.
 
-Next: obtain explicit business/data-model, architecture, and interface
-decisions on the published review artifacts. Do not begin the implementation
-protected by any pending checkpoint.
+Further review on 2026-09-17 simplified the proposed model without changing the
+task goal or provider scope: Account uses `blockedAt` rather than a general
+status, `credentialVersion` is only the credential-revocation generation,
+platform authorities are child rows keyed by `(accountId, authority)`, the
+Account retains at most one primary verified contact, and new model operations
+do not expose generic resource revisions. The canonical Task and all three
+review artifacts now reflect these decisions locally. The requesting user said
+there were no remaining issues and directed publication followed by iterative
+implementation; the revised artifacts must be published before that approval is
+recorded as the next ledger milestone.
+
+Next: publish the revised review artifacts with their pending checkpoint state,
+then record and publish the user's explicit approvals before implementation.
 
 ## Decisions
 
@@ -106,7 +116,20 @@ protected by any pending checkpoint.
   model keeps stable identifiers for relationships while showing literal
   `<<AO>>` and `<<EI>>` labels. For `<<EI>>` credentials, rotation creates a new
   record and expiry, revocation, or pruning ends the old record rather than
-  changing its Account/identity/revision binding.
+  changing its Account/identity/credential-version binding.
+- Replace Account's generic status with nullable `blockedAt`; future Merge uses
+  an immutable AccountAlias rather than a reserved `merged` status.
+- Model platform authorities as Account child rows with composite primary key
+  `(accountId, authority)`. Project them as `platformAuthorities`, and mutate
+  them through idempotent grant/revoke commands rather than a separate
+  PlatformAccess aggregate or whole-set replacement.
+- Retain at most one primary verified contact and its provenance on Account.
+  Fresh invitation evidence remains ephemeral and is the only email input to
+  invitation admission; stored contact text never identifies or links Accounts.
+- Remove generic revisions from the new Account, Profile, authority, membership,
+  and invitation flows. Keep `credentialVersion` solely as the generation that
+  invalidates all Account sessions and MCP grants and protects multi-step
+  link/unlink operations from stale authentication state.
 - Reconcile the previously stale progress wording with review-artifact commit
   `d3ef9fd44b7c141993d4307a750c39c817cf225a`; publication does not imply approval.
 
@@ -115,9 +138,9 @@ protected by any pending checkpoint.
 | Checkpoint | Status | Review artifact and decision evidence |
 | --- | --- | --- |
 | Scope | Approved | Requesting user, 2026-09-16: explicitly responded that there were no issues after being asked to approve or reject the goal, scope, out of scope, constraints, acceptance criteria, provider set, and prerequisite in [Task](./Task.md). |
-| Business and data model | Pending | Review [Business and data model](./BusinessDataModel.md): Account, ExternalIdentity, VerifiedEmail, Profile precedence, relationship ownership, evidence freshness, future Merge aliases, one-to-one migration, session/grant transition, rollback boundary, retention, and redaction. Explicit user or delegated identity/security-owner approval is required before protected model work. |
-| Architecture | Pending | Review [Architecture](./Architecture.md): provider adapters, `control-auth`, cloud-neutral service ports, D1/Email bindings, BFF/MCP composition, account resolution, linking state machines, revocation, deployment stages, and compatibility. Explicit user or delegated architecture-owner approval is required before protected structural work. |
-| Interface | Pending | Review [Interface](./InterfaceDesign.md): Account wire types, Account-keyed relationship routes, provider selection/callbacks, Console account flows, CLI/MCP presentation, compatibility sunset, errors, and privacy. Explicit user or delegated product/API-owner approval is required before protected interface work. |
+| Business and data model | Pending | Review [Business and data model](./BusinessDataModel.md): Account, ExternalIdentity, primary verified contact, Profile precedence, authority and membership ownership, evidence freshness, credential version, future Merge aliases, one-to-one migration, rollback boundary, retention, and redaction. Explicit user or delegated identity/security-owner approval is required before protected model work. |
+| Architecture | Pending | Review [Architecture](./Architecture.md): provider adapters, `control-auth`, cloud-neutral service ports, D1/Email bindings, BFF/MCP composition, account resolution, command-shaped authority changes, credential-version revocation, linking state machines, deployment stages, and compatibility. Explicit user or delegated architecture-owner approval is required before protected structural work. |
+| Interface | Pending | Review [Interface](./InterfaceDesign.md): Account wire types, Account-keyed membership and authority commands, provider selection/callbacks, Console account flows, CLI/MCP presentation, compatibility sunset, errors, and privacy. Explicit user or delegated product/API-owner approval is required before protected interface work. |
 | Delivery acceptance | Pending | Present the integrated revision and complete validation, security/privacy, deployment/rollback, and manual test evidence after implementation publication. |
 
 ## Publication milestones
@@ -207,6 +230,16 @@ protected by any pending checkpoint.
   preserved literally without obscuring entity fields or relationships.
   Annotation commit `72b7b4552a65057755aaadfa850b31acda85f1f9`
   was pushed and verified reachable from refreshed `origin/main`.
+- Focused residual-term scans found no stale `authRevision`, generic Account
+  status, multi-email wire collection, separate PlatformAccess aggregate, or
+  Account revision-conflict contract in the revised normative artifacts.
+- Mermaid CLI 11.12.0 rendered both simplified ER views into nonempty SVGs.
+  Editor diagnostics reported no errors in the four revised Markdown files,
+  and `pnpm check:tasks` passed all 16 ledger tasks and all 6 policy tests.
+- The user-formatted HTML prototype reloaded successfully. Browser checks
+  exercised Account profile feedback, unlink feedback, and privileged People
+  detail; the revised `blockedAt`, read-only contact, and credential-version
+  text rendered without horizontal overflow at 1440px.
 
 ## Blockers
 

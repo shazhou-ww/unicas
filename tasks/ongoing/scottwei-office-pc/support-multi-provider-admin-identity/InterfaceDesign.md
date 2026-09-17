@@ -55,12 +55,10 @@ interface ExternalIdentityDetail extends ExternalIdentitySummary {
   subject: string;
 }
 
-interface VerifiedEmailSummary {
-  verifiedEmailId: string;
+interface PrimaryVerifiedEmail {
   normalizedEmail: string;
   source: "google-oidc" | "github-emails-api" | "unicas-email-challenge";
   verifiedAt: number;
-  primary: boolean;
 }
 
 type AccountAvatar =
@@ -70,32 +68,37 @@ type AccountAvatar =
 interface AccountSummary {
   accountId: AccountId;
   displayName: string | null;
-  primaryVerifiedEmail: string | null;
+  primaryVerifiedEmail: PrimaryVerifiedEmail | null;
   avatar: AccountAvatar;
 }
 
 interface AccountSelf extends AccountSummary {
-  status: "active" | "blocked";
-  revision: number;
+  blockedAt: number | null;
+  platformAuthorities: readonly PlatformAuthority[];
   identities: readonly ExternalIdentitySummary[];
-  verifiedEmails: readonly VerifiedEmailSummary[];
+}
+
+interface PlatformAccountSummary extends AccountSummary {
+  blockedAt: number | null;
+  platformAuthorities: readonly PlatformAuthority[];
 }
 ```
 
 Ordinary Platform People and App Members use the same `AccountSummary`.
-Self-service Account reads include masked active identity summaries and current,
-non-retired verified emails. Only platform-administrator identity detail and
+Platform People enrich it as `PlatformAccountSummary`; self-service Account
+reads include the one primary verified contact, platform authorities, and masked
+active identity summaries. Only platform-administrator identity detail and
 privileged audit results expose `ExternalIdentityDetail` with exact issuer and
-subject. Provider access tokens, raw claims, challenge data, retired emails, and
-unverified email values have no wire type.
+subject. Provider access tokens, raw claims, challenge data, prior emails, and
+unverified email values have no wire type. `credentialVersion` is carried only
+inside server-managed credentials and is not a general API resource revision.
 
 `AppAdminMeResponse` becomes:
 
 ```ts
 interface AppAdminMeResponse {
-  account: AccountSummary;
+  account: AccountSelf;
   authenticatedIdentity: ExternalIdentitySummary;
-  platformAccess: CurrentPlatformAccess;
   memberships: readonly AppMembership[];
 }
 ```
@@ -103,13 +106,14 @@ interface AppAdminMeResponse {
 During the compatibility window, deprecated `principal` and `profile` fields
 remain additive aliases for old clients. `principal` describes only the exact
 identity used for this session; it is never accepted as an authorization target.
-`profile.emailForDisplay` aliases `account.primaryVerifiedEmail` only when a
-verified primary exists and is otherwise null.
+`profile.emailForDisplay` aliases
+`account.primaryVerifiedEmail.normalizedEmail` only when a verified primary
+exists and is otherwise null.
 
-`AppMembership`, PlatformAccess, People rows, Playground cache identity, and
-audit target projections replace Principal relationship fields with
-`accountId`/`AccountSummary`. Privileged audit events additionally expose the
-exact authenticated ExternalIdentity summary used by the event.
+`AppMembership`, AccountPlatformAuthority, People rows, Playground cache
+identity, and audit target projections replace Principal relationship fields
+with `accountId`/`AccountSummary`. Privileged audit events additionally expose
+the exact authenticated ExternalIdentity summary used by the event.
 
 ## Administrator API
 
@@ -117,14 +121,15 @@ exact authenticated ExternalIdentity summary used by the event.
 
 | Method and path | Purpose |
 | --- | --- |
-| `GET /admin/account` | Return the current Account, masked active identities, current non-retired verified emails, profile revision, and link capabilities. |
-| `PATCH /admin/account/profile` | Update display name, avatar choice, or primary verified email under `If-Match`, CSRF, and origin checks. |
+| `GET /admin/account` | Return the current Account, primary verified contact, platform authorities, masked active identities, and link capabilities. |
+| `PATCH /admin/account/profile` | Update display name or avatar choice under CSRF and origin checks. |
 | `GET /admin/account/identities` | Return masked active linked identity summaries for the current Account. |
 
-Profile PATCH accepts only mutable Account fields. A primary email value is an
-existing `verifiedEmailId`, not caller-supplied text. Provider avatar URLs cannot
-be supplied directly; a caller selects an already sanitized provider image or
-the deterministic fallback.
+Profile PATCH uses field-level last-write-wins semantics and never accepts an
+email value. Provider avatar URLs cannot be supplied directly; a caller selects
+an already sanitized provider image or the deterministic fallback. Changing
+the primary verified contact requires a separate fresh-verification workflow;
+no such general contact-change route is introduced by this task.
 
 Link and unlink commits are BFF-authentication workflows rather than bearer JSON
 mutations because both require fresh interactive proof. The Account APIs may
@@ -135,10 +140,17 @@ expose read-only operation status, but never accept provider tokens.
 Final v2 relationship operations use Account IDs:
 
 - App member remove targets `(appId, accountId)`.
-- Platform access get/patch targets `accountId`.
-- Platform People and App Members return `AccountSummary`.
+- Platform authority grant/revoke targets `(accountId, authority)` and is
+  idempotent; there is no whole-authority-set replacement operation.
+- Account block/restore targets `accountId`.
+- Platform People return `PlatformAccountSummary`; App Members return
+  `AccountSummary`.
 - Audit filters may accept `accountId`; exact identity is a result detail, not a
   relationship locator.
+
+Authority and block commands enforce the last-platform-administrator and
+self-block rules in one service transaction. They do not use client-visible
+resource revisions or `If-Match`.
 
 Legacy issuer/subject request shapes remain available only behind the migration
 compatibility stage. They resolve through the permanent one-to-one map, emit
@@ -208,8 +220,8 @@ or nonexistent challenges.
 The user menu gains an Account command opening a full-width Account view within
 the existing Console shell. It contains:
 
-- Account profile: display name, primary verified contact, avatar/image fallback,
-  and edit controls.
+- Account profile: editable display name and avatar/image fallback plus the
+  read-only primary verified contact and its verification source.
 - Login methods: one row per linked provider with provider name, masked provider
   identity hint when safe, linked date, latest authentication date, and Current
   session marker.
@@ -275,9 +287,9 @@ memberships. Member/platform tools accept `accountId`, not issuer/email keys.
 
 The OAuth authorization page presents the configured provider choices using the
 same registry and callback policy as Console login. The resulting OAuth grant is
-bound to `accountId`, exact authenticated identity, and `authRevision`. Provider
-selection is not added to token endpoints, dynamic client registration, or MCP
-tool inputs.
+bound to `accountId`, exact authenticated identity, and `credentialVersion`.
+Provider selection is not added to token endpoints, dynamic client registration,
+or MCP tool inputs.
 
 Consent and denial pages show Account-level profile data only after successful
 login. A blocked/revoked Account invalidates every linked provider's grants
@@ -293,7 +305,7 @@ Administrator JSON errors use stable codes and generic messages:
 | 403 | `ACCOUNT_ACCESS_DENIED` | Current Account is blocked or has no admission grant. |
 | 409 | `IDENTITY_LINK_CONFLICT` | Target identity cannot be linked; it may require a future Merge. No owner details. |
 | 409 | `FINAL_IDENTITY_CANNOT_BE_UNLINKED` | Operation would leave no usable login. |
-| 409 | `ACCOUNT_REVISION_CONFLICT` | Account changed; restart the fresh-auth operation. |
+| 409 | `AUTHENTICATION_STATE_CHANGED` | Credential state changed; restart the fresh-auth operation. |
 | 428 | `FRESH_AUTHENTICATION_REQUIRED` | Interactive recent proof is required. |
 | 400 | `EMAIL_CHALLENGE_FAILED` | Challenge is invalid, expired, used, or over its attempt limit. |
 | 503 | `AUTH_PROVIDER_UNAVAILABLE` | Chosen configured provider is temporarily unavailable. |
@@ -317,8 +329,9 @@ from already-consumed invitations or challenges.
 
 1. Add Account fields and new self endpoints while old client fields remain.
 2. Update Console, admin client, CLI, stdio MCP, and remote MCP to Account fields.
-3. Migrate member/platform mutation inputs to `accountId`; keep legacy identity
-   locators only under the documented migration stage with sunset headers.
+3. Migrate member mutations to `accountId` and platform-authority commands to
+  `(accountId, authority)`; keep legacy identity locators only under the
+  documented migration stage with sunset headers.
 4. Switch login page to the provider registry with Google enabled first.
 5. Enable Microsoft/GitHub and challenge UI after Account migration passes.
 6. Enable link/unlink UI last. Once used, old identity-keyed binaries are outside
@@ -332,7 +345,7 @@ from already-consumed invitations or challenges.
 - admin-client request/response tests for every Account-keyed route;
 - login selector keyboard, focus, mobile layout, and configured-provider tests;
 - callback route/provider/state mismatch and generic-error tests;
-- Account profile concurrency and verified-primary-email tests;
+- Account profile field-update and primary-verified-contact projection tests;
 - link success, same-Account idempotence, other-Account conflict privacy, replay,
   cancellation, timeout, and session-rotation tests;
 - unlink final-identity, current-identity handoff, race, and unchanged-grant tests;

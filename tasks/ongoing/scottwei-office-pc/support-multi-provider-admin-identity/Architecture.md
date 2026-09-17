@@ -66,12 +66,13 @@ Owns every durable security and business invariant behind explicit ports:
 
 - canonical Account resolution and blocked-state checks;
 - external identity binding and conflict detection;
-- profile precedence and verified-email persistence policy;
+- profile precedence and primary verified-contact persistence policy;
 - fresh VerifiedEmailEvidence validation;
 - invitation acceptance and atomic evidence consumption;
-- linking/unlinking preconditions and optimistic concurrency;
-- session/grant `authRevision` changes and revocation intent;
-- Account-owned platform access, memberships, Playground ownership, and audit;
+- linking/unlinking preconditions and credential-version checks;
+- session/grant `credentialVersion` changes and revocation intent;
+- command-shaped platform-authority grants/revokes, memberships, Playground
+  ownership, and audit;
 - future AccountAlias canonicalization with cycle/depth failure.
 
 Suggested cloud-neutral services and ports are cohesive additions to the current
@@ -81,7 +82,7 @@ control-plane actor, not new deployment units:
 AccountService
 AccountRepository
 ExternalIdentityRepository
-VerifiedEmailRepository
+AccountAuthorityRepository
 EmailChallengeRepository
 IdentityLinkIntentRepository
 AccountSessionRevocationPort
@@ -219,25 +220,27 @@ existing bootstrap/admission policy authorizes the transaction. Otherwise it
 may retain no Account at all and returns a generic denial. Matching email never
 selects an existing Account.
 
-Every authenticated request resolves any AccountAlias, checks Account status,
-compares credential `authRevision`, and evaluates current admission before the
-operation. The exact ExternalIdentity remains available to audit.
+Every authenticated request resolves any AccountAlias, requires `blockedAt` to
+be null, compares the credential's `credentialVersion` with the Account, and
+evaluates current admission before the operation. The exact ExternalIdentity
+remains available to audit.
 
 ## Linking state machine
 
 Linking proves both sides freshly and does not reuse an old session assertion:
 
 1. An authenticated Account starts a link intent with CSRF/origin protection,
-   target provider, Account revision, and 10-minute expiry.
+  target provider, Account `credentialVersion`, and 10-minute expiry.
 2. Reauthenticate an identity already linked to the current Account. Provider
    completion must resolve to that same canonical Account; otherwise fail.
 3. Rotate to a one-time intent that contains only opaque handles, then
    authenticate the target provider with a new state, PKCE verifier, and nonce
    where supported.
-4. In one D1 transaction, canonicalize the current Account, require unchanged
-   revision, reject an active target binding to any other Account, attach an
-   unowned identity, apply profile/email rules, write audit, increment
-   `authRevision`, consume the intent, and schedule credential revocation.
+4. In one D1 transaction, canonicalize the current Account, require an unchanged
+  `credentialVersion`, reject an active target binding to any other Account,
+  attach an unowned identity, apply profile/primary-contact rules, write audit,
+  increment `credentialVersion`, consume the intent, and schedule credential
+  revocation.
 5. Revoke prior browser/CLI sessions and remote MCP grants, then issue one new
    session from the fresh current-account proof. Failure before commit changes
    nothing; failure after commit cannot return a usable stale credential.
@@ -249,13 +252,14 @@ no other Account identifier, email, grants, or existence details are exposed.
 ## Unlinking state machine
 
 1. Start from an authenticated Account with CSRF/origin protection and current
-   Account revision.
+  Account `credentialVersion`.
 2. Freshly authenticate an identity that will remain linked after the operation.
    To unlink the currently used identity, the user must first authenticate a
    different linked identity.
-3. In one transaction, require at least two usable active identities, unchanged
-   revision, and ownership of the target link; set `unlinkedAt`, update profile
-   sources, write audit, increment `authRevision`, and consume the intent.
+3. In one transaction, require at least two usable active identities, an
+  unchanged `credentialVersion`, and ownership of the target link; set
+  `unlinkedAt`, update profile sources, write audit, increment
+  `credentialVersion`, and consume the intent.
 4. Revoke all prior sessions and grants and issue one replacement session for
    the remaining freshly authenticated identity.
 
@@ -287,8 +291,8 @@ once delivery never changes single-use verification semantics.
 
 Browser and CLI sessions remain opaque encrypted payloads in D1. Additive fields
 carry `accountId`, `externalIdentityId`, provider, exact issuer/subject,
-`authenticatedAt`, and `authRevision`; legacy identity fields remain through the
-compatibility window. The session table indexes `account_id` for revocation.
+`authenticatedAt`, and `credentialVersion`; legacy identity fields remain
+through the compatibility window. The session table indexes `account_id` for revocation.
 Legacy sessions may resolve and rotate on a read request but cannot mutate until
 rotation succeeds. Unknown or ambiguous mappings are revoked. Each credential
 migration is counted in the idempotent migration journal before Account reads
@@ -300,8 +304,8 @@ session type used by the browser.
 
 Remote MCP OAuth authorization uses the shared provider registry and account
 binding before grant issuance. Grants store original `accountId`, exact login
-identity, and `authRevision`. Token validation canonicalizes the Account and
-checks current revision/admission on every request. Existing grants are migrated
+identity, and `credentialVersion`. Token validation canonicalizes the Account
+and checks current credential version and admission on every request. Existing grants are migrated
 server-side through the permanent legacy map while preserving their old fields;
 unmapped grants are revoked. Stdio MCP remains an
 admin-client presentation over the CLI session. Neither path receives a tenant
@@ -311,18 +315,18 @@ capability merely by authenticating.
 
 The accepted revocation bound applies at Account resolution:
 
-- blocking an Account increments `authRevision` and deletes indexed BFF/CLI
+- blocking an Account sets `blockedAt`, increments `credentialVersion`, and deletes indexed BFF/CLI
   sessions and remote MCP grants;
 - removing the final platform authority or App membership makes admission fail
   for every identity even if a credential remains cryptographically valid;
-- link/unlink increments `authRevision` and rotates affected credentials;
+- link/unlink increments `credentialVersion` and rotates affected credentials;
 - provider revocation alone does not silently move grants, but a failed fresh
   provider authentication cannot create a new UniCAS credential;
 - alias resolution in a future Merge revokes source credentials before survivor
   issuance.
 
-Deletion is defense in depth; revision and current admission checks are the
-fail-closed control within the revocation bound.
+Deletion is defense in depth; credential-version and current-admission checks
+are the fail-closed control within the revocation bound.
 
 ## Deployment and migration sequence
 

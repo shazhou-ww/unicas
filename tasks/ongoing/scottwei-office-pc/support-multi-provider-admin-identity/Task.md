@@ -47,30 +47,28 @@ They are platform-access and App-membership relationships to the same stable
 UniCAS Account. The target model is:
 
 ```text
-Account { accountId, Profile }
+Account { accountId, blockedAt?, credentialVersion, Profile,
+          primaryVerifiedEmail?, emailVerificationSource?, emailVerifiedAt? }
 |-- ExternalIdentity[] { issuer, subject, provider }
-`-- VerifiedEmail[] { normalizedEmail, source, verifiedAt }
-
-PlatformAccess --> accountId
-AppMembership  --> accountId
+|-- AccountPlatformAuthority[] { authority }
+`-- AppMembership[] --> App
 ```
 
 - `accountId` is the opaque UniCAS primary key and the durable target of
   authorization, ownership, session, and audit relationships.
 - `(issuer, subject)` is the unique key of an ExternalIdentity. An Account has
   one or more ExternalIdentities, so issuer is not a single Account field.
-- Email is a first-class, potentially multi-valued Account attribute with
-  explicit verification provenance. It is not a primary-key component, is not
-  globally unique, and never causes automatic account linking or grant
-  transfer. One verified address may be selected as the primary contact and
-  display email.
+- Email is an optional single primary Account contact with explicit verification
+  provenance. It is not a primary-key component, is not globally unique, and
+  never causes automatic account linking or grant transfer. Fresh invitation
+  evidence remains separate from this stored contact.
 - Profile owns the Account-level display name and avatar presentation. Both are
   mutable, non-authoritative display data; provider values may initialize or
   refresh them under an explicit precedence policy. A missing avatar renders a
   deterministic fallback rather than affecting admission or authorization.
-- PlatformAccess and AppMembership store only their relationship to
-  `accountId` plus relationship-specific state. They do not copy issuer,
-  email, name, or avatar as independent user records.
+- Each platform authority is a child row keyed by `(accountId, authority)`;
+  AppMembership stores its `(appId, accountId)` relationship. Neither copies
+  issuer, email, name, or avatar as an independent user record.
 - Platform Principal and App member API/UI projections resolve the same shared
   Account summary: `accountId`, primary verified email, display name, and
   avatar or fallback. Privileged identity-management views may additionally
@@ -89,8 +87,8 @@ and reversibility:
   belongs to another established Account. It combines two authorization and
   ownership histories, not merely two login methods. This task detects and
   rejects that conflict but does not execute a merge.
-- A future Merge is irreversible. It must choose one surviving Account, retain
-  every source Account as a permanent tombstone or alias to the survivor,
+- A future Merge is irreversible. It must choose one surviving Account, block
+  every source Account, retain a permanent alias to the survivor,
   preserve original audit attribution, and never reuse or silently delete a
   source `accountId`. There is no ordinary unmerge or undo operation.
 - Any future Merge flow must require fresh authentication of both Accounts,
@@ -103,7 +101,7 @@ and reversibility:
 ## Scope
 
 - Introduce a stable UniCAS account identifier and persistence model that can
-  own App memberships, platform access, sessions, Playground ownership, and
+  own App memberships, platform authorities, sessions, Playground ownership, and
   durable audit attribution independently of an external login identity.
 - Store each external identity as a unique provider/issuer/subject binding to
   one account. Preserve the exact authenticated external identity alongside the
@@ -145,6 +143,10 @@ and reversibility:
 - Add guarded unlinking that requires fresh authentication and leaves at least
   one usable login identity. Blocking or revoking a UniCAS account must apply to
   every linked identity within the existing revocation bound.
+- Keep one Account `credentialVersion` as the credential-revocation generation
+  copied into browser/CLI sessions and remote MCP grants. Link, unlink, block,
+  revoke-all, and future Merge operations increment it; ordinary profile and
+  authority changes do not use generic resource revisions.
 - Keep Account identifiers, ownership references, and immutable audit records
   compatible with a future irreversible Merge through canonical Account
   resolution and retained source tombstones; do not add a Merge endpoint or
@@ -176,14 +178,14 @@ and reversibility:
 ## Acceptance criteria
 
 - [ ] A new or migrated administrator has one stable UniCAS account whose App
-      memberships, platform access, Playground ownership, and authorization do
+  memberships, platform authorities, Playground ownership, and authorization do
       not change when a linked external login identity is used.
 - [ ] Platform Principal and App member reads resolve the same Account profile
       and present a consistent primary verified email, display name, and avatar
       or deterministic fallback without duplicating those values in access or
       membership records.
 - [ ] Persistent and wire models distinguish the internal `accountId`, every
-      linked `(issuer, subject)` ExternalIdentity, verified email attributes,
+  linked `(issuer, subject)` ExternalIdentity, the optional primary verified email,
       and display-only Profile; no schema or API treats `(issuer, email)` as a
       user key.
 - [ ] Existing Google Principals migrate one-to-one without email-based merges,
@@ -215,8 +217,8 @@ and reversibility:
       and emits audit evidence without provider tokens or invitation secrets.
 - [ ] Unlinking requires fresh authentication, cannot remove the final usable
       identity, and does not alter the account's memberships or audit identity.
-- [ ] The Account model can retain a merged source `accountId` as an immutable
-  tombstone or alias to a surviving Account without rewriting historical
+- [ ] The Account model can block a future merged source `accountId` and retain
+  an immutable alias to a surviving Account without rewriting historical
   audit attribution; this task exposes no Merge or unmerge operation.
 - [ ] Blocking an account or removing its final admission grant denies all
       linked identities on browser, CLI, and MCP paths within the accepted
@@ -239,7 +241,8 @@ and reversibility:
   existing membership, platform access, storage ownership, or audit history.
 - Account linking is a privilege-bearing mutation and must use state, nonce
   where applicable, PKCE, short expirations, one-time continuations, session
-  rotation, CSRF/origin protection, optimistic concurrency, and durable audit.
+  rotation, CSRF/origin protection, an unchanged credential version, and
+  durable audit.
 - Account Merge is an irreversible privilege and ownership consolidation, not
   an extension of linking. Any future implementation must fail closed on
   conflicts, authenticate both Accounts afresh, preview all consequences,
@@ -272,7 +275,7 @@ and explicitly approved before the protected work begins.
 | Checkpoint | Applicability | Reviewer | Planned review artifact | Approval required before |
 | --- | --- | --- | --- | --- |
 | Scope | Required | User or accountable owner | This task's goal, scope, out of scope, constraints, acceptance criteria, provider set, and dependency on the platform-access task. | Substantive implementation. |
-| Business and data model | Required | User or delegated identity/security owner | Task-owned account model and migration design covering Account, ExternalIdentity, VerifiedEmail, shared Profile name/avatar ownership and precedence, PlatformAccess and AppMembership references, API projections, invitation ownership, audit attribution, linking conflicts, future irreversible-Merge tombstones and canonical resolution, retention, one-to-one migration, and rollback. | Changing persistent schemas, ownership keys, migration code, profile projections, invitation rules, linking semantics, or authorization records. |
+| Business and data model | Required | User or delegated identity/security owner | Task-owned account model and migration design covering Account, ExternalIdentity, the primary verified contact, shared Profile name/avatar ownership and precedence, AccountPlatformAuthority and AppMembership references, API projections, invitation ownership, audit attribution, linking conflicts, future irreversible-Merge aliases and canonical resolution, retention, one-to-one migration, and rollback. | Changing persistent schemas, ownership keys, migration code, profile projections, invitation rules, linking semantics, or authorization records. |
 | Architecture | Required | User or delegated architecture owner | Task-owned architecture and sequencing design covering provider adapters, `control-auth`, cloud-neutral service ports, Cloudflare persistence and BFF composition, session/account resolution, revocation, retained Account aliases, deployment order, and compatibility boundaries. | Changing module responsibilities, dependencies, provider composition, Account resolution, session architecture, or deployment wiring. |
 | Interface | Required | User or delegated product/API owner | Task-owned interface design for Console login and account management, callback and linking routes, explicit handling of conflicts that require a future irreversible Merge, administrator API contracts, CLI and MCP login behavior, error/privacy semantics, and compatibility with existing clients. | Implementing or changing affected GUI flows, HTTP contracts, CLI commands, or MCP behavior. |
 | Delivery acceptance | Required | User or accountable owner | Integrated revision, provider and migration test matrix, security and privacy evidence, validation results, deployment/rollback rehearsal, and required Console, CLI, and MCP manual test results. | Marking the task completed and archiving it. |

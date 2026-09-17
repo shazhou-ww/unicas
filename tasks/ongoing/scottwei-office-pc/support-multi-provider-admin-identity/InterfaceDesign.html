@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="en">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -20,9 +21,14 @@
       --shadow: 0 18px 45px rgba(24, 24, 27, 0.08);
     }
 
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+    }
 
-    html { min-height: 100%; background: var(--canvas); }
+    html {
+      min-height: 100%;
+      background: var(--canvas);
+    }
 
     body {
       min-width: 320px;
@@ -40,9 +46,20 @@
       letter-spacing: 0;
     }
 
-    button, input { font: inherit; letter-spacing: 0; }
-    button, a { -webkit-tap-highlight-color: transparent; }
-    button:focus-visible, a:focus-visible, input:focus-visible {
+    button,
+    input {
+      font: inherit;
+      letter-spacing: 0;
+    }
+
+    button,
+    a {
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    button:focus-visible,
+    a:focus-visible,
+    input:focus-visible {
       outline: 3px solid rgba(15, 118, 110, 0.22);
       outline-offset: 2px;
     }
@@ -58,9 +75,13 @@
       border-radius: 6px;
       transform: translateY(-150%);
     }
-    .skip-link:focus { transform: translateY(0); }
 
-    .review-header, main {
+    .skip-link:focus {
+      transform: translateY(0);
+    }
+
+    .review-header,
+    main {
       width: min(1480px, calc(100% - 40px));
       margin-inline: auto;
     }
@@ -95,9 +116,22 @@
       font-weight: 800;
     }
 
-    .review-title { max-width: 720px; }
-    .review-title h1 { margin: 0; font-size: 27px; font-weight: 680; line-height: 1.15; }
-    .review-title p { max-width: 68ch; margin: 7px 0 0; color: #505058; }
+    .review-title {
+      max-width: 720px;
+    }
+
+    .review-title h1 {
+      margin: 0;
+      font-size: 27px;
+      font-weight: 680;
+      line-height: 1.15;
+    }
+
+    .review-title p {
+      max-width: 68ch;
+      margin: 7px 0 0;
+      color: #505058;
+    }
 
     .review-state {
       display: inline-flex;
@@ -108,6 +142,7 @@
       font-size: 13px;
       white-space: nowrap;
     }
+
     .review-state::before {
       width: 8px;
       height: 8px;
@@ -116,7 +151,9 @@
       content: "";
     }
 
-    main { padding: 22px 0 48px; }
+    main {
+      padding: 22px 0 48px;
+    }
 
     .scenario-switch {
       display: inline-grid;
@@ -138,14 +175,20 @@
       cursor: pointer;
       font-weight: 600;
     }
+
     .scenario-tab[aria-selected="true"] {
       color: var(--ink);
       background: var(--surface);
       box-shadow: 0 1px 3px rgba(24, 24, 27, 0.12);
     }
 
-    .scenario { margin-top: 24px; }
-    .scenario[hidden] { display: none; }
+    .scenario {
+      margin-top: 24px;
+    }
+
+    .scenario[hidden] {
+      display: none;
+    }
 
     .scenario-heading {
       display: grid;
@@ -154,8 +197,17 @@
       align-items: end;
       margin-bottom: 16px;
     }
-    .scenario-heading h2 { margin: 0; font-size: 20px; font-weight: 680; }
-    .scenario-heading p { margin: 5px 0 0; color: var(--muted); }
+
+    .scenario-heading h2 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 680;
+    }
+
+    .scenario-heading p {
+      margin: 5px 0 0;
+      color: var(--muted);
+    }
 
     .change-list {
       display: flex;
@@ -166,6 +218,7 @@
       padding: 0;
       list-style: none;
     }
+
     .change-list li {
       padding: 5px 8px;
       color: #115e59;
@@ -191,7 +244,10 @@
       border-radius: 8px;
       box-shadow: var(--shadow);
     }
-    .compare-frame.after { border-color: #8ec7bf; }
+
+    .compare-frame.after {
+      border-color: #8ec7bf;
+    }
 
     .frame-heading {
       display: flex;
@@ -203,7 +259,10 @@
       background: #fafafa;
       border-bottom: 1px solid var(--border);
     }
-    .frame-heading strong { font-size: 13px; }
+
+    .frame-heading strong {
+      font-size: 13px;
+    }
 
     .phase {
       display: inline-flex;
@@ -212,6 +271,7 @@
       color: #505058;
       font-size: 12px;
     }
+
     .phase::before {
       width: 7px;
       height: 7px;
@@ -219,8 +279,15 @@
       border-radius: 50%;
       content: "";
     }
-    .after .phase { color: var(--accent); font-weight: 650; }
-    .after .phase::before { background: var(--accent); }
+
+    .after .phase {
+      color: var(--accent);
+      font-weight: 650;
+    }
+
+    .after .phase::before {
+      background: var(--accent);
+    }
 
     .mock-viewport {
       position: relative;
@@ -247,12 +314,35 @@
       border-radius: 8px;
       box-shadow: 0 12px 34px rgba(24, 24, 27, 0.08);
     }
-    .login-brand { display: flex; align-items: center; gap: 9px; margin-bottom: 28px; font-weight: 700; }
-    .login-panel h3 { margin: 0; font-size: 21px; line-height: 1.2; }
-    .login-copy { margin: 8px 0 22px; color: var(--muted); font-size: 13px; }
 
-    .provider-stack { display: grid; gap: 9px; }
-    .provider-button, .button, .icon-button {
+    .login-brand {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: 28px;
+      font-weight: 700;
+    }
+
+    .login-panel h3 {
+      margin: 0;
+      font-size: 21px;
+      line-height: 1.2;
+    }
+
+    .login-copy {
+      margin: 8px 0 22px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .provider-stack {
+      display: grid;
+      gap: 9px;
+    }
+
+    .provider-button,
+    .button,
+    .icon-button {
       display: inline-flex;
       min-height: 36px;
       align-items: center;
@@ -265,10 +355,31 @@
       cursor: pointer;
       font-weight: 620;
     }
-    .provider-button { width: 100%; min-height: 42px; padding: 8px 12px; justify-content: flex-start; }
-    .provider-button.primary, .button.primary { color: #fff; background: var(--ink); border-color: var(--ink); }
-    .provider-button:hover, .button:hover, .icon-button:hover { background: var(--subtle); }
-    .provider-button.primary:hover, .button.primary:hover { background: #09090b; }
+
+    .provider-button {
+      width: 100%;
+      min-height: 42px;
+      padding: 8px 12px;
+      justify-content: flex-start;
+    }
+
+    .provider-button.primary,
+    .button.primary {
+      color: #fff;
+      background: var(--ink);
+      border-color: var(--ink);
+    }
+
+    .provider-button:hover,
+    .button:hover,
+    .icon-button:hover {
+      background: var(--subtle);
+    }
+
+    .provider-button.primary:hover,
+    .button.primary:hover {
+      background: #09090b;
+    }
 
     .provider-mark {
       display: grid;
@@ -284,9 +395,22 @@
       font-weight: 800;
     }
 
-    .privacy-note, .status-line { margin: 16px 0 0; color: var(--muted); font-size: 12px; }
-    .status-line { min-height: 18px; color: var(--accent); font-weight: 620; }
-    [hidden] { display: none !important; }
+    .privacy-note,
+    .status-line {
+      margin: 16px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .status-line {
+      min-height: 18px;
+      color: var(--accent);
+      font-weight: 620;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
 
     .code-input {
       width: 100%;
@@ -303,10 +427,31 @@
       letter-spacing: 0.38em;
     }
 
-    .button { min-height: 34px; padding: 7px 11px; font-size: 13px; }
-    .button.quiet { color: #505058; background: transparent; border-color: transparent; }
-    .button.danger { color: var(--danger); background: var(--danger-soft); border-color: #f1bbb6; }
-    .challenge-actions, .dialog-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .button {
+      min-height: 34px;
+      padding: 7px 11px;
+      font-size: 13px;
+    }
+
+    .button.quiet {
+      color: #505058;
+      background: transparent;
+      border-color: transparent;
+    }
+
+    .button.danger {
+      color: var(--danger);
+      background: var(--danger-soft);
+      border-color: #f1bbb6;
+    }
+
+    .challenge-actions,
+    .dialog-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
 
     .console-shell {
       display: grid;
@@ -323,8 +468,17 @@
       background: #f5f5f6;
       border-right: 1px solid var(--border);
     }
-    .mock-sidebar .wordmark { margin: 2px 6px 21px; font-size: 13px; }
-    .mock-sidebar .brand-mark { width: 24px; height: 24px; font-size: 9px; }
+
+    .mock-sidebar .wordmark {
+      margin: 2px 6px 21px;
+      font-size: 13px;
+    }
+
+    .mock-sidebar .brand-mark {
+      width: 24px;
+      height: 24px;
+      font-size: 9px;
+    }
 
     .nav-item {
       display: flex;
@@ -337,8 +491,18 @@
       font-size: 12px;
       font-weight: 560;
     }
-    .nav-item.active { color: var(--ink); background: #e7e7e9; font-weight: 680; }
-    .nav-glyph { width: 14px; color: var(--muted); text-align: center; }
+
+    .nav-item.active {
+      color: var(--ink);
+      background: #e7e7e9;
+      font-weight: 680;
+    }
+
+    .nav-glyph {
+      width: 14px;
+      color: var(--muted);
+      text-align: center;
+    }
 
     .sidebar-user {
       display: flex;
@@ -365,22 +529,59 @@
       font-size: 10px;
       font-weight: 750;
     }
-    .avatar.alt { background: #155e75; }
-    .avatar.small { width: 27px; height: 27px; }
 
-    .user-lines, .person-lines { min-width: 0; }
-    .user-lines strong, .user-lines span, .person-lines strong, .person-lines span {
+    .avatar.alt {
+      background: #155e75;
+    }
+
+    .avatar.small {
+      width: 27px;
+      height: 27px;
+    }
+
+    .user-lines,
+    .person-lines {
+      min-width: 0;
+    }
+
+    .user-lines strong,
+    .user-lines span,
+    .person-lines strong,
+    .person-lines span {
       display: block;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .user-lines strong, .person-lines strong { font-size: 12px; }
-    .user-lines span, .person-lines span { color: var(--muted); font-size: 10px; }
 
-    .mock-content { min-width: 0; padding: 21px 22px; overflow: hidden; }
-    .mock-content h3 { margin: 0; font-size: 19px; font-weight: 680; }
-    .content-lede { margin: 4px 0 20px; color: var(--muted); font-size: 12px; }
+    .user-lines strong,
+    .person-lines strong {
+      font-size: 12px;
+    }
+
+    .user-lines span,
+    .person-lines span {
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .mock-content {
+      min-width: 0;
+      padding: 21px 22px;
+      overflow: hidden;
+    }
+
+    .mock-content h3 {
+      margin: 0;
+      font-size: 19px;
+      font-weight: 680;
+    }
+
+    .content-lede {
+      margin: 4px 0 20px;
+      color: var(--muted);
+      font-size: 12px;
+    }
 
     .menu-stage {
       position: relative;
@@ -390,6 +591,7 @@
       padding: 16px 12px 84px;
       background: var(--surface);
     }
+
     .menu-stage::before {
       position: absolute;
       inset: 0 0 auto;
@@ -409,9 +611,22 @@
       border-radius: 7px;
       box-shadow: 0 14px 35px rgba(24, 24, 27, 0.14);
     }
-    .legacy-profile { padding: 8px 9px 11px; border-bottom: 1px solid var(--border); }
-    .legacy-profile strong, .legacy-profile span { display: block; }
-    .legacy-profile span { margin-top: 2px; color: var(--muted); font-size: 11px; }
+
+    .legacy-profile {
+      padding: 8px 9px 11px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .legacy-profile strong,
+    .legacy-profile span {
+      display: block;
+    }
+
+    .legacy-profile span {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 11px;
+    }
 
     .legacy-menu-item {
       display: flex;
@@ -427,7 +642,12 @@
       font-size: 12px;
       text-align: left;
     }
-    .legacy-menu-item.danger { color: var(--danger); border-top: 1px solid var(--border); border-radius: 0; }
+
+    .legacy-menu-item.danger {
+      color: var(--danger);
+      border-top: 1px solid var(--border);
+      border-radius: 0;
+    }
 
     .empty-stage-note {
       position: absolute;
@@ -438,15 +658,50 @@
       text-align: center;
       transform: translateX(-50%);
     }
-    .empty-stage-note strong, .empty-stage-note span { display: block; }
-    .empty-stage-note strong { color: #505058; font-size: 14px; }
-    .empty-stage-note span { margin-top: 5px; font-size: 12px; }
 
-    .section-block { padding: 16px 0; border-top: 1px solid var(--border); }
-    .section-block:first-of-type { padding-top: 0; border-top: 0; }
-    .section-heading { display: flex; align-items: start; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
-    .section-heading h4 { margin: 0; font-size: 13px; }
-    .section-heading p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
+    .empty-stage-note strong,
+    .empty-stage-note span {
+      display: block;
+    }
+
+    .empty-stage-note strong {
+      color: #505058;
+      font-size: 14px;
+    }
+
+    .empty-stage-note span {
+      margin-top: 5px;
+      font-size: 12px;
+    }
+
+    .section-block {
+      padding: 16px 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .section-block:first-of-type {
+      padding-top: 0;
+      border-top: 0;
+    }
+
+    .section-heading {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 12px;
+    }
+
+    .section-heading h4 {
+      margin: 0;
+      font-size: 13px;
+    }
+
+    .section-heading p {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+    }
 
     .profile-grid {
       display: grid;
@@ -454,11 +709,33 @@
       gap: 12px;
       align-items: center;
     }
-    .profile-grid .avatar { width: 46px; height: 46px; font-size: 13px; }
-    .field-label { display: block; color: var(--muted); font-size: 10px; }
-    .field-value { display: block; margin-top: 2px; overflow: hidden; font-size: 12px; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
 
-    .method-list { border-top: 1px solid var(--border); }
+    .profile-grid .avatar {
+      width: 46px;
+      height: 46px;
+      font-size: 13px;
+    }
+
+    .field-label {
+      display: block;
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .field-value {
+      display: block;
+      margin-top: 2px;
+      overflow: hidden;
+      font-size: 12px;
+      font-weight: 620;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .method-list {
+      border-top: 1px solid var(--border);
+    }
+
     .method-row {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -467,11 +744,31 @@
       min-height: 62px;
       border-bottom: 1px solid var(--border);
     }
-    .method-main { display: flex; min-width: 0; align-items: center; gap: 10px; }
-    .method-copy { min-width: 0; }
-    .method-copy strong, .method-copy span { display: block; }
-    .method-copy strong { font-size: 12px; }
-    .method-copy span { color: var(--muted); font-size: 10px; }
+
+    .method-main {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .method-copy {
+      min-width: 0;
+    }
+
+    .method-copy strong,
+    .method-copy span {
+      display: block;
+    }
+
+    .method-copy strong {
+      font-size: 12px;
+    }
+
+    .method-copy span {
+      color: var(--muted);
+      font-size: 10px;
+    }
 
     .badge {
       display: inline-flex;
@@ -487,13 +784,40 @@
       font-weight: 650;
       white-space: nowrap;
     }
-    .badge.current { color: #115e59; background: var(--accent-soft); border-color: #b9ddd7; }
 
-    .icon-button { width: 32px; min-height: 32px; padding: 0; font-size: 17px; }
-    .icon-button:disabled { cursor: not-allowed; opacity: 0.38; }
-    .account-note { margin: 10px 0 0; padding-left: 10px; color: var(--muted); border-left: 2px solid #b9ddd7; font-size: 11px; }
+    .badge.current {
+      color: #115e59;
+      background: var(--accent-soft);
+      border-color: #b9ddd7;
+    }
 
-    .people-toolbar { display: grid; grid-template-columns: minmax(120px, 1fr) auto auto; gap: 7px; margin: 17px 0 13px; }
+    .icon-button {
+      width: 32px;
+      min-height: 32px;
+      padding: 0;
+      font-size: 17px;
+    }
+
+    .icon-button:disabled {
+      cursor: not-allowed;
+      opacity: 0.38;
+    }
+
+    .account-note {
+      margin: 10px 0 0;
+      padding-left: 10px;
+      color: var(--muted);
+      border-left: 2px solid #b9ddd7;
+      font-size: 11px;
+    }
+
+    .people-toolbar {
+      display: grid;
+      grid-template-columns: minmax(120px, 1fr) auto auto;
+      gap: 7px;
+      margin: 17px 0 13px;
+    }
+
     .mock-input {
       min-width: 0;
       min-height: 34px;
@@ -505,7 +829,13 @@
       font-size: 11px;
     }
 
-    .people-table { min-width: 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .people-table {
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
     .people-row {
       display: grid;
       grid-template-columns: minmax(160px, 1.45fr) minmax(70px, 0.65fr) minmax(115px, 1fr) 34px;
@@ -513,11 +843,35 @@
       align-items: center;
       border-top: 1px solid var(--border);
     }
-    .people-row:first-child { border-top: 0; }
-    .people-row.header { min-height: 36px; color: var(--muted); background: var(--subtle); font-size: 10px; font-weight: 650; }
-    .people-cell { min-width: 0; padding: 8px 9px; overflow-wrap: anywhere; font-size: 11px; }
-    .person-cell { display: flex; min-width: 0; align-items: center; gap: 8px; }
-    .identity-raw, .account-key {
+
+    .people-row:first-child {
+      border-top: 0;
+    }
+
+    .people-row.header {
+      min-height: 36px;
+      color: var(--muted);
+      background: var(--subtle);
+      font-size: 10px;
+      font-weight: 650;
+    }
+
+    .people-cell {
+      min-width: 0;
+      padding: 8px 9px;
+      overflow-wrap: anywhere;
+      font-size: 11px;
+    }
+
+    .person-cell {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .identity-raw,
+    .account-key {
       display: block;
       margin-top: 3px;
       color: var(--muted);
@@ -551,14 +905,53 @@
       transform: translateX(102%);
       transition: transform 180ms ease;
     }
-    .detail-drawer.open { visibility: visible; pointer-events: auto; transform: translateX(0); }
-    .drawer-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    .drawer-heading h4 { margin: 0; font-size: 16px; }
-    .drawer-section { margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--border); }
-    .drawer-section h5 { margin: 0 0 9px; font-size: 12px; }
-    .detail-list { display: grid; gap: 9px; margin: 0; }
-    .detail-list dt { color: var(--muted); font-size: 10px; }
-    .detail-list dd { margin: 2px 0 0; overflow-wrap: anywhere; font-family: "Cascadia Mono", Consolas, monospace; font-size: 10px; }
+
+    .detail-drawer.open {
+      visibility: visible;
+      pointer-events: auto;
+      transform: translateX(0);
+    }
+
+    .drawer-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .drawer-heading h4 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .drawer-section {
+      margin-top: 20px;
+      padding-top: 15px;
+      border-top: 1px solid var(--border);
+    }
+
+    .drawer-section h5 {
+      margin: 0 0 9px;
+      font-size: 12px;
+    }
+
+    .detail-list {
+      display: grid;
+      gap: 9px;
+      margin: 0;
+    }
+
+    .detail-list dt {
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .detail-list dd {
+      margin: 2px 0 0;
+      overflow-wrap: anywhere;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 10px;
+    }
 
     dialog {
       width: min(calc(100% - 32px), 430px);
@@ -569,11 +962,30 @@
       border-radius: 8px;
       box-shadow: 0 24px 65px rgba(24, 24, 27, 0.22);
     }
-    dialog::backdrop { background: rgba(24, 24, 27, 0.36); }
-    .dialog-body { padding: 21px; }
-    .dialog-body h3 { margin: 0; font-size: 17px; }
-    .dialog-body p { margin: 7px 0 18px; color: #505058; font-size: 13px; }
-    .dialog-actions { justify-content: flex-end; margin-top: 18px; }
+
+    dialog::backdrop {
+      background: rgba(24, 24, 27, 0.36);
+    }
+
+    .dialog-body {
+      padding: 21px;
+    }
+
+    .dialog-body h3 {
+      margin: 0;
+      font-size: 17px;
+    }
+
+    .dialog-body p {
+      margin: 7px 0 18px;
+      color: #505058;
+      font-size: 13px;
+    }
+
+    .dialog-actions {
+      justify-content: flex-end;
+      margin-top: 18px;
+    }
 
     .review-footer {
       display: flex;
@@ -585,24 +997,73 @@
       border-top: 1px solid var(--border);
       font-size: 12px;
     }
-    .review-footer a { color: var(--ink); font-weight: 650; }
+
+    .review-footer a {
+      color: var(--ink);
+      font-weight: 650;
+    }
 
     @media (max-width: 1040px) {
-      .review-header { grid-template-columns: auto minmax(0, 1fr); }
-      .review-state { grid-column: 2; }
-      .comparison-grid { grid-template-columns: 1fr; }
-      .scenario-heading { grid-template-columns: 1fr; gap: 12px; }
-      .change-list { justify-content: flex-start; }
+      .review-header {
+        grid-template-columns: auto minmax(0, 1fr);
+      }
+
+      .review-state {
+        grid-column: 2;
+      }
+
+      .comparison-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .scenario-heading {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+
+      .change-list {
+        justify-content: flex-start;
+      }
     }
 
     @media (max-width: 680px) {
-      .review-header, main { width: min(100% - 24px, 1480px); }
-      .review-header { grid-template-columns: 1fr; gap: 14px; padding-top: 22px; }
-      .review-state { grid-column: 1; }
-      .scenario-switch { width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      .scenario-tab { min-width: 0; padding-inline: 5px; }
-      .mock-viewport, .console-shell, .menu-stage { min-height: 560px; }
-      .console-shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+
+      .review-header,
+      main {
+        width: min(100% - 24px, 1480px);
+      }
+
+      .review-header {
+        grid-template-columns: 1fr;
+        gap: 14px;
+        padding-top: 22px;
+      }
+
+      .review-state {
+        grid-column: 1;
+      }
+
+      .scenario-switch {
+        width: 100%;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .scenario-tab {
+        min-width: 0;
+        padding-inline: 5px;
+      }
+
+      .mock-viewport,
+      .console-shell,
+      .menu-stage {
+        min-height: 560px;
+      }
+
+      .console-shell {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+      }
+
       .mock-sidebar {
         display: grid;
         grid-template-columns: auto repeat(3, minmax(0, 1fr));
@@ -612,25 +1073,72 @@
         border-right: 0;
         border-bottom: 1px solid var(--border);
       }
-      .mock-sidebar .wordmark { margin: 0 4px 0 0; }
-      .mock-sidebar .wordmark span:last-child, .nav-glyph, .sidebar-user { display: none; }
-      .nav-item { justify-content: center; padding-inline: 5px; text-align: center; }
-      .mock-content { padding: 17px 14px; }
-      .profile-grid { grid-template-columns: auto minmax(0, 1fr); }
-      .profile-grid > div:last-child { grid-column: 2; }
-      .people-toolbar { grid-template-columns: 1fr 1fr; }
-      .people-toolbar .mock-input { grid-column: 1 / -1; }
-      .people-row { grid-template-columns: minmax(145px, 1.4fr) minmax(68px, 0.6fr) 32px; }
-      .people-row .people-cell:nth-child(3) { display: none; }
-      .review-footer { display: block; }
-      .review-footer a { display: inline-block; margin-top: 8px; }
+
+      .mock-sidebar .wordmark {
+        margin: 0 4px 0 0;
+      }
+
+      .mock-sidebar .wordmark span:last-child,
+      .nav-glyph,
+      .sidebar-user {
+        display: none;
+      }
+
+      .nav-item {
+        justify-content: center;
+        padding-inline: 5px;
+        text-align: center;
+      }
+
+      .mock-content {
+        padding: 17px 14px;
+      }
+
+      .profile-grid {
+        grid-template-columns: auto minmax(0, 1fr);
+      }
+
+      .profile-grid>div:last-child {
+        grid-column: 2;
+      }
+
+      .people-toolbar {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .people-toolbar .mock-input {
+        grid-column: 1 / -1;
+      }
+
+      .people-row {
+        grid-template-columns: minmax(145px, 1.4fr) minmax(68px, 0.6fr) 32px;
+      }
+
+      .people-row .people-cell:nth-child(3) {
+        display: none;
+      }
+
+      .review-footer {
+        display: block;
+      }
+
+      .review-footer a {
+        display: inline-block;
+        margin-top: 8px;
+      }
     }
 
     @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after { transition-duration: 0.01ms !important; }
+
+      *,
+      *::before,
+      *::after {
+        transition-duration: 0.01ms !important;
+      }
     }
   </style>
 </head>
+
 <body>
   <a class="skip-link" href="#review-content">Skip to comparison</a>
 
@@ -640,40 +1148,55 @@
     </a>
     <div class="review-title">
       <h1>Administrator identity interface changes</h1>
-      <p>Illustrative before/after views for the planned Account model. The review document remains the interface contract.</p>
+      <p>Illustrative before/after views for the planned Account model. The review document remains the interface
+        contract.</p>
     </div>
     <div class="review-state">Pending interface approval</div>
   </header>
 
   <main id="review-content">
     <nav class="scenario-switch" role="tablist" aria-label="Interface scenario">
-      <button class="scenario-tab" id="tab-sign-in" type="button" role="tab" aria-selected="true" aria-controls="scenario-sign-in" data-scenario-target="sign-in">Sign in</button>
-      <button class="scenario-tab" id="tab-account" type="button" role="tab" aria-selected="false" aria-controls="scenario-account" data-scenario-target="account">Account</button>
-      <button class="scenario-tab" id="tab-people" type="button" role="tab" aria-selected="false" aria-controls="scenario-people" data-scenario-target="people">People</button>
+      <button class="scenario-tab" id="tab-sign-in" type="button" role="tab" aria-selected="true"
+        aria-controls="scenario-sign-in" data-scenario-target="sign-in">Sign in</button>
+      <button class="scenario-tab" id="tab-account" type="button" role="tab" aria-selected="false"
+        aria-controls="scenario-account" data-scenario-target="account">Account</button>
+      <button class="scenario-tab" id="tab-people" type="button" role="tab" aria-selected="false"
+        aria-controls="scenario-people" data-scenario-target="people">People</button>
     </nav>
 
-    <section class="scenario" id="scenario-sign-in" role="tabpanel" aria-labelledby="tab-sign-in" data-scenario="sign-in">
+    <section class="scenario" id="scenario-sign-in" role="tabpanel" aria-labelledby="tab-sign-in"
+      data-scenario="sign-in">
       <header class="scenario-heading">
-        <div><h2>Sign in and invitation proof</h2><p>Move provider choice into a closed server registry and keep admission failures private.</p></div>
-        <ul class="change-list" aria-label="Planned sign-in changes"><li>Configured providers only</li><li>Generic denial state</li><li>Invitation-bound challenge</li></ul>
+        <div>
+          <h2>Sign in and invitation proof</h2>
+          <p>Move provider choice into a closed server registry and keep admission failures private.</p>
+        </div>
+        <ul class="change-list" aria-label="Planned sign-in changes">
+          <li>Configured providers only</li>
+          <li>Generic denial state</li>
+          <li>Invitation-bound challenge</li>
+        </ul>
       </header>
 
       <div class="comparison-grid">
         <article class="compare-frame before" aria-labelledby="sign-in-before-title">
-          <header class="frame-heading"><span class="phase">Before</span><strong id="sign-in-before-title">Single provider</strong></header>
+          <header class="frame-heading"><span class="phase">Before</span><strong id="sign-in-before-title">Single
+              provider</strong></header>
           <div class="mock-viewport login-viewport">
             <section class="login-panel" aria-label="Current sign-in illustration">
               <div class="login-brand"><span class="brand-mark">UC</span><span>UniCAS</span></div>
               <h3>Sign in to UniCAS</h3>
               <p class="login-copy">Use your approved Google account to manage Apps.</p>
-              <button class="provider-button primary" type="button"><span class="provider-mark">G</span>Continue with Google</button>
+              <button class="provider-button primary" type="button"><span class="provider-mark">G</span>Continue with
+                Google</button>
               <p class="privacy-note">Access is checked after Google authentication.</p>
             </section>
           </div>
         </article>
 
         <article class="compare-frame after" aria-labelledby="sign-in-after-title">
-          <header class="frame-heading"><span class="phase">After</span><strong id="sign-in-after-title">Provider registry</strong></header>
+          <header class="frame-heading"><span class="phase">After</span><strong id="sign-in-after-title">Provider
+              registry</strong></header>
           <div class="mock-viewport login-viewport">
             <section class="login-panel" aria-label="Planned sign-in illustration">
               <div class="login-brand"><span class="brand-mark">UC</span><span>UniCAS</span></div>
@@ -681,19 +1204,26 @@
                 <h3>Sign in to UniCAS</h3>
                 <p class="login-copy">Choose a login method configured for this environment.</p>
                 <div class="provider-stack">
-                  <button class="provider-button" type="button" data-provider="Google"><span class="provider-mark">G</span>Continue with Google</button>
-                  <button class="provider-button" type="button" data-provider="Microsoft"><span class="provider-mark">M</span>Continue with Microsoft</button>
-                  <button class="provider-button" type="button" data-provider="GitHub"><span class="provider-mark">GH</span>Continue with GitHub</button>
+                  <button class="provider-button" type="button" data-provider="Google"><span
+                      class="provider-mark">G</span>Continue with Google</button>
+                  <button class="provider-button" type="button" data-provider="Microsoft"><span
+                      class="provider-mark">M</span>Continue with Microsoft</button>
+                  <button class="provider-button" type="button" data-provider="GitHub"><span
+                      class="provider-mark">GH</span>Continue with GitHub</button>
                 </div>
                 <p class="privacy-note">A matching email never combines accounts or transfers access.</p>
                 <p class="status-line" aria-live="polite" data-login-status></p>
               </div>
               <div data-challenge-view hidden>
                 <h3>Verify invitation email</h3>
-                <p class="login-copy">Enter the six-digit code sent to s***@example.com. The destination cannot be changed here.</p>
+                <p class="login-copy">Enter the six-digit code sent to s***@example.com. The destination cannot be
+                  changed here.</p>
                 <label for="challenge-code">Verification code</label>
-                <input class="code-input" id="challenge-code" name="challenge-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="000000">
-                <div class="challenge-actions"><button class="button primary" type="button">Verify code</button><button class="button" type="button">Resend</button><button class="button quiet" type="button" data-challenge-back>Back</button></div>
+                <input class="code-input" id="challenge-code" name="challenge-code" inputmode="numeric"
+                  autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="000000">
+                <div class="challenge-actions"><button class="button primary" type="button">Verify code</button><button
+                    class="button" type="button">Resend</button><button class="button quiet" type="button"
+                    data-challenge-back>Back</button></div>
               </div>
             </section>
           </div>
@@ -701,28 +1231,40 @@
       </div>
     </section>
 
-    <section class="scenario" id="scenario-account" role="tabpanel" aria-labelledby="tab-account" data-scenario="account" hidden>
+    <section class="scenario" id="scenario-account" role="tabpanel" aria-labelledby="tab-account"
+      data-scenario="account" hidden>
       <header class="scenario-heading">
-        <div><h2>Account profile and login methods</h2><p>Promote the durable Account from a menu summary to a first-class management view.</p></div>
-        <ul class="change-list" aria-label="Planned Account changes"><li>Account-level profile</li><li>Link with fresh proof</li><li>Guard final unlink</li></ul>
+        <div>
+          <h2>Account profile and login methods</h2>
+          <p>Promote the durable Account from a menu summary to a first-class management view.</p>
+        </div>
+        <ul class="change-list" aria-label="Planned Account changes">
+          <li>Account-level profile</li>
+          <li>Link with fresh proof</li>
+          <li>Guard final unlink</li>
+        </ul>
       </header>
 
       <div class="comparison-grid">
         <article class="compare-frame before" aria-labelledby="account-before-title">
-          <header class="frame-heading"><span class="phase">Before</span><strong id="account-before-title">Profile summary in menu</strong></header>
+          <header class="frame-heading"><span class="phase">Before</span><strong id="account-before-title">Profile
+              summary in menu</strong></header>
           <div class="mock-viewport menu-stage">
-            <div class="empty-stage-note"><strong>No Account management view</strong><span>Profile and login identity are exposed only as a compact session summary.</span></div>
+            <div class="empty-stage-note"><strong>No Account management view</strong><span>Profile and login identity
+                are exposed only as a compact session summary.</span></div>
             <div class="legacy-menu" aria-label="Current user menu illustration">
               <div class="legacy-profile"><strong>Alex Morgan</strong><span>alex@example.com</span></div>
               <button class="legacy-menu-item" type="button"><span aria-hidden="true">?</span>Documentation</button>
               <button class="legacy-menu-item" type="button"><span aria-hidden="true">+</span>Connect AI tools</button>
-              <button class="legacy-menu-item danger" type="button"><span aria-hidden="true">&#215;</span>Sign out</button>
+              <button class="legacy-menu-item danger" type="button"><span aria-hidden="true">&#215;</span>Sign
+                out</button>
             </div>
           </div>
         </article>
 
         <article class="compare-frame after" aria-labelledby="account-after-title">
-          <header class="frame-heading"><span class="phase">After</span><strong id="account-after-title">Full-width Account view</strong></header>
+          <header class="frame-heading"><span class="phase">After</span><strong id="account-after-title">Full-width
+              Account view</strong></header>
           <div class="mock-viewport">
             <div class="console-shell">
               <aside class="mock-sidebar" aria-label="Console navigation illustration">
@@ -730,22 +1272,49 @@
                 <div class="nav-item"><span class="nav-glyph">&#9633;</span>Apps</div>
                 <div class="nav-item"><span class="nav-glyph">&#9675;</span>People</div>
                 <div class="nav-item active"><span class="nav-glyph">&#9679;</span>Account</div>
-                <button class="sidebar-user" type="button"><span class="avatar">AM</span><span class="user-lines"><strong>Alex Morgan</strong><span>2 App memberships</span></span></button>
+                <button class="sidebar-user" type="button"><span class="avatar">AM</span><span
+                    class="user-lines"><strong>Alex Morgan</strong><span>2 App memberships</span></span></button>
               </aside>
               <section class="mock-content" aria-label="Planned Account view illustration">
                 <h3>Account</h3>
                 <p class="content-lede">Manage your profile and the login methods attached to this Account.</p>
                 <section class="section-block">
-                  <div class="section-heading"><div><h4>Profile</h4><p>Shared wherever this Account appears.</p></div><button class="button" type="button" data-edit-profile>Edit profile</button></div>
-                  <div class="profile-grid"><span class="avatar alt">AM</span><div><span class="field-label">Display name</span><span class="field-value">Alex Morgan</span></div><div><span class="field-label">Primary verified contact</span><span class="field-value">alex@example.com</span></div></div>
+                  <div class="section-heading">
+                    <div>
+                      <h4>Profile</h4>
+                      <p>Shared wherever this Account appears.</p>
+                    </div><button class="button" type="button" data-edit-profile>Edit profile</button>
+                  </div>
+                  <div class="profile-grid"><span class="avatar alt">AM</span>
+                    <div><span class="field-label">Display name</span><span class="field-value">Alex Morgan</span></div>
+                    <div><span class="field-label">Primary verified contact</span><span
+                        class="field-value">alex@example.com</span></div>
+                  </div>
                 </section>
                 <section class="section-block">
-                  <div class="section-heading"><div><h4>Login methods</h4><p>Each method signs in to the same Account.</p></div><button class="button primary" type="button" data-open-link>Link login method</button></div>
-                  <div class="method-list">
-                    <div class="method-row"><div class="method-main"><span class="provider-mark">G</span><span class="method-copy"><strong>Google <span class="badge current">Current session</span></strong><span>a***@example.com &middot; Used today</span></span></div><button class="icon-button" type="button" title="Current login requires handoff before unlinking" aria-label="Google requires handoff before unlinking" disabled>&#215;</button></div>
-                    <div class="method-row"><div class="method-main"><span class="provider-mark">GH</span><span class="method-copy"><strong>GitHub</strong><span>al*** &middot; Used 2 days ago</span></span></div><button class="icon-button" type="button" title="Unlink GitHub" aria-label="Unlink GitHub" data-open-unlink>&#215;</button></div>
+                  <div class="section-heading">
+                    <div>
+                      <h4>Login methods</h4>
+                      <p>Each method signs in to the same Account.</p>
+                    </div><button class="button primary" type="button" data-open-link>Link login method</button>
                   </div>
-                  <p class="account-note" data-account-status>Linking proves both the current Account and the new login. Matching email alone grants nothing.</p>
+                  <div class="method-list">
+                    <div class="method-row">
+                      <div class="method-main"><span class="provider-mark">G</span><span
+                          class="method-copy"><strong>Google <span class="badge current">Current
+                              session</span></strong><span>a***@example.com &middot; Used today</span></span></div>
+                      <button class="icon-button" type="button" title="Current login requires handoff before unlinking"
+                        aria-label="Google requires handoff before unlinking" disabled>&#215;</button>
+                    </div>
+                    <div class="method-row">
+                      <div class="method-main"><span class="provider-mark">GH</span><span
+                          class="method-copy"><strong>GitHub</strong><span>al*** &middot; Used 2 days ago</span></span>
+                      </div><button class="icon-button" type="button" title="Unlink GitHub" aria-label="Unlink GitHub"
+                        data-open-unlink>&#215;</button>
+                    </div>
+                  </div>
+                  <p class="account-note" data-account-status>Linking proves both the current Account and the new login.
+                    Matching email alone grants nothing.</p>
                 </section>
               </section>
             </div>
@@ -754,29 +1323,63 @@
       </div>
     </section>
 
-    <section class="scenario" id="scenario-people" role="tabpanel" aria-labelledby="tab-people" data-scenario="people" hidden>
+    <section class="scenario" id="scenario-people" role="tabpanel" aria-labelledby="tab-people" data-scenario="people"
+      hidden>
       <header class="scenario-heading">
-        <div><h2>People and membership targeting</h2><p>Replace Principal-shaped rows and actions with stable Account summaries and IDs.</p></div>
-        <ul class="change-list" aria-label="Planned People changes"><li>Account-keyed actions</li><li>Verified contact only</li><li>Identity detail is privileged</li></ul>
+        <div>
+          <h2>People and membership targeting</h2>
+          <p>Replace Principal-shaped rows and actions with stable Account summaries and IDs.</p>
+        </div>
+        <ul class="change-list" aria-label="Planned People changes">
+          <li>Account-keyed actions</li>
+          <li>Verified contact only</li>
+          <li>Identity detail is privileged</li>
+        </ul>
       </header>
 
       <div class="comparison-grid">
         <article class="compare-frame before" aria-labelledby="people-before-title">
-          <header class="frame-heading"><span class="phase">Before</span><strong id="people-before-title">Principal-shaped rows</strong></header>
+          <header class="frame-heading"><span class="phase">Before</span><strong
+              id="people-before-title">Principal-shaped rows</strong></header>
           <div class="mock-viewport">
             <div class="console-shell">
               <aside class="mock-sidebar" aria-label="Current Console navigation illustration">
                 <div class="wordmark"><span class="brand-mark">UC</span><span>UniCAS</span></div>
-                <div class="nav-item"><span class="nav-glyph">&#9633;</span>Apps</div><div class="nav-item active"><span class="nav-glyph">&#9675;</span>People</div><div class="nav-item"><span class="nav-glyph">&#9651;</span>Audit</div>
-                <button class="sidebar-user" type="button"><span class="avatar">AM</span><span class="user-lines"><strong>Alex Morgan</strong><span>2 App memberships</span></span></button>
+                <div class="nav-item"><span class="nav-glyph">&#9633;</span>Apps</div>
+                <div class="nav-item active"><span class="nav-glyph">&#9675;</span>People</div>
+                <div class="nav-item"><span class="nav-glyph">&#9651;</span>Audit</div>
+                <button class="sidebar-user" type="button"><span class="avatar">AM</span><span
+                    class="user-lines"><strong>Alex Morgan</strong><span>2 App memberships</span></span></button>
               </aside>
               <section class="mock-content" aria-label="Current People view illustration">
-                <h3>People</h3><p class="content-lede">Platform principals and pending invitations.</p>
-                <div class="people-toolbar"><input class="mock-input" aria-label="Current people search" placeholder="Search name, email or Principal"><button class="button" type="button">Current</button><button class="button primary" type="button">Invite</button></div>
+                <h3>People</h3>
+                <p class="content-lede">Platform principals and pending invitations.</p>
+                <div class="people-toolbar"><input class="mock-input" aria-label="Current people search"
+                    placeholder="Search name, email or Principal"><button class="button"
+                    type="button">Current</button><button class="button primary" type="button">Invite</button></div>
                 <div class="people-table" role="table" aria-label="Current Principal rows">
-                  <div class="people-row header" role="row"><div class="people-cell">Person / Email</div><div class="people-cell">Status</div><div class="people-cell">Authorities</div><div class="people-cell"></div></div>
-                  <div class="people-row" role="row"><div class="people-cell"><strong>Alex Morgan</strong><span class="identity-raw">https://accounts.google.com / 104891...</span></div><div class="people-cell"><span class="badge">Principal</span></div><div class="people-cell">Platform admin</div><div class="people-cell"><button class="more-button" type="button" aria-label="Principal actions">&#8942;</button></div></div>
-                  <div class="people-row" role="row"><div class="people-cell"><strong>Riley Chen</strong><span class="identity-raw">https://accounts.google.com / 117204...</span></div><div class="people-cell"><span class="badge">Principal</span></div><div class="people-cell">App creation</div><div class="people-cell"><button class="more-button" type="button" aria-label="Principal actions">&#8942;</button></div></div>
+                  <div class="people-row header" role="row">
+                    <div class="people-cell">Person / Email</div>
+                    <div class="people-cell">Status</div>
+                    <div class="people-cell">Authorities</div>
+                    <div class="people-cell"></div>
+                  </div>
+                  <div class="people-row" role="row">
+                    <div class="people-cell"><strong>Alex Morgan</strong><span
+                        class="identity-raw">https://accounts.google.com / 104891...</span></div>
+                    <div class="people-cell"><span class="badge">Principal</span></div>
+                    <div class="people-cell">Platform admin</div>
+                    <div class="people-cell"><button class="more-button" type="button"
+                        aria-label="Principal actions">&#8942;</button></div>
+                  </div>
+                  <div class="people-row" role="row">
+                    <div class="people-cell"><strong>Riley Chen</strong><span
+                        class="identity-raw">https://accounts.google.com / 117204...</span></div>
+                    <div class="people-cell"><span class="badge">Principal</span></div>
+                    <div class="people-cell">App creation</div>
+                    <div class="people-cell"><button class="more-button" type="button"
+                        aria-label="Principal actions">&#8942;</button></div>
+                  </div>
                 </div>
               </section>
             </div>
@@ -784,52 +1387,116 @@
         </article>
 
         <article class="compare-frame after" aria-labelledby="people-after-title">
-          <header class="frame-heading"><span class="phase">After</span><strong id="people-after-title">Account summary rows</strong></header>
+          <header class="frame-heading"><span class="phase">After</span><strong id="people-after-title">Account summary
+              rows</strong></header>
           <div class="mock-viewport">
             <div class="console-shell">
               <aside class="mock-sidebar" aria-label="Planned Console navigation illustration">
                 <div class="wordmark"><span class="brand-mark">UC</span><span>UniCAS</span></div>
-                <div class="nav-item"><span class="nav-glyph">&#9633;</span>Apps</div><div class="nav-item active"><span class="nav-glyph">&#9675;</span>People</div><div class="nav-item"><span class="nav-glyph">&#9651;</span>Audit</div>
-                <button class="sidebar-user" type="button"><span class="avatar alt">AM</span><span class="user-lines"><strong>Alex Morgan</strong><span>2 App memberships</span></span></button>
+                <div class="nav-item"><span class="nav-glyph">&#9633;</span>Apps</div>
+                <div class="nav-item active"><span class="nav-glyph">&#9675;</span>People</div>
+                <div class="nav-item"><span class="nav-glyph">&#9651;</span>Audit</div>
+                <button class="sidebar-user" type="button"><span class="avatar alt">AM</span><span
+                    class="user-lines"><strong>Alex Morgan</strong><span>2 App memberships</span></span></button>
               </aside>
               <section class="mock-content" aria-label="Planned People view illustration">
-                <h3>People</h3><p class="content-lede">Accounts with platform access and pending invitations.</p>
-                <div class="people-toolbar"><input class="mock-input" aria-label="Planned people search" placeholder="Search name, verified email or Account ID"><button class="button" type="button">Current</button><button class="button primary" type="button">Invite</button></div>
+                <h3>People</h3>
+                <p class="content-lede">Accounts with platform access and pending invitations.</p>
+                <div class="people-toolbar"><input class="mock-input" aria-label="Planned people search"
+                    placeholder="Search name, verified email or Account ID"><button class="button"
+                    type="button">Current</button><button class="button primary" type="button">Invite</button></div>
                 <div class="people-table" role="table" aria-label="Planned Account rows">
-                  <div class="people-row header" role="row"><div class="people-cell">Account</div><div class="people-cell">Access</div><div class="people-cell">Authorities</div><div class="people-cell"></div></div>
-                  <div class="people-row" role="row"><div class="people-cell person-cell"><span class="avatar small alt">AM</span><span class="person-lines"><strong>Alex Morgan</strong><span>alex@example.com</span><span class="account-key">acct_7fy2...m8q</span></span></div><div class="people-cell"><span class="badge current">Active</span></div><div class="people-cell">Platform admin</div><div class="people-cell"><button class="more-button" type="button" aria-label="Open Alex Morgan security detail" data-open-drawer>&#8942;</button></div></div>
-                  <div class="people-row" role="row"><div class="people-cell person-cell"><span class="avatar small">RC</span><span class="person-lines"><strong>Riley Chen</strong><span>riley@example.net</span><span class="account-key">acct_q9ka...4tp</span></span></div><div class="people-cell"><span class="badge current">Active</span></div><div class="people-cell">App creation</div><div class="people-cell"><button class="more-button" type="button" aria-label="Open Riley Chen security detail">&#8942;</button></div></div>
+                  <div class="people-row header" role="row">
+                    <div class="people-cell">Account</div>
+                    <div class="people-cell">Access</div>
+                    <div class="people-cell">Authorities</div>
+                    <div class="people-cell"></div>
+                  </div>
+                  <div class="people-row" role="row">
+                    <div class="people-cell person-cell"><span class="avatar small alt">AM</span><span
+                        class="person-lines"><strong>Alex Morgan</strong><span>alex@example.com</span><span
+                          class="account-key">acct_7fy2...m8q</span></span></div>
+                    <div class="people-cell"><span class="badge current">Active</span></div>
+                    <div class="people-cell">Platform admin</div>
+                    <div class="people-cell"><button class="more-button" type="button"
+                        aria-label="Open Alex Morgan security detail" data-open-drawer>&#8942;</button></div>
+                  </div>
+                  <div class="people-row" role="row">
+                    <div class="people-cell person-cell"><span class="avatar small">RC</span><span
+                        class="person-lines"><strong>Riley Chen</strong><span>riley@example.net</span><span
+                          class="account-key">acct_q9ka...4tp</span></span></div>
+                    <div class="people-cell"><span class="badge current">Active</span></div>
+                    <div class="people-cell">App creation</div>
+                    <div class="people-cell"><button class="more-button" type="button"
+                        aria-label="Open Riley Chen security detail">&#8942;</button></div>
+                  </div>
                 </div>
               </section>
             </div>
-            <aside class="detail-drawer" data-detail-drawer aria-hidden="true" aria-label="Privileged Account security detail" inert>
-              <div class="drawer-heading"><h4>Account security detail</h4><button class="icon-button" type="button" aria-label="Close security detail" data-close-drawer>&#215;</button></div>
+            <aside class="detail-drawer" data-detail-drawer aria-hidden="true"
+              aria-label="Privileged Account security detail" inert>
+              <div class="drawer-heading">
+                <h4>Account security detail</h4><button class="icon-button" type="button"
+                  aria-label="Close security detail" data-close-drawer>&#215;</button>
+              </div>
               <p class="content-lede">Exact identity values appear only in a privileged investigation view.</p>
-              <div class="drawer-section"><h5>Account</h5><dl class="detail-list"><div><dt>Account ID</dt><dd>acct_7fy2c4p9m8q</dd></div><div><dt>Status</dt><dd>active</dd></div></dl></div>
-              <div class="drawer-section"><h5>Authenticated identities</h5><dl class="detail-list"><div><dt>Google issuer / subject</dt><dd>https://accounts.google.com<br>104891...</dd></div><div><dt>GitHub subject</dt><dd>github.com / 9482173</dd></div></dl></div>
+              <div class="drawer-section">
+                <h5>Account</h5>
+                <dl class="detail-list">
+                  <div>
+                    <dt>Account ID</dt>
+                    <dd>acct_7fy2c4p9m8q</dd>
+                  </div>
+                  <div>
+                    <dt>Blocked at</dt>
+                    <dd>-</dd>
+                  </div>
+                </dl>
+              </div>
+              <div class="drawer-section">
+                <h5>Authenticated identities</h5>
+                <dl class="detail-list">
+                  <div>
+                    <dt>Google issuer / subject</dt>
+                    <dd>https://accounts.google.com<br>104891...</dd>
+                  </div>
+                  <div>
+                    <dt>GitHub subject</dt>
+                    <dd>github.com / 9482173</dd>
+                  </div>
+                </dl>
+              </div>
             </aside>
           </div>
         </article>
       </div>
     </section>
 
-    <footer class="review-footer"><span>Prototype scope: planned interaction and information hierarchy, not final visual specification.</span><a href="./InterfaceDesign.md">Read the normative interface review</a></footer>
+    <footer class="review-footer"><span>Prototype scope: planned interaction and information hierarchy, not final visual
+        specification.</span><a href="./InterfaceDesign.md">Read the normative interface review</a></footer>
   </main>
 
   <dialog id="link-dialog" aria-labelledby="link-dialog-title">
     <div class="dialog-body">
       <h3 id="link-dialog-title">Link a login method</h3>
-      <p>First reauthenticate this Account, then authenticate the new provider. Matching email does not combine accounts or access.</p>
-      <div class="provider-stack"><button class="provider-button" type="button" data-link-provider="Microsoft"><span class="provider-mark">M</span>Link Microsoft</button><button class="provider-button" type="button" data-link-provider="GitHub"><span class="provider-mark">GH</span>Link GitHub</button></div>
-      <div class="dialog-actions"><button class="button" type="button" data-close-dialog="link-dialog">Cancel</button></div>
+      <p>First reauthenticate this Account, then authenticate the new provider. Matching email does not combine accounts
+        or access.</p>
+      <div class="provider-stack"><button class="provider-button" type="button" data-link-provider="Microsoft"><span
+            class="provider-mark">M</span>Link Microsoft</button><button class="provider-button" type="button"
+          data-link-provider="GitHub"><span class="provider-mark">GH</span>Link GitHub</button></div>
+      <div class="dialog-actions"><button class="button" type="button" data-close-dialog="link-dialog">Cancel</button>
+      </div>
     </div>
   </dialog>
 
   <dialog id="unlink-dialog" aria-labelledby="unlink-dialog-title">
     <div class="dialog-body">
       <h3 id="unlink-dialog-title">Unlink GitHub?</h3>
-      <p>GitHub will no longer sign in to this Account. Memberships, authorities, Playground files, and audit history will not change.</p>
-      <div class="dialog-actions"><button class="button" type="button" data-close-dialog="unlink-dialog">Cancel</button><button class="button danger" type="button" data-confirm-unlink>Unlink GitHub</button></div>
+      <p>GitHub will no longer sign in to this Account. Memberships, authorities, Playground files, and audit history
+        will not change.</p>
+      <div class="dialog-actions"><button class="button" type="button"
+          data-close-dialog="unlink-dialog">Cancel</button><button class="button danger" type="button"
+          data-confirm-unlink>Unlink GitHub</button></div>
     </div>
   </dialog>
 
@@ -892,10 +1559,10 @@
     }));
     document.querySelector("[data-confirm-unlink]").addEventListener("click", () => {
       unlinkDialog.close();
-      accountStatus.textContent = "Prototype state: GitHub would be unlinked after fresh authentication and revision checks.";
+      accountStatus.textContent = "Prototype state: GitHub would be unlinked after fresh authentication and credential-version checks.";
     });
     document.querySelector("[data-edit-profile]").addEventListener("click", () => {
-      accountStatus.textContent = "Profile editing uses verified email choices and optimistic concurrency.";
+      accountStatus.textContent = "Profile editing updates display name or avatar; the verified contact remains read-only.";
     });
 
     const drawer = document.querySelector("[data-detail-drawer]");
@@ -913,4 +1580,5 @@
     });
   </script>
 </body>
+
 </html>

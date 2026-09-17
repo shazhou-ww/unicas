@@ -49,8 +49,11 @@ they are repeated.
 erDiagram
   ACCOUNT {
     string account_id PK
-    string status
-    int auth_revision
+    datetime blocked_at "nullable"
+    int credential_version
+    string primary_verified_email "nullable"
+    string email_verification_source "nullable"
+    datetime email_verified_at "nullable"
     datetime created_at
     datetime updated_at
   }
@@ -61,7 +64,6 @@ erDiagram
     string avatar
     string display_name_source
     string avatar_source
-    int revision
     datetime updated_at
   }
 
@@ -76,23 +78,10 @@ erDiagram
     datetime unlinked_at
   }
 
-  VERIFIED_EMAIL {
-    string verified_email_id PK
-    string account_id FK
-    string source_identity_id FK
-    string normalized_email
-    string source
-    datetime verified_at
-    datetime last_observed_at
-    datetime retired_at
-  }
-
-  PLATFORM_ACCESS {
+  ACCOUNT_PLATFORM_AUTHORITY {
     string account_id PK, FK
-    string authorities
-    int revision
-    datetime created_at
-    datetime updated_at
+    string authority PK
+    datetime granted_at
   }
 
   APP {
@@ -103,7 +92,6 @@ erDiagram
     string app_id PK, FK
     string account_id PK, FK
     datetime joined_at
-    int revision
   }
 
   PLAYGROUND_FILE_ROOT {
@@ -114,10 +102,7 @@ erDiagram
 
   ACCOUNT ||--|| ACCOUNT_PROFILE : has
   ACCOUNT ||--|{ EXTERNAL_IDENTITY : authenticates_through
-  ACCOUNT ||--o{ VERIFIED_EMAIL : owns
-  ACCOUNT o|--o| VERIFIED_EMAIL : selects_primary
-  EXTERNAL_IDENTITY o|--o{ VERIFIED_EMAIL : verifies
-  ACCOUNT ||--o| PLATFORM_ACCESS : may_hold
+  ACCOUNT ||--o{ ACCOUNT_PLATFORM_AUTHORITY : has
   ACCOUNT ||--o{ APP_MEMBERSHIP : holds
   APP ||--o{ APP_MEMBERSHIP : grants
   ACCOUNT ||--o{ PLAYGROUND_FILE_ROOT : owns
@@ -130,8 +115,8 @@ erDiagram
 erDiagram
   ACCOUNT {
     string account_id PK
-    string status
-    int auth_revision
+    datetime blocked_at "nullable"
+    int credential_version
   }
 
   EXTERNAL_IDENTITY {
@@ -149,7 +134,7 @@ erDiagram
     string session_id PK
     string account_id FK
     string external_identity_id FK
-    int auth_revision
+    int credential_version
     datetime expires_at
   }
 
@@ -157,7 +142,7 @@ erDiagram
     string grant_id PK
     string account_id FK
     string external_identity_id FK
-    int auth_revision
+    int credential_version
     datetime expires_at
   }
 
@@ -213,8 +198,10 @@ described in the later persistence and migration sections.
 | Field | Rule |
 | --- | --- |
 | `accountId` | Opaque UniCAS-generated 128-bit identifier with an `acct_` wire prefix; never derived from provider or email data. |
-| `status` | `active`, `blocked`, or reserved `merged`. `merged` has no write path in this task. |
-| `authRevision` | Monotonic optimistic-concurrency and session-revocation generation. |
+| `blockedAt` | Null while usable; a server timestamp when globally blocked. Blocking is independent of provider and authority rows. |
+| `credentialVersion` | Monotonic credential-revocation generation copied into every Session and MCP grant. It is not a general resource revision. |
+| `primaryVerifiedEmail` | Optional normalized contact address. It is not an identity or authorization key. |
+| `emailVerificationSource`, `emailVerifiedAt` | Provenance for the current primary contact when present. |
 | `createdAt`, `updatedAt` | Server timestamps. |
 
 Every authenticated administrator resolves to one canonical `accountId` before
@@ -222,8 +209,8 @@ admission or authorization. Blocking the Account denies all linked identities,
 BFF sessions, CLI sessions, and MCP grants. Effective admission is:
 
 ```text
-canonical Account is active
-AND (PlatformAccess has an authority OR Account has an active AppMembership)
+canonical Account is not blocked
+AND (Account has a platform authority OR an active AppMembership)
 ```
 
 A blocked Account remains the owner of memberships and audit history; blocking
@@ -249,9 +236,10 @@ is the decimal string form of the numeric `/user.id`; Microsoft uses the
 verified pairwise `sub` from the configured `consumers` issuer.
 
 Unlinking closes the link rather than deleting it. It requires a fresh
-successful authentication, optimistic concurrency on `authRevision`, and at
-least one other usable active identity. It changes neither memberships nor the
-Account's historical identity.
+successful authentication, an unchanged `credentialVersion`, and at least one
+other usable active identity. A successful link or unlink increments
+`credentialVersion`; it changes neither memberships nor the Account's
+historical identity.
 
 ### Profile
 
@@ -262,7 +250,7 @@ Profile is mutable Account-level display data:
 | `displayName` | Nullable display value. |
 | `avatar` | Nullable, sanitized HTTPS provider image reference or user-selected value. |
 | `displayNameSource`, `avatarSource` | `user` or an `externalIdentityId`, retained to apply precedence. |
-| `updatedAt`, `revision` | Server timestamp and optimistic-concurrency revision. |
+| `updatedAt` | Server timestamp. Profile commands use last-write-wins semantics. |
 
 Precedence is deterministic:
 
@@ -279,33 +267,22 @@ The UI uses `Referrer-Policy: no-referrer`. When no avatar exists, the Account
 projection returns server-derived initials and a palette index computed from
 `accountId`; this is deterministic and does not use email.
 
-### VerifiedEmail
+### Primary verified email
 
-VerifiedEmail is an Account attribute with provenance, not an identity key.
+An Account stores at most one primary verified contact with its source and
+verification time. It is normalized with exact `trim().toLowerCase()` and has
+no provider-specific canonicalization. Email is not globally unique: two
+Accounts may hold the same normalized address and remain separate.
 
-| Field | Rule |
-| --- | --- |
-| `verifiedEmailId` | Opaque internal identifier. |
-| `accountId` | Owning Account. |
-| `normalizedEmail` | Exact `trim().toLowerCase()` result. No provider-specific canonicalization. |
-| `source` | `google-oidc`, `github-emails-api`, or `unicas-email-challenge`. |
-| `sourceIdentityId` | External identity involved when applicable. |
-| `verifiedAt`, `lastObservedAt` | Verification and latest observation times. |
-| `retiredAt` | Optional removal from current profile projection; history remains available to retained audit evidence. |
+Fresh invitation evidence may initialize an empty primary contact after the
+invitation is accepted. A later provider login or link never replaces a
+nonempty primary contact. Changing it requires a separately verified fresh
+address; the profile PATCH cannot accept arbitrary email text. This task does
+not expose a multi-email address book or retain old plaintext contacts.
 
-Email is not globally unique. Two Accounts may hold the same normalized address
-and remain separate. The service persists only provider-verified addresses that
-are selected as primary contact or used for the current invitation; it does not
-persist GitHub's unverified/private list as a profile dump. A primary contact is
-selected from non-retired VerifiedEmail rows and may be changed explicitly.
-
-A stored VerifiedEmail proves a historical verification event but is not by
-itself fresh invitation evidence.
-
-Ordinary and platform-list projections expose only the current primary verified
-email. The self Account view lists current, non-retired addresses; retired rows
-and historical evidence are never returned by general APIs. No compatibility or
-new route accepts email as an Account selector.
+The stored primary contact proves a historical verification event but is not
+itself fresh invitation evidence. Ordinary projections may display it, but no
+compatibility or new route accepts email as an Account selector.
 
 ### Invitation evidence
 
@@ -333,18 +310,26 @@ stored normalized invitation address. Evidence is produced as follows:
   creates evidence after successful verification.
 
 The invitation and evidence are consumed in one service transaction. Display
-profile fields, old sessions, stored VerifiedEmail rows, public GitHub email,
+profile fields, old sessions, the stored primary contact, public GitHub email,
 unverified addresses, and stale evidence cannot pass this gate.
 
 ### Authorization relationships
 
-`PlatformAccess` and `AppMembership` store `accountId` only, plus their own
-state. They do not copy issuer, subject, email, display name, or avatar.
+Platform authorities and App memberships store `accountId` only, plus their own
+relationship state. They do not copy issuer, subject, email, display name, or
+avatar.
 
-- `PlatformAccess`: `accountId`, authorities, revision, timestamps.
-- `AppMembership`: `(appId, accountId)`, joined timestamp, revision if needed.
+- `AccountPlatformAuthority`: `(accountId, authority)` plus grant timestamp.
+  The composite primary key prevents duplicate authority grants.
+- `AppMembership`: `(appId, accountId)` plus joined timestamp.
 - `PlaygroundFileRoot`: `(appId, accountId, rootId)` ownership.
 - Idempotency scopes use canonical `accountId`.
+
+The logical Account projection exposes `platformAuthorities` as a set, while
+the relational model stores one child row per authority. Grant and revoke are
+idempotent command-shaped mutations; the last-platform-administrator invariant
+is enforced transactionally. There is no separate PlatformAccess aggregate and
+no whole-set replacement revision.
 
 Platform People and App Members join the same Account summary projection. The
 ordinary projection contains `accountId`, primary verified email, display name,
@@ -373,8 +358,8 @@ This task creates no Merge or unmerge operation. The model reserves:
 AccountAlias { sourceAccountId, canonicalAccountId, createdAt, reason }
 ```
 
-A future irreversible Merge may set the source Account to `merged` and insert
-one immutable alias to the survivor. Canonical resolution follows aliases with a
+A future irreversible Merge may block the source Account and insert one
+immutable alias to the survivor. Canonical resolution follows aliases with a
 small fixed depth, rejects cycles or missing targets, and fails closed. Source
 Accounts, identity-link history, and original audit `accountId` values are never
 deleted or reused. Authorization uses the canonical Account; historical reads
@@ -389,17 +374,19 @@ legacy tables:
 - `cas_account_aliases`
 - `cas_external_identities`
 - `cas_account_profiles`
-- `cas_verified_emails`
+- `cas_account_platform_authorities` with primary key
+  `(account_id, authority)` and an authority-first lookup index
 - `cas_identity_migration_journal`
-- account-keyed platform access and App membership tables or additive
-  `account_id` columns during transition
+- account-keyed App membership tables or additive `account_id` columns during
+  transition
 - `account_id` on Playground roots and session metadata
 - hashed email-challenge and one-time continuation records
 
+`cas_accounts` stores the optional primary verified contact and provenance.
 Table constraints enforce active identity uniqueness, one profile per Account,
-relationship uniqueness, challenge expiry/consumption, and optimistic
-concurrency. D1 transactions own identity linking, unlinking, invitation
-acceptance, session revision, and relationship mutations.
+authority and membership uniqueness, and challenge expiry/consumption. D1
+transactions own identity linking, unlinking, invitation acceptance,
+credential-version increments, and relationship mutations.
 
 ## One-to-one migration
 
@@ -413,10 +400,11 @@ Migration is additive, idempotent, and restartable:
    random Account to each pair. Never group by email.
 3. Create one active ExternalIdentity per mapped pair. Seed Profile display data
    from `cas_operator_identities`, recording it as legacy/provider display data.
-   Do not create VerifiedEmail from `email_for_display` because its provenance
-   was not persisted.
-4. Backfill PlatformAccess and AppMembership by the permanent map. Preserve
-   authorities, blocked state, membership timestamps, and revisions.
+  Do not initialize the primary verified contact from `email_for_display`
+  because its provenance was not persisted.
+4. Backfill `blockedAt`, one AccountPlatformAuthority row per existing grant,
+  and AppMembership by the permanent map. Preserve blocked state, authorities,
+  and membership timestamps; do not carry forward generic revisions.
 5. For every Playground root, recompute each legacy owner key from its App and
    mapped identity, then set `account_id`. Fail migration if an owner cannot be
    mapped or maps ambiguously; never orphan or reassign it.
@@ -438,14 +426,14 @@ Migration is additive, idempotent, and restartable:
 The encrypted payload remains readable by the previous deployment during the
 pre-provider compatibility window: existing v1 identity fields stay present and
 additive Account fields carry `accountId`, exact ExternalIdentity, fresh-auth
-time, and `authRevision`. A legacy session is resolved through the permanent map
+time, and `credentialVersion`. A legacy session is resolved through the permanent map
 and immediately rotated to the Account form. Unknown, ambiguous, blocked, or
-revision-mismatched sessions fail closed.
+credential-version-mismatched sessions fail closed.
 
-Session table metadata adds `account_id` and `auth_revision` so all browser and
-CLI sessions for an Account can be revoked. MCP grants carry the same Account
-and revision and are checked on every request within the existing revocation
-bound. Existing remote MCP grant records are migrated server-side through the
+Session table metadata adds `account_id` and `credential_version` so all browser
+and CLI sessions for an Account can be revoked. MCP grants carry the same
+Account and credential version and are checked on every request within the
+existing revocation bound. Existing remote MCP grant records are migrated server-side through the
 same permanent map while retaining their legacy identity fields; unmapped or
 ambiguous grants are revoked. A migrated browser/CLI session may read only long
 enough to rotate, and must rotate before any mutation. Credential migration
@@ -477,13 +465,10 @@ before production schema mutation.
   expire after 10 minutes, are single-use, and are pruned within 24 hours.
   Attempt counters and generic outcome metadata may be retained for 30 days.
 - Pre-login and linking continuations expire after 10 minutes and are single-use.
-- VerifiedEmail stores only normalized address plus provenance needed for contact
-  and audit. Unverified/private provider email lists are never persisted or
-  logged.
-- Retired VerifiedEmail plaintext is removed within 30 days unless it remains
-  the selected primary contact. When immutable evidence must outlive that
-  window, retain only a keyed digest, source, and timestamps; general reads can
-  neither recover nor search the retired address.
+- Account stores only the current normalized primary contact and its provenance.
+  Unverified/private provider email lists and prior plaintext contacts are never
+  persisted or logged. Replacement/removal audit may retain only a keyed digest,
+  source, and timestamp; general reads cannot recover or search the old address.
 - Provider display values remain while selected by the Account profile; values
   sourced only from an unlinked identity are cleared or replaced by precedence.
 - External identity link history and Account aliases follow immutable security
@@ -501,7 +486,7 @@ Implementation evidence must include:
 - restart/idempotency and rollback-window tests;
 - legacy session rotation and all-account revocation tests;
 - duplicate-email separation and identity-link conflict tests;
-- final-identity unlink denial and optimistic-concurrency tests;
+- final-identity unlink denial and stale credential-version intent tests;
 - fresh, stale, absent, mismatched, unverified, and display-only email evidence;
 - future alias canonicalization, cycle, missing-target, and immutable-audit tests;
 - redaction tests proving provider tokens, challenge values, invitation tokens,
