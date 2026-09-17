@@ -185,7 +185,8 @@ The BFF owns these presentation routes outside the administrator OpenAPI:
 | --- | --- |
 | `GET /admin/auth/login` | Render configured provider choices and generic prior error state. |
 | `GET /admin/auth/start/{provider}` | Start normal login using a closed provider name and sealed continuation. |
-| `GET /admin/auth/callback/{provider}` | Fixed callback per configured provider; state must bind the same provider and purpose. |
+| `GET /admin/auth/callback/{provider}` | Console and CLI browser callback per configured provider; state must bind the same provider and purpose. |
+| `GET /oauth/callback/{provider}` | Remote MCP OAuth callback per configured provider; state must bind the same provider and purpose. |
 | `GET /admin/auth/cli/authorize` | Validate CLI request, then render provider choices or honor a valid provider preference. |
 | `POST /admin/auth/link/{provider}` | CSRF-protected start of current-Account reauthentication and target-provider linking. |
 | `POST /admin/auth/unlink/{externalIdentityId}` | CSRF-protected start of reauthentication before guarded unlinking. |
@@ -195,9 +196,9 @@ The BFF owns these presentation routes outside the administrator OpenAPI:
 
 `{provider}` is accepted only when present and enabled in the server registry.
 The callback rejects any mismatch among route, sealed state, purpose, redirect,
-and provider. Existing `/admin/auth/oidc` and `/admin/auth/callback` remain
-Google compatibility redirects during migration and are removed after the
-published sunset.
+and provider. Retired `/admin/auth/oidc`, `/admin/auth/callback`, and
+`/oauth/{provider}/callback` routes return `404`; no compatibility aliases are
+retained.
 
 Sensitive continuation data remains encrypted server-side or in the existing
 opaque session store. URLs carry only opaque state and provider-independent

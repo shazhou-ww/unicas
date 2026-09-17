@@ -86,9 +86,9 @@ const MCP_METADATA_PATHS = new Set([
 
 const MCP_BROWSER_PATHS = new Set([
   "/oauth/authorize",
-  "/oauth/google/callback",
-  "/oauth/microsoft/callback",
-  "/oauth/github/callback",
+  "/oauth/callback/google",
+  "/oauth/callback/microsoft",
+  "/oauth/callback/github",
 ]);
 
 const MCP_TOKEN_PATHS = new Set([

@@ -118,6 +118,11 @@ and reversibility:
   pre-launch data and require fresh login instead of maintaining old credentials.
 - Replace the single Google BFF configuration with a server-side provider
   registry and adapters shared by Console, CLI authorization, and MCP login.
+- Use provider-last callback paths consistently: Console and CLI browser
+  authentication uses `/admin/auth/callback/{provider}` and remote MCP OAuth
+  uses `/oauth/callback/{provider}` for Google, Microsoft, and GitHub. Remove
+  `/admin/auth/callback`, `/admin/auth/oidc`, and `/oauth/{provider}/callback`
+  without compatibility aliases under the pre-launch replacement decision.
 - Support Google through OIDC authorization code + PKCE, nonce, and strict
   issuer/audience verification, retaining `sub` as the external account key.
 - Support personal Microsoft accounts through the `consumers` OIDC authority,

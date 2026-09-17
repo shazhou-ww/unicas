@@ -694,7 +694,7 @@ function memoryAccountRepository(
     seedIdentity,
   );
   const identityForAccount = (requested: string) => [...identities.values()].find(value => value.accountId === requested && value.unlinkedAt === null) ?? null;
-  return {
+  const repository: Partial<AccountRepository> = {
     getAccount: async requested => accounts.get(requested) ?? null,
     getAliasTarget: async () => null,
     getActiveIdentity: async (issuer, candidateSubject) => identityKeys.get(`${issuer}\0${candidateSubject}`) ?? null,
@@ -751,7 +751,8 @@ function memoryAccountRepository(
       add(input.account, input.profile, input.identity);
       return "created";
     },
-  } as AccountRepository;
+  };
+  return repository as AccountRepository;
 }
 
 async function createMockProvider(): Promise<MockProvider> {
@@ -821,7 +822,7 @@ async function createBff(
       discoveryUrl: DISCOVERY_URL,
       clientId: CLIENT_ID,
       clientSecret: CLIENT_SECRET,
-      redirectUri: `${PUBLIC_ORIGIN}/admin/auth/callback`,
+      redirectUri: `${PUBLIC_ORIGIN}/admin/auth/callback/google`,
     },
     { fetchImpl: providerFetch },
   );
@@ -859,7 +860,7 @@ function authRequest(
 
 async function signIn(bff: (request: Request) => Promise<Response>, provider: MockProvider): Promise<{ cookie: string; csrf: string }> {
   // 1. Start login.
-  const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/oidc?returnTo=/admin/`));
+  const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/start/google?returnTo=/admin/`));
   expect(login.status).toBe(302);
   const preLoginCookie = cookieFrom(login)!;
   const location = new URL(login.headers.get("Location")!);
@@ -870,7 +871,7 @@ async function signIn(bff: (request: Request) => Promise<Response>, provider: Mo
   expect(location.searchParams.get("client_id")).toBe(CLIENT_ID);
   expect(location.searchParams.get("code_challenge_method")).toBe("S256");
   expect(location.searchParams.get("prompt")).toBe("select_account");
-  expect(location.searchParams.get("redirect_uri")).toBe(`${PUBLIC_ORIGIN}/admin/auth/callback`);
+  expect(location.searchParams.get("redirect_uri")).toBe(`${PUBLIC_ORIGIN}/admin/auth/callback/google`);
   expect(state).toBeTruthy();
   expect(nonce).toBeTruthy();
   expect(codeChallenge).toBeTruthy();
@@ -888,7 +889,7 @@ async function signIn(bff: (request: Request) => Promise<Response>, provider: Mo
 
   // 3. Callback with the authorization code.
   const callback = await bff(new Request(
-    `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(state)}`,
+    `${PUBLIC_ORIGIN}/admin/auth/callback/google?code=mock-code&state=${encodeURIComponent(state)}`,
     { headers: { Cookie: preLoginCookie } },
   ));
   expect(callback.status).toBe(302);
@@ -912,7 +913,7 @@ async function signInAs(
   provider: MockProvider,
   subject: string,
 ): Promise<{ cookie: string; csrf: string }> {
-  const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/oidc?returnTo=/admin/`));
+  const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/start/google?returnTo=/admin/`));
   const preLoginCookie = cookieFrom(login)!;
   const location = new URL(login.headers.get("Location")!);
   const state = location.searchParams.get("state")!;
@@ -927,7 +928,7 @@ async function signInAs(
     name: subject,
   };
   const callback = await bff(new Request(
-    `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(state)}`,
+    `${PUBLIC_ORIGIN}/admin/auth/callback/google?code=mock-code&state=${encodeURIComponent(state)}`,
     { headers: { Cookie: preLoginCookie } },
   ));
   const cookie = cookieFrom(callback)!;
@@ -999,7 +1000,7 @@ describe("cas-admin-webui BFF", () => {
         accountHint: email,
         verifiedEmailEvidence: kind === "google" ? [{
           normalizedEmail: email,
-          source: "google-oidc",
+          source: "google-oidc" as const,
           verifiedAt: 1,
           expiresAt: Number.MAX_SAFE_INTEGER,
           authenticationEventId: input.authenticationEventId,
@@ -1075,7 +1076,7 @@ describe("cas-admin-webui BFF", () => {
         accountHint: "alice@example.com",
         verifiedEmailEvidence: kind === "google" ? [{
           normalizedEmail: "alice@example.com",
-          source: "google-oidc",
+          source: "google-oidc" as const,
           verifiedAt: 1,
           expiresAt: Number.MAX_SAFE_INTEGER,
           authenticationEventId: input.authenticationEventId,
@@ -1334,7 +1335,7 @@ describe("cas-admin-webui BFF", () => {
         avatarUrl: null,
       }],
     ]);
-    const accountRepository: AccountRepository = {
+    const accountRepository: Partial<AccountRepository> = {
       getAccount: async requested => requested === accountId ? account : null,
       getAliasTarget: async () => null,
       getActiveIdentity: async (issuer, subject) => identities.get(`${issuer}\0${subject}`) ?? null,
@@ -1373,7 +1374,7 @@ describe("cas-admin-webui BFF", () => {
       controlPlane: fakeControlPlane(),
       sessionStore: new MemorySessionRepository(),
       providerRegistry: new ProviderRegistry([adapter("google"), adapter("github")]),
-      accountRepository,
+      accountRepository: accountRepository as AccountRepository,
     });
 
     async function login(kind: "google" | "github") {
@@ -1682,7 +1683,7 @@ describe("cas-admin-webui BFF", () => {
     // Do NOT grant the test user — repo is empty.
     const bff = await createBff(provider, undefined, {}, repo);
 
-    const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/oidc?returnTo=/admin/`));
+    const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/start/google?returnTo=/admin/`));
     const preLoginCookie = cookieFrom(login)!;
     const location = new URL(login.headers.get("Location")!);
     const state = location.searchParams.get("state")!;
@@ -1718,7 +1719,7 @@ describe("cas-admin-webui BFF", () => {
     repo.grant(ISSUER, "google-user-with-grant");
     const bff = await createBff(provider, undefined, {}, repo);
 
-    const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/oidc?returnTo=/admin/`));
+    const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/start/google?returnTo=/admin/`));
     const preLoginCookie = cookieFrom(login)!;
     const location = new URL(login.headers.get("Location")!);
     const state = location.searchParams.get("state")!;
@@ -1764,7 +1765,7 @@ describe("cas-admin-webui BFF", () => {
       name: "To Block",
     };
     const callback = await bff(new Request(
-      `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(state)}`,
+      `${PUBLIC_ORIGIN}/admin/auth/callback/google?code=mock-code&state=${encodeURIComponent(state)}`,
       { headers: { Cookie: preLoginCookie } },
     ));
     expect(callback.status).toBe(302);
@@ -2484,7 +2485,7 @@ describe("cas-admin-webui BFF", () => {
       memoryAccountRepository(repo, subject),
     );
 
-    const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/oidc?returnTo=/admin/`));
+    const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/start/google?returnTo=/admin/`));
     const preLoginCookie = cookieFrom(login)!;
     const location = new URL(login.headers.get("Location")!);
     const state = location.searchParams.get("state")!;
@@ -2499,7 +2500,7 @@ describe("cas-admin-webui BFF", () => {
       name: subject,
     };
     const callback = await bff(new Request(
-      `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(state)}`,
+      `${PUBLIC_ORIGIN}/admin/auth/callback/google?code=mock-code&state=${encodeURIComponent(state)}`,
       { headers: { Cookie: preLoginCookie } },
     ));
     const cookie = cookieFrom(callback)!;
@@ -2844,7 +2845,7 @@ describe("cas-admin-webui BFF", () => {
       memoryAccountRepository(repo, "non-admin-user"),
     );
 
-    const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/oidc?returnTo=/admin/`));
+    const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/start/google?returnTo=/admin/`));
     const preLoginCookie = cookieFrom(login)!;
     const location = new URL(login.headers.get("Location")!);
     const state = location.searchParams.get("state")!;
@@ -2854,7 +2855,7 @@ describe("cas-admin-webui BFF", () => {
       email_verified: true, name: "Non Admin",
     };
     const callback = await bff(new Request(
-      `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(state)}`,
+      `${PUBLIC_ORIGIN}/admin/auth/callback/google?code=mock-code&state=${encodeURIComponent(state)}`,
       { headers: { Cookie: preLoginCookie } },
     ));
     const cookie = cookieFrom(callback)!;

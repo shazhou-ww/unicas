@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
+import type { KVNamespace } from "@cloudflare/workers-types";
 import { migrateControlSchema } from "../src/control-schema.js";
 import { ControlSessionStore } from "../src/control-sessions.js";
 import type {
@@ -28,8 +29,16 @@ const oauthRequest: AuthRequest = {
 };
 
 const accountResolution = {
-  account: { accountId: `acct_${"a".repeat(22)}`, credentialVersion: 1 },
-  authenticatedIdentity: { externalIdentityId: "external-1", issuer: "https://accounts.example", subject: "alice-sub" },
+  account: {
+    accountId: `acct_${"a".repeat(22)}`, blockedAt: null, credentialVersion: 1,
+    primaryVerifiedEmail: null, createdAt: 1, updatedAt: 1,
+  },
+  authenticatedIdentity: {
+    externalIdentityId: "external-1", accountId: `acct_${"a".repeat(22)}`,
+    provider: "google", issuer: "https://accounts.example", subject: "alice-sub",
+    linkedAt: 1, lastAuthenticatedAt: 1, unlinkedAt: null, accountHint: null,
+    displayName: null, avatarUrl: null,
+  },
   platformAuthorities: ["apps.create"], hasAppMembership: false,
 } as AccountResolution;
 
@@ -57,7 +66,7 @@ describe("control-plane MCP OAuth authorization", () => {
       const start = await handler.fetch(new Request("https://cas.example/oauth/authorize"), fixture.env);
       expect(fixture.kv.size).toBe(0);
       const state = new URL(start.headers.get("Location")!).searchParams.get("state");
-      const callback = () => handler.fetch(new Request(`https://cas.example/oauth/google/callback?code=code&state=${state}`, { headers: { Cookie: cookieFrom(start) } }), fixture.env);
+      const callback = () => handler.fetch(new Request(`https://cas.example/oauth/callback/google?code=code&state=${state}`, { headers: { Cookie: cookieFrom(start) } }), fixture.env);
       const responses = await Promise.all([callback(), callback()]);
       expect(responses.map(response => response.status).sort()).toEqual([200, 400]);
       const accountId = `acct_${"a".repeat(22)}`;
@@ -82,8 +91,16 @@ describe("control-plane MCP OAuth authorization", () => {
       }),
     });
     const resolution = {
-      account: { accountId: `acct_${"a".repeat(22)}`, credentialVersion: 2 },
-      authenticatedIdentity: { issuer: `https://${kind}.example`, subject: "provider-subject", externalIdentityId: `external-${kind}` },
+      account: {
+        accountId: `acct_${"a".repeat(22)}`, blockedAt: null, credentialVersion: 2,
+        primaryVerifiedEmail: null, createdAt: 1, updatedAt: 1,
+      },
+      authenticatedIdentity: {
+        externalIdentityId: `external-${kind}`, accountId: `acct_${"a".repeat(22)}`,
+        provider: kind, issuer: `https://${kind}.example`, subject: "provider-subject",
+        linkedAt: 1, lastAuthenticatedAt: 1, unlinkedAt: null, accountHint: null,
+        displayName: null, avatarUrl: null,
+      },
       platformAuthorities: ["apps.create"], hasAppMembership: false,
     } as AccountResolution;
     const accounts = {
@@ -99,7 +116,7 @@ describe("control-plane MCP OAuth authorization", () => {
     expect(await selector.text()).toContain("Continue with Microsoft");
     const start = await handler.fetch(new Request(`https://cas.example/oauth/authorize?provider=${kind}`), fixture.env);
     const state = new URL(start.headers.get("Location")!).searchParams.get("state");
-    const callback = await handler.fetch(new Request(`https://cas.example/oauth/${kind}/callback?state=${state}&code=code`, {
+    const callback = await handler.fetch(new Request(`https://cas.example/oauth/callback/${kind}?state=${state}&code=code`, {
       headers: { Cookie: cookieFrom(start) },
     }), fixture.env);
     expect(callback.status).toBe(200);
@@ -118,7 +135,7 @@ describe("control-plane MCP OAuth authorization", () => {
     }));
     const second = await handler.fetch(new Request(`https://cas.example/oauth/authorize?provider=${kind}`), fixture.env);
     const wrongState = new URL(second.headers.get("Location")!).searchParams.get("state");
-    const wrong = await handler.fetch(new Request(`https://cas.example/oauth/google/callback?state=${wrongState}&code=code`, {
+    const wrong = await handler.fetch(new Request(`https://cas.example/oauth/callback/google?state=${wrongState}&code=code`, {
       headers: { Cookie: cookieFrom(second) },
     }), fixture.env);
     expect(wrong.status).toBe(400);
@@ -127,8 +144,16 @@ describe("control-plane MCP OAuth authorization", () => {
   test.each([false, true])("binds grants to Accounts and rechecks consent credential version (revoked=%s)", async revoked => {
     const fixture = createFixture();
     const resolution = {
-      account: { accountId: `acct_${"a".repeat(22)}`, credentialVersion: 1 },
-      authenticatedIdentity: { issuer: "https://accounts.example", subject: "alice-sub", externalIdentityId: "external-1" },
+      account: {
+        accountId: `acct_${"a".repeat(22)}`, blockedAt: null, credentialVersion: 1,
+        primaryVerifiedEmail: null, createdAt: 1, updatedAt: 1,
+      },
+      authenticatedIdentity: {
+        externalIdentityId: "external-1", accountId: `acct_${"a".repeat(22)}`,
+        provider: "google", issuer: "https://accounts.example", subject: "alice-sub",
+        linkedAt: 1, lastAuthenticatedAt: 1, unlinkedAt: null, accountHint: null,
+        displayName: null, avatarUrl: null,
+      },
       platformAuthorities: ["apps.create"], hasAppMembership: false,
     } as AccountResolution;
     const accounts = {
@@ -138,7 +163,7 @@ describe("control-plane MCP OAuth authorization", () => {
     const handler = createOAuthAuthorizationHandler({ oidcFactory: () => fixture.oidc, accountServiceFactory: () => accounts });
     const started = await handler.fetch(new Request("https://cas.example/oauth/authorize"), fixture.env);
     const state = new URL(started.headers.get("Location")!).searchParams.get("state");
-    const callback = await handler.fetch(new Request(`https://cas.example/oauth/google/callback?code=code&state=${state}`, {
+    const callback = await handler.fetch(new Request(`https://cas.example/oauth/callback/google?code=code&state=${state}`, {
       headers: { Cookie: cookieFrom(started) },
     }), fixture.env);
     expect(callback.status).toBe(200);
@@ -178,7 +203,7 @@ describe("control-plane MCP OAuth authorization", () => {
     expect(encrypted).not.toContain("client-state");
 
     const callback = await handler.fetch(new Request(
-      `https://cas.example/oauth/google/callback?code=google-code&state=${transactionId}`,
+      `https://cas.example/oauth/callback/google?code=google-code&state=${transactionId}`,
       { headers: { Cookie: authCookie } },
     ), fixture.env);
     expect(callback.status).toBe(200);
@@ -199,7 +224,7 @@ describe("control-plane MCP OAuth authorization", () => {
     const consentCookie = cookieFrom(callback);
 
     const replay = await handler.fetch(new Request(
-      `https://cas.example/oauth/google/callback?code=google-code&state=${transactionId}`,
+      `https://cas.example/oauth/callback/google?code=google-code&state=${transactionId}`,
       { headers: { Cookie: authCookie } },
     ), fixture.env);
     expect(replay.status).toBe(400);
@@ -259,7 +284,7 @@ describe("control-plane MCP OAuth authorization", () => {
     const started = await handler.fetch(new Request("https://cas.example/oauth/authorize"), fixture.env);
     const transactionId = new URL(started.headers.get("Location")!).searchParams.get("state")!;
     const callback = await handler.fetch(new Request(
-      `https://cas.example/oauth/google/callback?code=google-code&state=${transactionId}`,
+      `https://cas.example/oauth/callback/google?code=google-code&state=${transactionId}`,
       { headers: { Cookie: cookieFrom(started) } },
     ), fixture.env);
 
@@ -275,7 +300,7 @@ describe("control-plane MCP OAuth authorization", () => {
     const started = await handler.fetch(new Request("https://cas.example/oauth/authorize"), fixture.env);
     const transactionId = new URL(started.headers.get("Location")!).searchParams.get("state")!;
     const callback = await handler.fetch(new Request(
-      `https://cas.example/oauth/google/callback?code=google-code&state=${transactionId}`,
+      `https://cas.example/oauth/callback/google?code=google-code&state=${transactionId}`,
       { headers: { Cookie: cookieFrom(started) } },
     ), fixture.env);
 
@@ -302,7 +327,7 @@ describe("control-plane MCP OAuth authorization", () => {
       const started = await handler.fetch(new Request("https://cas.example/oauth/authorize"), fixture.env);
       const transactionId = new URL(started.headers.get("Location")!).searchParams.get("state")!;
       const callback = await handler.fetch(new Request(
-        `https://cas.example/oauth/google/callback?code=google-code&state=${transactionId}`,
+        `https://cas.example/oauth/callback/google?code=google-code&state=${transactionId}`,
         { headers: { Cookie: cookieFrom(started) } },
       ), fixture.env);
 
@@ -335,7 +360,7 @@ describe("control-plane MCP OAuth authorization", () => {
     const started = await handler.fetch(new Request("https://cas.example/oauth/authorize"), fixture.env);
     const transactionId = new URL(started.headers.get("Location")!).searchParams.get("state")!;
     const callback = await handler.fetch(new Request(
-      `https://cas.example/oauth/google/callback?code=google-code&state=${transactionId}`,
+      `https://cas.example/oauth/callback/google?code=google-code&state=${transactionId}`,
       { headers: { Cookie: cookieFrom(started) } },
     ), fixture.env);
     const consentHtml = await callback.text();

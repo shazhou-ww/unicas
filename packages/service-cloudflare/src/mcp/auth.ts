@@ -78,7 +78,7 @@ export function createOAuthAuthorizationHandler(options: OAuthAuthorizationHandl
       if (url.pathname === "/oauth/authorize" && request.method === "GET") {
         return startAuthorization(request, env, options);
       }
-      const callback = /^\/oauth\/(google|microsoft|github)\/callback$/.exec(url.pathname);
+      const callback = /^\/oauth\/callback\/(google|microsoft|github)$/.exec(url.pathname);
       if (callback && request.method === "GET") {
         return finishProviderAuthentication(request, env, options, callback[1] as ProviderKind);
       }
@@ -293,7 +293,7 @@ function oidcClient(env: OAuthAuthorizationEnv, options: OAuthAuthorizationHandl
     discoveryUrl: env.OIDC_DISCOVERY_URL,
     clientId,
     clientSecret,
-    redirectUri: `${publicOrigin}/oauth/google/callback`,
+    redirectUri: `${publicOrigin}/oauth/callback/google`,
   });
 }
 
@@ -307,13 +307,13 @@ function providerRegistry(env: OAuthAuthorizationEnv, options: OAuthAuthorizatio
   if (env.MICROSOFT_OIDC_CLIENT_ID && env.MICROSOFT_OIDC_CLIENT_SECRET) {
     adapters.push(createMicrosoftPersonalProvider({
       clientId: env.MICROSOFT_OIDC_CLIENT_ID, clientSecret: env.MICROSOFT_OIDC_CLIENT_SECRET,
-      discoveryUrl: env.MICROSOFT_OIDC_DISCOVERY_URL, redirectUri: `${origin}/oauth/microsoft/callback`,
+      discoveryUrl: env.MICROSOFT_OIDC_DISCOVERY_URL, redirectUri: `${origin}/oauth/callback/microsoft`,
     }));
   }
   if (env.GITHUB_OAUTH_CLIENT_ID && env.GITHUB_OAUTH_CLIENT_SECRET) {
     adapters.push(createGitHubProvider({
       clientId: env.GITHUB_OAUTH_CLIENT_ID, clientSecret: env.GITHUB_OAUTH_CLIENT_SECRET,
-      redirectUri: `${origin}/oauth/github/callback`,
+      redirectUri: `${origin}/oauth/callback/github`,
     }));
   }
   return new ProviderRegistry(adapters);

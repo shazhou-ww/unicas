@@ -40,8 +40,8 @@ Create a Web application client in Google Cloud. Add both authorized redirect
 URIs:
 
 ```text
-https://console.unicas.work/admin/auth/callback
-https://api.unicas.work/oauth/google/callback
+https://console.unicas.work/admin/auth/callback/google
+https://api.unicas.work/oauth/callback/google
 ```
 
 Enable the OpenID Connect scopes requested by the application: `openid`,
@@ -54,7 +54,7 @@ accounts. Add both Web redirect URIs:
 
 ```text
 https://console.unicas.work/admin/auth/callback/microsoft
-https://api.unicas.work/oauth/microsoft/callback
+https://api.unicas.work/oauth/callback/microsoft
 ```
 
 Create a client secret and retain its *value* in
@@ -72,7 +72,7 @@ Apps rather than choosing one path:
 | App | Authorization callback URL | GitHub Environment variables |
 | --- | --- | --- |
 | UniCAS Console | `https://console.unicas.work/admin/auth/callback/github` | `GITHUB_CONSOLE_OAUTH_CLIENT_ID`, `GITHUB_CONSOLE_OAUTH_CLIENT_SECRET` |
-| UniCAS MCP | `https://api.unicas.work/oauth/github/callback` | `GITHUB_MCP_OAUTH_CLIENT_ID`, `GITHUB_MCP_OAUTH_CLIENT_SECRET` |
+| UniCAS MCP | `https://api.unicas.work/oauth/callback/github` | `GITHUB_MCP_OAUTH_CLIENT_ID`, `GITHUB_MCP_OAUTH_CLIENT_SECRET` |
 
 The current Worker configuration accepts one GitHub credential pair. Before
 enabling real GitHub login, the remaining task implementation must make the

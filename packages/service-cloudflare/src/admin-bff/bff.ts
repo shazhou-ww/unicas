@@ -172,7 +172,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       discoveryUrl: config.oidcDiscoveryUrl,
       clientId: config.googleClientId,
       clientSecret: config.googleClientSecret,
-      redirectUri: `${config.publicOrigin}/admin/auth/callback`,
+      redirectUri: `${config.publicOrigin}/admin/auth/callback/google`,
     });
   const providerRegistry = options.providerRegistry ?? new ProviderRegistry(configuredProviderAdapters());
   const assets = options.assets ?? (async () => null);
@@ -231,15 +231,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     if (pathname === "/admin/auth/login" && method === "GET") {
       return handleLoginPage(request, url);
     }
-    if (pathname === "/admin/auth/oidc" && method === "GET") {
-      return handleOidcLogin(url);
-    }
     const providerStart = /^\/admin\/auth\/start\/(google|microsoft|github)$/.exec(pathname);
     if (providerStart && method === "GET") {
       return handleProviderLogin(providerStart[1] as ProviderKind, url);
-    }
-    if (pathname === "/admin/auth/callback" && method === "GET") {
-      return handleCallback(request, url, "google");
     }
     const providerCallback = /^\/admin\/auth\/callback\/(google|microsoft|github)$/.exec(pathname);
     if (providerCallback && method === "GET") {
@@ -347,15 +341,13 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     const configuredProviders = providerRegistry.list();
     const googleOnly = configuredProviders.length === 1 && configuredProviders[0]?.kind === "google";
     const providerButtons = configuredProviders.map(provider => {
-      const path = provider.kind === "google"
-        ? "/admin/auth/oidc"
-        : `/admin/auth/start/${provider.kind}`;
+      const path = `/admin/auth/start/${provider.kind}`;
       const providerUrl = new URL(path, config.publicOrigin);
       if (returnTo) providerUrl.searchParams.set("returnTo", returnTo);
       return `<a class="btn${configuredProviders.length === 1 ? " btn-primary" : ""}" href="${providerUrl.pathname}${providerUrl.search}">Continue with ${escapeHtml(provider.displayName)}</a>`;
     }).join("\n          ");
     const retryUrl = new URL(
-      googleOnly ? "/admin/auth/oidc" : "/admin/auth/login",
+      googleOnly ? "/admin/auth/start/google" : "/admin/auth/login",
       config.publicOrigin,
     );
     if (returnTo) retryUrl.searchParams.set("returnTo", returnTo);
@@ -408,10 +400,6 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       status: 200,
       headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
     });
-  }
-
-  async function handleOidcLogin(url: URL): Promise<Response> {
-    return handleProviderLogin("google", url);
   }
 
   async function handleProviderLogin(provider: ProviderKind, url: URL): Promise<Response> {

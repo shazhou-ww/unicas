@@ -16,6 +16,22 @@ Updated: 2026-09-17
 
 ## Current state
 
+On 2026-09-17, the requesting user explicitly approved the narrow callback
+contract adjustment: Console and CLI browser authentication use
+`/admin/auth/callback/{provider}` and remote MCP OAuth uses
+`/oauth/callback/{provider}` for Google, Microsoft, and GitHub. Retired
+`/admin/auth/callback`, `/admin/auth/oidc`, and `/oauth/{provider}/callback`
+routes have no compatibility aliases. This approval does not constitute
+Delivery acceptance.
+
+The callback implementation now directs all Console/CLI Google login flows to
+`/admin/auth/start/google` and `/admin/auth/callback/google`, and directs MCP
+provider callbacks to `/oauth/callback/{provider}`. Cloudflare package
+`tsc --noEmit` and the MCP authorization suite passed (16 tests). The remaining
+focused BFF test fixture calls that directly use retired Google routes still
+need conversion before the BFF suite can be recorded as passing; production
+routes remain current-only and return `404` for the retired paths.
+
 Claim commit `1b33a29c6ebcc9e7ed66fe273b4ca7c020e43584` initially assigned the
 task to `scottwei-home-pc`. On 2026-09-17, the requesting user explicitly
 directed `copilot-unicas-standalone` to take over the task. The validated
