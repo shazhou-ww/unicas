@@ -20,7 +20,7 @@ import { loginCommand } from "./commands/login.js";
 import { logoutCommand } from "./commands/logout.js";
 import { membersCommand } from "./commands/members.js";
 import { oauthIssuerCommand } from "./commands/oauth-issuer.js";
-import { principalCommand } from "./commands/principal.js";
+import { accountCommand, principalCommand } from "./commands/principal.js";
 import { platformInvitationsCommand } from "./commands/platform-invitations.js";
 import { platformAuditCommand } from "./commands/platform-audit.js";
 import { platformAccessCommand } from "./commands/platform-access.js";
@@ -38,7 +38,7 @@ Usage:
   unicas login [--port N] [--no-browser]                   Google OIDC login, then exchange for an admin session
   unicas logout                                            End the admin session and clear it locally
   unicas status                                             Show local session state
-  unicas principal                                          Current Principal, Profile, and App memberships
+  unicas account                                            Current Account, login method, authorities, and App memberships
 
   unicas apps list [--limit N] [--cursor C]
   unicas apps get <appId>
@@ -47,7 +47,7 @@ Usage:
 
   unicas app-members list <appId> [--limit N] [--cursor C]
   unicas app-members invite <appId> <email> [--idempotency-key K]
-  unicas app-members remove <appId> --issuer <url> --subject <sub> [--etag E] [--confirm-subject S]
+  unicas app-members remove <appId> <accountId> [--confirm-account-id ID]
 
   unicas app-oauth-issuer get <appId>
   unicas app-oauth-issuer inspect <appId> <issuer>
@@ -67,6 +67,7 @@ Usage:
   unicas platform-access update <principalRef> [--status active|blocked] [--authority platform.admin|apps.create ... | --clear-authorities] [--etag E]
 
 Legacy v1 compatibility:
+  unicas principal                                          Deprecated Principal/Profile alias
   unicas whoami                                             Legacy operator identity and Stack memberships
   unicas stacks list [--limit N] [--cursor C]
   unicas stacks get <stackId>
@@ -115,6 +116,9 @@ export async function main(argv: readonly string[]): Promise<void> {
       return;
     case "principal":
       await principalCommand(ctx);
+      return;
+    case "account":
+      await accountCommand(ctx);
       return;
     case "apps": {
       const [subcommand, ...subArgs] = rest;

@@ -5,6 +5,17 @@ import { describe, expect, test, vi } from "vitest";
 import { UserMenu } from "../src/ui/index.js";
 
 const mockMe = {
+  account: {
+    accountId: `acct_${"a".repeat(22)}`,
+    displayName: "Admin User",
+    primaryVerifiedEmail: { normalizedEmail: "admin@example.com", source: "google-oidc", verifiedAt: 1 },
+    avatar: { kind: "fallback", initials: "AU", colorIndex: 1 },
+    blockedAt: null,
+    platformAuthorities: [],
+    identities: [{ externalIdentityId: "ext-admin", provider: "google", accountHint: null, linkedAt: 1, lastAuthenticatedAt: 1, currentLogin: true }],
+    linkableProviders: [],
+  },
+  authenticatedIdentity: { externalIdentityId: "ext-admin", provider: "google", accountHint: null, linkedAt: 1, lastAuthenticatedAt: 1, currentLogin: true },
   principal: { issuer: "https://accounts.example", subject: "admin" },
   profile: { displayName: "Admin User", emailForDisplay: "admin@example.com" },
   platformAccess: {

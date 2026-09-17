@@ -1,15 +1,24 @@
 import type { D1Database } from "@cloudflare/workers-types";
-import type { PeopleEntry, PeopleRepository, PeopleScope } from "@unicas/service";
+import { projectAccountSummary, type PeopleEntry, type PeopleRepository, type PeopleScope } from "@unicas/service";
+import type { AccountId, AppPerson, PlatformPerson, PrimaryVerifiedEmail } from "@unicas/admin-protocol";
 
 const identity = "json_object('issuer', identity_issuer, 'subject', subject)";
 const profile = "json_object('displayName', display_name, 'emailForDisplay', email_for_display)";
 const authorities = "json(CASE WHEN platform_admin = 1 AND apps_create = 1 THEN '[\"platform.admin\",\"apps.create\"]' WHEN platform_admin = 1 THEN '[\"platform.admin\"]' WHEN apps_create = 1 THEN '[\"apps.create\"]' ELSE '[]' END)";
-const appMembers = `SELECT 'member:' || hex(identity_issuer) || ':' || hex(subject) AS row_key, joined_at AS row_time,
+const appMembers = `SELECT 'member:' || hex(account_id) AS row_key, joined_at AS row_time,
   'member' AS kind, 'member' AS state, 0 AS platform_admin, 0 AS apps_create, NULL AS effective,
-  COALESCE(display_name, '') || ' ' || COALESCE(email_for_display, '') || ' ' || identity_issuer || ' ' || subject AS search,
-  json_object('kind', 'member', 'joinedAt', joined_at, 'membership', json_object('appId', app_id, 'principal', ${identity}, 'profile', ${profile})) AS payload
-  FROM (SELECT member.*, profile.display_name, profile.email_for_display FROM cas_app_members member
-    LEFT JOIN cas_operator_identities profile USING(identity_issuer, subject) WHERE member.app_id = ?)`;
+  COALESCE(display_name, '') || ' ' || COALESCE(primary_verified_email, '') || ' ' || account_id AS search,
+  json_object('kind', 'member', 'joinedAt', joined_at, 'membership', json_object(
+    'appId', app_id, 'account', json_object('accountId', account_id, 'displayName', display_name,
+      'primaryVerifiedEmail', primary_verified_email, 'emailVerificationSource', email_verification_source,
+      'emailVerifiedAt', email_verified_at, 'avatarUrl', avatar_url))) AS payload
+  FROM (SELECT member.app_id, member.account_id, member.joined_at,
+      account.primary_verified_email, account.email_verification_source, account.email_verified_at,
+      profile.display_name, profile.avatar_url
+    FROM cas_app_members member
+    JOIN cas_accounts account ON account.account_id = member.account_id
+    JOIN cas_account_profiles profile ON profile.account_id = member.account_id
+    WHERE member.app_id = ?)`;
 const appInvitations = `SELECT 'invitation:' || hex(invitation_id), created_at, 'invitation',
   CASE WHEN status = 'pending' AND expires_at <= ? THEN 'expired' ELSE status END,
   0, 0, NULL, COALESCE(email_constraint, ''),
@@ -80,6 +89,46 @@ export class D1PeopleRepository implements PeopleRepository {
     const rows = await this.db.prepare(`WITH people AS (${app ? appMembers : platformPrincipals} UNION ALL ${app ? appInvitations : platformInvitations})
       SELECT row_key, row_time, payload FROM people WHERE ${conditions.join(" AND ")} ORDER BY row_time DESC, row_key ASC LIMIT ?`)
       .bind(...bindings).all<{ row_key: string; row_time: number; payload: string }>();
-    return (rows.results ?? []).map(row => ({ key: row.row_key, time: row.row_time, item: JSON.parse(row.payload) }));
+    return (rows.results ?? []).map(row => ({ key: row.row_key, time: row.row_time, item: peopleItem(row.payload) }));
   }
+}
+
+interface RawAccountMembership {
+  readonly appId: string;
+  readonly account: {
+    readonly accountId: AccountId;
+    readonly displayName: string | null;
+    readonly primaryVerifiedEmail: string | null;
+    readonly emailVerificationSource: PrimaryVerifiedEmail["source"] | null;
+    readonly emailVerifiedAt: number | null;
+    readonly avatarUrl: string | null;
+  };
+}
+
+function peopleItem(payload: string): AppPerson | PlatformPerson {
+  const parsed = JSON.parse(payload) as (AppPerson | PlatformPerson) & {
+    membership?: RawAccountMembership;
+  };
+  if (parsed.kind !== "member" || !parsed.membership) return parsed;
+  const raw = parsed.membership.account;
+  const primaryVerifiedEmail = raw.primaryVerifiedEmail !== null
+    && raw.emailVerificationSource !== null
+    && raw.emailVerifiedAt !== null
+    ? {
+      normalizedEmail: raw.primaryVerifiedEmail,
+      source: raw.emailVerificationSource,
+      verifiedAt: raw.emailVerifiedAt,
+    }
+    : null;
+  return {
+    kind: "member",
+    joinedAt: parsed.joinedAt,
+    membership: {
+      appId: parsed.membership.appId,
+      account: projectAccountSummary(
+        { accountId: raw.accountId, primaryVerifiedEmail },
+        { displayName: raw.displayName, avatarUrl: raw.avatarUrl },
+      ),
+    },
+  };
 }

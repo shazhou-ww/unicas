@@ -1,7 +1,8 @@
 import { afterEach, expect, test } from "vitest";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
-import { PeopleService } from "@unicas/service";
+import { AccountService, PeopleService } from "@unicas/service";
 import { D1PeopleRepository } from "../src/people-repository.js";
+import { D1AccountRepository } from "../src/account-repository.js";
 import { migrateControlSchema } from "../src/control-schema.js";
 import { D1ControlPlaneAdminRepository } from "../src/control-admin-repository.js";
 
@@ -13,10 +14,13 @@ test("D1 combines people before filtering and paging without merging shared emai
   await runtime.ready;
   const db = await runtime.getD1Database("DB", "people");
   await migrateControlSchema(db);
-  for (const issuer of ["issuer-a", "issuer-b"]) {
-    await db.prepare("INSERT INTO cas_operator_identities (identity_issuer, subject, display_name, email_for_display, created_at) VALUES (?, 'same', 'Alice', 'same@example.test', 1)").bind(issuer).run();
-    await db.prepare("INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at) VALUES ('cas_one', ?, 'same', 100)").bind(issuer).run();
-    await db.prepare("INSERT INTO cas_platform_principals (principal_ref, identity_issuer, subject, status, platform_admin, apps_create, revision, created_at, updated_at) VALUES (?, ?, 'same', 'active', 0, 1, 1, 100, 100)").bind(issuer, issuer).run();
+  const accounts = new AccountService(new D1AccountRepository(db), () => 1);
+  for (const [issuer, provider] of [["issuer-a", "google"], ["issuer-b", "github"]] as const) {
+    const created = await accounts.createForExternalIdentity({ provider, issuer, subject: "same", displayName: "Alice" });
+    await db.prepare("UPDATE cas_accounts SET primary_verified_email = 'same@example.test', email_verification_source = 'google-oidc', email_verified_at = 1 WHERE account_id = ?").bind(created.account.accountId).run();
+    await db.prepare("INSERT INTO cas_operator_identities (identity_issuer, subject, display_name, email_for_display, created_at, account_id) VALUES (?, 'same', 'Alice', 'same@example.test', 1, ?)").bind(issuer, created.account.accountId).run();
+    await db.prepare("INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES ('cas_one', ?, 'same', 100, ?)").bind(issuer, created.account.accountId).run();
+    await db.prepare("INSERT INTO cas_platform_principals (principal_ref, identity_issuer, subject, status, platform_admin, apps_create, revision, created_at, updated_at, account_id) VALUES (?, ?, 'same', 'active', 0, 1, 1, 100, 100, ?)").bind(issuer, issuer, created.account.accountId).run();
   }
   for (const [invitationId, status, expiry] of [["pending", "pending", 3000], ["expired", "pending", 500], ["accepted", "accepted", 3000]] as const) {
     await db.prepare("INSERT INTO cas_app_member_invitations (invitation_id, app_id, status, email_constraint, token_hash, expires_at, created_at, revision) VALUES (?, 'cas_one', ?, 'same@example.test', ?, ?, 100, 1)").bind(invitationId, status, invitationId, expiry).run();
@@ -33,8 +37,10 @@ test("D1 combines people before filtering and paging without merging shared emai
     expect([first.items[0], second.items[0], third.items[0]]).toEqual(all.items);
     expect(third.nextCursor).toBeNull();
     expect((await service.list(scope, { filter: "history" })).items).toHaveLength(2);
-    expect((await service.list(scope, { query: "issuer-b" })).items).toHaveLength(1);
+    expect((await service.list(scope, { query: "issuer-b" })).items).toHaveLength("appId" in scope ? 0 : 1);
   }
+  const appMembers = await service.list({ appId: "cas_one" }, { filter: "members" });
+  expect(JSON.stringify(appMembers)).not.toMatch(/issuer-[ab]|"subject"/);
   expect((await service.list({ platform: true }, { authority: "platform.admin" })).items).toHaveLength(1);
   expect((await service.list({ platform: true }, { effectiveAccess: "active" })).items).toHaveLength(2);
   expect((await service.list({ appId: "cas_other" }, {})).items).toHaveLength(0);

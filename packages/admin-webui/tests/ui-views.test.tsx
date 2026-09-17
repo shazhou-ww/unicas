@@ -24,6 +24,16 @@ function json(body: unknown, status = 200): Response {
 }
 
 const STACK = "cas_stack_a";
+const ACCOUNT_ID = `acct_${"a".repeat(22)}`;
+
+function accountSummary(displayName: string | null, email: string | null = null) {
+  return {
+    accountId: ACCOUNT_ID,
+    displayName,
+    primaryVerifiedEmail: email ? { normalizedEmail: email, source: "google-oidc", verifiedAt: 1 } : null,
+    avatar: { kind: "fallback", initials: displayName?.slice(0, 2).toUpperCase() ?? "UC", colorIndex: 1 },
+  };
+}
 
 describe("InvitationView", () => {
   test("accepts an App membership invitation", async () => {
@@ -130,7 +140,7 @@ describe("PlatformPrincipalsView", () => {
           : json({ items: [], nextCursor: null });
       }
       if (path === "/admin/platform/principals/principal-1") {
-        return json({ ...principal, memberships: [{ appId: "app-1", principal: principal.principal, profile: principal.profile }] });
+        return json({ ...principal, memberships: [{ appId: "app-1", account: accountSummary("Developer", "developer@example.com") }] });
       }
       return new Response(null, { status: 404 });
     });
@@ -494,8 +504,7 @@ describe("MembersView", () => {
           {
             kind: "member", joinedAt: 1, membership: {
               appId: STACK,
-              principal: { issuer: "iss", subject: "alice" },
-              profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+              account: accountSummary("Alice", "alice@example.com"),
             },
           },
         ]
@@ -513,15 +522,14 @@ describe("MembersView", () => {
     expect(screen.getByText("https://cas.example/admin/invitations/token-xyz")).toBeInTheDocument();
   });
 
-  test("removing an App member sends the App revision and Principal query", async () => {
+  test("removing an App member sends only the Account ID", async () => {
     fetchMock
       .mockResolvedValueOnce(json({
         items: [
           {
             kind: "member", joinedAt: 1, membership: {
               appId: STACK,
-              principal: { issuer: "iss", subject: "alice" },
-              profile: { displayName: null, emailForDisplay: null },
+              account: accountSummary(null),
             },
           },
         ]
@@ -536,8 +544,8 @@ describe("MembersView", () => {
     await waitFor(() => expect(screen.getByText("No people found.")).toBeInTheDocument());
     const deleteCall = fetchMock.mock.calls.find((call) => call[1]?.method === "DELETE");
     expect(deleteCall).toBeDefined();
-    expect(new Headers(deleteCall![1]!.headers).get("If-Match")).toBe('"3"');
-    expect(deleteCall![0]).toBe(`/admin/apps/${STACK}/members?issuer=iss&subject=alice`);
+    expect(new Headers(deleteCall![1]!.headers).get("If-Match")).toBeNull();
+    expect(deleteCall![0]).toBe(`/admin/apps/${STACK}/members?accountId=${ACCOUNT_ID}`);
   });
 });
 

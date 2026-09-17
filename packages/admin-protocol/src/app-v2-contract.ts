@@ -4,6 +4,7 @@ import { AppIdSchema } from "@unicas/tenant-protocol";
 import { AppPeopleQuerySchema, PlatformPeopleQuerySchema } from "./people.js";
 import {
   AccountSelfSchema,
+  AccountIdSchema,
   AppControlAuditEventSchema,
   AppMemberInvitationSchema,
   AppMembershipSchema,
@@ -103,12 +104,14 @@ export const appMeContract = appProcedure
     path: "/admin/me",
     operationId: "getCurrentPrincipal",
     summary: "Read the current administrator",
-    description: "Returns immutable Principal identity, non-authoritative Profile metadata, and visible App memberships.",
+    description: "Returns the stable Account, current masked login identity, and Account-keyed memberships. Principal/Profile fields are deprecated session compatibility aliases.",
     inputStructure: "detailed",
     tags: ["Identity"],
   })
   .input(z.object({}).readonly())
   .output(z.object({
+    account: AccountSelfSchema,
+    authenticatedIdentity: ExternalIdentitySummarySchema,
     principal: PrincipalSchema,
     profile: ProfileSchema,
     platformAccess: z.object({
@@ -234,7 +237,7 @@ export const listAppMembersContract = appProcedure
     path: `${AppAdminApiBasePath}/{appId}/members`,
     operationId: "listAppMembers",
     summary: "List App members",
-    description: "Lists equal-authority App administrators with Principal and Profile kept separate.",
+    description: "Lists equal-authority App administrator Accounts without exposing login identity details.",
     inputStructure: "detailed",
     tags: ["Members"],
   })
@@ -247,11 +250,11 @@ export const deleteAppMemberContract = appProcedure
     path: `${AppAdminApiBasePath}/{appId}/members`,
     operationId: "deleteAppMember",
     summary: "Remove an App member",
-    description: "Removes the member selected by exact Principal issuer and subject.",
+    description: "Idempotently removes the member selected by stable Account ID. The App must retain at least one member.",
     inputStructure: "detailed",
     tags: ["Members"],
   })
-  .input(z.object({ params: appParams, headers: mutationHeaders, query: PrincipalSchema }).readonly())
+  .input(z.object({ params: appParams, query: z.object({ accountId: AccountIdSchema }).readonly() }).readonly())
   .output(z.object({ ok: z.literal(true) }).readonly());
 
 export const createAppMemberInvitationContract = appProcedure

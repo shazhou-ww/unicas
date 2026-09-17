@@ -88,10 +88,8 @@ describe("tool catalog", () => {
     const removeAppMember = getToolDefinition("remove_app_member");
     expect(removeAppMember?.inputSchema.safeParse({
       appId: "a",
-      issuer: "https://issuer.example",
-      subject: "sub",
-      etag: "\"1\"",
-      confirmSubject: "sub",
+      accountId: `acct_${"a".repeat(22)}`,
+      confirmAccountId: `acct_${"a".repeat(22)}`,
     }).success).toBe(true);
   });
 });

@@ -1,11 +1,15 @@
 import type {
   AccountSelf,
   AccountId,
+  AccountSummary,
+  AppId,
+  AppMembership,
   PlatformAuthority,
   PrimaryVerifiedEmail,
   ProviderKind,
 } from "@unicas/admin-protocol";
 import { generateAccountId, generateExternalIdentityId } from "./control-ids.js";
+import { decodeControlListCursor, encodeControlListCursor } from "./control-cursor.js";
 import type { AuthenticatedProviderResult } from "./authentication.js";
 import { AUTHENTICATION_FLOW_TTL_MS } from "./authentication.js";
 
@@ -49,6 +53,13 @@ export interface AccountWithIdentityCreate {
   readonly identity: ExternalIdentityRecord;
 }
 
+export interface AccountAppMembershipRecord {
+  readonly appId: AppId;
+  readonly account: AccountRecord;
+  readonly profile: AccountProfileRecord;
+  readonly joinedAt: number;
+}
+
 export interface AccountRepository {
   getAccount(accountId: AccountId): Promise<AccountRecord | null>;
   getAliasTarget(sourceAccountId: AccountId): Promise<AccountId | null>;
@@ -57,7 +68,25 @@ export interface AccountRepository {
   getProfile(accountId: AccountId): Promise<AccountProfileRecord | null>;
   listActiveIdentities(accountId: AccountId): Promise<readonly ExternalIdentityRecord[]>;
   listPlatformAuthorities(accountId: AccountId): Promise<readonly PlatformAuthority[]>;
-  hasAppMembership(accountId: AccountId): Promise<boolean>;
+  hasAppMembership(accountId: AccountId, appId?: AppId): Promise<boolean>;
+  listAccountMembershipAppIds(accountId: AccountId): Promise<readonly AppId[]>;
+  readControlSnapshot(): Promise<number>;
+  listAppMemberships(input: {
+    readonly appId: AppId;
+    readonly afterAccountId: string;
+    readonly limit: number;
+  }): Promise<readonly AccountAppMembershipRecord[]>;
+  commitRemoveAppMembership(input: {
+    readonly appId: AppId;
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly targetAccountId: AccountId;
+    readonly eventId: string;
+    readonly requestId?: string;
+    readonly traceId?: string;
+    readonly callerChannel?: string;
+    readonly now: number;
+  }): Promise<"removed" | "actor-not-member" | "last-member">;
   createAccountWithIdentity(input: AccountWithIdentityCreate): Promise<"created" | "identity-conflict">;
   commitLinkIdentity(input: {
     readonly accountId: AccountId;
@@ -106,7 +135,11 @@ export type AccountServiceErrorCode =
   | "IDENTITY_ACCOUNT_MISMATCH"
   | "IDENTITY_LINK_CONFLICT"
   | "FINAL_IDENTITY_CANNOT_BE_UNLINKED"
-  | "FRESH_AUTHENTICATION_REQUIRED";
+  | "FRESH_AUTHENTICATION_REQUIRED"
+  | "APP_MEMBERSHIP_REQUIRED"
+  | "INVALID_CURSOR"
+  | "INVALID_REQUEST"
+  | "LAST_MEMBER";
 
 export class AccountServiceError extends Error {
   constructor(readonly code: AccountServiceErrorCode) {
@@ -221,21 +254,9 @@ export class AccountService {
       this.repository.listPlatformAuthorities(account.accountId),
     ]);
     if (!profile) throw new AccountServiceError("ACCOUNT_NOT_FOUND");
-    const displayName = profile.displayName;
-    const fallbackAvatar = {
-      initials: initials(displayName),
-      colorIndex: stableColorIndex(account.accountId),
-    };
+    const summary = projectAccountSummary(account, profile);
     return {
-      accountId: account.accountId,
-      displayName,
-      primaryVerifiedEmail: account.primaryVerifiedEmail,
-      avatar: profile.avatarUrl
-        ? { kind: "image", url: profile.avatarUrl, ...fallbackAvatar }
-        : {
-          kind: "fallback",
-          ...fallbackAvatar,
-        },
+      ...summary,
       blockedAt: account.blockedAt,
       platformAuthorities,
       identities: identities.map(identity => ({
@@ -259,6 +280,76 @@ export class AccountService {
     await this.#resolveCanonicalAccount(input.accountId).then(account => this.#requireUsableAccount(account));
     const result = await this.repository.updateProfile({ ...input, now: this.now() });
     if (result === "identity-not-found") throw new AccountServiceError("IDENTITY_NOT_FOUND");
+  }
+
+  async listAppMembers(input: {
+    readonly actorAccountId: AccountId;
+    readonly appId: AppId;
+    readonly limit?: number;
+    readonly cursor?: string;
+  }): Promise<{ readonly items: readonly AppMembership[]; readonly nextCursor: string | null }> {
+    const actor = await this.#resolveCanonicalAccount(input.actorAccountId);
+    this.#requireUsableAccount(actor);
+    if (!await this.repository.hasAppMembership(actor.accountId, input.appId)) {
+      throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
+    }
+    const limit = input.limit ?? 50;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new AccountServiceError("INVALID_REQUEST");
+    }
+    const cursor = input.cursor === undefined ? null : decodeControlListCursor(input.cursor);
+    if (input.cursor !== undefined && !cursor) throw new AccountServiceError("INVALID_CURSOR");
+    const snapshot = await this.repository.readControlSnapshot();
+    if (cursor && cursor.snapshot !== snapshot) throw new AccountServiceError("INVALID_CURSOR");
+    const rows = await this.repository.listAppMemberships({
+      appId: input.appId,
+      afterAccountId: cursor?.last ?? "",
+      limit: limit + 1,
+    });
+    if (await this.repository.readControlSnapshot() !== snapshot) {
+      throw new AccountServiceError("INVALID_CURSOR");
+    }
+    const page = rows.slice(0, limit);
+    return {
+      items: page.map(row => ({
+        appId: row.appId,
+        account: projectAccountSummary(row.account, row.profile),
+      })),
+      nextCursor: rows.length > limit
+        ? encodeControlListCursor({ version: 1, snapshot, last: page.at(-1)!.account.accountId })
+        : null,
+    };
+  }
+
+  async listAccountMemberships(accountId: AccountId): Promise<readonly AppMembership[]> {
+    const account = await this.#resolveCanonicalAccount(accountId);
+    this.#requireUsableAccount(account);
+    const profile = await this.repository.getProfile(account.accountId);
+    if (!profile) throw new AccountServiceError("ACCOUNT_NOT_FOUND");
+    const summary = projectAccountSummary(account, profile);
+    return (await this.repository.listAccountMembershipAppIds(account.accountId))
+      .map(appId => ({ appId, account: summary }));
+  }
+
+  async removeAppMember(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly appId: AppId;
+    readonly targetAccountId: AccountId;
+    readonly requestId?: string;
+    readonly traceId?: string;
+    readonly callerChannel?: string;
+  }): Promise<void> {
+    const actor = await this.#resolveCanonicalAccount(input.actorAccountId);
+    this.#requireUsableAccount(actor);
+    const result = await this.repository.commitRemoveAppMembership({
+      ...input,
+      actorAccountId: actor.accountId,
+      eventId: crypto.randomUUID(),
+      now: this.now(),
+    });
+    if (result === "actor-not-member") throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
+    if (result === "last-member") throw new AccountServiceError("LAST_MEMBER");
   }
 
   async linkExternalIdentity(input: {
@@ -377,4 +468,22 @@ function stableColorIndex(accountId: string): number {
   let hash = 0;
   for (const character of accountId) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
   return hash % 12;
+}
+
+export function projectAccountSummary(
+  account: Pick<AccountRecord, "accountId" | "primaryVerifiedEmail">,
+  profile: Pick<AccountProfileRecord, "displayName" | "avatarUrl">,
+): AccountSummary {
+  const fallbackAvatar = {
+    initials: initials(profile.displayName),
+    colorIndex: stableColorIndex(account.accountId),
+  };
+  return {
+    accountId: account.accountId,
+    displayName: profile.displayName,
+    primaryVerifiedEmail: account.primaryVerifiedEmail,
+    avatar: profile.avatarUrl
+      ? { kind: "image" as const, url: profile.avatarUrl, ...fallbackAvatar }
+      : { kind: "fallback" as const, ...fallbackAvatar },
+  };
 }

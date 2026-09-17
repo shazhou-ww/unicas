@@ -17,8 +17,9 @@ export type {
   ProviderFlowPurpose,
   VerifiedEmailEvidence,
 } from "./authentication.js";
-export { AccountService, AccountServiceError } from "./account.js";
+export { AccountService, AccountServiceError, projectAccountSummary } from "./account.js";
 export type {
+  AccountAppMembershipRecord,
   AccountCreateInput,
   AccountProfileRecord,
   AccountRecord,

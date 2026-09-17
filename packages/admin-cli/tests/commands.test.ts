@@ -12,7 +12,7 @@ import { appsCommand } from "../src/commands/apps.js";
 import { logoutCommand } from "../src/commands/logout.js";
 import { membersCommand } from "../src/commands/members.js";
 import { oauthIssuerCommand } from "../src/commands/oauth-issuer.js";
-import { principalCommand } from "../src/commands/principal.js";
+import { accountCommand, principalCommand } from "../src/commands/principal.js";
 import { platformInvitationsCommand } from "../src/commands/platform-invitations.js";
 import { platformAuditCommand } from "../src/commands/platform-audit.js";
 import { platformAccessCommand } from "../src/commands/platform-access.js";
@@ -86,6 +86,21 @@ describe("command layer", () => {
     const parsed = JSON.parse(writes.join("")) as { principal: { subject: string }; memberships: Array<{ appId: string }> };
     expect(parsed.principal.subject).toBe("sub-1");
     expect(parsed.memberships).toEqual([expect.objectContaining({ appId: "cas_stack_a" })]);
+  });
+
+  test("account prints stable Account data without Principal identity", async () => {
+    await seedLoggedIn(ctx.store);
+    const server = new FakeAdminApi({ adminVocabulary: "app" });
+    ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
+    const { writes } = captureStdout();
+    await accountCommand(ctx);
+    const parsed = JSON.parse(writes.join(""));
+    expect(parsed).toMatchObject({
+      account: { accountId: `acct_${"a".repeat(22)}`, displayName: "Alice" },
+      authenticatedIdentity: { provider: "google" },
+      memberships: [{ appId: "cas_stack_a" }],
+    });
+    expect(parsed).not.toHaveProperty("principal");
   });
 
   test("status reports the local session without network traffic", async () => {
@@ -237,7 +252,7 @@ describe("command layer", () => {
     ]);
   });
 
-  test("app-members list returns separate Principal and Profile data", async () => {
+  test("app-members list returns Account summaries without login identity", async () => {
     await seedLoggedIn(ctx.store);
     const server = new FakeAdminApi({ adminVocabulary: "app" });
     ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
@@ -246,8 +261,7 @@ describe("command layer", () => {
     expect(JSON.parse(writes.join(""))).toMatchObject({
       items: [{
         appId: "cas_app_a",
-        principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-        profile: { displayName: "Alice" },
+        account: { accountId: `acct_${"a".repeat(22)}`, displayName: "Alice" },
       }],
     });
     expect(server.requests[0]).toMatchObject({
@@ -277,28 +291,24 @@ describe("command layer", () => {
     });
   });
 
-  test("app-members remove confirms the Principal and resolves the App ETag", async () => {
+  test("app-members remove confirms the Account ID without resolving an App ETag", async () => {
     await seedLoggedIn(ctx.store);
     const server = new FakeAdminApi({ adminVocabulary: "app" });
     ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
     const { writes } = captureStdout();
     await appMembersCommand(ctx, "remove", [
       "cas_app_a",
-      "--issuer",
-      "https://accounts.google.com",
-      "--subject",
-      "sub-1",
-      "--confirm-subject",
-      "sub-1",
+      `acct_${"a".repeat(22)}`,
+      "--confirm-account-id",
+      `acct_${"a".repeat(22)}`,
     ]);
     expect(JSON.parse(writes.join(""))).toEqual({ ok: true });
     expect(server.requests).toEqual([
-      expect.objectContaining({ pathname: "/admin/apps/cas_app_a", method: "GET" }),
       expect.objectContaining({
         pathname: "/admin/apps/cas_app_a/members",
-        search: "?issuer=https%3A%2F%2Faccounts.google.com&subject=sub-1",
+        search: `?accountId=acct_${"a".repeat(22)}`,
         method: "DELETE",
-        ifMatch: '"rev-3"',
+        ifMatch: null,
       }),
     ]);
   });
@@ -307,13 +317,8 @@ describe("command layer", () => {
     await seedLoggedIn(ctx.store);
     await expect(appMembersCommand(ctx, "remove", [
       "cas_app_a",
-      "--issuer",
-      "https://accounts.google.com",
-      "--subject",
-      "sub-1",
-      "--etag",
-      '"3"',
-    ])).rejects.toThrow(/confirm-subject/);
+      `acct_${"a".repeat(22)}`,
+    ])).rejects.toThrow(/confirm-account-id/);
   });
 
   test("stacks create auto-generates an idempotency key", async () => {

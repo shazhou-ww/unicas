@@ -968,8 +968,11 @@ describe("cas-admin-webui BFF", () => {
       getAliasTarget: async () => null,
       getActiveIdentity: async (issuer, subject) => identities.get(`${issuer}\0${subject}`) ?? null,
       getIdentity: async externalIdentityId => [...identities.values()].find(identity => identity.externalIdentityId === externalIdentityId) ?? null,
+      getProfile: async () => ({ accountId, displayName: "Account User", avatarUrl: null, displayNameSource: "user", avatarSource: "user", updatedAt: 1 }),
+      listActiveIdentities: async () => [...identities.values()],
       listPlatformAuthorities: async () => ["platform.admin"],
       hasAppMembership: async () => false,
+      listAccountMembershipAppIds: async () => [],
       createAccountWithIdentity: async () => "identity-conflict",
     };
     const adapter = (kind: "google" | "github"): ProviderAdapter => ({

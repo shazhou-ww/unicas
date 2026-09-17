@@ -229,6 +229,10 @@ const TOOL_HANDLERS = {
     return admin.me();
   },
 
+  async get_current_account(admin) {
+    return currentAccountOutput(await admin.getCurrentPrincipal());
+  },
+
   async get_current_principal(admin) {
     return admin.getCurrentPrincipal();
   },
@@ -289,13 +293,9 @@ const TOOL_HANDLERS = {
   },
 
   async remove_app_member(admin, args) {
-    const subject = str(args.subject);
-    requireMatch(args.confirmSubject, subject, "confirmSubject must exactly match subject");
-    return admin.deleteAppMember(
-      { appId: str(args.appId) },
-      { issuer: str(args.issuer), subject },
-      str(args.etag),
-    );
+    const accountId = str(args.accountId);
+    requireMatch(args.confirmAccountId, accountId, "confirmAccountId must exactly match accountId");
+    return admin.deleteAppMember({ appId: str(args.appId), accountId });
   },
 
   async list_app_playground_file_roots(admin, args) {
@@ -504,6 +504,20 @@ const TOOL_HANDLERS = {
     );
   },
 } satisfies Readonly<Record<AppAdminMcpToolName | LegacyToolName, ToolHandler>>;
+
+function currentAccountOutput(current: Awaited<ReturnType<AdminClient["getCurrentPrincipal"]>>) {
+  return {
+    account: {
+      accountId: current.account.accountId,
+      displayName: current.account.displayName,
+      primaryVerifiedEmail: current.account.primaryVerifiedEmail,
+      avatar: current.account.avatar,
+    },
+    authenticatedIdentity: current.authenticatedIdentity,
+    platformAuthorities: current.account.platformAuthorities,
+    memberships: current.memberships,
+  };
+}
 
 function str(value: unknown): string {
   if (typeof value !== "string" || value.length === 0) {

@@ -51,7 +51,7 @@
       "get": {
         "operationId": "getCurrentPrincipal",
         "summary": "Read the current administrator",
-        "description": "Returns immutable Principal identity, non-authoritative Profile metadata, and visible App memberships.",
+        "description": "Returns the stable Account, current masked login identity, and Account-keyed memberships. Principal/Profile fields are deprecated session compatibility aliases.",
         "tags": [
           "Identity"
         ],
@@ -63,6 +63,296 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "account": {
+                      "type": "object",
+                      "properties": {
+                        "accountId": {
+                          "type": "string",
+                          "pattern": "^acct_[A-Za-z0-9_-]{22}$",
+                          "description": "Opaque UniCAS-generated durable administrator account identifier."
+                        },
+                        "displayName": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "primaryVerifiedEmail": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "normalizedEmail": {
+                                  "type": "string",
+                                  "maxLength": 254,
+                                  "format": "email",
+                                  "description": "Current primary contact normalized with trim().toLowerCase()."
+                                },
+                                "source": {
+                                  "enum": [
+                                    "google-oidc",
+                                    "github-emails-api",
+                                    "unicas-email-challenge"
+                                  ],
+                                  "type": "string",
+                                  "description": "Verifier that established control of the primary contact address."
+                                },
+                                "verifiedAt": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991,
+                                  "description": "Unix timestamp in milliseconds since 1970-01-01T00:00:00Z."
+                                }
+                              },
+                              "required": [
+                                "normalizedEmail",
+                                "source",
+                                "verifiedAt"
+                              ],
+                              "additionalProperties": false,
+                              "readOnly": true
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "avatar": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "const": "image"
+                                },
+                                "url": {
+                                  "type": "string",
+                                  "format": "uri"
+                                },
+                                "initials": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "colorIndex": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "url",
+                                "initials",
+                                "colorIndex"
+                              ],
+                              "additionalProperties": false,
+                              "readOnly": true
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "const": "fallback"
+                                },
+                                "initials": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "colorIndex": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "initials",
+                                "colorIndex"
+                              ],
+                              "additionalProperties": false,
+                              "readOnly": true
+                            }
+                          ]
+                        },
+                        "blockedAt": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991,
+                              "description": "Unix timestamp in milliseconds since 1970-01-01T00:00:00Z."
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "platformAuthorities": {
+                          "type": "array",
+                          "items": {
+                            "enum": [
+                              "platform.admin",
+                              "apps.create"
+                            ],
+                            "type": "string"
+                          },
+                          "readOnly": true
+                        },
+                        "identities": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "externalIdentityId": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "provider": {
+                                "enum": [
+                                  "google",
+                                  "microsoft",
+                                  "github"
+                                ],
+                                "type": "string",
+                                "description": "Configured administrator authentication provider."
+                              },
+                              "accountHint": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "linkedAt": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991,
+                                "description": "Unix timestamp in milliseconds since 1970-01-01T00:00:00Z."
+                              },
+                              "lastAuthenticatedAt": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991,
+                                    "description": "Unix timestamp in milliseconds since 1970-01-01T00:00:00Z."
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "currentLogin": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "externalIdentityId",
+                              "provider",
+                              "accountHint",
+                              "linkedAt",
+                              "lastAuthenticatedAt",
+                              "currentLogin"
+                            ],
+                            "additionalProperties": false,
+                            "readOnly": true
+                          },
+                          "readOnly": true
+                        },
+                        "linkableProviders": {
+                          "type": "array",
+                          "items": {
+                            "enum": [
+                              "google",
+                              "microsoft",
+                              "github"
+                            ],
+                            "type": "string",
+                            "description": "Configured administrator authentication provider."
+                          },
+                          "readOnly": true
+                        }
+                      },
+                      "required": [
+                        "accountId",
+                        "displayName",
+                        "primaryVerifiedEmail",
+                        "avatar",
+                        "blockedAt",
+                        "platformAuthorities",
+                        "identities",
+                        "linkableProviders"
+                      ],
+                      "additionalProperties": false,
+                      "readOnly": true
+                    },
+                    "authenticatedIdentity": {
+                      "type": "object",
+                      "properties": {
+                        "externalIdentityId": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "provider": {
+                          "enum": [
+                            "google",
+                            "microsoft",
+                            "github"
+                          ],
+                          "type": "string",
+                          "description": "Configured administrator authentication provider."
+                        },
+                        "accountHint": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "linkedAt": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991,
+                          "description": "Unix timestamp in milliseconds since 1970-01-01T00:00:00Z."
+                        },
+                        "lastAuthenticatedAt": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991,
+                              "description": "Unix timestamp in milliseconds since 1970-01-01T00:00:00Z."
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "currentLogin": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "externalIdentityId",
+                        "provider",
+                        "accountHint",
+                        "linkedAt",
+                        "lastAuthenticatedAt",
+                        "currentLogin"
+                      ],
+                      "additionalProperties": false,
+                      "readOnly": true
+                    },
                     "principal": {
                       "type": "object",
                       "properties": {
@@ -161,30 +451,14 @@
                             "minLength": 1,
                             "description": "App whose equal administrator authority this membership grants."
                           },
-                          "principal": {
+                          "account": {
                             "type": "object",
                             "properties": {
-                              "issuer": {
+                              "accountId": {
                                 "type": "string",
-                                "format": "uri",
-                                "description": "Canonical issuer component of the immutable Principal key."
+                                "pattern": "^acct_[A-Za-z0-9_-]{22}$",
+                                "description": "Opaque UniCAS-generated durable administrator account identifier."
                               },
-                              "subject": {
-                                "type": "string",
-                                "minLength": 1,
-                                "description": "Immutable subject component within the issuer."
-                              }
-                            },
-                            "required": [
-                              "issuer",
-                              "subject"
-                            ],
-                            "readOnly": true,
-                            "description": "Immutable authenticated identity granted membership."
-                          },
-                          "profile": {
-                            "type": "object",
-                            "properties": {
                               "displayName": {
                                 "anyOf": [
                                   {
@@ -193,40 +467,130 @@
                                   {
                                     "type": "null"
                                   }
-                                ],
-                                "description": "Display-only name; never an authorization key."
+                                ]
                               },
-                              "emailForDisplay": {
+                              "primaryVerifiedEmail": {
                                 "anyOf": [
                                   {
-                                    "type": "string"
+                                    "type": "object",
+                                    "properties": {
+                                      "normalizedEmail": {
+                                        "type": "string",
+                                        "maxLength": 254,
+                                        "format": "email",
+                                        "description": "Current primary contact normalized with trim().toLowerCase()."
+                                      },
+                                      "source": {
+                                        "enum": [
+                                          "google-oidc",
+                                          "github-emails-api",
+                                          "unicas-email-challenge"
+                                        ],
+                                        "type": "string",
+                                        "description": "Verifier that established control of the primary contact address."
+                                      },
+                                      "verifiedAt": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991,
+                                        "description": "Unix timestamp in milliseconds since 1970-01-01T00:00:00Z."
+                                      }
+                                    },
+                                    "required": [
+                                      "normalizedEmail",
+                                      "source",
+                                      "verifiedAt"
+                                    ],
+                                    "additionalProperties": false,
+                                    "readOnly": true
                                   },
                                   {
                                     "type": "null"
                                   }
-                                ],
-                                "description": "Display-only email; never an authorization key."
+                                ]
+                              },
+                              "avatar": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "const": "image"
+                                      },
+                                      "url": {
+                                        "type": "string",
+                                        "format": "uri"
+                                      },
+                                      "initials": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "colorIndex": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "url",
+                                      "initials",
+                                      "colorIndex"
+                                    ],
+                                    "additionalProperties": false,
+                                    "readOnly": true
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "const": "fallback"
+                                      },
+                                      "initials": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "colorIndex": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "initials",
+                                      "colorIndex"
+                                    ],
+                                    "additionalProperties": false,
+                                    "readOnly": true
+                                  }
+                                ]
                               }
                             },
                             "required": [
+                              "accountId",
                               "displayName",
-                              "emailForDisplay"
+                              "primaryVerifiedEmail",
+                              "avatar"
                             ],
+                            "additionalProperties": false,
                             "readOnly": true,
-                            "description": "Non-authoritative display metadata for the Principal."
+                            "description": "Stable Account granted membership."
                           }
                         },
                         "required": [
                           "appId",
-                          "principal",
-                          "profile"
+                          "account"
                         ],
+                        "additionalProperties": false,
                         "readOnly": true
                       },
                       "readOnly": true
                     }
                   },
                   "required": [
+                    "account",
+                    "authenticatedIdentity",
                     "principal",
                     "profile",
                     "platformAccess",
@@ -2812,7 +3176,7 @@
       "get": {
         "operationId": "listAppMembers",
         "summary": "List App members",
-        "description": "Lists equal-authority App administrators with Principal and Profile kept separate.",
+        "description": "Lists equal-authority App administrator Accounts without exposing login identity details.",
         "tags": [
           "Members"
         ],
@@ -2867,30 +3231,14 @@
                             "minLength": 1,
                             "description": "App whose equal administrator authority this membership grants."
                           },
-                          "principal": {
+                          "account": {
                             "type": "object",
                             "properties": {
-                              "issuer": {
+                              "accountId": {
                                 "type": "string",
-                                "format": "uri",
-                                "description": "Canonical issuer component of the immutable Principal key."
+                                "pattern": "^acct_[A-Za-z0-9_-]{22}$",
+                                "description": "Opaque UniCAS-generated durable administrator account identifier."
                               },
-                              "subject": {
-                                "type": "string",
-                                "minLength": 1,
-                                "description": "Immutable subject component within the issuer."
-                              }
-                            },
-                            "required": [
-                              "issuer",
-                              "subject"
-                            ],
-                            "readOnly": true,
-                            "description": "Immutable authenticated identity granted membership."
-                          },
-                          "profile": {
-                            "type": "object",
-                            "properties": {
                               "displayName": {
                                 "anyOf": [
                                   {
@@ -2899,34 +3247,122 @@
                                   {
                                     "type": "null"
                                   }
-                                ],
-                                "description": "Display-only name; never an authorization key."
+                                ]
                               },
-                              "emailForDisplay": {
+                              "primaryVerifiedEmail": {
                                 "anyOf": [
                                   {
-                                    "type": "string"
+                                    "type": "object",
+                                    "properties": {
+                                      "normalizedEmail": {
+                                        "type": "string",
+                                        "maxLength": 254,
+                                        "format": "email",
+                                        "description": "Current primary contact normalized with trim().toLowerCase()."
+                                      },
+                                      "source": {
+                                        "enum": [
+                                          "google-oidc",
+                                          "github-emails-api",
+                                          "unicas-email-challenge"
+                                        ],
+                                        "type": "string",
+                                        "description": "Verifier that established control of the primary contact address."
+                                      },
+                                      "verifiedAt": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991,
+                                        "description": "Unix timestamp in milliseconds since 1970-01-01T00:00:00Z."
+                                      }
+                                    },
+                                    "required": [
+                                      "normalizedEmail",
+                                      "source",
+                                      "verifiedAt"
+                                    ],
+                                    "additionalProperties": false,
+                                    "readOnly": true
                                   },
                                   {
                                     "type": "null"
                                   }
-                                ],
-                                "description": "Display-only email; never an authorization key."
+                                ]
+                              },
+                              "avatar": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "const": "image"
+                                      },
+                                      "url": {
+                                        "type": "string",
+                                        "format": "uri"
+                                      },
+                                      "initials": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "colorIndex": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "url",
+                                      "initials",
+                                      "colorIndex"
+                                    ],
+                                    "additionalProperties": false,
+                                    "readOnly": true
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "const": "fallback"
+                                      },
+                                      "initials": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "colorIndex": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "initials",
+                                      "colorIndex"
+                                    ],
+                                    "additionalProperties": false,
+                                    "readOnly": true
+                                  }
+                                ]
                               }
                             },
                             "required": [
+                              "accountId",
                               "displayName",
-                              "emailForDisplay"
+                              "primaryVerifiedEmail",
+                              "avatar"
                             ],
+                            "additionalProperties": false,
                             "readOnly": true,
-                            "description": "Non-authoritative display metadata for the Principal."
+                            "description": "Stable Account granted membership."
                           }
                         },
                         "required": [
                           "appId",
-                          "principal",
-                          "profile"
+                          "account"
                         ],
+                        "additionalProperties": false,
                         "readOnly": true
                       },
                       "readOnly": true
@@ -3185,7 +3621,7 @@
       "delete": {
         "operationId": "deleteAppMember",
         "summary": "Remove an App member",
-        "description": "Removes the member selected by exact Principal issuer and subject.",
+        "description": "Idempotently removes the member selected by stable Account ID. The App must retain at least one member.",
         "tags": [
           "Members"
         ],
@@ -3201,39 +3637,16 @@
             }
           },
           {
-            "name": "issuer",
+            "name": "accountId",
             "in": "query",
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uri",
-              "description": "Canonical issuer component of the immutable Principal key."
+              "pattern": "^acct_[A-Za-z0-9_-]{22}$",
+              "description": "Opaque UniCAS-generated durable administrator account identifier."
             },
             "allowEmptyValue": true,
             "allowReserved": true
-          },
-          {
-            "name": "subject",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Immutable subject component within the issuer."
-            },
-            "allowEmptyValue": true,
-            "allowReserved": true
-          },
-          {
-            "name": "if-match",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 9007199254740991,
-              "description": "Exact current resource revision used as the If-Match precondition."
-            }
           }
         ],
         "responses": {
@@ -4549,30 +4962,14 @@
                                     "minLength": 1,
                                     "description": "App whose equal administrator authority this membership grants."
                                   },
-                                  "principal": {
+                                  "account": {
                                     "type": "object",
                                     "properties": {
-                                      "issuer": {
+                                      "accountId": {
                                         "type": "string",
-                                        "format": "uri",
-                                        "description": "Canonical issuer component of the immutable Principal key."
+                                        "pattern": "^acct_[A-Za-z0-9_-]{22}$",
+                                        "description": "Opaque UniCAS-generated durable administrator account identifier."
                                       },
-                                      "subject": {
-                                        "type": "string",
-                                        "minLength": 1,
-                                        "description": "Immutable subject component within the issuer."
-                                      }
-                                    },
-                                    "required": [
-                                      "issuer",
-                                      "subject"
-                                    ],
-                                    "readOnly": true,
-                                    "description": "Immutable authenticated identity granted membership."
-                                  },
-                                  "profile": {
-                                    "type": "object",
-                                    "properties": {
                                       "displayName": {
                                         "anyOf": [
                                           {
@@ -4581,34 +4978,122 @@
                                           {
                                             "type": "null"
                                           }
-                                        ],
-                                        "description": "Display-only name; never an authorization key."
+                                        ]
                                       },
-                                      "emailForDisplay": {
+                                      "primaryVerifiedEmail": {
                                         "anyOf": [
                                           {
-                                            "type": "string"
+                                            "type": "object",
+                                            "properties": {
+                                              "normalizedEmail": {
+                                                "type": "string",
+                                                "maxLength": 254,
+                                                "format": "email",
+                                                "description": "Current primary contact normalized with trim().toLowerCase()."
+                                              },
+                                              "source": {
+                                                "enum": [
+                                                  "google-oidc",
+                                                  "github-emails-api",
+                                                  "unicas-email-challenge"
+                                                ],
+                                                "type": "string",
+                                                "description": "Verifier that established control of the primary contact address."
+                                              },
+                                              "verifiedAt": {
+                                                "type": "integer",
+                                                "minimum": 0,
+                                                "maximum": 9007199254740991,
+                                                "description": "Unix timestamp in milliseconds since 1970-01-01T00:00:00Z."
+                                              }
+                                            },
+                                            "required": [
+                                              "normalizedEmail",
+                                              "source",
+                                              "verifiedAt"
+                                            ],
+                                            "additionalProperties": false,
+                                            "readOnly": true
                                           },
                                           {
                                             "type": "null"
                                           }
-                                        ],
-                                        "description": "Display-only email; never an authorization key."
+                                        ]
+                                      },
+                                      "avatar": {
+                                        "anyOf": [
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "kind": {
+                                                "const": "image"
+                                              },
+                                              "url": {
+                                                "type": "string",
+                                                "format": "uri"
+                                              },
+                                              "initials": {
+                                                "type": "string",
+                                                "minLength": 1
+                                              },
+                                              "colorIndex": {
+                                                "type": "integer",
+                                                "minimum": 0,
+                                                "maximum": 9007199254740991
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "url",
+                                              "initials",
+                                              "colorIndex"
+                                            ],
+                                            "additionalProperties": false,
+                                            "readOnly": true
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "kind": {
+                                                "const": "fallback"
+                                              },
+                                              "initials": {
+                                                "type": "string",
+                                                "minLength": 1
+                                              },
+                                              "colorIndex": {
+                                                "type": "integer",
+                                                "minimum": 0,
+                                                "maximum": 9007199254740991
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "initials",
+                                              "colorIndex"
+                                            ],
+                                            "additionalProperties": false,
+                                            "readOnly": true
+                                          }
+                                        ]
                                       }
                                     },
                                     "required": [
+                                      "accountId",
                                       "displayName",
-                                      "emailForDisplay"
+                                      "primaryVerifiedEmail",
+                                      "avatar"
                                     ],
+                                    "additionalProperties": false,
                                     "readOnly": true,
-                                    "description": "Non-authoritative display metadata for the Principal."
+                                    "description": "Stable Account granted membership."
                                   }
                                 },
                                 "required": [
                                   "appId",
-                                  "principal",
-                                  "profile"
+                                  "account"
                                 ],
+                                "additionalProperties": false,
                                 "readOnly": true
                               },
                               "joinedAt": {
@@ -11746,30 +12231,14 @@
                             "minLength": 1,
                             "description": "App whose equal administrator authority this membership grants."
                           },
-                          "principal": {
+                          "account": {
                             "type": "object",
                             "properties": {
-                              "issuer": {
+                              "accountId": {
                                 "type": "string",
-                                "format": "uri",
-                                "description": "Canonical issuer component of the immutable Principal key."
+                                "pattern": "^acct_[A-Za-z0-9_-]{22}$",
+                                "description": "Opaque UniCAS-generated durable administrator account identifier."
                               },
-                              "subject": {
-                                "type": "string",
-                                "minLength": 1,
-                                "description": "Immutable subject component within the issuer."
-                              }
-                            },
-                            "required": [
-                              "issuer",
-                              "subject"
-                            ],
-                            "readOnly": true,
-                            "description": "Immutable authenticated identity granted membership."
-                          },
-                          "profile": {
-                            "type": "object",
-                            "properties": {
                               "displayName": {
                                 "anyOf": [
                                   {
@@ -11778,34 +12247,122 @@
                                   {
                                     "type": "null"
                                   }
-                                ],
-                                "description": "Display-only name; never an authorization key."
+                                ]
                               },
-                              "emailForDisplay": {
+                              "primaryVerifiedEmail": {
                                 "anyOf": [
                                   {
-                                    "type": "string"
+                                    "type": "object",
+                                    "properties": {
+                                      "normalizedEmail": {
+                                        "type": "string",
+                                        "maxLength": 254,
+                                        "format": "email",
+                                        "description": "Current primary contact normalized with trim().toLowerCase()."
+                                      },
+                                      "source": {
+                                        "enum": [
+                                          "google-oidc",
+                                          "github-emails-api",
+                                          "unicas-email-challenge"
+                                        ],
+                                        "type": "string",
+                                        "description": "Verifier that established control of the primary contact address."
+                                      },
+                                      "verifiedAt": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991,
+                                        "description": "Unix timestamp in milliseconds since 1970-01-01T00:00:00Z."
+                                      }
+                                    },
+                                    "required": [
+                                      "normalizedEmail",
+                                      "source",
+                                      "verifiedAt"
+                                    ],
+                                    "additionalProperties": false,
+                                    "readOnly": true
                                   },
                                   {
                                     "type": "null"
                                   }
-                                ],
-                                "description": "Display-only email; never an authorization key."
+                                ]
+                              },
+                              "avatar": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "const": "image"
+                                      },
+                                      "url": {
+                                        "type": "string",
+                                        "format": "uri"
+                                      },
+                                      "initials": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "colorIndex": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "url",
+                                      "initials",
+                                      "colorIndex"
+                                    ],
+                                    "additionalProperties": false,
+                                    "readOnly": true
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "const": "fallback"
+                                      },
+                                      "initials": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "colorIndex": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "initials",
+                                      "colorIndex"
+                                    ],
+                                    "additionalProperties": false,
+                                    "readOnly": true
+                                  }
+                                ]
                               }
                             },
                             "required": [
+                              "accountId",
                               "displayName",
-                              "emailForDisplay"
+                              "primaryVerifiedEmail",
+                              "avatar"
                             ],
+                            "additionalProperties": false,
                             "readOnly": true,
-                            "description": "Non-authoritative display metadata for the Principal."
+                            "description": "Stable Account granted membership."
                           }
                         },
                         "required": [
                           "appId",
-                          "principal",
-                          "profile"
+                          "account"
                         ],
+                        "additionalProperties": false,
                         "readOnly": true
                       },
                       "readOnly": true

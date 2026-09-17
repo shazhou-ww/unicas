@@ -171,4 +171,75 @@ describe("D1 Account repository", () => {
     expect(await repository.getIdentity(created.authenticatedIdentity.externalIdentityId))
       .toMatchObject({ displayName: "Initial Name", avatarUrl: "https://lh3.googleusercontent.com/avatar" });
   });
+
+  test("lists and atomically removes App members by Account ID", async () => {
+    const { db, service } = await fixture();
+    const actor = await service.createForExternalIdentity({
+      provider: "google",
+      issuer: "https://accounts.google.com",
+      subject: "member-admin",
+      displayName: "Member Admin",
+    });
+    const target = await service.createForExternalIdentity({
+      provider: "github",
+      issuer: "https://github.com",
+      subject: "84",
+      displayName: "Target User",
+    });
+    await db.prepare(
+      "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES ('cas_app_a', 'App', '', 'active', 1, 1)",
+    ).run();
+    for (const member of [actor, target]) {
+      await db.prepare(
+        "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES ('cas_app_a', ?, ?, 1, ?)",
+      ).bind(
+        member.authenticatedIdentity.issuer,
+        member.authenticatedIdentity.subject,
+        member.account.accountId,
+      ).run();
+    }
+
+    const page = await service.listAppMembers({
+      actorAccountId: actor.account.accountId,
+      appId: "cas_app_a",
+    });
+    expect(page.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ account: expect.objectContaining({ accountId: actor.account.accountId, displayName: "Member Admin" }) }),
+      expect.objectContaining({ account: expect.objectContaining({ accountId: target.account.accountId, displayName: "Target User" }) }),
+    ]));
+    await service.removeAppMember({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      appId: "cas_app_a",
+      targetAccountId: target.account.accountId,
+      requestId: "request-1",
+      traceId: "trace-1",
+      callerChannel: "admin-webui",
+    });
+    expect(await db.prepare("SELECT account_id FROM cas_app_members").all()).toMatchObject({
+      results: [{ account_id: actor.account.accountId }],
+    });
+    expect(await db.prepare(
+      "SELECT target, original_account_id, external_identity_id FROM cas_control_audit_events WHERE action = 'member.removed'",
+    ).first()).toEqual({
+      target: target.account.accountId,
+      original_account_id: actor.account.accountId,
+      external_identity_id: actor.authenticatedIdentity.externalIdentityId,
+    });
+    await service.removeAppMember({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      appId: "cas_app_a",
+      targetAccountId: target.account.accountId,
+    });
+    expect(await db.prepare(
+      "SELECT COUNT(*) AS count FROM cas_control_audit_events WHERE action = 'member.removed'",
+    ).first()).toEqual({ count: 1 });
+    await expect(service.removeAppMember({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      appId: "cas_app_a",
+      targetAccountId: actor.account.accountId,
+    })).rejects.toMatchObject({ code: "LAST_MEMBER" });
+  });
 });

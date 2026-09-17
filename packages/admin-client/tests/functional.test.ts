@@ -103,13 +103,19 @@ class MockAdminService {
     if (path === casAdminRoutes.me()) {
       if (this.appVocabulary) {
         return Response.json({
+          account,
+          authenticatedIdentity: account.identities[0],
           principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
           profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
           platformAccess: { principalRef: "principal-1", status: "active", authorities: ["platform.admin", "apps.create"], revision: 1 },
           memberships: [{
             appId: APP,
-            principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-            profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+            account: {
+              accountId: account.accountId,
+              displayName: account.displayName,
+              primaryVerifiedEmail: account.primaryVerifiedEmail,
+              avatar: account.avatar,
+            },
           }],
         });
       }
@@ -228,8 +234,12 @@ class MockAdminService {
       return Response.json({
         items: [{
           appId: APP,
-          principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-          profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+          account: {
+            accountId: `acct_${"a".repeat(22)}`,
+            displayName: "Alice",
+            primaryVerifiedEmail: null,
+            avatar: { kind: "fallback", initials: "AL", colorIndex: 1 },
+          },
         }],
         nextCursor: null,
       });
@@ -463,8 +473,10 @@ describe("functional admin client", () => {
   it("uses explicit App operations for shared routes and managed Space issuance", async () => {
     service.appVocabulary = true;
     const current = await client.getCurrentPrincipal();
+    expect(current.account.displayName).toBe("Alice");
+    expect(current.authenticatedIdentity.provider).toBe("google");
     expect(current.principal.subject).toBe("sub-1");
-    expect(current.memberships[0]!.appId).toBe(APP);
+    expect(current.memberships[0]).toMatchObject({ appId: APP, account: { accountId: current.account.accountId } });
 
     const membership = await client.acceptAppMemberInvitation({ token: "invite-1" });
     expect(membership).toEqual({ appId: APP });
@@ -517,13 +529,12 @@ describe("functional admin client", () => {
     expect(await client.patchApp({ appId: APP }, { description: "Production", status: "suspended" }, '"3"'))
       .toEqual({ etag: '"4"' });
     expect(await client.listAppMembers({ appId: APP }, { limit: 10 })).toMatchObject({
-      items: [{ appId: APP, principal: { subject: "sub-1" } }],
+      items: [{ appId: APP, account: { accountId: `acct_${"a".repeat(22)}` } }],
     });
     expect(await client.deleteAppMember(
-      { appId: APP },
-      { issuer: "https://accounts.google.com", subject: "sub-1" },
-      '"4"',
+      { appId: APP, accountId: `acct_${"a".repeat(22)}` },
     )).toEqual({ ok: true });
+    expect(service.requests.at(-1)).toMatchObject({ ifMatch: null, search: `?accountId=acct_${"a".repeat(22)}` });
     expect(await client.createAppMemberInvitation(
       { appId: APP },
       { emailConstraint: "alice@example.com" },
@@ -543,9 +554,9 @@ describe("functional admin client", () => {
       }),
       expect.objectContaining({
         path: `/admin/apps/${APP}/members`,
-        search: "?issuer=https%3A%2F%2Faccounts.google.com&subject=sub-1",
+        search: `?accountId=acct_${"a".repeat(22)}`,
         method: "DELETE",
-        ifMatch: '"4"',
+        ifMatch: null,
       }),
     ]));
   });

@@ -104,12 +104,15 @@ export interface App {
 
 export interface AppMembership {
   readonly appId: AppId;
-  readonly principal: Principal;
-  readonly profile: Profile;
+  readonly account: AccountSummary;
 }
 
 export interface AppAdminMeResponse {
+  readonly account: AccountSelf;
+  readonly authenticatedIdentity: ExternalIdentitySummary;
+  /** @deprecated Use account. */
   readonly principal: Principal;
+  /** @deprecated Use account profile/contact fields. */
   readonly profile: Profile;
   readonly platformAccess: CurrentPlatformAccess;
   readonly memberships: readonly AppMembership[];

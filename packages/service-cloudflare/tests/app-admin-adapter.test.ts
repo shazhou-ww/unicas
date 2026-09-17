@@ -57,7 +57,25 @@ describe("App admin physical compatibility adapter", () => {
     expect(await response.text()).toBe("");
   });
 
-  test("maps the shared current-administrator response to Principal and Profile", async () => {
+  test("maps the shared current-administrator response to Account-first v2 fields", async () => {
+    const account = {
+      accountId: `acct_${"a".repeat(22)}`,
+      displayName: "Alice",
+      primaryVerifiedEmail: null,
+      avatar: { kind: "fallback", initials: "AL", colorIndex: 1 },
+      blockedAt: null,
+      platformAuthorities: ["platform.admin"],
+      identities: [{ externalIdentityId: "ext-alice", provider: "google", accountHint: null, linkedAt: 1, lastAuthenticatedAt: 2, currentLogin: true }],
+      linkableProviders: ["github"],
+    };
+    const accountMemberships = [{
+      appId: "app-1", account: {
+        accountId: account.accountId,
+        displayName: account.displayName,
+        primaryVerifiedEmail: account.primaryVerifiedEmail,
+        avatar: account.avatar,
+      }
+    }];
     const { response, legacyHandler } = await invoke(
       { operation: "me" },
       "/admin/me",
@@ -81,12 +99,17 @@ describe("App admin physical compatibility adapter", () => {
           displayName: "Alice",
           emailForDisplay: "alice@example.com",
         }],
+        account,
+        authenticatedIdentity: account.identities[0],
+        accountMemberships,
       },
     );
     expect(legacyHandler).toHaveBeenCalledWith(expect.objectContaining({
       url: "https://console.unicas.work/admin/me",
     }));
     await expect(response.json()).resolves.toEqual({
+      account,
+      authenticatedIdentity: account.identities[0],
       principal: { issuer: "https://accounts.example", subject: "alice" },
       profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
       platformAccess: {
@@ -95,11 +118,7 @@ describe("App admin physical compatibility adapter", () => {
         authorities: ["platform.admin"],
         revision: 3,
       },
-      memberships: [{
-        appId: "app-1",
-        principal: { issuer: "https://accounts.example", subject: "alice" },
-        profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
-      }],
+      memberships: accountMemberships,
     });
   });
 
@@ -171,29 +190,28 @@ describe("App admin physical compatibility adapter", () => {
     expect(response.headers.get("ETag")).toBe('"3"');
   });
 
-  test("separates Principal and Profile in App memberships", async () => {
-    const { response } = await invoke(
-      { operation: "listMembers", appId: "app-1" },
-      "/admin/apps/app-1/members",
-      {
-        items: [{
-          stackId: "app-1",
-          identityIssuer: "https://accounts.example",
-          subject: "subject-1",
-          displayName: "Operator",
-          emailForDisplay: "operator@example.com",
-        }],
-        nextCursor: null,
-      },
-    );
-    await expect(response.json()).resolves.toEqual({
+  test("forwards Account-keyed App memberships without legacy rewriting", async () => {
+    const body = {
       items: [{
         appId: "app-1",
-        principal: { issuer: "https://accounts.example", subject: "subject-1" },
-        profile: { displayName: "Operator", emailForDisplay: "operator@example.com" },
+        account: {
+          accountId: `acct_${"a".repeat(22)}`,
+          displayName: "Operator",
+          primaryVerifiedEmail: null,
+          avatar: { kind: "fallback", initials: "OP", colorIndex: 1 },
+        },
       }],
       nextCursor: null,
-    });
+    };
+    const { response, legacyHandler } = await invoke(
+      { operation: "listMembers", appId: "app-1" },
+      "/admin/apps/app-1/members",
+      body,
+    );
+    expect(legacyHandler).toHaveBeenCalledWith(expect.objectContaining({
+      url: "https://console.unicas.work/admin/apps/app-1/members",
+    }));
+    await expect(response.json()).resolves.toEqual(body);
   });
 
   test("maps Space audit filters and response fields", async () => {

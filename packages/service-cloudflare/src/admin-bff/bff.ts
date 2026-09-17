@@ -9,6 +9,7 @@
 
 import {
   CasAdminErrorCodes,
+  AccountIdSchema,
   casAdminErrorHttpStatus,
   formatCasAdminETag,
   matchAppAdminRoute,
@@ -280,6 +281,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       || appRoute?.operation === "listAccountIdentities"
       || appRoute?.operation === "patchAccountProfile") {
       return handleAccountApi(request, appRoute.operation);
+    }
+    if (appRoute?.operation === "listMembers" || appRoute?.operation === "deleteMember") {
+      return handleAccountAppMembers(request, url, appRoute.appId, appRoute.operation);
     }
     if (appRoute?.operation === "listPeople") return handlePeople(request, appRoute.appId);
     if (appRoute?.operation === "mintManagedCapability") {
@@ -1318,6 +1322,50 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     }
   }
 
+  async function handleAccountAppMembers(
+    request: Request,
+    url: URL,
+    appId: string,
+    operation: "listMembers" | "deleteMember",
+  ): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!accountService || !auth.payload.accountId || !auth.payload.externalIdentityId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
+    }
+    try {
+      if (operation === "listMembers") {
+        return json(await accountService.listAppMembers({
+          actorAccountId: auth.payload.accountId,
+          appId,
+          ...pageQuery(queryFromUrl(url)),
+        }), 200);
+      }
+      if (!(await passCsrf(request, auth.payload))) return csrfRejected();
+      const accountId = AccountIdSchema.safeParse(url.searchParams.get("accountId"));
+      if (!accountId.success) return invalidRequest("A valid accountId is required");
+      await accountService.removeAppMember({
+        actorAccountId: auth.payload.accountId,
+        actorExternalIdentityId: auth.payload.externalIdentityId,
+        appId,
+        targetAccountId: accountId.data,
+        requestId: request.headers.get("X-Request-Id") ?? undefined,
+        traceId: request.headers.get("X-Trace-Id") ?? undefined,
+        callerChannel: "admin-webui",
+      });
+      return json({ ok: true }, 200);
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "APP_MEMBERSHIP_REQUIRED" || error.code === "ACCOUNT_BLOCKED" ? 403
+          : error.code === "INVALID_CURSOR" || error.code === "INVALID_REQUEST" ? 400
+            : error.code === "LAST_MEMBER" ? 409
+              : 404;
+        return json({ error: error.code }, status);
+      }
+      throw error;
+    }
+  }
+
   async function handlePeople(request: Request, appId?: string): Promise<Response> {
     const auth = await requireAuthenticated(request);
     if (auth instanceof Response) return auth;
@@ -1529,7 +1577,10 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
             status: "active";
             authorities: readonly ("platform.admin" | "apps.create")[];
             revision: number;
-          }
+          };
+          account?: Awaited<ReturnType<AccountService["getSelf"]>>;
+          authenticatedIdentity?: Awaited<ReturnType<AccountService["getSelf"]>>["identities"][number];
+          accountMemberships?: Awaited<ReturnType<AccountService["listAccountMemberships"]>>;
         } = result;
         if (platformAccess !== null) {
           try {
@@ -1555,6 +1606,30 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
           } catch (error) {
             if (error instanceof PlatformAccessError) {
               return adminErrorResponse(error.code as CasAdminErrorResponse["error"]);
+            }
+            throw error;
+          }
+        }
+        if (accountService && auth.payload.accountId && auth.payload.externalIdentityId) {
+          try {
+            const account = await accountService.getSelf(
+              auth.payload.accountId,
+              auth.payload.externalIdentityId,
+              providerRegistry.list().map(provider => provider.kind),
+            );
+            const authenticatedIdentity = account.identities.find(identity => identity.currentLogin);
+            if (!authenticatedIdentity) {
+              return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "current Account identity is unavailable");
+            }
+            responseResult = {
+              ...responseResult,
+              account,
+              authenticatedIdentity,
+              accountMemberships: await accountService.listAccountMemberships(auth.payload.accountId),
+            };
+          } catch (error) {
+            if (error instanceof AccountServiceError) {
+              return json({ error: error.code }, error.code === "ACCOUNT_BLOCKED" ? 403 : 409);
             }
             throw error;
           }

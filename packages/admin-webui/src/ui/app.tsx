@@ -136,7 +136,7 @@ export function App() {
     return () => { active = false; };
   }, [selectedAppId, appRoute?.section, reloadKey]);
 
-  const authorities = me?.platformAccess?.authorities ?? [];
+  const authorities = me?.account.platformAuthorities ?? [];
   const hasPlatformAdmin = authorities.includes("platform.admin");
   const canCreateApps = authorities.includes("apps.create");
 

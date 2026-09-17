@@ -30,6 +30,7 @@ import type {
 } from "@unicas/admin-protocol";
 import type {
   AccountSelf,
+  AccountId,
   App,
   AppAdminMeResponse,
   AppControlAuditEvent,
@@ -102,9 +103,7 @@ export interface AdminClient {
     query?: CasAdminPageQuery,
   ): Promise<CasAdminPage<AppMembership>>;
   deleteAppMember(
-    path: { readonly appId: AppId },
-    principal: Principal,
-    ifMatch: string,
+    path: { readonly appId: AppId; readonly accountId: AccountId },
   ): Promise<{ readonly ok: true }>;
   createAppMemberInvitation(
     path: { readonly appId: AppId },
@@ -466,11 +465,10 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
       return response.json();
     },
 
-    async deleteAppMember(path, principal, ifMatch) {
+    async deleteAppMember(path) {
       const response = await requireOk(
-        await request(`${appAdminRoutes.members(path)}${queryString(principal)}`, {
+        await request(`${appAdminRoutes.members(path)}${queryString({ accountId: path.accountId })}`, {
           method: "DELETE",
-          headers: ifMatchHeader(ifMatch),
         }),
         "deleteAppMember",
       );

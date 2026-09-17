@@ -4,12 +4,13 @@ import type { D1Database } from "@cloudflare/workers-types";
 import { CLIENT_CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, PROTOCOL_VERSION_META_KEY } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { APP_ADMIN_MCP_TOOL_LIST } from "@unicas/admin-protocol";
-import { PlatformAccessService, PlatformAuditService, PlatformInvitationService } from "@unicas/service";
+import { AccountService, PlatformAccessService, PlatformAuditService, PlatformInvitationService } from "@unicas/service";
 import { createControlPlaneMcpServer } from "../src/mcp/server.js";
 import type { ControlPlaneMcpGrantProps } from "../src/mcp/server.js";
 import { migrateControlSchema } from "../src/control-schema.js";
 import { createControlPlaneOperations } from "../src/control-operations.js";
 import { D1PlatformAccessRepository } from "../src/platform-access-repository.js";
+import { D1AccountRepository } from "../src/account-repository.js";
 
 let miniflare: Miniflare;
 let db: D1Database;
@@ -260,11 +261,23 @@ describe("adapter-hosted control-plane MCP server", () => {
     })).structuredContent).toEqual({ etag: '"2"' });
   });
 
-  test("serves App memberships and Principal-owned Playground records", async () => {
+  test("serves Account-keyed App memberships and Playground records", async () => {
+    const accountService = new AccountService(new D1AccountRepository(db), () => 1000);
+    const aliceAccount = await accountService.createForExternalIdentity({
+      provider: "google",
+      issuer: "https://accounts.google.com",
+      subject: "alice-sub",
+      displayName: "Alice",
+    });
     const aliceHandler = handlerFor(
       grant(["control:read", "control:write", "control:security"]),
-      { mutationsEnabled: true, publicOrigin: "https://console.unicas.work" },
+      { mutationsEnabled: true, publicOrigin: "https://console.unicas.work", accountService },
     );
+    expect((await callTool(aliceHandler, "get_current_account", {})).structuredContent).toMatchObject({
+      account: { accountId: aliceAccount.account.accountId },
+      authenticatedIdentity: { provider: "google" },
+      memberships: [],
+    });
     const created = await callTool(aliceHandler, "create_app", {
       displayName: "Collaboration",
       idempotencyKey: "create-collaboration-1",
@@ -280,28 +293,40 @@ describe("adapter-hosted control-plane MCP server", () => {
     expect(invitation.structuredContent).not.toHaveProperty("invitation");
     const token = String(invitation.structuredContent.acceptUrl).split("/").pop()!;
 
+    const bobAccount = await accountService.createForExternalIdentity({
+      provider: "google",
+      issuer: "https://accounts.google.com",
+      subject: "bob-sub",
+      displayName: "Bob",
+    });
     const bobHandler = handlerFor({
       ...grant(["control:read", "control:security"]),
       subject: "bob-sub",
       displayName: "Bob",
       emailForDisplay: "bob@example.com",
       verifiedEmailEvidence: [emailEvidence("bob@example.com", "bob-auth")],
-    }, { mutationsEnabled: true });
+    }, { mutationsEnabled: true, accountService });
     expect((await callTool(bobHandler, "accept_app_member_invitation", { token })).structuredContent)
       .toEqual({ appId });
 
     const members = await callTool(aliceHandler, "list_app_members", { appId, limit: 10 });
-    expect(members.structuredContent.items).toEqual([
+    expect(members.structuredContent.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
         appId,
-        principal: expect.objectContaining({ subject: "alice-sub" }),
+        account: expect.objectContaining({ accountId: aliceAccount.account.accountId }),
       }),
       expect.objectContaining({
         appId,
-        principal: expect.objectContaining({ subject: "bob-sub" }),
-        profile: expect.objectContaining({ displayName: "Bob" }),
+        account: expect.objectContaining({ accountId: bobAccount.account.accountId, displayName: "Bob" }),
       }),
-    ]);
+    ]));
+    expect((await callTool(aliceHandler, "remove_app_member", {
+      appId,
+      accountId: bobAccount.account.accountId,
+      confirmAccountId: bobAccount.account.accountId,
+    })).structuredContent).toEqual({ ok: true });
+    expect((await callTool(aliceHandler, "list_app_members", { appId, limit: 10 })).structuredContent)
+      .toMatchObject({ items: [{ account: { accountId: aliceAccount.account.accountId } }] });
 
     const manifestHash = "a".repeat(64);
     const root = await callTool(aliceHandler, "create_app_playground_file_root", {

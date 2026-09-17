@@ -3,12 +3,14 @@
 import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
 import { createMcpHandler } from "agents/mcp/server";
 import {
+  AccountService,
   PlatformAccessError,
   PlatformAccessService,
   PlatformAuditService,
   PlatformInvitationService,
   type ControlPlaneOperations,
 } from "@unicas/service";
+import { D1AccountRepository } from "../account-repository.js";
 import { D1PlatformAccessRepository } from "../platform-access-repository.js";
 import { InvitationTokenCrypto, parseInvitationEncryptionKeys } from "../invitation-token-crypto.js";
 import { createOAuthAuthorizationHandler } from "./auth.js";
@@ -105,6 +107,7 @@ export function createControlPlaneMcpWorker(
             platformInvitations,
             platformAudit,
             platformAccess,
+            accountService: new AccountService(new D1AccountRepository(env.CAS_CONTROL_DB)),
             authorizePlatformOperation: (grant, authority) =>
               authorizeMcpPlatformOperation(
                 platformAccess,

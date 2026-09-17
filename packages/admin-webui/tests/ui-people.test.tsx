@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import { PeopleView } from "../src/ui/views/people.js";
 
-const member = { kind: "member", joinedAt: 1, membership: { appId: "cas_one", principal: { issuer: "issuer-a", subject: "same" }, profile: { displayName: "Alice", emailForDisplay: "same@example.test" } } };
+const accountId = `acct_${"a".repeat(22)}`;
+const member = { kind: "member", joinedAt: 1, membership: { appId: "cas_one", account: { accountId, displayName: "Alice", primaryVerifiedEmail: { normalizedEmail: "same@example.test", source: "google-oidc", verifiedAt: 1 }, avatar: { kind: "fallback", initials: "AL", colorIndex: 1 } } } };
 const invitation = { kind: "invitation", invitation: { invitationId: "invite-1", emailConstraint: "same@example.test", status: "pending", expiresAt: 4102444800000, createdAt: 2, revision: 7 } };
 const response = (body: unknown) => Response.json(body);
 
@@ -49,7 +50,7 @@ test("one App table renders distinct members and invitations, filtering and pagi
   expect(requests.at(-1)).toContain("query=Alice");
 });
 
-test("App invitations use existing create/revoke receipts and member removal uses both identity fields", async () => {
+test("App invitations use revision receipts while member removal targets only Account ID", async () => {
   const fetcher = vi.fn(async (_input: string, init?: RequestInit) => init?.method === "POST" ? response({ acceptUrl: "https://example.test/invite/one", expiresAt: 4102444800000 }) : init?.method === "DELETE" ? new Response(null, { status: 204 }) : response({ items: [member, invitation], nextCursor: null }));
   vi.stubGlobal("fetch", fetcher);
   const user = userEvent.setup();
@@ -65,7 +66,7 @@ test("App invitations use existing create/revoke receipts and member removal use
   await waitFor(() => expect(fetcher.mock.calls.some(([url, init]) => url.endsWith("invite-1") && new Headers(init?.headers).get("If-Match") === '"7"')).toBe(true));
   await user.click(screen.getByTitle("Remove member"));
   await user.click(screen.getByRole("button", { name: "Confirm removal" }));
-  await waitFor(() => expect(fetcher.mock.calls.some(([url, init]) => url.includes("issuer=issuer-a&subject=same") && new Headers(init?.headers).get("If-Match") === '"3"')).toBe(true));
+  await waitFor(() => expect(fetcher.mock.calls.some(([url, init]) => url.includes(`accountId=${accountId}`) && new Headers(init?.headers).get("If-Match") === null)).toBe(true));
 });
 
 test("Platform Invite requires proposed authorities and keeps permission editing separate", async () => {

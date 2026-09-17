@@ -89,12 +89,21 @@ describe("CAS admin schemas", () => {
       createdAt: 1,
       revision: 1,
     };
-    const membership: AppMembership = { appId: app.appId, principal, profile };
+    const membership: AppMembership = {
+      appId: app.appId,
+      account: {
+        accountId: `acct_${"a".repeat(22)}`,
+        displayName: profile.displayName,
+        primaryVerifiedEmail: null,
+        avatar: { kind: "fallback", initials: "AU", colorIndex: 1 },
+      },
+    };
 
     expect(PrincipalSchema.safeParse(principal).success).toBe(true);
     expect(ProfileSchema.safeParse(profile).success).toBe(true);
     expect(AppSchema.safeParse(app).success).toBe(true);
     expect(AppMembershipSchema.safeParse(membership).success).toBe(true);
+    expect(AppMembershipSchema.safeParse({ ...membership, principal, profile }).success).toBe(false);
     expect(PrincipalSchema.safeParse({
       identityIssuer: principal.issuer,
       subject: principal.subject,
@@ -123,6 +132,8 @@ describe("CAS admin schemas", () => {
     type AppResult = Awaited<ReturnType<Client["apps"]["get"]>>;
     type MeResult = Awaited<ReturnType<Client["identity"]["me"]>>;
     expectTypeOf<AppResult>().toEqualTypeOf<App>();
+    expectTypeOf<MeResult["account"]>().toEqualTypeOf<import("../src/index.js").AccountSelf>();
+    expectTypeOf<MeResult["authenticatedIdentity"]>().toEqualTypeOf<import("../src/index.js").ExternalIdentitySummary>();
     expectTypeOf<MeResult["principal"]>().toEqualTypeOf<Principal>();
     expectTypeOf<MeResult["profile"]>().toEqualTypeOf<Profile>();
 

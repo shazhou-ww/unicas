@@ -1,6 +1,7 @@
 import type { D1Database } from "@cloudflare/workers-types";
-import type { AccountId, PlatformAuthority, PrimaryVerifiedEmail } from "@unicas/admin-protocol";
+import type { AccountId, AppId, PlatformAuthority, PrimaryVerifiedEmail } from "@unicas/admin-protocol";
 import type {
+  AccountAppMembershipRecord,
   AccountRecord,
   AccountRepository,
   AccountWithIdentityCreate,
@@ -30,6 +31,16 @@ interface ExternalIdentityRow {
   account_hint: string | null;
   display_name: string | null;
   avatar_url: string | null;
+}
+
+interface AccountMembershipRow extends AccountRow {
+  app_id: AppId;
+  joined_at: number;
+  display_name: string | null;
+  avatar_url: string | null;
+  display_name_source: string | null;
+  avatar_source: string | null;
+  profile_updated_at: number;
 }
 
 export class D1AccountRepository implements AccountRepository {
@@ -98,10 +109,116 @@ export class D1AccountRepository implements AccountRepository {
     return (rows.results ?? []).map(row => row.authority);
   }
 
-  async hasAppMembership(accountId: AccountId): Promise<boolean> {
+  async hasAppMembership(accountId: AccountId, appId?: AppId): Promise<boolean> {
     return await this.db.prepare(
-      "SELECT 1 AS member FROM cas_app_members WHERE account_id = ? LIMIT 1",
-    ).bind(accountId).first() !== null;
+      "SELECT 1 AS member FROM cas_app_members WHERE account_id = ? AND (? IS NULL OR app_id = ?) LIMIT 1",
+    ).bind(accountId, appId ?? null, appId ?? null).first() !== null;
+  }
+
+  async listAccountMembershipAppIds(accountId: AccountId): Promise<readonly AppId[]> {
+    const rows = await this.db.prepare(
+      "SELECT app_id FROM cas_app_members WHERE account_id = ? ORDER BY app_id",
+    ).bind(accountId).all<{ app_id: AppId }>();
+    return (rows.results ?? []).map(row => row.app_id);
+  }
+
+  async readControlSnapshot(): Promise<number> {
+    const row = await this.db.prepare(
+      "SELECT value FROM cas_control_meta WHERE key = 'snapshot'",
+    ).first<{ value: number }>();
+    return row?.value ?? 0;
+  }
+
+  async listAppMemberships(
+    input: Parameters<AccountRepository["listAppMemberships"]>[0],
+  ): Promise<readonly AccountAppMembershipRecord[]> {
+    const rows = await this.db.prepare(
+      `SELECT member.app_id, member.account_id, member.joined_at,
+         account.blocked_at, account.credential_version, account.primary_verified_email,
+         account.email_verification_source, account.email_verified_at, account.created_at,
+         account.updated_at, profile.display_name, profile.avatar_url,
+         profile.display_name_source, profile.avatar_source, profile.updated_at AS profile_updated_at
+       FROM cas_app_members AS member
+       JOIN cas_accounts AS account ON account.account_id = member.account_id
+       JOIN cas_account_profiles AS profile ON profile.account_id = member.account_id
+       WHERE member.app_id = ? AND member.account_id > ?
+       ORDER BY member.account_id LIMIT ?`,
+    ).bind(input.appId, input.afterAccountId, input.limit).all<AccountMembershipRow>();
+    return (rows.results ?? []).map(row => ({
+      appId: row.app_id,
+      account: accountRecord(row),
+      profile: {
+        accountId: row.account_id,
+        displayName: row.display_name,
+        avatarUrl: row.avatar_url,
+        displayNameSource: row.display_name_source,
+        avatarSource: row.avatar_source,
+        updatedAt: row.profile_updated_at,
+      },
+      joinedAt: row.joined_at,
+    }));
+  }
+
+  async commitRemoveAppMembership(
+    input: Parameters<AccountRepository["commitRemoveAppMembership"]>[0],
+  ): Promise<"removed" | "actor-not-member" | "last-member"> {
+    const requireActor = this.db.prepare(
+      `SELECT CASE WHEN EXISTS (SELECT 1 FROM cas_app_members WHERE app_id = ? AND account_id = ?)
+         AND EXISTS (SELECT 1 FROM cas_external_identities WHERE external_identity_id = ?
+           AND account_id = ? AND unlinked_at IS NULL)
+       THEN 1 ELSE json_extract('invalid', '$') END AS allowed`,
+    ).bind(input.appId, input.actorAccountId, input.actorExternalIdentityId, input.actorAccountId);
+    const requireRemainingMember = this.db.prepare(
+      `SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM cas_app_members WHERE app_id = ? AND account_id = ?)
+         OR (SELECT COUNT(*) FROM cas_app_members WHERE app_id = ?) > 1
+       THEN 1 ELSE json_extract('invalid', '$') END AS allowed`,
+    ).bind(input.appId, input.targetAccountId, input.appId);
+    const remove = this.db.prepare(
+      "DELETE FROM cas_app_members WHERE app_id = ? AND account_id = ?",
+    ).bind(input.appId, input.targetAccountId);
+    const advanceSnapshot = this.db.prepare(
+      "UPDATE cas_control_meta SET value = value + 1 WHERE key = 'snapshot' AND changes() = 1",
+    );
+    const audit = this.db.prepare(
+      `INSERT INTO cas_control_audit_events
+        (event_id, app_id, identity_issuer, subject, action, target, request_id,
+         trace_id, caller_channel, oauth_client_handle, tool_name, created_at,
+         original_account_id, external_identity_id)
+       SELECT ?, ?, issuer, subject, 'member.removed', ?, ?, ?, ?, NULL, NULL, ?, ?, ?
+       FROM cas_external_identities
+       WHERE external_identity_id = ? AND account_id = ? AND unlinked_at IS NULL
+         AND EXISTS (SELECT 1 FROM cas_app_members WHERE app_id = ? AND account_id = ?)`,
+    ).bind(
+      input.eventId,
+      input.appId,
+      input.targetAccountId,
+      input.requestId ?? null,
+      input.traceId ?? null,
+      input.callerChannel ?? null,
+      input.now,
+      input.actorAccountId,
+      input.actorExternalIdentityId,
+      input.actorExternalIdentityId,
+      input.actorAccountId,
+      input.appId,
+      input.targetAccountId,
+    );
+    try {
+      await this.db.batch([requireActor, requireRemainingMember, audit, remove, advanceSnapshot]);
+      return "removed";
+    } catch (error) {
+      if (!isJsonFailure(error)) throw error;
+      const actorIdentity = await this.getIdentity(input.actorExternalIdentityId);
+      if (!await this.hasAppMembership(input.actorAccountId, input.appId)
+        || !actorIdentity || actorIdentity.accountId !== input.actorAccountId || actorIdentity.unlinkedAt !== null) {
+        return "actor-not-member";
+      }
+      if (!await this.hasAppMembership(input.targetAccountId, input.appId)) return "removed";
+      const count = await this.db.prepare(
+        "SELECT COUNT(*) AS count FROM cas_app_members WHERE app_id = ?",
+      ).bind(input.appId).first<{ count: number }>();
+      return (count?.count ?? 0) <= 1 ? "last-member" : "removed";
+    }
   }
 
   async createAccountWithIdentity(input: AccountWithIdentityCreate): Promise<"created" | "identity-conflict"> {

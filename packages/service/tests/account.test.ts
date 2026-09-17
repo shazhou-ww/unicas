@@ -46,6 +46,10 @@ function fixture() {
     listActiveIdentities: vi.fn(async () => [identity]),
     listPlatformAuthorities: vi.fn(async () => ["apps.create"]),
     hasAppMembership: vi.fn(async () => false),
+    listAccountMembershipAppIds: vi.fn(async () => []),
+    readControlSnapshot: vi.fn(async () => 1),
+    listAppMemberships: vi.fn(async () => []),
+    commitRemoveAppMembership: vi.fn(async () => "removed"),
     createAccountWithIdentity: vi.fn(async () => "created"),
     commitLinkIdentity: vi.fn(async () => "linked"),
     commitUnlinkIdentity: vi.fn(async () => "unlinked"),
@@ -116,6 +120,58 @@ describe("Account service", () => {
       });
     await service.updateProfile({ accountId, displayName: "Updated" });
     expect(repository.updateProfile).toHaveBeenCalledWith({ accountId, displayName: "Updated", now: 1000 });
+  });
+
+  test("lists and removes App members only by stable Account ID", async () => {
+    const { repository, service } = fixture();
+    vi.mocked(repository.hasAppMembership).mockResolvedValue(true);
+    vi.mocked(repository.listAppMemberships).mockResolvedValue([{
+      appId: "cas_app_a",
+      account,
+      profile: {
+        accountId,
+        displayName: "Alice Example",
+        avatarUrl: null,
+        displayNameSource: "user",
+        avatarSource: "user",
+        updatedAt: 2,
+      },
+      joinedAt: 3,
+    }]);
+
+    await expect(service.listAppMembers({ actorAccountId: accountId, appId: "cas_app_a" }))
+      .resolves.toMatchObject({
+        items: [{ appId: "cas_app_a", account: { accountId, displayName: "Alice Example" } }],
+        nextCursor: null,
+      });
+    await service.removeAppMember({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      appId: "cas_app_a",
+      targetAccountId: accountId,
+    });
+    expect(repository.commitRemoveAppMembership).toHaveBeenCalledWith(expect.objectContaining({
+      actorAccountId: accountId,
+      targetAccountId: accountId,
+      appId: "cas_app_a",
+    }));
+
+    vi.mocked(repository.commitRemoveAppMembership).mockResolvedValue("last-member");
+    await expect(service.removeAppMember({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      appId: "cas_app_a",
+      targetAccountId: accountId,
+    })).rejects.toMatchObject({ code: "LAST_MEMBER" });
+  });
+
+  test("projects current memberships with one Account summary", async () => {
+    const { repository, service } = fixture();
+    vi.mocked(repository.listAccountMembershipAppIds).mockResolvedValue(["cas_app_a", "cas_app_b"]);
+    await expect(service.listAccountMemberships(accountId)).resolves.toEqual([
+      expect.objectContaining({ appId: "cas_app_a", account: expect.objectContaining({ accountId }) }),
+      expect.objectContaining({ appId: "cas_app_b", account: expect.objectContaining({ accountId }) }),
+    ]);
   });
 
   test("fails closed on alias cycles and excessive depth", async () => {

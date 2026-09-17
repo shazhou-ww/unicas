@@ -216,8 +216,18 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
       ...this.#mutationStatements(plan.audit),
       this.#db.prepare("INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES (?, ?, ?, ?, ?, ?)")
         .bind(plan.stack.stackId, plan.stack.displayName, plan.stack.description, plan.stack.status, plan.stack.createdAt, plan.stack.revision),
-      this.#db.prepare("INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at) VALUES (?, ?, ?, ?)")
-        .bind(plan.membership.stackId, plan.membership.identityIssuer, plan.membership.subject, plan.membership.joinedAt),
+      this.#db.prepare(
+        `INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id)
+         VALUES (?, ?, ?, ?, (SELECT account_id FROM cas_external_identities
+           WHERE issuer = ? AND subject = ? AND unlinked_at IS NULL))`,
+      ).bind(
+        plan.membership.stackId,
+        plan.membership.identityIssuer,
+        plan.membership.subject,
+        plan.membership.joinedAt,
+        plan.membership.identityIssuer,
+        plan.membership.subject,
+      ),
     ];
     if (plan.managedIssuer) {
       const issuer = plan.managedIssuer;

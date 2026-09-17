@@ -7,7 +7,6 @@ import {
   confirmOrPrompt,
   idempotencyKeyFromFlag,
   requireSubcommand,
-  resolveAppEtag,
   withAdminClient,
 } from "./common.js";
 import { parseBoundedLimit } from "./stacks.js";
@@ -96,26 +95,20 @@ async function appMembersRemove(ctx: CliContext, argv: string[]): Promise<void> 
   const { values, positionals } = parseArgs({
     args: argv,
     options: {
-      issuer: { type: "string" },
-      subject: { type: "string" },
-      etag: { type: "string" },
-      "confirm-subject": { type: "string" },
+      "confirm-account-id": { type: "string" },
     },
     allowPositionals: true,
   });
-  const appId = positionals[0];
-  const issuer = values.issuer;
-  const subject = values.subject;
-  if (!appId || !issuer || !subject) {
-    throw new Error("usage: unicas app-members remove <appId> --issuer <url> --subject <sub> [--etag E] [--confirm-subject S]");
+  const [appId, accountId] = positionals;
+  if (!appId || !accountId) {
+    throw new Error("usage: unicas app-members remove <appId> <accountId> [--confirm-account-id ID]");
   }
   await confirmOrPrompt({
-    flag: values["confirm-subject"],
-    expected: subject,
-    label: "confirm-subject",
+    flag: values["confirm-account-id"],
+    expected: accountId,
+    label: "confirm-account-id",
   });
   await withAdminClient(ctx, async (admin) => {
-    const etag = values.etag ?? (await resolveAppEtag(admin, appId));
-    printJson(await admin.deleteAppMember({ appId }, { issuer, subject }, etag));
+    printJson(await admin.deleteAppMember({ appId, accountId }));
   });
 }

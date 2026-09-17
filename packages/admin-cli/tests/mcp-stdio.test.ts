@@ -185,6 +185,23 @@ describe("unicas mcp (stdio server)", () => {
 
     stdin.write(`${JSON.stringify({
       jsonrpc: "2.0",
+      id: 20,
+      method: "tools/call",
+      params: { name: "get_current_account", arguments: {} },
+    })}\n`);
+    const account = await reader.next();
+    expect(account.result).toMatchObject({
+      isError: false,
+      structuredContent: {
+        account: { accountId: `acct_${"a".repeat(22)}` },
+        authenticatedIdentity: { provider: "google" },
+        memberships: [{ appId: "cas_stack_a" }],
+      },
+    });
+    expect((account.result as { structuredContent: object }).structuredContent).not.toHaveProperty("principal");
+
+    stdin.write(`${JSON.stringify({
+      jsonrpc: "2.0",
       id: 3,
       method: "tools/call",
       params: { name: "list_apps", arguments: { limit: 10 } },

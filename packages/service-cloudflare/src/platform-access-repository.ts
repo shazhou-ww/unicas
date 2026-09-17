@@ -1,5 +1,5 @@
 import type { D1Database } from "@cloudflare/workers-types";
-import { effectivePlatformAccess, type PlatformAccessState, type PlatformAccessSummary, type PlatformAuditAction, type PlatformAuditEvent, type PlatformAuthority, type PlatformPrincipalDetail, type PlatformPrincipalListItem, type Principal } from "@unicas/admin-protocol";
+import { effectivePlatformAccess, type AccountId, type PlatformAccessState, type PlatformAccessSummary, type PlatformAuditAction, type PlatformAuditEvent, type PlatformAuthority, type PlatformPrincipalDetail, type PlatformPrincipalListItem, type PrimaryVerifiedEmail, type Principal } from "@unicas/admin-protocol";
 import type {
   PlatformAccessRepository,
   PlatformAuditRepository,
@@ -8,6 +8,7 @@ import type {
   PlatformInvitationRepository,
   StoredPlatformInvitation,
 } from "@unicas/service";
+import { projectAccountSummary } from "@unicas/service";
 
 interface PrincipalRow {
   principal_ref: string;
@@ -23,6 +24,16 @@ interface PrincipalRow {
   email_for_display?: string | null;
   membership_count?: number;
   last_active_at?: number | null;
+}
+
+interface MembershipAccountRow {
+  app_id: string;
+  account_id: AccountId;
+  primary_verified_email: string | null;
+  email_verification_source: PrimaryVerifiedEmail["source"] | null;
+  email_verified_at: number | null;
+  display_name: string | null;
+  avatar_url: string | null;
 }
 
 interface AppInvitationAdmissionRow {
@@ -363,14 +374,22 @@ export class D1PlatformAccessRepository implements PlatformAccessRepository, Pla
     if (!row) return null;
     const view = principalView(row);
     const memberships = await this.db.prepare(
-      "SELECT app_id FROM cas_app_members WHERE identity_issuer = ? AND subject = ? ORDER BY app_id",
-    ).bind(row.identity_issuer, row.subject).all<{ app_id: string }>();
+      `SELECT member.app_id, member.account_id, account.primary_verified_email,
+         account.email_verification_source, account.email_verified_at,
+         profile.display_name, profile.avatar_url
+       FROM cas_app_members AS member
+       JOIN cas_accounts AS account ON account.account_id = member.account_id
+       JOIN cas_account_profiles AS profile ON profile.account_id = member.account_id
+       WHERE member.identity_issuer = ? AND member.subject = ? ORDER BY member.app_id`,
+    ).bind(row.identity_issuer, row.subject).all<MembershipAccountRow>();
     return {
       ...view,
       memberships: (memberships.results ?? []).map(member => ({
         appId: member.app_id,
-        principal: view.principal,
-        profile: view.profile,
+        account: projectAccountSummary({
+          accountId: member.account_id,
+          primaryVerifiedEmail: membershipVerifiedEmail(member),
+        }, { displayName: member.display_name, avatarUrl: member.avatar_url }),
       })),
     };
   }
@@ -524,3 +543,15 @@ function parseAuditDetails(value: string): Readonly<Record<string, string | numb
     return {};
   }
 }
+
+function membershipVerifiedEmail(row: MembershipAccountRow): PrimaryVerifiedEmail | null {
+  return row.primary_verified_email !== null
+    && row.email_verification_source !== null
+    && row.email_verified_at !== null
+    ? {
+      normalizedEmail: row.primary_verified_email,
+      source: row.email_verification_source,
+      verifiedAt: row.email_verified_at,
+    }
+    : null;
+  }

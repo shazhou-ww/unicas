@@ -19,13 +19,6 @@ const currentApp = {
   revision: 3,
 };
 
-const me = {
-  principal: { issuer: "https://accounts.example", subject: "admin" },
-  profile: { displayName: "Admin", emailForDisplay: "admin@example.com" },
-  platformAccess: { principalRef: "admin-ref", status: "active", authorities: ["apps.create"], revision: 1 },
-  memberships: [{ appId: currentApp.appId, principal: { issuer: "https://accounts.example", subject: "admin" }, profile: { displayName: "Admin", emailForDisplay: "admin@example.com" } }],
-};
-
 const account = {
   accountId: `acct_${"a".repeat(22)}`,
   displayName: "Admin User",
@@ -42,6 +35,20 @@ const account = {
     currentLogin: true,
   }],
   linkableProviders: ["microsoft", "github"],
+};
+
+const me = {
+  account,
+  authenticatedIdentity: account.identities[0],
+  principal: { issuer: "https://accounts.example", subject: "admin" },
+  profile: { displayName: "Admin", emailForDisplay: "admin@example.com" },
+  platformAccess: { principalRef: "admin-ref", status: "active", authorities: ["apps.create"], revision: 1 },
+  memberships: [{ appId: currentApp.appId, account: {
+    accountId: account.accountId,
+    displayName: account.displayName,
+    primaryVerifiedEmail: account.primaryVerifiedEmail,
+    avatar: account.avatar,
+  } }],
 };
 
 function managedIssuer(status: "active" | "disabled" = "active") {

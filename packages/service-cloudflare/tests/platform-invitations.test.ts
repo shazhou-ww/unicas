@@ -78,6 +78,9 @@ describe("D1 platform invitations", () => {
       "INSERT INTO cas_accounts (account_id, credential_version, created_at, updated_at) VALUES (?, 1, 1, 1)",
     ).bind(inviteeAccountId).run();
     await db.prepare(
+      "INSERT INTO cas_account_profiles (account_id, display_name, updated_at) VALUES (?, 'Invitee', 1)",
+    ).bind(inviteeAccountId).run();
+    await db.prepare(
       "INSERT INTO cas_external_identities (external_identity_id, account_id, provider, issuer, subject, linked_at) VALUES ('ext-invitee', ?, 'google', ?, ?, 1)",
     ).bind(inviteeAccountId, invitee.issuer, invitee.subject).run();
     await service.accept(
@@ -105,13 +108,13 @@ describe("D1 platform invitations", () => {
       email_verification_source: "google-oidc",
     });
     await db.prepare("INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES ('app-1', 'App One', '', 'active', 1, 1)").run();
-    await db.prepare("INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at) VALUES ('app-1', ?, ?, 1)").bind(invitee.issuer, invitee.subject).run();
+    await db.prepare("INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES ('app-1', ?, ?, 1, ?)").bind(invitee.issuer, invitee.subject, inviteeAccountId).run();
     await db.prepare("INSERT INTO cas_control_audit_events (event_id, app_id, identity_issuer, subject, action, target, created_at) VALUES ('activity-1', 'app-1', ?, ?, 'session.login', 'principal', 900)").bind(invitee.issuer, invitee.subject).run();
     const access = await repository.getAccess(invitee);
     expect(await repository.getPrincipal(access!.principalRef)).toMatchObject({
       lastActiveAt: 900,
       appMembershipCount: 1,
-      memberships: [{ appId: "app-1", principal: invitee }],
+      memberships: [{ appId: "app-1", account: { accountId: inviteeAccountId, displayName: "Invitee" } }],
     });
     expect(await repository.listPrincipals({ after: "", limit: 10 })).toEqual(expect.arrayContaining([
       expect.objectContaining({ principal: invitee, lastActiveAt: 900, appMembershipCount: 1 }),

@@ -184,9 +184,8 @@ export const AppSchema: z.ZodType<App> = z.object({
 
 export const AppMembershipSchema: z.ZodType<AppMembership> = z.object({
   appId: AppIdSchema.describe("App whose equal administrator authority this membership grants."),
-  principal: PrincipalSchema.describe("Immutable authenticated identity granted membership."),
-  profile: ProfileSchema.describe("Non-authoritative display metadata for the Principal."),
-}).readonly().meta({ id: "AppMembership" });
+  account: AccountSummarySchema.describe("Stable Account granted membership."),
+}).strict().readonly().meta({ id: "AppMembership" });
 
 export const AppMemberInvitationSchema: z.ZodType<AppMemberInvitation> = z.object({
   invitationId: NonEmptyStringSchema.describe("Opaque persistent invitation identity."),

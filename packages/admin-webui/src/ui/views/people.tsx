@@ -20,7 +20,7 @@ type Scope = { appId: string; appRevision: number; onChanged: () => void } | { p
 type Props = { scope: Scope; initialFilter?: string };
 
 function personKey(person: Person): string {
-  if (person.kind === "member") return JSON.stringify([person.kind, person.membership.principal.issuer, person.membership.principal.subject]);
+  if (person.kind === "member") return `${person.kind}:${person.membership.account.accountId}`;
   if (person.kind === "principal") return `principal:${person.principal.principalRef}`;
   return `invitation:${person.invitation.invitationId}`;
 }
@@ -124,9 +124,8 @@ function PeoplePanel({ scope, initialFilter = "current" }: Props) {
       if (confirming.kind === "invitation") {
         await api(`${invitationBase}/${encodeURIComponent(confirming.invitation.invitationId)}`, { method: "DELETE", headers: ifMatch(confirming.invitation.revision) });
       } else if (confirming.kind === "member" && !platform) {
-        const identity = confirming.membership.principal;
-        const query = new URLSearchParams({ issuer: identity.issuer, subject: identity.subject });
-        await api(`${base}/members?${query}`, { method: "DELETE", headers: ifMatch(scope.appRevision) });
+        const query = new URLSearchParams({ accountId: confirming.membership.account.accountId });
+        await api(`${base}/members?${query}`, { method: "DELETE" });
         scope.onChanged();
       }
       setConfirming(null);
@@ -143,7 +142,7 @@ function PeoplePanel({ scope, initialFilter = "current" }: Props) {
 
   return <section ref={regionRef} tabIndex={-1} className="space-y-4" aria-label={platform ? "Platform people" : "App members"}>
     <form className="flex flex-wrap items-center gap-2" onSubmit={event => { event.preventDefault(); setFilters({ ...draft, query: draft.query.trim() }); }}>
-      <Input className="min-w-0 flex-[1_1_14rem]" aria-label="Search people" placeholder="Search name, email or Principal" value={draft.query} onChange={event => setDraft({ ...draft, query: event.target.value })} />
+      <Input className="min-w-0 flex-[1_1_14rem]" aria-label="Search people" placeholder={`Search name, email or ${platform ? "Principal" : "Account"}`} value={draft.query} onChange={event => setDraft({ ...draft, query: event.target.value })} />
       <Select value={draft.filter} onValueChange={filter => setDraft({ ...draft, filter })}>
         <SelectTrigger className="w-44" aria-label="People filter"><SelectValue /></SelectTrigger>
         <SelectContent><SelectItem value="current">Current</SelectItem><SelectItem value={platform ? "principals" : "members"}>{platform ? "Principals" : "Members"}</SelectItem><SelectItem value="pending">Pending invitations</SelectItem><SelectItem value="history">Invitation history</SelectItem></SelectContent>
@@ -165,15 +164,21 @@ function PeoplePanel({ scope, initialFilter = "current" }: Props) {
       <TableBody>
         {!busy && !error && items.length === 0 ? <TableRow><TableCell colSpan={platform ? 7 : 5}>No people found.</TableCell></TableRow> : null}
         {items.map(person => {
-          const identity = person.kind === "member" ? person.membership : person.kind === "principal" ? person.principal : null;
-          const name = identity ? identity.profile.displayName || identity.profile.emailForDisplay || identity.principal.subject : person.kind === "invitation" ? person.invitation.emailConstraint ?? "Unconstrained invitation" : "";
+          const account = person.kind === "member" ? person.membership.account : null;
+          const principal = person.kind === "principal" ? person.principal : null;
+          const name = account
+            ? account.displayName || account.primaryVerifiedEmail?.normalizedEmail || account.accountId
+            : principal
+              ? principal.profile.displayName || principal.profile.emailForDisplay || principal.principal.subject
+              : person.kind === "invitation" ? person.invitation.emailConstraint ?? "Unconstrained invitation" : "";
           const state = person.kind === "member" ? "Member" : person.kind === "principal" ? person.principal.effectiveAccess : person.invitation.status;
           const time = person.kind === "member" ? person.joinedAt : person.kind === "principal" ? person.principal.createdAt : person.invitation.createdAt;
           const grants = person.kind === "principal" ? person.principal.authorities : person.kind === "invitation" && "authorities" in person.invitation ? person.invitation.authorities : [];
           return <TableRow key={personKey(person)}>
             <TableCell className="min-w-48 max-w-sm break-words">
               {person.kind === "principal" ? <Button variant="link" className="h-auto max-w-full whitespace-normal p-0 text-left" aria-label={`Open Principal details for ${name}`} onClick={event => { detailTrigger.current = event.currentTarget; setPrincipalRef(person.principal.principalRef); }}>{name}</Button> : <span className="font-medium">{name}</span>}
-              {identity ? <><div className="text-xs text-muted-foreground">{identity.profile.emailForDisplay}</div><div className="break-all font-mono text-xs text-muted-foreground">{identity.principal.issuer} / {identity.principal.subject}</div></> : null}
+              {account ? <><div className="text-xs text-muted-foreground">{account.primaryVerifiedEmail?.normalizedEmail}</div><div className="break-all font-mono text-xs text-muted-foreground">{account.accountId}</div></> : null}
+              {principal ? <><div className="text-xs text-muted-foreground">{principal.profile.emailForDisplay}</div><div className="break-all font-mono text-xs text-muted-foreground">{principal.principal.issuer} / {principal.principal.subject}</div></> : null}
             </TableCell>
             <TableCell><Badge variant={state === "blocked" ? "destructive" : "secondary"}>{state}</Badge>{person.kind === "principal" ? <div className="text-xs text-muted-foreground">Principal</div> : person.kind === "invitation" ? <div className="text-xs text-muted-foreground">Invitation</div> : null}</TableCell>
             {platform ? <><TableCell><div className="flex flex-wrap gap-1">{grants.map(grant => <Badge key={grant} variant="outline">{grant}</Badge>)}{grants.length === 0 ? "-" : null}</div></TableCell><TableCell>{person.kind === "principal" ? person.principal.appMembershipCount : "-"}</TableCell></> : null}
@@ -197,7 +202,7 @@ function PeoplePanel({ scope, initialFilter = "current" }: Props) {
       </DialogContent>
     </Dialog>
     <Dialog open={confirming !== null} onOpenChange={open => { if (!open && !mutationBusy) setConfirming(null); }}>
-      <DialogContent onCloseAutoFocus={event => restoreFocus(event, actionTrigger.current)}><DialogHeader><DialogTitle>{confirming?.kind === "member" ? "Remove member" : "Revoke invitation"}</DialogTitle><DialogDescription>{confirming?.kind === "member" ? "Remove this Principal's App membership?" : "Prevent this invitation from being accepted?"}</DialogDescription></DialogHeader>
+      <DialogContent onCloseAutoFocus={event => restoreFocus(event, actionTrigger.current)}><DialogHeader><DialogTitle>{confirming?.kind === "member" ? "Remove member" : "Revoke invitation"}</DialogTitle><DialogDescription>{confirming?.kind === "member" ? "Remove this Account's App membership?" : "Prevent this invitation from being accepted?"}</DialogDescription></DialogHeader>
         {mutationError ? <p role="alert" className="text-sm text-destructive">{mutationError}</p> : null}
         <DialogFooter><Button variant="outline" disabled={mutationBusy} onClick={() => setConfirming(null)}>Cancel</Button><Button variant="destructive" disabled={mutationBusy} onClick={() => void remove()}>Confirm {confirming?.kind === "member" ? "removal" : "revoke"}</Button></DialogFooter>
       </DialogContent>

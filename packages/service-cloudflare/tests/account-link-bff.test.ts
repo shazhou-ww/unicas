@@ -164,6 +164,48 @@ describe("BFF Account identity mutations", () => {
       avatarSource: "user",
     });
 
+    const targetMember = await accounts.createForExternalIdentity({
+      provider: "microsoft",
+      issuer: "https://login.microsoftonline.com/consumers/v2.0",
+      subject: "target-member",
+      displayName: "Target Member",
+    });
+    await db.prepare(
+      "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES ('cas_app_a', 'App', '', 'active', 1, 1)",
+    ).run();
+    for (const member of [created, targetMember]) {
+      await db.prepare(
+        "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES ('cas_app_a', ?, ?, 1, ?)",
+      ).bind(
+        member.authenticatedIdentity.issuer,
+        member.authenticatedIdentity.subject,
+        member.account.accountId,
+      ).run();
+    }
+    expect(await (await bff(new Request("https://console.example/admin/me", {
+      headers: { Cookie: initialCookie },
+    }))).json()).toMatchObject({
+      account: { accountId: created.account.accountId },
+      authenticatedIdentity: { externalIdentityId: created.authenticatedIdentity.externalIdentityId },
+      accountMemberships: [{ appId: "cas_app_a", account: { accountId: created.account.accountId } }],
+    });
+    expect(await (await bff(new Request("https://console.example/admin/apps/cas_app_a/members", {
+      headers: { Cookie: initialCookie },
+    }))).json()).toMatchObject({
+      items: expect.arrayContaining([
+        expect.objectContaining({ account: expect.objectContaining({ accountId: created.account.accountId }) }),
+        expect.objectContaining({ account: expect.objectContaining({ accountId: targetMember.account.accountId }) }),
+      ]),
+    });
+    expect(await (await bff(new Request(
+      `https://console.example/admin/apps/cas_app_a/members?accountId=${encodeURIComponent(targetMember.account.accountId)}`,
+      { method: "DELETE", headers: { Cookie: initialCookie } },
+    ))).json()).toEqual({ ok: true });
+    expect((await bff(new Request(
+      `https://console.example/admin/apps/cas_app_a/members?accountId=${encodeURIComponent(created.account.accountId)}`,
+      { method: "DELETE", headers: { Cookie: initialCookie } },
+    ))).status).toBe(409);
+
     const linkStart = await bff(new Request("https://console.example/admin/auth/link/github", {
       method: "POST",
       headers: { Cookie: initialCookie, Accept: "application/json" },
@@ -211,5 +253,5 @@ describe("BFF Account identity mutations", () => {
     expect(await repository.getIdentity(github!.externalIdentityId)).toMatchObject({ unlinkedAt: clock });
     expect(await repository.getAccount(created.account.accountId)).toMatchObject({ credentialVersion: 3 });
     expect(sessions.sessions.has(initialCookie.split("=")[1]!)).toBe(false);
-  });
+  }, 30_000);
 });

@@ -18,6 +18,7 @@ export interface AppAdminMcpToolDefinition {
 }
 
 const appId = z.string().min(1);
+const accountId = z.string().regex(/^acct_[A-Za-z0-9_-]{22}$/);
 const spaceId = z.string().min(1);
 const cursor = z.string().min(1);
 const boundedLimit = z.number().int().min(1).max(200);
@@ -36,12 +37,22 @@ function tool<const Definition extends AppAdminMcpToolDefinition>(definition: De
 }
 
 export const APP_ADMIN_MCP_TOOLS = {
+  get_current_account: tool({
+    name: "get_current_account",
+    requiredScope: "control:read",
+    registration: {
+      title: "Current UniCAS Account",
+      description: "Return the stable Account summary, current masked login identity, authorities, and App memberships.",
+      inputSchema: z.object({}),
+      annotations: { readOnlyHint: true, destructiveHint: false },
+    },
+  }),
   get_current_principal: tool({
     name: "get_current_principal",
     requiredScope: "control:read",
     registration: {
       title: "Current UniCAS Principal",
-      description: "Return the authenticated Principal, Profile, and current App memberships from the v2 contract.",
+      description: "Deprecated compatibility alias returning the current administrator response. Use get_current_account.",
       inputSchema: z.object({}),
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
@@ -323,15 +334,13 @@ export const APP_ADMIN_MCP_TOOLS = {
     name: "remove_app_member",
     requiredScope: "control:security",
     registration: {
-      description: "Remove an App administrator selected by Principal using the App's current ETag.",
+      description: "Idempotently remove an App administrator selected by stable Account ID.",
       inputSchema: z.object({
         appId,
-        issuer: url,
-        subject: z.string().min(1),
-        etag,
-        confirmSubject: z.string().min(1),
+        accountId,
+        confirmAccountId: accountId,
       }),
-      annotations: { destructiveHint: true, idempotentHint: false },
+      annotations: { destructiveHint: true, idempotentHint: true },
     },
   }),
   create_app_playground_file_root: tool({

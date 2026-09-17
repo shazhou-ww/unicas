@@ -1,6 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import {
+  AccountServiceError,
   PlatformAccessError,
+  type AccountService,
   type PlatformAccessService,
   type PlatformAuditService,
   type PlatformInvitationService,
@@ -43,6 +45,7 @@ export interface ControlPlaneMcpServerOptions {
   readonly platformInvitations?: PlatformInvitationService;
   readonly platformAudit?: PlatformAuditService;
   readonly platformAccess?: PlatformAccessService;
+  readonly accountService?: AccountService;
 }
 
 export function createControlPlaneMcpServer(
@@ -66,6 +69,37 @@ export function createControlPlaneMcpServer(
       const grant = requireGrantScope("control:read");
       const result = await controlPlane.me(serviceContext(grant, "whoami"));
       return toolResult(result);
+    },
+  );
+
+  server.registerTool(
+    APP_ADMIN_MCP_TOOLS.get_current_account.name,
+    APP_ADMIN_MCP_TOOLS.get_current_account.registration,
+    async () => {
+      const grant = requireGrantScope("control:read");
+      return accountToolResult(async () => {
+        if (!options.accountService) throw new Error("Account service unavailable");
+        const actor = await options.accountService.resolveExternalIdentity(grant.identityIssuer, grant.subject);
+        if (!actor) throw new AccountServiceError("IDENTITY_NOT_FOUND");
+        const account = await options.accountService.getSelf(
+          actor.account.accountId,
+          actor.authenticatedIdentity.externalIdentityId,
+          [],
+        );
+        const authenticatedIdentity = account.identities.find(identity => identity.currentLogin);
+        if (!authenticatedIdentity) throw new AccountServiceError("IDENTITY_NOT_FOUND");
+        return {
+          account: {
+            accountId: account.accountId,
+            displayName: account.displayName,
+            primaryVerifiedEmail: account.primaryVerifiedEmail,
+            avatar: account.avatar,
+          },
+          authenticatedIdentity,
+          platformAuthorities: account.platformAuthorities,
+          memberships: await options.accountService.listAccountMemberships(account.accountId),
+        };
+      });
     },
   );
 
@@ -109,11 +143,17 @@ export function createControlPlaneMcpServer(
     APP_ADMIN_MCP_TOOLS.list_app_members.registration,
     async ({ appId, limit, cursor }) => {
       const grant = requireGrantScope("control:read");
-      const result = await controlPlane.listMembers(
-        serviceContext(grant, "list_app_members"),
-        { path: { stackId: appId }, query: { limit, cursor } },
-      );
-      return appToolResult({ operation: "listMembers", appId }, result);
+      return accountToolResult(async () => {
+        if (!options.accountService) throw new Error("Account service unavailable");
+        const actor = await options.accountService.resolveExternalIdentity(grant.identityIssuer, grant.subject);
+        if (!actor) throw new AccountServiceError("IDENTITY_NOT_FOUND");
+        return options.accountService.listAppMembers({
+          actorAccountId: actor.account.accountId,
+          appId,
+          limit,
+          cursor,
+        });
+      });
     },
   );
 
@@ -443,15 +483,22 @@ export function createControlPlaneMcpServer(
   server.registerTool(
     APP_ADMIN_MCP_TOOLS.remove_app_member.name,
     APP_ADMIN_MCP_TOOLS.remove_app_member.registration,
-    async ({ appId, issuer, subject, etag, confirmSubject }) => {
+    async ({ appId, accountId, confirmAccountId }) => {
       const grant = requireMutation("control:security", options);
-      if (confirmSubject !== subject) return confirmationError("confirmSubject must exactly match subject");
-      const result = await controlPlane.deleteMember(
-        serviceContext(grant, "remove_app_member"),
-        { path: { stackId: appId }, query: { identityIssuer: issuer, subject } },
-        { ifMatch: etag },
-      );
-      return appToolResult({ operation: "deleteMember", appId }, result);
+      if (confirmAccountId !== accountId) return confirmationError("confirmAccountId must exactly match accountId");
+      return accountToolResult(async () => {
+        if (!options.accountService) throw new Error("Account service unavailable");
+        const actor = await options.accountService.resolveExternalIdentity(grant.identityIssuer, grant.subject);
+        if (!actor) throw new AccountServiceError("IDENTITY_NOT_FOUND");
+        await options.accountService.removeAppMember({
+          actorAccountId: actor.account.accountId,
+          actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+          appId,
+          targetAccountId: accountId,
+          callerChannel: "mcp",
+        });
+        return { ok: true };
+      });
     },
   );
 
@@ -1032,4 +1079,13 @@ function isVerifiedEmailEvidence(value: unknown): value is VerifiedEmailEvidence
     && Number.isSafeInteger(evidence.expiresAt)
     && typeof evidence.authenticationEventId === "string"
     && evidence.authenticationEventId.length > 0;
+}
+
+async function accountToolResult(operation: () => Promise<object>) {
+  try {
+    return toolResult(await operation());
+  } catch (error) {
+    if (error instanceof AccountServiceError) return toolResult({ error: error.code });
+    return toolResult({ error: "SERVICE_UNAVAILABLE" });
+  }
 }

@@ -11,6 +11,23 @@ function json(body: unknown): Response {
   });
 }
 
+function accountMe(displayName: string, email: string, platformAuthorities: string[]) {
+  const identity = { externalIdentityId: "ext-current", provider: "google", accountHint: null, linkedAt: 1, lastAuthenticatedAt: 1, currentLogin: true };
+  return {
+    account: {
+      accountId: `acct_${"a".repeat(22)}`,
+      displayName,
+      primaryVerifiedEmail: { normalizedEmail: email, source: "google-oidc", verifiedAt: 1 },
+      avatar: { kind: "fallback", initials: displayName.slice(0, 2).toUpperCase(), colorIndex: 1 },
+      blockedAt: null,
+      platformAuthorities,
+      identities: [identity],
+      linkableProviders: [],
+    },
+    authenticatedIdentity: identity,
+  };
+}
+
 describe("AI tool connection", () => {
   test("opens from sidebar profile menu, copies connection details, and closes with Escape", async () => {
     const user = userEvent.setup();
@@ -19,6 +36,7 @@ describe("AI tool connection", () => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
       if (path === "/admin/me") {
         return json({
+          ...accountMe("Admin User", "admin@example.com", ["platform.admin", "apps.create"]),
           principal: { issuer: "https://accounts.example", subject: "admin" },
           profile: { displayName: "Admin User", emailForDisplay: "admin@example.com" },
           platformAccess: {
@@ -85,6 +103,7 @@ describe("AI tool connection", () => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
       if (path === "/admin/me") {
         return json({
+          ...accountMe("App Member", "member@example.com", []),
           principal: { issuer: "https://accounts.example", subject: "member" },
           profile: { displayName: "App Member", emailForDisplay: "member@example.com" },
           platformAccess: {
@@ -113,6 +132,7 @@ describe("AI tool connection", () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
       if (path === "/admin/me") return json({
+        ...accountMe("Member", "member@example.com", []),
         principal: { issuer: "https://accounts.example", subject: "member" },
         profile: { displayName: "Member", emailForDisplay: "member@example.com" },
         platformAccess: { principalRef: "member-ref", status: "active", authorities: [], revision: 1 },
@@ -134,6 +154,7 @@ describe("AI tool connection", () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
       if (path === "/admin/me") return json({
+        ...accountMe("Admin", "admin@example.com", ["platform.admin"]),
         principal: { issuer: "https://accounts.example", subject: "admin" },
         profile: { displayName: "Admin", emailForDisplay: "admin@example.com" },
         platformAccess: { principalRef: "admin-ref", status: "active", authorities: ["platform.admin"], revision: 1 },
@@ -169,6 +190,7 @@ describe("AI tool connection", () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
       if (path === "/admin/me") return json({
+        ...accountMe("Admin", "admin@example.com", ["apps.create"]),
         principal: { issuer: "https://accounts.example", subject: "admin" },
         profile: { displayName: "Admin", emailForDisplay: "admin@example.com" },
         platformAccess: { principalRef: "admin-ref", status: "active", authorities: ["apps.create"], revision: 1 },
