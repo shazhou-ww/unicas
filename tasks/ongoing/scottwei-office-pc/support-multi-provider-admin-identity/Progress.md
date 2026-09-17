@@ -130,7 +130,8 @@ invitation admission no longer accepts profile/display email or an
 Google callback evidence with source, verification time, expiry, and
 authentication event. BFF and MCP contexts pass that evidence to the service,
 and successful invitation acceptance rotates the session without retaining the
-consumed evidence. The slice awaits checkpoint publication.
+consumed evidence. The slice is published on `origin/main` as
+`c6d63fee969ee9c42734a4f36b0d1fda7ecdd849`.
 
 Next: publish the fresh-evidence checkpoint, then switch BFF login, CLI, and
 callback routes to the configured provider registry.
@@ -368,6 +369,8 @@ callback routes to the configured provider registry.
   D1 service and MCP invitation integrations passed with explicit evidence, and
   the full Cloudflare suite passed all 257 tests across 28 files. The full
   service suite passed all 129 tests across 18 files.
+- Fresh invitation-evidence commit `c6d63fee969ee9c42734a4f36b0d1fda7ecdd849`
+  was pushed and verified reachable from refreshed `origin/main`.
 
 ## Blockers
 
