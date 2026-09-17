@@ -1,11 +1,17 @@
 {
   "version": 1,
   "skills": {
+    "business-data-model-review": {
+      "source": "shazhou-ww/skills",
+      "sourceType": "github",
+      "skillPath": "skills/business-data-model-review/SKILL.md",
+      "computedHash": "67edcc194ca828a0bafb93937a53e456b86be25b4ca7aedaa153658842847b01"
+    },
     "repository-task-ledger": {
       "source": "shazhou-ww/skills",
       "sourceType": "github",
       "skillPath": "skills/repository-task-ledger/SKILL.md",
-      "computedHash": "47bdf6e5f4d6b5fb3f714735239baf264d51b2da38a66e68af738734c890b75e"
+      "computedHash": "e3145029642251d289bdf0ab9e391b90e6833f3d3afadfe762c1015d2a82abda"
     },
     "task-exec": {
       "source": "shazhou-ww/skills",
@@ -18,6 +24,12 @@
       "sourceType": "github",
       "skillPath": "skills/task-new/SKILL.md",
       "computedHash": "ba816ecf583a13f83a78ddeaa8d46aa3b3a449b4a7e622312bff472ac2b87179"
+    },
+    "ui-change-review": {
+      "source": "shazhou-ww/skills",
+      "sourceType": "github",
+      "skillPath": "skills/ui-change-review/SKILL.md",
+      "computedHash": "196b29f3decfe2659bf490f7fd701beaa49bf494c9ebe290d2a9172af3c8aaea"
     }
   }
 }

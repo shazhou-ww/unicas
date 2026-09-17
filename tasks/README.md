@@ -13,11 +13,14 @@ contains only the UniCAS project profile.
 
 ## Skill installation
 
-The installed skill is committed under `.agents/skills/`, and
-[`skills-lock.json`](../skills-lock.json) records its GitHub source and content
-hash. Restore it after cloning with `npx skills experimental_install`. Update it
-deliberately with `npx skills update repository-task-ledger --project --yes`,
-then review and validate the resulting repository diff.
+The installed shared skills are committed under `.agents/skills/`, and
+[`skills-lock.json`](../skills-lock.json) records their GitHub source and content
+hashes. Restore them after cloning with `npx skills experimental_install`.
+Update them deliberately with
+`npx skills update repository-task-ledger task-new task-exec ui-change-review business-data-model-review --project --yes`,
+then review and validate the resulting repository diff. The first three skills
+provide the task workflow; the two review skills are optional communication
+aids for interface and business data model checkpoints.
 
 ## Layout
 

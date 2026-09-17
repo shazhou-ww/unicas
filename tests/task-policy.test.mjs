@@ -8,14 +8,14 @@ const AGENT_INSTRUCTIONS = join(ROOT, "AGENTS.md");
 const PACKAGE_JSON = join(ROOT, "package.json");
 const REPOLEDGER_CONFIG = join(ROOT, "repoledger.json");
 const TASK_PROFILE = join(ROOT, "tasks", "README.md");
-const TASK_SKILL = join(
-  ROOT,
-  ".agents",
-  "skills",
-  "repository-task-ledger",
-  "SKILL.md",
-);
 const SKILLS_LOCK = join(ROOT, "skills-lock.json");
+const SHARED_SKILLS = [
+  "repository-task-ledger",
+  "task-new",
+  "task-exec",
+  "ui-change-review",
+  "business-data-model-review",
+];
 
 function markdownFiles(directory, files = []) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -67,20 +67,30 @@ describe("repository task policy", () => {
     });
   });
 
-  test("pins the installed task skill to its shared source", () => {
-    expect(existsSync(TASK_SKILL)).toBe(true);
-    const skill = readFileSync(TASK_SKILL, "utf8");
+  test("pins the installed shared skills to their source", () => {
+    const taskSkill = join(
+      ROOT,
+      ".agents",
+      "skills",
+      "repository-task-ledger",
+      "SKILL.md",
+    );
+    const skill = readFileSync(taskSkill, "utf8");
     expect(skill).toContain("name: repository-task-ledger");
     expect(skill).toContain("extensions.worktreeConfig");
     expect(skill).toContain("task-ledger.identity");
 
     expect(existsSync(SKILLS_LOCK)).toBe(true);
     const lock = JSON.parse(readFileSync(SKILLS_LOCK, "utf8"));
-    expect(lock.skills?.["repository-task-ledger"]).toMatchObject({
-      source: "shazhou-ww/skills",
-      sourceType: "github",
-      skillPath: "skills/repository-task-ledger/SKILL.md",
-    });
+    for (const name of SHARED_SKILLS) {
+      const skillPath = join(ROOT, ".agents", "skills", name, "SKILL.md");
+      expect(existsSync(skillPath)).toBe(true);
+      expect(lock.skills?.[name]).toMatchObject({
+        source: "shazhou-ww/skills",
+        sourceType: "github",
+        skillPath: `skills/${name}/SKILL.md`,
+      });
+    }
   });
 
   test("documents the worktree-local identity binding", () => {

@@ -156,6 +156,13 @@ The checkpoints cover:
 5. **Delivery acceptance:** the integrated revision, validation evidence, and
    any manual test result before marking the task completed and archiving it.
 
+Keep human review artifacts decision-first and concise: show material changes,
+governing reasons, risks, and the requested decision without repeating task
+history or embedding exhaustive implementation evidence. When installed,
+`ui-change-review` and `business-data-model-review` are optional communication
+aids for the corresponding artifacts. Their absence never blocks a checkpoint,
+and neither skill owns task state, publication, or approval.
+
 Claim publication and research needed to prepare a review artifact may happen
 before approval. At each applicable gate:
 
