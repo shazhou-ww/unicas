@@ -48,25 +48,25 @@ user profile block at the bottom of the navigation.
 
 ## Acceptance criteria
 
-- [ ] For both platform administrators and App-only users, the main scrolling
+- [x] For both platform administrators and App-only users, the main scrolling
       sidebar region contains the Apps section and no standalone
       Administration section.
-- [ ] The signed-in user profile block remains anchored to the bottom of the
+- [x] The signed-in user profile block remains anchored to the bottom of the
       desktop sidebar and mobile drawer while a long Apps list scrolls without
       obscuring or displacing it.
-- [ ] A platform administrator sees exactly one navigation destination labeled
+- [x] A platform administrator sees exactly one navigation destination labeled
       `Administration` in the bottom profile block, and activating it opens the
       existing platform administration route.
-- [ ] An App-only user sees the same Apps-list hierarchy and profile block but
+- [x] An App-only user sees the same Apps-list hierarchy and profile block but
       no `Administration` destination; direct-route authorization continues to
       fail closed as it does today.
-- [ ] The destination detail heading is `Administration`, and its accessible
+- [x] The destination detail heading is `Administration`, and its accessible
       navigation name uses the same terminology; the old `Platform access` and
       `Platform Administration` navigation/title text is absent from this flow.
-- [ ] Existing App selection, App creation visibility, user-menu commands,
+- [x] Existing App selection, App creation visibility, user-menu commands,
       mobile drawer close/focus behavior, and Administration tab routing remain
       functional.
-- [ ] Focused automated tests cover authorized and unauthorized visibility,
+- [x] Focused automated tests cover authorized and unauthorized visibility,
       navigation, title semantics, and mobile behavior, and the relevant
       Admin WebUI validation passes.
 

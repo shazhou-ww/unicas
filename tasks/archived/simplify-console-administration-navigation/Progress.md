@@ -9,11 +9,11 @@ Updated: 2026-09-17
 - [x] Verify admin-webui test suite passes (91 tests, 11 files).
 - [x] Verify check:tasks passes.
 - [x] Obtain delivery acceptance.
-- [ ] Archive the task.
+- [x] Archive the task.
 
 ## Current state
 
-Task completed. Implementation moves platform administration navigation from standalone sidebar section to UserMenu dropdown.
+Task archived. Implementation moves platform administration navigation from standalone sidebar section to UserMenu dropdown.
 
 ## Decisions
 
@@ -36,8 +36,8 @@ Task completed. Implementation moves platform administration navigation from sta
 | Milestone | Evidence | Status |
 | --- | --- | --- |
 | Claim | Commit `a5588e2` on `origin/main`. | Published |
-| Implementation complete | Pending push. | Pending |
-| Archive | Pending. | Pending |
+| Implementation complete | Commit `49e8171` on `origin/main`. | Published |
+| Archive | Published to origin/main. | Published |
 
 ## Validation
 
