@@ -35,6 +35,15 @@ The requesting user approved the scope review artifact, the canonical
 approval request. This approves its goal, scope, out-of-scope boundaries,
 constraints, acceptance criteria, provider set, and prerequisite.
 
+On 2026-09-17, the requesting user explicitly directed this worktree to switch
+from the distinct `copilot-unicas-standalone` identity to the device's
+`scottwei-office-pc` suggestion. Identity lane reservation commit
+`c8185760d18f26672f472b0a16f812835713f3ef` is published on `origin/main`, the
+worktree is explicitly bound to the registered identity as required by the
+repository policy, and `repoledger doctor` passes. The CLI-validated task
+transfer from `copilot-unicas-standalone` to `scottwei-office-pc` is applied
+locally and awaits publication.
+
 Scope approval is published on `origin/main` as
 `aa94d2efef95c581dbc67a0493539ed2f42f4ab3`. The task-owned
 [business/data-model](./BusinessDataModel.md),
@@ -64,6 +73,11 @@ protected by any pending checkpoint.
 - Treat the user's direct 2026-09-17 takeover request as explicit coordination
   authorization to transfer the task from `scottwei-home-pc` to
   `copilot-unicas-standalone`; it does not approve any pending review checkpoint.
+- Treat the user's direct 2026-09-17 identity-switch request as explicit
+  coordination authorization to transfer the task from
+  `copilot-unicas-standalone` to `scottwei-office-pc`. Keep the required
+  worktree-scoped binding; the matching device-global value remains an
+  initialization suggestion rather than an identity fallback.
 - Reconcile the previously stale progress wording with review-artifact commit
   `d3ef9fd44b7c141993d4307a750c39c817cf225a`; publication does not imply approval.
 
@@ -83,6 +97,7 @@ protected by any pending checkpoint.
 | --- | --- | --- |
 | Claim | `origin/main` commit `1b33a29c6ebcc9e7ed66fe273b4ca7c020e43584`. | Published |
 | Ownership transfer | `origin/main` commit `1db432c0820218ff821f233b322165149eb1d5f5`, coordinated from `scottwei-home-pc` to `copilot-unicas-standalone`. | Published |
+| Ownership transfer to `scottwei-office-pc` | Pending. | Pending publication |
 | Implementation complete | Pending. | Pending |
 | Archive | Pending. | Pending |
 
@@ -130,6 +145,16 @@ protected by any pending checkpoint.
   all 6 focused task-policy tests passed. Transfer commit
   `1db432c0820218ff821f233b322165149eb1d5f5` was then pushed and verified
   reachable from refreshed `origin/main`; the worktree was clean and aligned.
+- `pnpm check:tasks` passed before identity lane reservation publication. The
+  reservation is published on `origin/main` as
+  `c8185760d18f26672f472b0a16f812835713f3ef` and was verified reachable after a
+  remote refresh.
+- `pnpm exec repoledger doctor` passed after explicitly rebinding this worktree
+  to the registered `scottwei-office-pc` identity.
+- `pnpm exec repoledger check --task support-multi-provider-admin-identity`
+  passed before and immediately after the previewed transfer was applied with
+  `--take-from copilot-unicas-standalone --update-all-refs`; the preview and
+  apply results reported no blockers, warnings, or reference edits.
 
 ## Blockers
 
