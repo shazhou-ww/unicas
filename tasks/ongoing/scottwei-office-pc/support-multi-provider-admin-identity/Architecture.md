@@ -1,6 +1,16 @@
 # Architecture review
 
-Status: Pending approval
+Status: Approved with pre-launch replacement amendment
+
+## Governing amendment
+
+The requesting user's 2026-09-17 [rollout decision](./RolloutReview.md)
+supersedes every legacy-preservation, dual-write, credential-migration, staged
+cutover, and old-binary rollback requirement below. These portions describe the
+earlier proposal, not remaining implementation requirements. Build one current
+Account-based service against fresh schema; retire compatibility adapters and
+require fresh authentication for old credentials. Existing module boundaries,
+provider verification, fresh-auth linking, and revocation requirements remain.
 
 ## Decision requested
 

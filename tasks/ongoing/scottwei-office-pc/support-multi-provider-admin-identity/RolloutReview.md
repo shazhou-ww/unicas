@@ -1,54 +1,48 @@
-# Rollout architecture decision
+# Pre-launch replacement decision
 
-Status: Pending approval
+Status: Approved principle; implementation pending
 
-## Decision requested
+## Decision
 
-Approve using separately validated release revisions for the legacy/shadow
-rehearsal, instead of promising that the current Account-based binary can switch
-back to identity-keyed authorization through a runtime flag.
+Requesting user, 2026-09-17: the service is not publicly launched; no legacy
+should be retained, and existing data can be cleared whenever needed.
 
-The Account model, provider set, and no-email-linking rules remain unchanged.
-This reopens only the deployment and rollback portion of the architecture
-checkpoint, not the already approved Account implementation.
+This replaces both the original four-stage compatibility rollout and the
+subsequent pinned-revision rehearsal proposal. Deliver one current Account-based
+system, not an old/new transition framework.
 
-## Current and proposed
+## Consequences
 
-| Aspect | Approved plan | Proposed refinement | Reason |
-| --- | --- | --- | --- |
-| Legacy/shadow | Runtime stages in one service version | Rehearse using pinned legacy, additive-migration, and Account release revisions on disposable copied fixtures | The current Worker initializes Account migration and uses Account v2 contracts unconditionally. Legacy columns alone do not implement a legacy runtime mode. |
-| Account rollout | `account-google`, then `multi-provider` | Retain these runtime gates, default to `account-google`, and separately gate linking | Preserve the original order without reintroducing a second authorization model. |
-| Recovery | Disable new login, linking, and challenge mutations; preserve Account reads | Add an explicit authentication-mutation stop switch shared by BFF and remote MCP; existing credentials still undergo current Account checks | Recovery must not bypass revocation or change resource ownership. |
-| Rollback boundary | Recorded when multi-provider/linking is enabled | Persist an irreversible cutover marker before enabling multi-provider/linking; refuse an identity-mode downgrade afterward | Prevent a configuration edit from splitting linked identities into separate authorization owners. |
+- Remove legacy identity-keyed contracts, adapters, aliases, tables/columns,
+  dual writes, permanent migration maps, migration-only journals, and old
+  session/grant upgrade paths in this task's affected surfaces.
+- Do not implement legacy/shadow runtime modes, a compatibility window, staged
+  Google-only migration gates, or an irreversible migration cutover marker.
+- Initialize the current schema and explicitly provision initial Account access.
+  Recreate disposable pre-launch data as needed instead of preserving it through
+  compatibility migrations. Old sessions and grants need fresh authentication.
+- Update repository consumers, tests, generated contracts, and documentation to
+  the current model rather than maintaining fallback behavior for old clients.
+- Keep provider availability configuration-driven. Normal authorization,
+  credential-version revocation, fresh-auth linking, and failure handling remain.
 
-## Unchanged invariants
+## Boundaries
 
-- Every existing Principal maps one-to-one through the permanent migration map;
-  email never merges identities or moves access.
-- The Account and ExternalIdentity relationships in
-  [BusinessDataModel](./BusinessDataModel.md) remain unchanged. Session and MCP
-  grant bindings remain ephemeral immutable: migration or refresh creates a
-  replacement and does not adopt a newer credential generation.
-- Neither configuration rollback nor binary rollback removes migration data,
-  Account attribution, or linked identity history.
-- After multi-provider use, recovery preserves Account authorization and rolls
-  forward. Restoring a database backup is disaster recovery, not ordinary undo.
-- No production mutation is part of this review. Backup/export, provider
-  registrations, sender onboarding, rehearsals, and delivery acceptance remain
-  required before production rollout.
+The Account model, provider set, no-email-linking rule, and prohibition on
+automatic Account merge are unchanged. Current-model audit and identity-link
+history remain security records during normal operation; disposable pre-launch
+data does not mean normal commands may rewrite security history.
 
-## Validation before rollout
+This principle permits data replacement but is not an instruction to clear any
+specific database now. A reset must target an explicitly identified environment
+and resource set. The frozen `unicas.shazhou.work` environment and unrelated
+App/Space data-plane work remain outside this task.
 
-Require one-to-one reconciliation, old-session rotation, old-grant transition,
-Google-only gates, provider/link gating, recovery-stop behavior, and tests that
-reject downgrade after the cutover marker. Rehearse pre-cutover rollback and
-post-cutover forward recovery against disposable data before real providers and
-email delivery are accepted by the user.
+## Completion checks
 
-If this refinement is rejected, retain the original four-runtime-stage design
-and implement and test an explicit legacy/shadow authorization composition in
-addition to the existing Account path. Neither option is assumed approved.
-
-Do you approve this rollout architecture refinement: pinned-revision
-legacy/shadow rehearsals, Account-only runtime gates, and an irreversible
-multi-provider cutover marker?
+Verify fresh initialization/bootstrap, Account-only authorization and ownership,
+configured provider flows, email challenges, link/unlink and revocation, and
+rejection of retired credentials/contracts. Validate updated consumers and
+generated artifacts. Real provider/email acceptance and human delivery approval
+are still required. Historical checkpoint code that implemented compatibility
+is now cleanup work, not a reason to retain it.

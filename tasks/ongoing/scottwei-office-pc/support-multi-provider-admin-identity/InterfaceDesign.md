@@ -1,6 +1,17 @@
 # Interface review
 
-Status: Pending approval
+Status: Approved with pre-launch replacement amendment
+
+## Governing amendment
+
+The requesting user's 2026-09-17 [rollout decision](./RolloutReview.md)
+supersedes compatibility-period requirements below. Do not retain deprecated
+Principal projections, legacy routes or tool aliases, compatibility redirects,
+sunset mechanisms, or old-credential upgrades in the affected administrator
+surface. Update consumers to the current Account contract and fresh login.
+Configured provider selection, profile/linking flows, and privacy/error rules
+remain unchanged. The HTML comparison is historical review material, not a
+requirement to ship both old and new interfaces.
 
 ## Decision requested
 

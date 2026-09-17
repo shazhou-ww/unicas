@@ -1,6 +1,16 @@
 # Business and data model review
 
-Status: Pending approval
+Status: Approved with pre-launch replacement amendment
+
+## Governing amendment
+
+The requesting user's 2026-09-17 [rollout decision](./RolloutReview.md)
+supersedes the legacy migration and rollback design below. `LegacyIdentityMap`,
+migration journals, shadow keys, dual writes, and old-record preservation are
+not target entities or requirements, including where shown in the original ER
+view. Existing pre-launch data may be replaced with freshly initialized data.
+Account, ExternalIdentity, current security audit, credential revocation, and
+future explicit Merge invariants remain unchanged; no email-based merge is added.
 
 ## Decision requested
 

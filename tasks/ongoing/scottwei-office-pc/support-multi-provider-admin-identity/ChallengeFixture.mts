@@ -47,7 +47,7 @@ const mcpEnv: OAuthAuthorizationEnv = {
     parseAuthRequest: async () => ({ responseType: "code", clientId: "fixture-client", redirectUri: `${origin}/fixture/mcp-complete`, scope: ["control:read", "control:security"], state: "fixture-state", codeChallenge: "fixture-challenge", codeChallengeMethod: "S256", resource: `${origin}/mcp`, issuer: origin }),
     lookupClient: async () => ({ clientName: "Fixture MCP" }),
     completeAuthorization: async () => ({ redirectTo: `${origin}/fixture/mcp-complete` }),
-  } as OAuthAuthorizationEnv["OAUTH_PROVIDER"],
+  } as unknown as OAuthAuthorizationEnv["OAUTH_PROVIDER"],
 };
 const mcp = createOAuthAuthorizationHandler({
   accountServiceFactory: () => accounts,

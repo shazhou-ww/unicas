@@ -247,19 +247,25 @@ Only the permanent legacy map at initial credential generation is accepted;
 partial or mismatched bindings fail closed. Admin client, CLI, and stdio MCP
 persist server-rotated cookie/CSRF pairs without replaying mutations.
 
-The rollout portion of Architecture is reopened for explicit review in
-[RolloutReview](./RolloutReview.md). The current Account-based binary does not
-implement the previously described legacy/shadow runtime modes. The proposed
-refinement uses pinned release revisions for those rehearsals and retains
-Account-only runtime gates plus a persistent multi-provider cutover boundary.
-This is a proposal, not an approved change to the original architecture.
+On 2026-09-17 the requesting user resolved the rollout review with a different
+principle: the service is not publicly launched, no legacy should remain, and
+existing data may be cleared. [RolloutReview](./RolloutReview.md) now records
+pre-launch replacement, superseding both earlier rollout proposals. Previously
+implemented compatibility paths are removal work, not completed target behavior.
+The principle does not authorize this session to clear unspecified resources.
 
-Next: obtain the user's decision on RolloutReview before implementing the
-affected deployment gates. Then complete rollback/forward-recovery rehearsals,
-the remaining acceptance matrix, and real-provider/email user acceptance.
+Next: remove legacy contracts/adapters and identity-keyed persistence from the
+affected administrator surfaces, along with dual writes, migration-only state,
+and old session/grant upgrades. Update consumers/tests and validate fresh Account
+initialization and explicit bootstrap. Do not build compatibility stage flags or
+cutover markers. Then complete the current-model and real-provider/email tests.
 
 ## Decisions
 
+- Requesting user, 2026-09-17: accepted pre-launch replacement with no retained
+  legacy and disposable data. This supersedes earlier decisions below only where
+  they require compatibility, preservation of old records, or migration rollout.
+  Keep chronology as history; do not mistake prior implementation for target scope.
 - Claim the task only after confirming its platform-access prerequisite is
   archived and no active or backlog task overlaps its identity scope.
 - Use the repository ledger's documented manual move fallback because the pinned
@@ -323,7 +329,7 @@ the remaining acceptance matrix, and real-provider/email user acceptance.
 | --- | --- | --- |
 | Scope | Approved | Requesting user, 2026-09-16: explicitly responded that there were no issues after being asked to approve or reject the goal, scope, out of scope, constraints, acceptance criteria, provider set, and prerequisite in [Task](./Task.md). |
 | Business and data model | Approved | Requesting user, 2026-09-17: after reviewing the Account `blockedAt`, authority child-row, primary verified contact, generic-revision removal, and `credentialVersion` refinements published in `4f02dea51c7da183369141f0eec706c758bb90e0`, stated there were no remaining issues and directed iterative implementation. |
-| Architecture | Pending | Original Account/service boundaries were approved by the requesting user on 2026-09-17. Deployment/rollback composition only is reopened for [RolloutReview](./RolloutReview.md); no revised rollout implementation may proceed before explicit approval. |
+| Architecture | Approved | Requesting user, 2026-09-17: responding to [RolloutReview](./RolloutReview.md), stated the service is pre-launch, no legacy should remain, and data is disposable. This replaces compatibility rollout proposals with direct current-model replacement; it is not delivery acceptance or a specific reset command. |
 | Interface | Approved | Requesting user, 2026-09-17: approved proceeding after the revised interface and HTML comparison were published in `4f02dea51c7da183369141f0eec706c758bb90e0`. |
 | Delivery acceptance | Pending | Present the integrated revision and complete validation, security/privacy, deployment/rollback, and manual test evidence after implementation publication. |
 
@@ -629,7 +635,7 @@ was archive publication reachability for an ancestor of the local merge; this
 integration publishes that ancestry and must be verified with `repoledger doctor`
 after push. No additional task-policy test has been restored.
 
-Human architecture decision required: [RolloutReview](./RolloutReview.md).
+The architecture decision is resolved by [RolloutReview](./RolloutReview.md).
 The earlier unrelated ledger publication blocker has been resolved and verified
 by successful repository-wide `repoledger doctor` and `pnpm check:tasks` runs.
 

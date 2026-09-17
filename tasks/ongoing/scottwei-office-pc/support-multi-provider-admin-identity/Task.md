@@ -100,15 +100,22 @@ and reversibility:
 
 ## Scope
 
+- Pre-launch replacement decision (requesting user, 2026-09-17): retain no
+  legacy compatibility in this task's affected surfaces. Existing data is
+  disposable; initialize the current model rather than migrate old records.
+  [Rollout decision](./RolloutReview.md) supersedes earlier compatibility and
+  rollback requirements in the review artifacts. No data reset is performed
+  merely by recording this decision.
 - Introduce a stable UniCAS account identifier and persistence model that can
   own App memberships, platform authorities, sessions, Playground ownership, and
   durable audit attribution independently of an external login identity.
 - Store each external identity as a unique provider/issuer/subject binding to
   one account. Preserve the exact authenticated external identity alongside the
   stable account in security-sensitive audit evidence.
-- Migrate each existing `(issuer, subject)` Principal to its own account without
-  merging records by email, changing its grants, or breaking active ownership
-  semantics. Define session transition and rollback behavior for the migration.
+- Remove legacy Principal contracts, identity-keyed persistence, dual writes,
+  migration maps/journals, old session/grant upgrades, and compatibility aliases.
+  Update affected consumers to the current Account model. Reinitialize
+  pre-launch data and require fresh login instead of maintaining old credentials.
 - Replace the single Google BFF configuration with a server-side provider
   registry and adapters shared by Console, CLI authorization, and MCP login.
 - Support Google through OIDC authorization code + PKCE, nonce, and strict
@@ -177,10 +184,10 @@ and reversibility:
 
 ## Acceptance criteria
 
-- [ ] A new or migrated administrator has one stable UniCAS account whose App
+- [ ] A newly provisioned administrator has one stable UniCAS account whose App
   memberships, platform authorities, Playground ownership, and authorization do
       not change when a linked external login identity is used.
-- [ ] Platform Principal and App member reads resolve the same Account profile
+- [ ] Platform Account and App member reads resolve the same Account profile
       and present a consistent primary verified email, display name, and avatar
       or deterministic fallback without duplicating those values in access or
       membership records.
@@ -188,8 +195,9 @@ and reversibility:
   linked `(issuer, subject)` ExternalIdentity, the optional primary verified email,
       and display-only Profile; no schema or API treats `(issuer, email)` as a
       user key.
-- [ ] Existing Google Principals migrate one-to-one without email-based merges,
-      grant changes, orphaned memberships, or loss of durable audit attribution.
+- [ ] Fresh schema initialization and explicit Account bootstrap work without
+  legacy tables, migration maps, dual writes, or old credential upgrades;
+  retired contracts are removed and old sessions/grants fail closed.
 - [ ] Console, CLI, and MCP login offer the configured Google, personal
       Microsoft account, and GitHub methods and resolve all three through the
       same account-binding service before issuing a UniCAS session or grant.
@@ -223,11 +231,11 @@ and reversibility:
 - [ ] Blocking an account or removing its final admission grant denies all
       linked identities on browser, CLI, and MCP paths within the accepted
       revocation bound.
-- [ ] Login, callback, linking, email challenge, and migration failures fail
+- [ ] Login, callback, linking, email challenge, and initialization failures fail
       closed without exposing account existence, invitation validity, provider
       tokens, email challenge values, or private email lists in responses,
       URLs, logs, or audit records.
-- [ ] Protocol, service, Cloudflare adapter, BFF, CLI/MCP, Console, migration,
+- [ ] Protocol, service, Cloudflare adapter, BFF, CLI/MCP, Console, initialization,
       and security tests cover successful and denied flows for all providers,
       and the relevant package and repository validation commands pass.
 
@@ -263,8 +271,9 @@ and reversibility:
 - Minimize stored personal data. Document retention and redaction for verified
   email evidence, provider profile data, email challenges, and authentication
   audit events before production rollout.
-- Use forward migrations and an explicitly tested rollback/compatibility plan;
-  do not rewrite immutable audit history or merge existing accounts by email.
+- Do not retain legacy compatibility solely to preserve disposable pre-launch
+  data. Reset only identified resources; do not rewrite current-model security
+  history during ordinary operations or merge Accounts by email.
 
 ## Human review checkpoints
 
@@ -278,7 +287,7 @@ and explicitly approved before the protected work begins.
 | Business and data model | Required | User or delegated identity/security owner | Task-owned account model and migration design covering Account, ExternalIdentity, the primary verified contact, shared Profile name/avatar ownership and precedence, AccountPlatformAuthority and AppMembership references, API projections, invitation ownership, audit attribution, linking conflicts, future irreversible-Merge aliases and canonical resolution, retention, one-to-one migration, and rollback. | Changing persistent schemas, ownership keys, migration code, profile projections, invitation rules, linking semantics, or authorization records. |
 | Architecture | Required | User or delegated architecture owner | Task-owned architecture and sequencing design covering provider adapters, `control-auth`, cloud-neutral service ports, Cloudflare persistence and BFF composition, session/account resolution, revocation, retained Account aliases, deployment order, and compatibility boundaries. | Changing module responsibilities, dependencies, provider composition, Account resolution, session architecture, or deployment wiring. |
 | Interface | Required | User or delegated product/API owner | Task-owned interface design for Console login and account management, callback and linking routes, explicit handling of conflicts that require a future irreversible Merge, administrator API contracts, CLI and MCP login behavior, error/privacy semantics, and compatibility with existing clients. | Implementing or changing affected GUI flows, HTTP contracts, CLI commands, or MCP behavior. |
-| Delivery acceptance | Required | User or accountable owner | Integrated revision, provider and migration test matrix, security and privacy evidence, validation results, deployment/rollback rehearsal, and required Console, CLI, and MCP manual test results. | Marking the task completed and archiving it. |
+| Delivery acceptance | Required | User or accountable owner | Integrated revision, provider and fresh-initialization test matrix, legacy-removal coverage, security/privacy evidence, validation results, and required Console, CLI, and MCP manual test results. | Marking the task completed and archiving it. |
 
 ## References
 
