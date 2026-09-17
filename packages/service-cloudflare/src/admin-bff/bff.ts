@@ -33,7 +33,7 @@ import type {
   PlatformAuditRepository,
   PlatformInvitationRepository,
 } from "@unicas/service";
-import { PlatformAccessError, PlatformAccessService, PlatformAuditService, PlatformInvitationService, sha256Hex } from "@unicas/service";
+import { PlatformAccessError, PlatformAccessService, PlatformAuditService, PlatformInvitationService, sha256Hex, verifiedProviderEmailEvidence } from "@unicas/service";
 import type { AdminBffConfig } from "./config.js";
 const ADMIN_ASSET_CACHE_BUSTER = "issuer-discovery-v1";
 
@@ -442,14 +442,22 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       issuer: config.oidcIssuer ?? "https://accounts.google.com",
       subject: identity.sub,
     };
+    const authenticatedAt = now();
+    const verifiedEmailEvidence = identity.email && identity.emailVerified
+      ? [verifiedProviderEmailEvidence({
+        provider: "google",
+        email: identity.email,
+        verifiedAt: authenticatedAt,
+        authenticationEventId: generateRequestId(),
+      })]
+      : [];
     let invitationAccess: AdminSessionPayload["invitationAccess"];
     if (platformAccess !== null) {
       try {
         if (invitationContinuation?.kind === "app") {
           const authorization = await platformAccess.authorizeAppInvitationLogin(
             loginPrincipal,
-            identity.email,
-            identity.emailVerified,
+            verifiedEmailEvidence,
             invitationContinuation.token,
           );
           if (authorization.mode === "invitation") {
@@ -464,8 +472,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
           if (!platformInvitations) throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
           const invitation = await platformInvitations.authorizeLogin(
             loginPrincipal,
-            identity.email,
-            identity.emailVerified,
+            verifiedEmailEvidence,
             invitationContinuation.token,
           );
           invitationAccess = {
@@ -517,6 +524,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         subject: identity.sub,
         displayName: identity.name,
         emailForDisplay: identity.email,
+        authProvider: "google",
+        authenticatedAt,
+        verifiedEmailEvidence,
         codeChallenge: preLogin.cliCodeChallenge!,
         cliState: preLogin.cliState!,
         cliRedirectUri: preLogin.cliRedirectUri!,
@@ -541,6 +551,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       displayName: identity.name,
       emailForDisplay: identity.email,
       csrfToken: generateCsrfToken(),
+      authProvider: "google",
+      authenticatedAt,
+      verifiedEmailEvidence,
       invitationAccess,
       admittedViaInvitation: invitationContinuation ? true : undefined,
     };
@@ -810,6 +823,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       displayName: payload.displayName,
       emailForDisplay: payload.emailForDisplay,
       csrfToken: generateCsrfToken(),
+      authProvider: payload.authProvider,
+      authenticatedAt: payload.authenticatedAt,
+      verifiedEmailEvidence: payload.verifiedEmailEvidence,
     };
     const sessionId = generateSessionId();
     await sessionStore.create(sessionId, await sessionCrypto.encrypt(authenticatedPayload), sessionTtlMs);
@@ -964,6 +980,8 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       displayName: payload.displayName,
       emailForDisplay: payload.emailForDisplay,
       csrfToken: generateCsrfToken(),
+      authProvider: payload.authProvider,
+      authenticatedAt: payload.authenticatedAt,
       admittedViaInvitation: payload.admittedViaInvitation || payload.invitationAccess
         ? true
         : undefined,
@@ -996,6 +1014,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       await platformInvitations.accept(
         { issuer: payload.identityIssuer, subject: payload.subject },
         { displayName: payload.displayName, emailForDisplay: payload.emailForDisplay },
+        payload.verifiedEmailEvidence ?? [],
         token,
         request.headers.get("X-Request-Id"),
       );
@@ -1013,6 +1032,8 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       displayName: payload.displayName,
       emailForDisplay: payload.emailForDisplay,
       csrfToken: generateCsrfToken(),
+      authProvider: payload.authProvider,
+      authenticatedAt: payload.authenticatedAt,
       admittedViaInvitation: true,
     };
     const nextSessionId = generateSessionId();
@@ -1505,6 +1526,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
   ): ControlPlaneCallContext {
     return {
       identity: { identityIssuer: payload.identityIssuer, subject: payload.subject },
+      verifiedEmailEvidence: payload.verifiedEmailEvidence,
       profile: {
         displayName: payload.displayName,
         emailForDisplay: payload.emailForDisplay,

@@ -76,6 +76,7 @@ describe("D1 platform invitations", () => {
     await service.accept(
       invitee,
       { displayName: "Invitee", emailForDisplay: "invitee@example.com" },
+      [{ normalizedEmail: "invitee@example.com", source: "google-oidc", verifiedAt: 900, expiresAt: 2_000, authenticationEventId: "auth-invitee" }],
       acceptedInvitation.acceptUrl.split("/")[3]!,
       "request-accept",
     );
@@ -119,6 +120,7 @@ describe("D1 platform invitations", () => {
     await expect(service.accept(
       blocked,
       { displayName: "Blocked", emailForDisplay: "blocked@example.com" },
+      [{ normalizedEmail: "blocked@example.com", source: "google-oidc", verifiedAt: 900, expiresAt: 2_000, authenticationEventId: "auth-blocked" }],
       blockedInvitation.acceptUrl.split("/")[3]!,
     )).rejects.toMatchObject({ code: "PLATFORM_ACCESS_REQUIRED" });
     expect(await repository.getInvitation(blockedInvitation.invitationId, 1000)).toMatchObject({ status: "pending" });

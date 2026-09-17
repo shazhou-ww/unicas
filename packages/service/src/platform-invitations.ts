@@ -11,6 +11,7 @@ import {
 import { generateEventId, generateInvitationId, generateInvitationToken, generatePrincipalRef } from "./control-ids.js";
 import { canonicalJson, sha256Hex, validateInvitationToken } from "./control-validation.js";
 import { PlatformAccessError, PlatformAccessService, type PlatformAuditRecord } from "./platform-access.js";
+import { requireInvitationEmailEvidence, type VerifiedEmailEvidence } from "./authentication.js";
 
 const DEFAULT_INVITATION_TTL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_LIST_LIMIT = 50;
@@ -236,13 +237,14 @@ export class PlatformInvitationService {
 
   async authorizeLogin(
     principal: Principal,
-    email: string | null,
-    emailVerified: boolean,
+    evidence: readonly VerifiedEmailEvidence[],
     token: string,
   ): Promise<StoredPlatformInvitation> {
     const invitation = await this.resolve(token);
     await this.access.assertNotBlocked(principal);
-    if (!emailVerified || email?.trim().toLowerCase() !== invitation.emailConstraint) {
+    try {
+      requireInvitationEmailEvidence(evidence, invitation.emailConstraint, this.#now());
+    } catch {
       throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
     }
     return invitation;
@@ -251,11 +253,14 @@ export class PlatformInvitationService {
   async accept(
     principal: Principal,
     profile: Profile,
+    evidence: readonly VerifiedEmailEvidence[],
     token: string,
     requestId: string | null = null,
   ): Promise<void> {
     const invitation = await this.resolve(token);
-    if (profile.emailForDisplay?.trim().toLowerCase() !== invitation.emailConstraint) {
+    try {
+      requireInvitationEmailEvidence(evidence, invitation.emailConstraint, this.#now());
+    } catch {
       throw new PlatformAccessError("NOT_FOUND", 404);
     }
     const result = await this.repository.commitAcceptInvitation({

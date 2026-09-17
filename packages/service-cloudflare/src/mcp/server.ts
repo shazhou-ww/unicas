@@ -6,6 +6,7 @@ import {
   type PlatformInvitationService,
   type ControlPlaneCallContext,
   type ControlPlaneOperations,
+  type VerifiedEmailEvidence,
 } from "@unicas/service";
 import {
   APP_ADMIN_MCP_TOOLS,
@@ -24,6 +25,7 @@ export interface ControlPlaneMcpGrantProps extends Record<string, unknown> {
   readonly subject: string;
   readonly displayName: string | null;
   readonly emailForDisplay: string | null;
+  readonly verifiedEmailEvidence?: readonly VerifiedEmailEvidence[];
   readonly scopes: readonly string[];
   readonly oauthClientId: string;
   readonly oauthClientHandle: string;
@@ -909,6 +911,9 @@ function isGrantProps(value: Record<string, unknown> | undefined): value is Cont
     && value.subject.length > 0
     && (value.displayName === null || typeof value.displayName === "string")
     && (value.emailForDisplay === null || typeof value.emailForDisplay === "string")
+    && (value.verifiedEmailEvidence === undefined
+      || Array.isArray(value.verifiedEmailEvidence)
+      && value.verifiedEmailEvidence.every(isVerifiedEmailEvidence))
     && Array.isArray(value.scopes)
     && value.scopes.every((scope) => typeof scope === "string")
     && typeof value.oauthClientId === "string"
@@ -926,6 +931,7 @@ function serviceContext(grant: ControlPlaneMcpGrantProps, toolName: string): Con
       displayName: grant.displayName,
       emailForDisplay: grant.emailForDisplay,
     },
+    verifiedEmailEvidence: grant.verifiedEmailEvidence,
     requestId: crypto.randomUUID(),
     traceId: crypto.randomUUID(),
     caller: {
@@ -1013,4 +1019,17 @@ async function platformToolResult(operation: () => Promise<object>) {
     if (error instanceof PlatformAccessError) return toolResult({ error: error.code });
     return toolResult({ error: "SERVICE_UNAVAILABLE" });
   }
+}
+
+function isVerifiedEmailEvidence(value: unknown): value is VerifiedEmailEvidence {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const evidence = value as Record<string, unknown>;
+  return typeof evidence.normalizedEmail === "string"
+    && ["google-oidc", "github-emails-api", "unicas-email-challenge"].includes(String(evidence.source))
+    && typeof evidence.verifiedAt === "number"
+    && Number.isSafeInteger(evidence.verifiedAt)
+    && typeof evidence.expiresAt === "number"
+    && Number.isSafeInteger(evidence.expiresAt)
+    && typeof evidence.authenticationEventId === "string"
+    && evidence.authenticationEventId.length > 0;
 }

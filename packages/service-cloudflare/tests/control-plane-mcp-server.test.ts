@@ -285,6 +285,7 @@ describe("adapter-hosted control-plane MCP server", () => {
       subject: "bob-sub",
       displayName: "Bob",
       emailForDisplay: "bob@example.com",
+      verifiedEmailEvidence: [emailEvidence("bob@example.com", "bob-auth")],
     }, { mutationsEnabled: true });
     expect((await callTool(bobHandler, "accept_app_member_invitation", { token })).structuredContent)
       .toEqual({ appId });
@@ -346,6 +347,7 @@ describe("adapter-hosted control-plane MCP server", () => {
     expect(await createControlPlaneOperations(db).acceptMemberInvitation({
       identity: { identityIssuer: "https://accounts.google.com", subject: "bob-sub" },
       profile: { displayName: "Bob", emailForDisplay: "bob@example.com" },
+      verifiedEmailEvidence: [emailEvidence("bob@example.com", "bob-auth")],
     }, { path: { token } })).toMatchObject({ subject: "bob-sub", displayName: "Bob" });
     const members = await callTool(handler, "list_members", { stackId, limit: 10 });
     expect(members.structuredContent.items).toEqual([
@@ -445,7 +447,17 @@ describe("adapter-hosted control-plane MCP server", () => {
 function grant(scopes: readonly string[]): ControlPlaneMcpGrantProps {
   return {
     identityIssuer: "https://accounts.google.com", subject: "alice-sub", displayName: "Alice",
-    emailForDisplay: "alice@example.com", scopes, oauthClientId: "github-copilot", oauthClientHandle: "a".repeat(64),
+    emailForDisplay: "alice@example.com", verifiedEmailEvidence: [emailEvidence("alice@example.com", "alice-auth")],
+    scopes, oauthClientId: "github-copilot", oauthClientHandle: "a".repeat(64),
+  };
+}
+function emailEvidence(normalizedEmail: string, authenticationEventId: string) {
+  return {
+    normalizedEmail,
+    source: "google-oidc" as const,
+    verifiedAt: 1,
+    expiresAt: Number.MAX_SAFE_INTEGER,
+    authenticationEventId,
   };
 }
 function handlerFor(props: ControlPlaneMcpGrantProps, options: Parameters<typeof createControlPlaneMcpServer>[1] = {}) {

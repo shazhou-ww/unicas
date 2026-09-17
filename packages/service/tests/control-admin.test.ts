@@ -37,9 +37,17 @@ const alice: CasOperatorIdentityKey = { identityIssuer: "https://id.example", su
 const bob: CasOperatorIdentityKey = { identityIssuer: "https://id.example", subject: "bob" };
 
 function context(identity = alice, displayName = "Alice"): ControlPlaneCallContext {
+  const normalizedEmail = `${identity.subject}@example.com`;
   return {
     identity,
-    profile: { displayName, emailForDisplay: `${identity.subject}@example.com` },
+    profile: { displayName, emailForDisplay: normalizedEmail },
+    verifiedEmailEvidence: [{
+      normalizedEmail,
+      source: "google-oidc",
+      verifiedAt: 900,
+      expiresAt: 2_000,
+      authenticationEventId: `auth-${identity.subject}`,
+    }],
     requestId: "request-1",
     traceId: "trace-1",
     caller: { channel: "mcp", oauthClientHandle: "client", toolName: "test" },
@@ -331,6 +339,13 @@ describe("ControlPlaneAdminService", () => {
     expectError(await service.acceptMemberInvitation({
       ...context(bob, "Bob"),
       profile: { displayName: "Bob", emailForDisplay: "wrong@example.com" },
+      verifiedEmailEvidence: [{
+        normalizedEmail: "wrong@example.com",
+        source: "google-oidc",
+        verifiedAt: 900,
+        expiresAt: 2_000,
+        authenticationEventId: "auth-wrong",
+      }],
     }, { path: { token } }), CasAdminErrorCodes.NOT_FOUND);
     expect(await service.acceptMemberInvitation(context(bob, "Bob"), { path: { token } })).toMatchObject({
       stackId: stack.stackId,

@@ -56,7 +56,19 @@ const ISSUER = "https://accounts.google.com";
 const alice: CasOperatorIdentityKey = { identityIssuer: ISSUER, subject: "alice-sub" };
 const bob: CasOperatorIdentityKey = { identityIssuer: ISSUER, subject: "bob-sub" };
 function ctx(identity: CasOperatorIdentityKey, email = `${identity.subject}@example.com`): ControlPlaneCallContext {
-  return { identity, profile: { displayName: identity.subject, emailForDisplay: email }, requestId: "req-1", traceId: "trace-1" };
+  return {
+    identity,
+    profile: { displayName: identity.subject, emailForDisplay: email },
+    verifiedEmailEvidence: [{
+      normalizedEmail: email.trim().toLowerCase(),
+      source: "google-oidc",
+      verifiedAt: 900_000,
+      expiresAt: 1_100_000,
+      authenticationEventId: `auth-${identity.subject}`,
+    }],
+    requestId: "req-1",
+    traceId: "trace-1",
+  };
 }
 function expectError(value: unknown, error: CasAdminErrorResponse["error"]): void {
   expect(value).toMatchObject({ error });

@@ -2,6 +2,13 @@ import { describe, expect, test, vi } from "vitest";
 import { PlatformAccessService, type PlatformAccessRepository } from "../src/platform-access.js";
 
 const principal = { issuer: "https://identity.example.test", subject: "synthetic" };
+const evidence = (email: string, expiresAt = 2000) => [{
+  normalizedEmail: email.trim().toLowerCase(),
+  source: "google-oidc" as const,
+  verifiedAt: 900,
+  expiresAt,
+  authenticationEventId: "auth-1",
+}];
 
 function fixture() {
   const repository: PlatformAccessRepository = {
@@ -77,20 +84,17 @@ describe("platform access service", () => {
 
     await expect(service.authorizeAppInvitationLogin(
       principal,
-      "Alice@Example.com",
-      true,
+      evidence("Alice@Example.com"),
       "a".repeat(32),
     )).resolves.toMatchObject({ mode: "invitation", invitation: { invitationId: "invitation-1" } });
     await expect(service.authorizeAppInvitationLogin(
       principal,
-      "other@example.com",
-      true,
+      evidence("other@example.com"),
       "a".repeat(32),
     )).rejects.toMatchObject({ code: "PLATFORM_ACCESS_REQUIRED" });
     await expect(service.authorizeAppInvitationLogin(
       principal,
-      "alice@example.com",
-      false,
+      [],
       "a".repeat(32),
     )).rejects.toMatchObject({ code: "PLATFORM_ACCESS_REQUIRED" });
   });
@@ -108,8 +112,7 @@ describe("platform access service", () => {
 
     await expect(service.authorizeAppInvitationLogin(
       principal,
-      null,
-      false,
+      [],
       "a".repeat(32),
     )).resolves.toMatchObject({ mode: "full" });
   });
@@ -135,8 +138,7 @@ describe("platform access service", () => {
     });
     await expect(service.authorizeAppInvitationLogin(
       principal,
-      "alice@example.com",
-      true,
+      evidence("alice@example.com"),
       "a".repeat(32),
     )).rejects.toMatchObject({ code: "PLATFORM_ACCESS_REQUIRED" });
 

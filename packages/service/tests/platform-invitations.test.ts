@@ -171,16 +171,23 @@ describe("platform invitation service", () => {
     const { repository, service } = fixture();
     const created = await service.create(actor, { emailConstraint: "invitee@example.com", authorities: ["apps.create"] }, "a");
     const token = created.acceptUrl.split("/")[3]!;
-    await expect(service.authorizeLogin(invitee, "other@example.com", true, token))
+    const evidence = (email: string) => [{
+      normalizedEmail: email,
+      source: "google-oidc" as const,
+      verifiedAt: 900,
+      expiresAt: 2_000,
+      authenticationEventId: "auth-invitee",
+    }];
+    await expect(service.authorizeLogin(invitee, evidence("other@example.com"), token))
       .rejects.toMatchObject({ code: "PLATFORM_ACCESS_REQUIRED" });
-    await expect(service.authorizeLogin(invitee, "invitee@example.com", true, token)).resolves.toMatchObject({ invitationId: created.invitationId });
-    await service.accept(invitee, { displayName: "Invitee", emailForDisplay: "invitee@example.com" }, token);
+    await expect(service.authorizeLogin(invitee, evidence("invitee@example.com"), token)).resolves.toMatchObject({ invitationId: created.invitationId });
+    await service.accept(invitee, { displayName: "Invitee", emailForDisplay: "invitee@example.com" }, evidence("invitee@example.com"), token);
     await expect(new PlatformAccessService(repository).requireAccess(invitee, "apps.create")).resolves.toBeTruthy();
 
     const blocked = { issuer: invitee.issuer, subject: "blocked" };
     repository.states.set(key(blocked), { ...state(blocked, []), status: "blocked" });
     const blockedInvite = await service.create(actor, { emailConstraint: "blocked@example.com", authorities: ["platform.admin"] }, "b");
-    await expect(service.authorizeLogin(blocked, "blocked@example.com", true, blockedInvite.acceptUrl.split("/")[3]!))
+    await expect(service.authorizeLogin(blocked, evidence("blocked@example.com"), blockedInvite.acceptUrl.split("/")[3]!))
       .rejects.toMatchObject({ code: "PLATFORM_ACCESS_REQUIRED" });
   });
 });

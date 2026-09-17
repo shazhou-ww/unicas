@@ -9,6 +9,8 @@
  */
 
 import { EncryptJWT, jwtDecrypt } from "jose";
+import type { ProviderKind } from "@unicas/admin-protocol";
+import type { VerifiedEmailEvidence } from "@unicas/service";
 
 export interface AppInvitationContinuation {
   readonly kind: "app";
@@ -50,6 +52,9 @@ export interface AdminSessionPayload {
   readonly displayName: string | null;
   readonly emailForDisplay: string | null;
   readonly csrfToken: string;
+  readonly authProvider?: ProviderKind;
+  readonly authenticatedAt?: number;
+  readonly verifiedEmailEvidence?: readonly VerifiedEmailEvidence[];
   /** Pre-login OIDC authorization state (login in progress). */
   readonly oidcState?: string;
   readonly oidcNonce?: string;
@@ -80,6 +85,9 @@ export interface CliOneTimeCodePayload {
   readonly subject: string;
   readonly displayName: string | null;
   readonly emailForDisplay: string | null;
+  readonly authProvider?: ProviderKind;
+  readonly authenticatedAt?: number;
+  readonly verifiedEmailEvidence?: readonly VerifiedEmailEvidence[];
   readonly codeChallenge: string;
   readonly cliState: string;
   readonly cliRedirectUri: string;

@@ -47,10 +47,12 @@ import type {
   ManagedSpaceCapability,
 } from "@unicas/admin-protocol";
 import type { ControlAuditAction } from "./control-audit.js";
+import type { VerifiedEmailEvidence } from "./authentication.js";
 
 /** Authenticated caller context supplied by an ingress after session checks. */
 export interface ControlPlaneCallContext {
   readonly identity: CasOperatorIdentityKey;
+  readonly verifiedEmailEvidence?: readonly VerifiedEmailEvidence[];
   /** Display metadata from the verified identity profile (email is display-only). */
   readonly profile?: {
     readonly displayName: string | null;

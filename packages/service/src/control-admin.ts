@@ -59,6 +59,7 @@ import type {
   ManagedSpaceCapability,
 } from "@unicas/admin-protocol";
 import { ControlAuditActions, type ControlAuditAction } from "./control-audit.js";
+import { requireInvitationEmailEvidence } from "./authentication.js";
 import { decodeControlListCursor, encodeControlListCursor } from "./control-cursor.js";
 import { ControlPlaneError, toAdminError } from "./control-errors.js";
 import {
@@ -818,9 +819,12 @@ export class ControlPlaneAdminService {
         throw new ControlPlaneError(CasAdminErrorCodes.NOT_FOUND, "invitation not found, expired, or already used");
       }
       const profile = ctx.profile ?? { displayName: null, emailForDisplay: null };
-      if (invitation.emailConstraint !== null
-        && profile.emailForDisplay?.trim().toLowerCase() !== invitation.emailConstraint) {
-        throw new ControlPlaneError(CasAdminErrorCodes.NOT_FOUND, "invitation is bound to another email");
+      if (invitation.emailConstraint !== null) {
+        try {
+          requireInvitationEmailEvidence(ctx.verifiedEmailEvidence ?? [], invitation.emailConstraint, now);
+        } catch {
+          throw new ControlPlaneError(CasAdminErrorCodes.NOT_FOUND, "invitation is bound to another email");
+        }
       }
       const existingIdentity = await this.#repository.getIdentity(ctx.identity);
       const identity: ControlIdentityRecord = {

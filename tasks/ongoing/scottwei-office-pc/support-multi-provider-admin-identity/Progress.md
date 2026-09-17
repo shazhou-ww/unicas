@@ -123,8 +123,17 @@ GitHub keys identity by numeric `/user.id` while accepting only verified Emails
 API entries. The adapters are not yet routed from the BFF. The slice is
 published on `origin/main` as `309ed44061c8ebe65b96b7a92626f776dbb52453`.
 
-Next: publish the provider foundation checkpoint, then switch the BFF login,
-CLI, and callback routes to the configured provider registry.
+The fifth implementation slice is complete locally. App and platform
+invitation admission no longer accepts profile/display email or an
+`emailVerified` boolean; both require an exact, unexpired
+`VerifiedEmailEvidence` record. Browser/CLI sessions and remote MCP grants carry
+Google callback evidence with source, verification time, expiry, and
+authentication event. BFF and MCP contexts pass that evidence to the service,
+and successful invitation acceptance rotates the session without retaining the
+consumed evidence. The slice awaits checkpoint publication.
+
+Next: publish the fresh-evidence checkpoint, then switch BFF login, CLI, and
+callback routes to the configured provider registry.
 
 ## Decisions
 
@@ -350,6 +359,15 @@ CLI, and callback routes to the configured provider registry.
   packages passed typecheck.
 - Provider foundation commit `309ed44061c8ebe65b96b7a92626f776dbb52453` was
   pushed and verified reachable from refreshed `origin/main`.
+- Focused App/platform invitation service suites passed 27 tests after removing
+  the display-email authorization path. Focused BFF/session/platform invitation
+  suites passed 63 tests with evidence carried through Google browser and CLI
+  flows; service and Cloudflare typechecks passed.
+- Remote MCP OAuth now issues bounded Google evidence in grant properties and
+  validates its full shape at the MCP server boundary. The previously failing
+  D1 service and MCP invitation integrations passed with explicit evidence, and
+  the full Cloudflare suite passed all 257 tests across 28 files. The full
+  service suite passed all 129 tests across 18 files.
 
 ## Blockers
 

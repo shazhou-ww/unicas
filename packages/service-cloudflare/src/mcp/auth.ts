@@ -11,6 +11,7 @@ import {
 } from "@unicas/control-auth";
 import { CONTROL_PLANE_MCP_SCOPES, emailAllowed } from "./config.js";
 import type { ControlPlaneMcpGrantProps } from "./server.js";
+import { verifiedProviderEmailEvidence, type VerifiedEmailEvidence } from "@unicas/service";
 
 const AUTH_COOKIE = "unicas_mcp_oauth";
 const CONSENT_COOKIE = "unicas_mcp_consent";
@@ -47,6 +48,7 @@ interface PendingConsent {
     readonly subject: string;
     readonly displayName: string | null;
     readonly emailForDisplay: string | null;
+    readonly verifiedEmailEvidence: readonly VerifiedEmailEvidence[];
   };
   readonly clientName: string;
   readonly csrfToken: string;
@@ -162,6 +164,14 @@ async function finishGoogleAuthentication(
         subject: identity.sub,
         displayName: identity.name,
         emailForDisplay: identity.email,
+        verifiedEmailEvidence: identity.email && identity.emailVerified
+          ? [verifiedProviderEmailEvidence({
+            provider: "google",
+            email: identity.email,
+            verifiedAt: Date.now(),
+            authenticationEventId: randomToken(),
+          })]
+          : [],
       },
       clientName: client.clientName ?? "MCP client",
       csrfToken,

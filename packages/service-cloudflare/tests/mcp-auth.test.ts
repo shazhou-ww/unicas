@@ -98,10 +98,19 @@ describe("control-plane MCP OAuth authorization", () => {
       subject: "alice-sub",
       displayName: "Alice",
       emailForDisplay: "alice@example.com",
+      verifiedEmailEvidence: [{
+        normalizedEmail: "alice@example.com",
+        source: "google-oidc",
+        verifiedAt: expect.any(Number),
+        expiresAt: expect.any(Number),
+        authenticationEventId: expect.any(String),
+      }],
       scopes: ["control:read", "control:security"],
       oauthClientId: oauthRequest.clientId,
       oauthClientHandle: expect.stringMatching(/^[a-f0-9]{64}$/),
     });
+    expect(completed.props.verifiedEmailEvidence[0].expiresAt)
+      .toBeGreaterThan(completed.props.verifiedEmailEvidence[0].verifiedAt);
     expect(JSON.stringify(completed.props)).not.toContain("google-access-token");
   });
 

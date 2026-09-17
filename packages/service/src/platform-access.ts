@@ -13,6 +13,7 @@ import {
   type Principal,
 } from "@unicas/admin-protocol";
 import { sha256Hex, validateInvitationToken } from "./control-validation.js";
+import { requireInvitationEmailEvidence, type VerifiedEmailEvidence } from "./authentication.js";
 
 export class PlatformAccessError extends Error {
   constructor(readonly code: string, readonly status: number) {
@@ -115,8 +116,7 @@ export class PlatformAccessService {
 
   async authorizeAppInvitationLogin(
     principal: Principal,
-    email: string | null,
-    emailVerified: boolean,
+    evidence: readonly VerifiedEmailEvidence[],
     token: string,
   ): Promise<{ readonly mode: "full" | "invitation"; readonly invitation: AppInvitationAdmission }> {
     const invitation = await this.resolveAppInvitation(token);
@@ -133,10 +133,12 @@ export class PlatformAccessService {
     if (effectivePlatformAccess(state, member) === "active") {
       return { mode: "full", invitation };
     }
-    if (state?.status === "blocked"
-      || invitation.emailConstraint === null
-      || !emailVerified
-      || email?.trim().toLowerCase() !== invitation.emailConstraint) {
+    if (state?.status === "blocked" || invitation.emailConstraint === null) {
+      throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
+    }
+    try {
+      requireInvitationEmailEvidence(evidence, invitation.emailConstraint, this.now());
+    } catch {
       throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
     }
     return { mode: "invitation", invitation };
