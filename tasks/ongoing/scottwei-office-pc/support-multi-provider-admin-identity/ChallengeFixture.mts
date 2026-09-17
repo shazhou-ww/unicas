@@ -2,7 +2,8 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
-import { ProviderRegistry, sha256Hex } from "../../../../packages/service/src/index.ts";
+import { AccountService, ProviderRegistry, sha256Hex } from "../../../../packages/service/src/index.ts";
+import { createOAuthAuthorizationHandler, type OAuthAuthorizationEnv } from "../../../../packages/service-cloudflare/src/mcp/auth.ts";
 import { matchAppAdminRoute } from "../../../../packages/admin-protocol/src/index.ts";
 import { createAdminBff } from "../../../../packages/service-cloudflare/src/admin-bff/bff.ts";
 import { handleAppAdminCompatibilityRequest } from "../../../../packages/service-cloudflare/src/app-admin-adapter.ts";
@@ -30,6 +31,33 @@ await database.prepare(
 ).run();
 let latestCode = "";
 const platform = new D1PlatformAccessRepository(database);
+const accounts = new AccountService(new D1AccountRepository(database));
+const mcpAccount = await accounts.createForExternalIdentity({ provider: "microsoft", issuer: "https://microsoft.fixture", subject: "fixture-mcp-subject", displayName: "Fixture Account" });
+await database.prepare("INSERT INTO cas_account_platform_authorities (account_id, authority, granted_at) VALUES (?, 'apps.create', 1)").bind(mcpAccount.account.accountId).run();
+for (const provider of ["google", "github"]) {
+  await database.prepare("INSERT INTO cas_external_identities (external_identity_id, account_id, provider, issuer, subject, linked_at) VALUES (?, ?, ?, ?, 'fixture-mcp-subject', 1)")
+    .bind(`fixture-${provider}`, mcpAccount.account.accountId, provider, `https://${provider}.fixture`).run();
+}
+const mcpEnv: OAuthAuthorizationEnv = {
+  CAS_CONTROL_DB: database,
+  OAUTH_KV: {} as OAuthAuthorizationEnv["OAUTH_KV"],
+  MCP_PUBLIC_ORIGIN: origin,
+  OAUTH_STATE_ENCRYPTION_KEY: randomBytes(32).toString("base64url"),
+  OAUTH_PROVIDER: {
+    parseAuthRequest: async () => ({ responseType: "code", clientId: "fixture-client", redirectUri: `${origin}/fixture/mcp-complete`, scope: ["control:read", "control:security"], state: "fixture-state", codeChallenge: "fixture-challenge", codeChallengeMethod: "S256", resource: `${origin}/mcp`, issuer: origin }),
+    lookupClient: async () => ({ clientName: "Fixture MCP" }),
+    completeAuthorization: async () => ({ redirectTo: `${origin}/fixture/mcp-complete` }),
+  } as OAuthAuthorizationEnv["OAUTH_PROVIDER"],
+};
+const mcp = createOAuthAuthorizationHandler({
+  accountServiceFactory: () => accounts,
+  providerRegistryFactory: () => new ProviderRegistry((["google", "microsoft", "github"] as const).map(provider => ({
+    kind: provider,
+    displayName: { google: "Google", microsoft: "Microsoft", github: "GitHub" }[provider],
+    begin: async input => `${origin}/oauth/${provider}/callback?code=fixture&state=${input.state}`,
+    complete: async input => ({ provider, issuer: `https://${provider}.fixture`, subject: "fixture-mcp-subject", displayName: "Fixture Account", avatarUrl: null, accountHint: null, verifiedEmailEvidence: [], authenticatedAt: Date.now(), authenticationEventId: input.authenticationEventId }),
+  }))),
+});
 const bff = createAdminBff({
   config: {
     googleClientId: "fixture",
@@ -70,6 +98,7 @@ const bff = createAdminBff({
 if (process.argv.includes("--check")) {
   const response = await bff(new Request(`${origin}/admin/auth/login`));
   if (response.status !== 200) throw new Error("Fixture initialization failed");
+  if ((await mcp.fetch(new Request(`${origin}/oauth/authorize`), mcpEnv)).status !== 200) throw new Error("MCP fixture initialization failed");
   await runtime.dispose();
   console.log("Challenge fixture initialization passed");
 } else {
@@ -85,6 +114,8 @@ if (process.argv.includes("--check")) {
         response = Response.redirect(`${origin}/admin/invitations/${token}`);
       } else if (url.pathname === "/fixture/code") {
         response = Response.json({ code: latestCode });
+      } else if (url.pathname === "/fixture/mcp-complete") {
+        response = new Response("MCP fixture authorization completed");
       } else {
         const chunks: Buffer[] = [];
         for await (const chunk of incoming) chunks.push(Buffer.from(chunk));
@@ -94,7 +125,8 @@ if (process.argv.includes("--check")) {
           ...(chunks.length ? { body: Buffer.concat(chunks) } : {}),
         });
         const route = matchAppAdminRoute(request.method, url.pathname);
-        response = await (route ? handleAppAdminCompatibilityRequest(request, route, bff) : bff(request));
+        response = await (url.pathname.startsWith("/oauth/") ? mcp.fetch(request, mcpEnv)
+          : route ? handleAppAdminCompatibilityRequest(request, route, bff) : bff(request));
       }
       outgoing.writeHead(response.status, Object.fromEntries(response.headers));
       outgoing.end(Buffer.from(await response.arrayBuffer()));

@@ -17,12 +17,19 @@ import {
   type AppAdminRoute,
   type CasAdminErrorResponse,
   type PlatformAuthority,
+  type AccountId,
+  type ProviderKind,
 } from "@unicas/admin-protocol";
 import { getMcpAuthContext } from "agents/mcp/server";
 import { z } from "zod";
 import { transformAppAdminError, transformAppAdminResponse } from "../app-admin-adapter.js";
 
 export interface ControlPlaneMcpGrantProps extends Record<string, unknown> {
+  readonly accountId?: AccountId;
+  readonly externalIdentityId?: string;
+  readonly credentialVersion?: number;
+  readonly authProvider?: ProviderKind;
+  readonly authenticatedAt?: number;
   readonly identityIssuer: string;
   readonly subject: string;
   readonly displayName: string | null;
@@ -985,6 +992,9 @@ function isGrantProps(value: Record<string, unknown> | undefined): value is Cont
 
 function serviceContext(grant: ControlPlaneMcpGrantProps, toolName: string): ControlPlaneCallContext {
   return {
+    account: grant.accountId && grant.externalIdentityId && grant.credentialVersion !== undefined
+      ? { accountId: grant.accountId, externalIdentityId: grant.externalIdentityId, credentialVersion: grant.credentialVersion }
+      : undefined,
     identity: {
       identityIssuer: grant.identityIssuer,
       subject: grant.subject,

@@ -88,6 +88,8 @@ const MCP_METADATA_PATHS = new Set([
 const MCP_BROWSER_PATHS = new Set([
   "/oauth/authorize",
   "/oauth/google/callback",
+  "/oauth/microsoft/callback",
+  "/oauth/github/callback",
 ]);
 
 const MCP_TOKEN_PATHS = new Set([
@@ -211,6 +213,7 @@ export default {
     ctx.waitUntil((async () => {
       await ensureControlSchema(env);
       await new D1EmailChallengeRepository(env.CAS_CONTROL_DB).pruneExpired(Date.now());
+      await new ControlSessionStore(env.CAS_CONTROL_DB).pruneExpired();
     })());
   },
 } satisfies ExportedHandler<Env>;
@@ -587,6 +590,7 @@ async function fetchMcp(
   const worker = createControlPlaneMcpWorker(
     mcpConfigFromEnv(env),
     () => controlPlaneFor(env),
+    env.CAS_CONTROL_DB,
   );
   return worker.fetch(request, {
     ...env,

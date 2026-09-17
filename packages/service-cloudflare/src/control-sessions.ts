@@ -48,6 +48,20 @@ export class ControlSessionStore implements ControlSessionRepository {
       .run();
   }
 
+  async take(sessionId: string): Promise<StoredSession | null> {
+    const row = await this.#db.prepare(
+      "DELETE FROM cas_admin_sessions WHERE session_id = ? RETURNING session_id, encrypted_payload, expires_at, created_at, last_seen_at",
+    ).bind(sessionId).first<StoredSessionRow>();
+    if (!row || row.expires_at <= this.#now()) return null;
+    return {
+      sessionId: row.session_id,
+      encryptedPayload: row.encrypted_payload,
+      expiresAt: row.expires_at,
+      createdAt: row.created_at,
+      lastSeenAt: row.last_seen_at,
+    };
+  }
+
   async delete(sessionId: string): Promise<void> {
     await this.#db
       .prepare("DELETE FROM cas_admin_sessions WHERE session_id = ?")

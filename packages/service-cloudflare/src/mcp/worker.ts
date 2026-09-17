@@ -1,10 +1,9 @@
 /** OAuth-protected remote MCP ingress for the UniCAS control plane. */
 
-import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
+import { OAuthError, OAuthProvider } from "@cloudflare/workers-oauth-provider";
 import { createMcpHandler } from "agents/mcp/server";
 import {
   AccountService,
-  PlatformAccessError,
   PlatformAccessService,
   PlatformAuditService,
   PlatformInvitationService,
@@ -23,8 +22,8 @@ import type { ControlPlaneMcpEnvConfig } from "./config.js";
 import { createControlPlaneMcpServer } from "./server.js";
 import type { ControlPlaneMcpGrantProps } from "./server.js";
 import {
-  authorizeMcpPlatformOperation,
-  checkMcpPlatformAccess,
+  bindLegacyMcpCredential,
+  checkMcpAccountAccess,
 } from "./platform-access.js";
 
 export interface Env extends ControlPlaneMcpEnvConfig {
@@ -72,6 +71,7 @@ function attachVerifiedOAuthContext(
 export function createControlPlaneMcpWorker(
   config: ReturnType<typeof mcpConfigFromEnv>,
   operationsForEnv: ControlPlaneOperationsFactory,
+  database: D1Database,
 ) {
   const mcpApiHandler = {
     async fetch(
@@ -80,21 +80,24 @@ export function createControlPlaneMcpWorker(
       ctx: ExecutionContext,
     ): Promise<Response> {
       const requestConfig = mcpConfigFromEnv(env);
-      const props = (ctx as ExecutionContextWithProps).props;
-      if (!props)
+      const originalProps = (ctx as ExecutionContextWithProps).props;
+      if (!originalProps)
         return Response.json(
           { error: "MCP_AUTH_CONTEXT_MISSING" },
           { status: 500 },
         );
+      const props = await bindLegacyMcpCredential(env.CAS_CONTROL_DB, originalProps);
+      if (!props) return Response.json({ error: "MCP_ACCESS_NOT_ALLOWED" }, { status: 403 });
       const platformRepository = new D1PlatformAccessRepository(env.CAS_CONTROL_DB);
       const platformAccess = new PlatformAccessService(platformRepository);
+      const accountService = new AccountService(new D1AccountRepository(env.CAS_CONTROL_DB));
       const platformInvitations = new PlatformInvitationService(
         platformRepository,
         platformAccess,
         new InvitationTokenCrypto(parseInvitationEncryptionKeys(env.SESSION_ENCRYPTION_KEYS)),
       );
       const platformAudit = new PlatformAuditService(platformRepository, platformAccess);
-      const accessError = await checkMcpPlatformAccess(platformAccess, props);
+      const accessError = await checkMcpAccountAccess(accountService, props);
       if (accessError) return accessError;
       attachVerifiedOAuthContext(request, ctx, props, requestConfig.resource);
       const handler = createMcpHandler(
@@ -107,13 +110,11 @@ export function createControlPlaneMcpWorker(
             platformInvitations,
             platformAudit,
             platformAccess,
-            accountService: new AccountService(new D1AccountRepository(env.CAS_CONTROL_DB)),
-            authorizePlatformOperation: (grant, authority) =>
-              authorizeMcpPlatformOperation(
-                platformAccess,
-                { issuer: grant.identityIssuer, subject: grant.subject },
-                authority,
-              ),
+            accountService,
+            authorizePlatformOperation: async (grant, authority) => {
+              const error = await checkMcpAccountAccess(accountService, grant, authority);
+              return error ? { error: error.status === 503 ? "SERVICE_UNAVAILABLE" : "PLATFORM_ACCESS_REQUIRED" } : null;
+            },
           }),
         {
           route: CONTROL_PLANE_MCP_PATH,
@@ -129,20 +130,9 @@ export function createControlPlaneMcpWorker(
     apiRoute: CONTROL_PLANE_MCP_PATH,
     apiHandler: mcpApiHandler,
     defaultHandler: createOAuthAuthorizationHandler({
-      authorizePrincipal: async (env, principal) => {
-        if (!env.CAS_CONTROL_DB) return "unavailable";
-        const platformAccess = new PlatformAccessService(
-          new D1PlatformAccessRepository(env.CAS_CONTROL_DB),
-        );
-        try {
-          await platformAccess.requireAccess(principal);
-          return "allowed";
-        } catch (error) {
-          return error instanceof PlatformAccessError &&
-            error.code !== "SERVICE_UNAVAILABLE"
-            ? "denied"
-            : "unavailable";
-        }
+      accountServiceFactory: env => {
+        if (!env.CAS_CONTROL_DB) throw new Error("Account storage is unavailable");
+        return new AccountService(new D1AccountRepository(env.CAS_CONTROL_DB));
       },
     }),
     authorizeEndpoint: "/oauth/authorize",
@@ -154,12 +144,18 @@ export function createControlPlaneMcpWorker(
     accessTokenTTL: 15 * 60,
     refreshTokenTTL: 8 * 60 * 60,
     scopesSupported: [...CONTROL_PLANE_MCP_SCOPES],
-    tokenExchangeCallback: ({ props, requestedScope }) => ({
-      accessTokenProps: {
-        ...(props as ControlPlaneMcpGrantProps),
-        scopes: requestedScope,
-      },
-    }),
+    tokenExchangeCallback: async ({ props, requestedScope }) => {
+      if (!props || typeof props.identityIssuer !== "string" || typeof props.subject !== "string") {
+        throw new OAuthError("invalid_grant", { description: "Account credential is unavailable" });
+      }
+      const bound = await bindLegacyMcpCredential(database, props as ControlPlaneMcpGrantProps);
+      if (!bound) throw new OAuthError("invalid_grant", { description: "Account credential is unavailable" });
+      const accessError = await checkMcpAccountAccess(new AccountService(new D1AccountRepository(database)), bound);
+      if (accessError) throw new OAuthError(accessError.status === 503 ? "temporarily_unavailable" : "invalid_grant", {
+        description: "Account credential is unavailable",
+      });
+      return { newProps: bound, accessTokenProps: { ...bound, scopes: requestedScope } };
+    },
     resourceMetadata: {
       resource: config.resource,
       authorization_servers: [config.publicOrigin],

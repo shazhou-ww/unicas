@@ -1,10 +1,14 @@
 import { describe, expect, test, vi } from "vitest";
+import { convertV4MiniflareOptions, Miniflare } from "miniflare";
+import { migrateControlSchema } from "../src/control-schema.js";
+import { bindLegacyMcpCredential } from "../src/mcp/platform-access.js";
 import type {
   AuthRequest,
   CompleteAuthorizationOptions,
   OAuthHelpers,
 } from "@cloudflare/workers-oauth-provider";
 import type { OidcClient } from "@unicas/control-auth";
+import { AccountServiceError, ProviderRegistry, type AccountResolution, type ProviderAdapter } from "@unicas/service";
 import {
   createOAuthAuthorizationHandler,
   type OAuthAuthorizationEnv,
@@ -23,6 +27,126 @@ const oauthRequest: AuthRequest = {
 };
 
 describe("control-plane MCP OAuth authorization", () => {
+  test("atomically consumes production D1 callback transactions once", async () => {
+    const runtime = new Miniflare(convertV4MiniflareOptions({
+      workers: [{ name: "mcp-flow", modules: true, script: "export default { fetch() { return new Response('ok'); } };", compatibilityDate: "2025-08-17", d1Databases: { DB: "mcp-flow" } }],
+    }));
+    try {
+      const database = await runtime.getD1Database("DB", "mcp-flow");
+      await migrateControlSchema(database);
+      const fixture = createFixture();
+      fixture.env.CAS_CONTROL_DB = database;
+      const handler = createOAuthAuthorizationHandler({ oidcFactory: () => fixture.oidc });
+      const start = await handler.fetch(new Request("https://cas.example/oauth/authorize"), fixture.env);
+      expect(fixture.kv.size).toBe(0);
+      const state = new URL(start.headers.get("Location")!).searchParams.get("state");
+      const callback = () => handler.fetch(new Request(`https://cas.example/oauth/google/callback?code=code&state=${state}`, { headers: { Cookie: cookieFrom(start) } }), fixture.env);
+      const responses = await Promise.all([callback(), callback()]);
+      expect(responses.map(response => response.status).sort()).toEqual([200, 400]);
+      const accountId = `acct_${"a".repeat(22)}`;
+      await database.batch([
+        database.prepare("INSERT INTO cas_accounts (account_id, credential_version, created_at, updated_at) VALUES (?, 1, 1, 1)").bind(accountId),
+        database.prepare("INSERT INTO cas_external_identities (external_identity_id, account_id, provider, issuer, subject, linked_at) VALUES ('legacy-ext', ?, 'google', 'https://accounts.example', 'legacy-sub', 1)").bind(accountId),
+        database.prepare("INSERT INTO cas_identity_migration_map (identity_issuer, subject, account_id, external_identity_id, created_at) VALUES ('https://accounts.example', 'legacy-sub', ?, 'legacy-ext', 1)").bind(accountId),
+      ]);
+      const legacy = { identityIssuer: "https://accounts.example", subject: "legacy-sub" };
+      expect(await bindLegacyMcpCredential(database, legacy)).toMatchObject({ accountId, externalIdentityId: "legacy-ext", credentialVersion: 1 });
+      await database.prepare("UPDATE cas_accounts SET credential_version = 2 WHERE account_id = ?").bind(accountId).run();
+      expect(await bindLegacyMcpCredential(database, legacy)).toBeNull();
+      expect(await bindLegacyMcpCredential(database, { ...legacy, subject: "unmapped" })).toBeNull();
+    } finally {
+      await runtime.dispose();
+    }
+  }, 15_000);
+
+  test.each(["microsoft", "github"] as const)("authenticates %s with shared adapters and Account binding", async kind => {
+    const fixture = createFixture();
+    const adapter = (provider: "microsoft" | "github"): ProviderAdapter => ({
+      kind: provider,
+      displayName: provider === "github" ? "GitHub" : "Microsoft",
+      begin: async input => `https://${provider}.example/authorize?state=${input.state}`,
+      complete: async input => ({
+        provider, issuer: `https://${provider}.example`, subject: "provider-subject",
+        displayName: "Example", avatarUrl: null, accountHint: "private-hint",
+        verifiedEmailEvidence: [], authenticatedAt: 1000, authenticationEventId: input.authenticationEventId,
+      }),
+    });
+    const resolution = {
+      account: { accountId: `acct_${"a".repeat(22)}`, credentialVersion: 2 },
+      authenticatedIdentity: { issuer: `https://${kind}.example`, subject: "provider-subject", externalIdentityId: `external-${kind}` },
+      platformAuthorities: ["apps.create"], hasAppMembership: false,
+    } as AccountResolution;
+    const accounts = {
+      resolveExternalIdentity: vi.fn(async () => resolution),
+      authorizeCredential: vi.fn(async () => resolution),
+    };
+    const handler = createOAuthAuthorizationHandler({
+      providerRegistryFactory: () => new ProviderRegistry([adapter("microsoft"), adapter("github")]),
+      accountServiceFactory: () => accounts,
+    });
+    const selector = await handler.fetch(new Request("https://cas.example/oauth/authorize"), fixture.env);
+    expect(selector.status).toBe(200);
+    expect(await selector.text()).toContain("Continue with Microsoft");
+    const start = await handler.fetch(new Request(`https://cas.example/oauth/authorize?provider=${kind}`), fixture.env);
+    const state = new URL(start.headers.get("Location")!).searchParams.get("state");
+    const callback = await handler.fetch(new Request(`https://cas.example/oauth/${kind}/callback?state=${state}&code=code`, {
+      headers: { Cookie: cookieFrom(start) },
+    }), fixture.env);
+    expect(callback.status).toBe(200);
+    const html = await callback.text();
+    expect(html).not.toContain("private-hint");
+    expect(html).not.toContain("provider-subject");
+    expect(accounts.resolveExternalIdentity).toHaveBeenCalledWith(`https://${kind}.example`, "provider-subject");
+    const accepted = await handler.fetch(new Request("https://cas.example/oauth/authorize", {
+      method: "POST", headers: { Cookie: cookieFrom(callback), Origin: "https://cas.example" },
+      body: new URLSearchParams({ consent_id: hiddenValue(html, "consent_id"), csrf_token: hiddenValue(html, "csrf_token"), decision: "approve" }),
+    }), fixture.env);
+    expect(accepted.status).toBe(302);
+    expect(fixture.completeAuthorization).toHaveBeenCalledWith(expect.objectContaining({
+      userId: resolution.account.accountId,
+      props: expect.objectContaining({ accountId: resolution.account.accountId, authProvider: kind, credentialVersion: 2 }),
+    }));
+    const second = await handler.fetch(new Request(`https://cas.example/oauth/authorize?provider=${kind}`), fixture.env);
+    const wrongState = new URL(second.headers.get("Location")!).searchParams.get("state");
+    const wrong = await handler.fetch(new Request(`https://cas.example/oauth/google/callback?state=${wrongState}&code=code`, {
+      headers: { Cookie: cookieFrom(second) },
+    }), fixture.env);
+    expect(wrong.status).toBe(400);
+  });
+
+  test.each([false, true])("binds grants to Accounts and rechecks consent credential version (revoked=%s)", async revoked => {
+    const fixture = createFixture();
+    const resolution = {
+      account: { accountId: `acct_${"a".repeat(22)}`, credentialVersion: 1 },
+      authenticatedIdentity: { issuer: "https://accounts.example", subject: "alice-sub", externalIdentityId: "external-1" },
+      platformAuthorities: ["apps.create"], hasAppMembership: false,
+    } as AccountResolution;
+    const accounts = {
+      resolveExternalIdentity: vi.fn(async () => resolution),
+      authorizeCredential: vi.fn(async () => resolution),
+    };
+    const handler = createOAuthAuthorizationHandler({ oidcFactory: () => fixture.oidc, accountServiceFactory: () => accounts });
+    const started = await handler.fetch(new Request("https://cas.example/oauth/authorize"), fixture.env);
+    const state = new URL(started.headers.get("Location")!).searchParams.get("state");
+    const callback = await handler.fetch(new Request(`https://cas.example/oauth/google/callback?code=code&state=${state}`, {
+      headers: { Cookie: cookieFrom(started) },
+    }), fixture.env);
+    expect(callback.status).toBe(200);
+    const html = await callback.text();
+    if (revoked) accounts.authorizeCredential.mockRejectedValue(new AccountServiceError("CREDENTIAL_VERSION_MISMATCH"));
+    const accepted = await handler.fetch(new Request("https://cas.example/oauth/authorize", {
+      method: "POST",
+      headers: { Cookie: cookieFrom(callback), Origin: "https://cas.example" },
+      body: new URLSearchParams({ consent_id: hiddenValue(html, "consent_id"), csrf_token: hiddenValue(html, "csrf_token"), decision: "approve" }),
+    }), fixture.env);
+    expect(accepted.status).toBe(revoked ? 403 : 302);
+    if (revoked) expect(fixture.completeAuthorization).not.toHaveBeenCalled();
+    else expect(fixture.completeAuthorization).toHaveBeenCalledWith(expect.objectContaining({
+      userId: resolution.account.accountId,
+      props: expect.objectContaining({ accountId: resolution.account.accountId, externalIdentityId: "external-1", credentialVersion: 1 }),
+    }));
+  });
+
   test("authenticates with Google, requires consent, and completes a scoped grant", async () => {
     const fixture = createFixture();
     const authorizePrincipal = vi.fn(async () => "allowed" as const);
@@ -94,6 +218,8 @@ describe("control-plane MCP OAuth authorization", () => {
     expect(completed.userId).not.toContain("alice-sub");
     expect(completed.metadata).not.toMatchObject({ clientId: oauthRequest.clientId });
     expect(completed.props).toEqual({
+      authProvider: "google",
+      authenticatedAt: expect.any(Number),
       identityIssuer: "https://accounts.example",
       subject: "alice-sub",
       displayName: "Alice",
