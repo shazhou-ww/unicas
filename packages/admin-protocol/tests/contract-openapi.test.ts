@@ -134,8 +134,7 @@ describe("CAS admin schemas", () => {
     expectTypeOf<AppResult>().toEqualTypeOf<App>();
     expectTypeOf<MeResult["account"]>().toEqualTypeOf<import("../src/index.js").AccountSelf>();
     expectTypeOf<MeResult["authenticatedIdentity"]>().toEqualTypeOf<import("../src/index.js").ExternalIdentitySummary>();
-    expectTypeOf<MeResult["principal"]>().toEqualTypeOf<Principal>();
-    expectTypeOf<MeResult["profile"]>().toEqualTypeOf<Profile>();
+    expectTypeOf<keyof MeResult>().toEqualTypeOf<"account" | "authenticatedIdentity" | "memberships">();
 
     expect(Object.keys(appAdminApiContract.apps)).toHaveLength(4);
     expect(Object.keys(appAdminApiContract.members)).toHaveLength(7);

@@ -11,6 +11,7 @@
 
 import {
   appAdminRoutes,
+  AppAdminMeResponseSchema,
   casAdminRoutes,
   CasAdminETagHeader,
   CasAdminIdempotencyKeyHeader,
@@ -77,8 +78,7 @@ import type {
 export interface AdminClient {
   listAppPeople(path: { readonly appId: AppId }, query?: AppPeopleQuery): Promise<PeoplePage<AppPerson>>;
   listPlatformPeople(query?: PlatformPeopleQuery): Promise<PeoplePage<PlatformPerson>>;
-  me(): Promise<{ readonly identity: CasOperatorIdentity; readonly memberships: readonly CasStackMember[] }>;
-  getCurrentPrincipal(): Promise<AppAdminMeResponse>;
+  getCurrentAdministrator(): Promise<AppAdminMeResponse>;
   getCurrentAccount(): Promise<AccountSelf>;
   listCurrentAccountIdentities(): Promise<AccountSelf["identities"]>;
   patchCurrentAccountProfile(body: {
@@ -354,30 +354,15 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
   const ifMatchHeader = (ifMatch: string): Record<string, string> => ({ [CasAdminIfMatchHeader]: ifMatch });
 
   return {
-    async me() {
-      const response = await requireOk(await request(casAdminRoutes.me()), "me");
-      const body: unknown = await response.json();
-      if (!isRecord(body) || !isRecord(body.identity) || !Array.isArray(body.memberships)) {
-        throw new AdminClientError(502, "ADMIN_CONTRACT_MISMATCH", "legacy administrator identity response was not returned");
-      }
-      return body as { readonly identity: CasOperatorIdentity; readonly memberships: readonly CasStackMember[] };
-    },
-
-    async getCurrentPrincipal() {
+    async getCurrentAdministrator() {
       const response = await requireOk(
         await request(appAdminRoutes.me()),
-        "getCurrentPrincipal",
+        "getCurrentAdministrator",
       );
       const body: unknown = await response.json();
-      if (!isRecord(body)
-        || !isRecord(body.principal)
-        || !isRecord(body.profile)
-        || !isRecord(body.platformAccess)
-        || !Array.isArray(body.platformAccess.authorities)
-        || !Array.isArray(body.memberships)) {
-        throw new AdminClientError(502, "ADMIN_CONTRACT_MISMATCH", "App administrator identity response was not returned");
-      }
-      return body as unknown as AppAdminMeResponse;
+      const parsed = AppAdminMeResponseSchema.safeParse(body);
+      if (!parsed.success) throw new AdminClientError(502, "ADMIN_CONTRACT_MISMATCH", "Account administrator response was not returned");
+      return parsed.data;
     },
 
     async getCurrentAccount() {

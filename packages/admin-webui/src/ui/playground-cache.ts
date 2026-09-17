@@ -9,13 +9,13 @@ export interface PlaygroundCacheSession {
 
 export const PlaygroundCacheContext = createContext<PlaygroundCacheSession | null>(null);
 
-export function createPlaygroundCacheSession(identity: { identityIssuer: string; subject: string }): PlaygroundCacheSession {
+export function createPlaygroundCacheSession(accountId: string): PlaygroundCacheSession {
   const caches = new Map<string, BrowserCasNodeCache>();
-  const principal = JSON.stringify([identity.identityIssuer, identity.subject]);
+  const principal = accountId;
   let closed = false;
   return {
     get(endpoint) {
-      if (closed || !identity.identityIssuer || !identity.subject) return undefined;
+      if (closed || !accountId) return undefined;
       let cache = caches.get(endpoint);
       if (!cache) {
         cache = createBrowserCasNodeCache({ namespace: { endpoint, principal }, version: 2 });

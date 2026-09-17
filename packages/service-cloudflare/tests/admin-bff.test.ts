@@ -1389,7 +1389,13 @@ describe("cas-admin-webui BFF", () => {
     const githubLogin = await login("github");
     expect(githubLogin.status).toBe(302);
     const githubCookie = cookieFrom(githubLogin)!;
-    expect((await authRequest(bff, "/admin/me", githubCookie)).status).toBe(200);
+    const current = await authRequest(bff, "/admin/me", githubCookie);
+    expect(current.status).toBe(200);
+    const currentBody = await current.json();
+    expect(Object.keys(currentBody).sort()).toEqual(["account", "authenticatedIdentity", "memberships"]);
+    expect(currentBody.account.accountId).toBe(accountId);
+    expect(currentBody.authenticatedIdentity.provider).toBe("github");
+    expect(currentBody.authenticatedIdentity).not.toHaveProperty("subject");
 
     account = { ...account, credentialVersion: 2, updatedAt: 2 };
     expect((await authRequest(bff, "/admin/me", githubCookie)).status).toBe(401);
@@ -1450,7 +1456,7 @@ describe("cas-admin-webui BFF", () => {
     expect(body.identity?.subject).toBe("cli-user-1");
 
     // 4. The issued session works for API reads.
-    const me = await authRequest(bff, "/admin/me", cookie);
+    const me = await authRequest(bff, "/admin/stacks", cookie);
     expect(me.status).toBe(200);
   });
 
@@ -1583,19 +1589,9 @@ describe("cas-admin-webui BFF", () => {
       expect(body.get("code_verifier")).toBeTruthy();
     };
     const bff = await createBff(provider);
-    const { cookie, csrf } = await signIn(bff, provider);
-
-    const me = await authRequest(bff, "/admin/me", cookie);
-    expect(me.status).toBe(200);
-    expect(me.headers.get("X-CSRF-Token")).toBe(csrf);
-    const body = await me.json();
-    expect(body.identity).toMatchObject({
-      identityIssuer: ISSUER,
-      subject: "google-user-123",
-      displayName: "Alice",
-      emailForDisplay: "alice@example.com",
-    });
-    expect(body.memberships).toEqual([]);
+    const { cookie } = await signIn(bff, provider);
+    expect((await authRequest(bff, "/admin/stacks", cookie)).status).toBe(200);
+    expect((await authRequest(bff, "/admin/me", cookie)).status).toBe(401);
   });
 
   test("email allowlist accepts verified emails case-insensitively", async () => {
@@ -1605,11 +1601,7 @@ describe("cas-admin-webui BFF", () => {
     });
     const { cookie } = await signIn(bff, provider);
 
-    const me = await authRequest(bff, "/admin/me", cookie);
-    expect(me.status).toBe(200);
-    expect(await me.json()).toMatchObject({
-      identity: { emailForDisplay: "alice@example.com" },
-    });
+    expect((await authRequest(bff, "/admin/stacks", cookie)).status).toBe(200);
   });
 
   test("email allowlist rejects absent, unverified, or unlisted OIDC emails", async () => {
@@ -1748,16 +1740,7 @@ describe("cas-admin-webui BFF", () => {
     expect(callback.headers.get("Location")).toBe("/admin/");
     const cookie = cookieFrom(callback)!;
 
-    const me = await authRequest(bff, "/admin/me", cookie);
-    expect(me.status).toBe(200);
-    expect(await me.json()).toMatchObject({
-      identity: { subject: "google-user-with-grant" },
-      platformAccess: {
-        status: "active",
-        authorities: ["apps.create"],
-        revision: 1,
-      },
-    });
+    expect((await authRequest(bff, "/admin/stacks", cookie)).status).toBe(200);
   }, 10_000);
 
   test("platform access blocked: authenticated request is denied and session is cleared for a blocked principal", async () => {
@@ -1788,14 +1771,14 @@ describe("cas-admin-webui BFF", () => {
     const cookie = cookieFrom(callback)!;
 
     // Verify the session is initially valid.
-    const meBefore = await authRequest(bff, "/admin/me", cookie);
+    const meBefore = await authRequest(bff, "/admin/stacks", cookie);
     expect(meBefore.status).toBe(200);
 
     // Now block the principal.
     repo.block(ISSUER, "google-user-to-block");
 
     // Subsequent authenticated request must be rejected and session cleared.
-    const meAfter = await authRequest(bff, "/admin/me", cookie);
+    const meAfter = await authRequest(bff, "/admin/stacks", cookie);
     expect(meAfter.status).toBe(401);
     expect(await meAfter.json()).toMatchObject({ error: "ADMIN_AUTH_REQUIRED" });
   }, 10_000);
@@ -1873,9 +1856,8 @@ describe("cas-admin-webui BFF", () => {
     expect(callback.status).toBe(302);
     expect(callback.headers.get("Location")).toBe("/admin/");
     const sessionCookie = cookieFrom(callback)!;
-    const me = await authRequest(bff, "/admin/me", sessionCookie);
+    const me = await authRequest(bff, "/admin/stacks", sessionCookie);
     expect(me.status).toBe(200);
-    expect(await me.json()).toMatchObject({ identity: { subject: "google-user-123" } });
   }, 10_000);
 
   test("configured test account bypasses OIDC and creates a normal admin session", async () => {
@@ -1902,15 +1884,8 @@ describe("cas-admin-webui BFF", () => {
     expect(login.headers.get("Location")).toBe("/admin/");
     const cookie = cookieFrom(login)!;
 
-    const me = await authRequest(bff, "/admin/me", cookie);
-    expect(me.status).toBe(200);
-    expect(await me.json()).toMatchObject({
-      identity: {
-        identityIssuer: "urn:unicas:manage:test-account",
-        subject: "tester@example.com",
-        emailForDisplay: "tester@example.com",
-      },
-    });
+    expect((await authRequest(bff, "/admin/stacks", cookie)).status).toBe(200);
+    expect((await authRequest(bff, "/admin/me", cookie)).status).toBe(401);
   });
 
   test("callback with a mismatched state is rejected", async () => {
@@ -2286,7 +2261,7 @@ describe("cas-admin-webui BFF", () => {
 
     const staleSession = await authRequest(bff, "/admin/me", limitedCookie);
     expect(staleSession.status).toBe(401);
-    const admitted = await authRequest(bff, "/admin/me", fullCookie);
+    const admitted = await authRequest(bff, "/admin/stacks", fullCookie);
     expect(admitted.status).toBe(200);
   }, 10_000);
 
@@ -2812,8 +2787,8 @@ describe("cas-admin-webui BFF", () => {
     const me = await authRequest(bff, "/admin/me", fullCookie);
     expect(me.status).toBe(200);
     expect(await me.json()).toMatchObject({
-      identity: { subject: "external-user" },
-      platformAccess: { status: "active", authorities: ["apps.create"] },
+      account: { displayName: "External User", blockedAt: null, platformAuthorities: ["apps.create"] },
+      authenticatedIdentity: { provider: "google", currentLogin: true },
     });
     await expect(repo.getInvitation(receipt.invitationId, Date.now())).resolves.toMatchObject({ status: "accepted" });
   }, 10_000);

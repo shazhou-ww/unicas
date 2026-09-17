@@ -11,20 +11,25 @@ const ACCOUNT = `acct_${"a".repeat(22)}`;
 it("persists rotated cookies and CSRF before the next request", async () => {
   let saved: AdminClientSession | null = null;
   const requests: Headers[] = [];
+  const service = new MockAdminService();
+  service.appVocabulary = true;
   const client = createAdminClient({
     baseUrl: "https://admin.test",
     getSession: async () => ({ cookie: "cas_admin_session=old", csrfToken: "old-csrf" }),
     onSessionChanged: async next => { saved = next; },
-    fetcher: async (_input, init) => {
+    fetcher: async (input, init) => {
       requests.push(new Headers(init?.headers));
-      return Response.json({ identity: {}, memberships: [] }, {
-        headers: requests.length === 1 ? { "Set-Cookie": "cas_admin_session=new; HttpOnly; Path=/admin", "X-CSRF-Token": "new-csrf" } : {},
-      });
+      const response = await service.fetch(input, init);
+      if (requests.length === 1) {
+        response.headers.set("Set-Cookie", "cas_admin_session=new; HttpOnly; Path=/admin");
+        response.headers.set("X-CSRF-Token", "new-csrf");
+      }
+      return response;
     },
   });
-  await client.me();
+  await client.getCurrentAdministrator();
   expect(saved).toEqual({ cookie: "cas_admin_session=new", csrfToken: "new-csrf" });
-  await client.me();
+  await client.getCurrentAdministrator();
   expect(requests[1]!.get("Cookie")).toBe("cas_admin_session=new");
 });
 
@@ -126,9 +131,6 @@ class MockAdminService {
         return Response.json({
           account,
           authenticatedIdentity: account.identities[0],
-          principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-          profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
-          platformAccess: { principalRef: "principal-1", status: "active", authorities: ["platform.admin", "apps.create"], revision: 1 },
           memberships: [{
             appId: APP,
             account: {
@@ -523,22 +525,22 @@ describe("functional admin client", () => {
     client = createAdminClient({ baseUrl: "https://admin.test", getSession: sessionOf, fetcher: service.fetch.bind(service) });
   });
 
-  it("reads identity and typed pages", async () => {
-    const me = await client.me();
-    expect(me.identity.subject).toBe("sub-1");
-    expect(me.memberships[0]!.stackId).toBe(STACK);
-
-    const stacks = await client.listStacks();
-    expect(stacks.items[0]!.displayName).toBe("Ops");
-    expect(stacks.nextCursor).toBeNull();
+  it("reads Account identity and typed App pages", async () => {
+    service.appVocabulary = true;
+    const me = await client.getCurrentAdministrator();
+    expect(me.account.accountId).toBe(ACCOUNT);
+    expect(me.memberships[0]!.appId).toBe(APP);
+    const apps = await client.listApps();
+    expect(apps.items[0]!.displayName).toBe("App Ops");
+    expect(apps.nextCursor).toBeNull();
   });
 
   it("uses explicit App operations for shared routes and managed Space issuance", async () => {
     service.appVocabulary = true;
-    const current = await client.getCurrentPrincipal();
+    const current = await client.getCurrentAdministrator();
     expect(current.account.displayName).toBe("Alice");
     expect(current.authenticatedIdentity.provider).toBe("google");
-    expect(current.principal.subject).toBe("sub-1");
+    expect(current).not.toHaveProperty("principal");
     expect(current.memberships[0]).toMatchObject({ appId: APP, account: { accountId: current.account.accountId } });
 
     const membership = await client.acceptAppMemberInvitation({ token: "invite-1" });
@@ -749,13 +751,8 @@ describe("functional admin client", () => {
     ]));
   });
 
-  it("rejects the opposite identity contract on the shared path", async () => {
-    await expect(client.getCurrentPrincipal()).rejects.toMatchObject({
-      status: 502,
-      code: "ADMIN_CONTRACT_MISMATCH",
-    });
-    service.appVocabulary = true;
-    await expect(client.me()).rejects.toMatchObject({
+  it("rejects the retired identity contract on the shared path", async () => {
+    await expect(client.getCurrentAdministrator()).rejects.toMatchObject({
       status: 502,
       code: "ADMIN_CONTRACT_MISMATCH",
     });
@@ -820,9 +817,10 @@ describe("functional admin client", () => {
 
   it("forces re-login after a 401 session failure", async () => {
     service.session = false;
-    await expect(client.me()).rejects.toMatchObject({ status: 401, code: "ADMIN_AUTH_REQUIRED" });
+    await expect(client.getCurrentAdministrator()).rejects.toMatchObject({ status: 401, code: "ADMIN_AUTH_REQUIRED" });
     service.session = true;
-    const me = await client.me();
-    expect(me.identity.subject).toBe("sub-1");
+    service.appVocabulary = true;
+    const me = await client.getCurrentAdministrator();
+    expect(me.account.accountId).toBe(ACCOUNT);
   });
 });

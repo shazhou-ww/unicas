@@ -3,6 +3,7 @@ import {
   AccountIdSchema,
   AccountPlatformAuthoritySchema,
   AccountSelfSchema,
+  AppAdminMeResponseSchema,
   ExternalIdentityDetailSchema,
   PrimaryVerifiedEmailSchema,
   PlatformAccountDetailSchema,
@@ -12,6 +13,30 @@ import {
 const accountId = `acct_${"a".repeat(22)}`;
 
 describe("Account protocol model", () => {
+  test("accepts only Account-based current administrator responses", () => {
+    const authenticatedIdentity = {
+      externalIdentityId: "ext-google", provider: "google", accountHint: null,
+      linkedAt: 1, lastAuthenticatedAt: 2, currentLogin: true,
+    };
+    const response = {
+      account: {
+        accountId, displayName: "Alex", primaryVerifiedEmail: null,
+        avatar: { kind: "fallback", initials: "AL", colorIndex: 1 },
+        blockedAt: null, platformAuthorities: ["apps.create"],
+        identities: [authenticatedIdentity], linkableProviders: [],
+      },
+      authenticatedIdentity,
+      memberships: [],
+    };
+    expect(AppAdminMeResponseSchema.safeParse(response).success).toBe(true);
+    for (const alias of ["identity", "principal", "profile", "platformAccess", "accountMemberships"]) {
+      expect(AppAdminMeResponseSchema.safeParse({ ...response, [alias]: {} }).success).toBe(false);
+    }
+    expect(AppAdminMeResponseSchema.safeParse({
+      ...response, authenticatedIdentity: { ...authenticatedIdentity, issuer: "https://issuer.example", subject: "private" },
+    }).success).toBe(false);
+  });
+
   test("requires opaque 128-bit account identifiers", () => {
     expect(AccountIdSchema.safeParse(accountId).success).toBe(true);
     expect(AccountIdSchema.safeParse("acct_short").success).toBe(false);

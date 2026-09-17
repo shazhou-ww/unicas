@@ -220,7 +220,7 @@ const TOOL_HANDLERS = {
   },
 
   async get_current_account(admin) {
-    return currentAccountOutput(await admin.getCurrentPrincipal());
+    return currentAccountOutput(await admin.getCurrentAdministrator());
   },
 
   async list_apps(admin, args) {
@@ -395,7 +395,7 @@ const TOOL_HANDLERS = {
   },
 } satisfies Readonly<Record<AppAdminMcpToolName, ToolHandler>>;
 
-function currentAccountOutput(current: Awaited<ReturnType<AdminClient["getCurrentPrincipal"]>>) {
+function currentAccountOutput(current: Awaited<ReturnType<AdminClient["getCurrentAdministrator"]>>) {
   return {
     account: {
       accountId: current.account.accountId,

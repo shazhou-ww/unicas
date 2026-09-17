@@ -232,7 +232,7 @@ describe("BFF Account identity mutations", () => {
     }))).json()).toMatchObject({
       account: { accountId: created.account.accountId },
       authenticatedIdentity: { externalIdentityId: created.authenticatedIdentity.externalIdentityId },
-      accountMemberships: [{ appId: "cas_app_a", account: { accountId: created.account.accountId } }],
+      memberships: [{ appId: "cas_app_a", account: { accountId: created.account.accountId } }],
     });
     expect(await (await bff(new Request("https://console.example/admin/apps/cas_app_a/members", {
       headers: { Cookie: initialCookie },

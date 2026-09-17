@@ -49,9 +49,9 @@
   "paths": {
     "/admin/me": {
       "get": {
-        "operationId": "getCurrentPrincipal",
+        "operationId": "getCurrentAdministrator",
         "summary": "Read the current administrator",
-        "description": "Returns the stable Account, current masked login identity, and Account-keyed memberships. Principal/Profile fields are deprecated session compatibility aliases.",
+        "description": "Returns the stable Account, current masked login identity, and Account-keyed memberships.",
         "tags": [
           "Identity"
         ],
@@ -353,94 +353,6 @@
                       "additionalProperties": false,
                       "readOnly": true
                     },
-                    "principal": {
-                      "type": "object",
-                      "properties": {
-                        "issuer": {
-                          "type": "string",
-                          "format": "uri",
-                          "description": "Canonical issuer component of the immutable Principal key."
-                        },
-                        "subject": {
-                          "type": "string",
-                          "minLength": 1,
-                          "description": "Immutable subject component within the issuer."
-                        }
-                      },
-                      "required": [
-                        "issuer",
-                        "subject"
-                      ],
-                      "readOnly": true
-                    },
-                    "profile": {
-                      "type": "object",
-                      "properties": {
-                        "displayName": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "description": "Display-only name; never an authorization key."
-                        },
-                        "emailForDisplay": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "description": "Display-only email; never an authorization key."
-                        }
-                      },
-                      "required": [
-                        "displayName",
-                        "emailForDisplay"
-                      ],
-                      "readOnly": true
-                    },
-                    "platformAccess": {
-                      "type": "object",
-                      "properties": {
-                        "principalRef": {
-                          "type": "string",
-                          "minLength": 1
-                        },
-                        "status": {
-                          "const": "active"
-                        },
-                        "authorities": {
-                          "type": "array",
-                          "items": {
-                            "enum": [
-                              "platform.admin",
-                              "apps.create"
-                            ],
-                            "type": "string"
-                          },
-                          "readOnly": true
-                        },
-                        "revision": {
-                          "type": "integer",
-                          "minimum": -9007199254740991,
-                          "maximum": 9007199254740991,
-                          "exclusiveMinimum": 0
-                        }
-                      },
-                      "required": [
-                        "principalRef",
-                        "status",
-                        "authorities",
-                        "revision"
-                      ],
-                      "readOnly": true
-                    },
                     "memberships": {
                       "type": "array",
                       "items": {
@@ -591,11 +503,9 @@
                   "required": [
                     "account",
                     "authenticatedIdentity",
-                    "principal",
-                    "profile",
-                    "platformAccess",
                     "memberships"
                   ],
+                  "additionalProperties": false,
                   "readOnly": true
                 }
               }

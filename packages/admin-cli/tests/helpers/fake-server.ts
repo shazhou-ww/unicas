@@ -179,9 +179,6 @@ export class FakeAdminApi {
         return json({
           account,
           authenticatedIdentity: account.identities[0],
-          principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-          profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
-          platformAccess: { principalRef: "principal-1", status: "active", authorities: ["platform.admin", "apps.create"], revision: 1 },
           memberships: [{
             appId: "cas_stack_a",
             account: {

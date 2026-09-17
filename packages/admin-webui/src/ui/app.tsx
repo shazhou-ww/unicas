@@ -50,10 +50,7 @@ export function App() {
       api<{ items: AppResource[] }>("/admin/apps"),
     ]).then(([meResponse, appsResponse]) => {
       if (!active) return;
-      session = createPlaygroundCacheSession({
-        identityIssuer: meResponse.principal.issuer,
-        subject: meResponse.principal.subject,
-      });
+      session = createPlaygroundCacheSession(meResponse.account.accountId);
       setCacheSession(session);
       setMe(meResponse);
       setApps(appsResponse.items);

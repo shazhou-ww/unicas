@@ -268,6 +268,24 @@ Validation for this checkpoint: all workspace typechecks, 49 CLI tests,
 current-session metadata, credential revocation, and client cookie updates remain.
 The cleanup performs no external data reset.
 
+The second no-legacy cleanup checkpoint makes `GET /admin/me` Account-only:
+the BFF reads AccountService directly and no longer builds legacy identity,
+Principal/Profile, PlatformAccess, or intermediate membership projections.
+The shared strict response schema and regenerated v2 OpenAPI expose exactly
+`account`, masked `authenticatedIdentity`, and `memberships`. The typed client
+uses `getCurrentAdministrator`; old `me()` and `getCurrentPrincipal()` methods
+are removed, and CLI/stdio consumers use the current method. Console cache
+isolation now uses stable Account IDs, retaining the supported cache format.
+
+Validation: protocol 111 tests, client 20, CLI 49, Console 91, and Cloudflare
+278 tests all passed. Workspace typecheck, 4 OpenAPI drift checks, 3 docs checks,
+and the production Console/Worker build passed. The disposable browser fixture
+completed Microsoft challenge and invitation acceptance; `/admin/me` returned
+only the three current fields, and the Console navigation displayed the Account
+and its App membership without overflow. No real provider or remote data was used.
+Other old HTTP/authentication test fixtures remain pending removal with their
+own routes; they are not compatibility fallbacks for the current identity API.
+
 Next: remove remaining legacy HTTP contracts/adapters and identity-keyed
 persistence, dual writes, and startup identity migration. Update consumers/tests
 and validate fresh Account

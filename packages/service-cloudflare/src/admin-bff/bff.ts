@@ -1942,72 +1942,20 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
 
     switch (route.operation) {
       case "me": {
-        const result = await controlPlane.me(ctx);
-        if ("error" in result) return json(result, casAdminErrorHttpStatus[result.error]);
-        let responseResult: typeof result & {
-          platformAccess?: {
-            principalRef: string;
-            status: "active";
-            authorities: readonly ("platform.admin" | "apps.create")[];
-            revision: number;
-          };
-          account?: Awaited<ReturnType<AccountService["getSelf"]>>;
-          authenticatedIdentity?: Awaited<ReturnType<AccountService["getSelf"]>>["identities"][number];
-          accountMemberships?: Awaited<ReturnType<AccountService["listAccountMemberships"]>>;
-        } = result;
-        if (platformAccess !== null) {
-          try {
-            const state = await platformAccess.requireAccess({
-              issuer: auth.payload.identityIssuer,
-              subject: auth.payload.subject,
-            });
-            if (!state) {
-              return adminErrorResponse(
-                CasAdminErrorCodes.SERVICE_UNAVAILABLE,
-                "platform access state is unavailable",
-              );
-            }
-            responseResult = {
-              ...result,
-              platformAccess: {
-                principalRef: state.principalRef,
-                status: "active",
-                authorities: state.authorities,
-                revision: state.revision,
-              },
-            };
-          } catch (error) {
-            if (error instanceof PlatformAccessError) {
-              return adminErrorResponse(error.code as CasAdminErrorResponse["error"]);
-            }
-            throw error;
-          }
+        if (!accountService || !auth.payload.accountId || !auth.payload.externalIdentityId) {
+          return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED, "Account login required");
         }
-        if (accountService && auth.payload.accountId && auth.payload.externalIdentityId) {
-          try {
-            const account = await accountService.getSelf(
-              auth.payload.accountId,
-              auth.payload.externalIdentityId,
-              providerRegistry.list().map(provider => provider.kind),
-            );
-            const authenticatedIdentity = account.identities.find(identity => identity.currentLogin);
-            if (!authenticatedIdentity) {
-              return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "current Account identity is unavailable");
-            }
-            responseResult = {
-              ...responseResult,
-              account,
-              authenticatedIdentity,
-              accountMemberships: await accountService.listAccountMemberships(auth.payload.accountId),
-            };
-          } catch (error) {
-            if (error instanceof AccountServiceError) {
-              return json({ error: error.code }, error.code === "ACCOUNT_BLOCKED" ? 403 : 409);
-            }
-            throw error;
-          }
-        }
-        const response = json(responseResult, 200);
+        const account = await accountService.getSelf(
+          auth.payload.accountId, auth.payload.externalIdentityId,
+          providerRegistry.list().map(provider => provider.kind),
+        );
+        const authenticatedIdentity = account.identities.find(identity => identity.currentLogin);
+        if (!authenticatedIdentity) return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED, "Account login required");
+        const response = json({
+          account,
+          authenticatedIdentity,
+          memberships: await accountService.listAccountMemberships(auth.payload.accountId),
+        }, 200);
         response.headers.set("X-CSRF-Token", auth.payload.csrfToken);
         return response;
       }

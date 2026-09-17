@@ -9,6 +9,7 @@ export async function handleAppAdminCompatibilityRequest(
   legacyHandler: AdminHandler,
 ): Promise<Response> {
   const pathname = new URL(request.url).pathname;
+  if (route.operation === "me") return legacyHandler(request);
   if (pathname.startsWith("/admin/platform/") || pathname.startsWith("/admin/platform-invitations/")) {
     return legacyHandler(request);
   }
@@ -79,7 +80,7 @@ function rewriteRequest(request: Request, route: AppAdminRoute): Request {
 export function transformAppAdminResponse(route: AppAdminRoute, body: unknown): unknown {
   switch (route.operation) {
     case "me":
-      return mapMe(body);
+      return body;
     case "listApps":
       return mapPage(body, mapApp);
     case "createApp":
@@ -119,29 +120,6 @@ export function transformAppAdminResponse(route: AppAdminRoute, body: unknown): 
     case "mintManagedCapability":
       return body;
   }
-}
-
-function mapMe(value: unknown): unknown {
-  if (!isRecord(value) || !isRecord(value.identity) || !Array.isArray(value.memberships)) return value;
-  const accountMemberships = Array.isArray(value.accountMemberships) ? value.accountMemberships : null;
-  return {
-    ...(isRecord(value.account) && isRecord(value.authenticatedIdentity) && accountMemberships
-      ? {
-        account: value.account,
-        authenticatedIdentity: value.authenticatedIdentity,
-      }
-      : {}),
-    principal: {
-      issuer: value.identity.identityIssuer,
-      subject: value.identity.subject,
-    },
-    profile: {
-      displayName: value.identity.displayName,
-      emailForDisplay: value.identity.emailForDisplay,
-    },
-    ...("platformAccess" in value ? { platformAccess: value.platformAccess } : {}),
-    memberships: accountMemberships ?? value.memberships.map(mapMembership),
-  };
 }
 
 function mapApp(value: unknown): unknown {

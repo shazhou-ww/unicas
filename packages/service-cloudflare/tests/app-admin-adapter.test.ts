@@ -57,7 +57,7 @@ describe("App admin physical compatibility adapter", () => {
     expect(await response.text()).toBe("");
   });
 
-  test("maps the shared current-administrator response to Account-first v2 fields", async () => {
+  test("forwards the Account-only current-administrator response unchanged", async () => {
     const account = {
       accountId: `acct_${"a".repeat(22)}`,
       displayName: "Alice",
@@ -80,28 +80,9 @@ describe("App admin physical compatibility adapter", () => {
       { operation: "me" },
       "/admin/me",
       {
-        identity: {
-          identityIssuer: "https://accounts.example",
-          subject: "alice",
-          displayName: "Alice",
-          emailForDisplay: "alice@example.com",
-        },
-        platformAccess: {
-          principalRef: "principal-1",
-          status: "active",
-          authorities: ["platform.admin"],
-          revision: 3,
-        },
-        memberships: [{
-          stackId: "app-1",
-          identityIssuer: "https://accounts.example",
-          subject: "alice",
-          displayName: "Alice",
-          emailForDisplay: "alice@example.com",
-        }],
         account,
         authenticatedIdentity: account.identities[0],
-        accountMemberships,
+        memberships: accountMemberships,
       },
     );
     expect(legacyHandler).toHaveBeenCalledWith(expect.objectContaining({
@@ -110,14 +91,6 @@ describe("App admin physical compatibility adapter", () => {
     await expect(response.json()).resolves.toEqual({
       account,
       authenticatedIdentity: account.identities[0],
-      principal: { issuer: "https://accounts.example", subject: "alice" },
-      profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
-      platformAccess: {
-        principalRef: "principal-1",
-        status: "active",
-        authorities: ["platform.admin"],
-        revision: 3,
-      },
       memberships: accountMemberships,
     });
   });

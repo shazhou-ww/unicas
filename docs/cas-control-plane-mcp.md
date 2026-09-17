@@ -59,6 +59,13 @@ MCP request. A credential-version change is never silently adopted by an old
 grant. Grants without a complete Account binding are rejected and require fresh
 login; no legacy identity mapping or credential upgrade is performed.
 
+The shared administrator endpoint `GET /admin/me` returns only `account`,
+`authenticatedIdentity` (masked login summary), and Account-keyed `memberships`.
+The typed client exposes it as `getCurrentAdministrator`; neither `me()` nor
+`getCurrentPrincipal()` is a compatibility alias. Principal/Profile and
+`platformAccess` response fields are retired. Console caches are isolated by
+the stable Account ID rather than the external provider identity.
+
 Production authorization and consent transactions use encrypted records in
 control D1 and atomic deletion on use, with a ten-minute expiry. Outstanding
 pre-cutover KV login transactions must restart; durable OAuth client and grant

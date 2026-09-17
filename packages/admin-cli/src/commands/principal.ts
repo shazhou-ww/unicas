@@ -4,7 +4,7 @@ import { withAdminClient } from "./common.js";
 
 export async function accountCommand(ctx: CliContext): Promise<void> {
   await withAdminClient(ctx, async (admin) => {
-    const current = await admin.getCurrentPrincipal();
+    const current = await admin.getCurrentAdministrator();
     printJson({
       account: {
         accountId: current.account.accountId,

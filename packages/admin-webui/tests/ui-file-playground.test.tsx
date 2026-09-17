@@ -219,7 +219,7 @@ test("does not reuse roots or Space capabilities across Apps", async () => {
 test("reopens persisted manifests after a fresh session and catalog check, then clears on logout", async () => {
   vi.stubGlobal("Blob", NodeBlob);
   const user = userEvent.setup();
-  const identity = { identityIssuer: "https://login.example", subject: "cache-integration" };
+  const identity = `acct_${"a".repeat(22)}`;
   let session = createPlaygroundCacheSession(identity);
   const mount = () => render(<PlaygroundCacheContext value={session}><PlaygroundView appId={stackId} /></PlaygroundCacheContext>);
   let view = mount();
@@ -254,7 +254,7 @@ test("reopens persisted manifests after a fresh session and catalog check, then 
 test("does not display persisted content when the fresh catalog denies access", async () => {
   vi.stubGlobal("Blob", NodeBlob);
   const user = userEvent.setup();
-  const session = createPlaygroundCacheSession({ identityIssuer: "https://login.example", subject: "cache-denied" });
+  const session = createPlaygroundCacheSession(`acct_${"b".repeat(22)}`);
   const mount = () => render(<PlaygroundCacheContext value={session}><PlaygroundView appId={stackId} /></PlaygroundCacheContext>);
   let view = mount();
   try {

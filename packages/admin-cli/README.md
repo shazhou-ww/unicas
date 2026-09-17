@@ -93,6 +93,10 @@ and Account-owned Playground root operations. Retired commands (`principal`,
 not supported and have no compatibility aliases. Use the current commands above.
 Old credentials without Account binding require a new login instead of migration.
 
+`unicas account` and the stdio Account tool use the client's
+`getCurrentAdministrator()` operation. Its `/admin/me` response contains only
+Account data, the masked current login method, and Account memberships.
+
 Plain commands print the tool's `structuredContent` as JSON on stdout;
 diagnostics go to stderr.
 

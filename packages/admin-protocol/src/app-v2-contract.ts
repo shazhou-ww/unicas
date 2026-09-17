@@ -100,30 +100,24 @@ function pageSchema(item: z.ZodType) {
   }).readonly();
 }
 
+export const AppAdminMeResponseSchema = z.object({
+  account: AccountSelfSchema,
+  authenticatedIdentity: ExternalIdentitySummarySchema,
+  memberships: z.array(AppMembershipSchema).readonly(),
+}).strict().readonly().meta({ id: "AppAdminMeResponse" });
+
 export const appMeContract = appProcedure
   .route({
     method: "GET",
     path: "/admin/me",
-    operationId: "getCurrentPrincipal",
+    operationId: "getCurrentAdministrator",
     summary: "Read the current administrator",
-    description: "Returns the stable Account, current masked login identity, and Account-keyed memberships. Principal/Profile fields are deprecated session compatibility aliases.",
+    description: "Returns the stable Account, current masked login identity, and Account-keyed memberships.",
     inputStructure: "detailed",
     tags: ["Identity"],
   })
   .input(z.object({}).readonly())
-  .output(z.object({
-    account: AccountSelfSchema,
-    authenticatedIdentity: ExternalIdentitySummarySchema,
-    principal: PrincipalSchema,
-    profile: ProfileSchema,
-    platformAccess: z.object({
-      principalRef: z.string().min(1),
-      status: z.literal("active"),
-      authorities: z.array(PlatformAuthoritySchema).readonly(),
-      revision: z.number().int().positive(),
-    }).readonly(),
-    memberships: z.array(AppMembershipSchema).readonly(),
-  }).readonly().meta({ id: "AppAdminMeResponse" }));
+  .output(AppAdminMeResponseSchema);
 
 export const getAccountContract = appProcedure
   .route({
