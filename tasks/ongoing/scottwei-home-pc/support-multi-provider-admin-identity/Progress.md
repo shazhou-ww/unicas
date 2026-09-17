@@ -21,13 +21,14 @@ directly through `AccountService` and `D1AccountRepository`, pages Apps by stabl
 `accountId`, and no longer rewrites the request or response through
 Principal-keyed `/admin/stacks`.
 
-The fourth no-legacy cleanup checkpoint is complete locally. `POST /admin/apps`
+The fourth no-legacy cleanup checkpoint is published. `POST /admin/apps`
 now uses `apps.create` on the stable Account, requires an active authenticated
 ExternalIdentity, scopes idempotency to `accountId`, and atomically writes the
 App, first Account membership, managed issuer, Account-attributed audit event,
 idempotency result, and control snapshot. Worker composition injects one cached
 managed issuer instance into both the current Account path and remaining legacy
 operations. The App adapter no longer rewrites list or create requests.
+Remote reachability was verified after publication with `repoledger doctor`.
 
 Next: migrate App get/patch and the remaining App operations to AccountService
 and Account-keyed repository transactions. After their consumers move, delete
