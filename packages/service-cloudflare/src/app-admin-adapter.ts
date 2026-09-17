@@ -13,7 +13,9 @@ export async function handleAppAdminCompatibilityRequest(
   if (pathname.startsWith("/admin/platform/") || pathname.startsWith("/admin/platform-invitations/")) {
     return legacyHandler(request);
   }
-  if (route.operation === "listApps" || route.operation === "createApp") return legacyHandler(request);
+  if (route.operation === "listApps" || route.operation === "createApp" || route.operation === "getApp") {
+    return legacyHandler(request);
+  }
   if (route.operation === "listMembers" || route.operation === "deleteMember") {
     return legacyHandler(request);
   }

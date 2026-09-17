@@ -282,6 +282,78 @@ export class D1AccountRepository implements AccountRepository {
     }));
   }
 
+  async getAccountApp(accountId: AccountId, appId: AppId): Promise<App | null> {
+    const row = await this.db.prepare(
+      `SELECT app.app_id, app.display_name, app.description, app.status, app.created_at, app.revision
+       FROM cas_apps AS app
+       JOIN cas_app_members AS member ON member.app_id = app.app_id
+       WHERE member.account_id = ? AND app.app_id = ?`,
+    ).bind(accountId, appId).first<{
+      app_id: AppId;
+      display_name: string;
+      description: string;
+      status: App["status"];
+      created_at: number;
+      revision: number;
+    }>();
+    return row ? {
+      appId: row.app_id,
+      displayName: row.display_name,
+      description: row.description,
+      status: row.status,
+      createdAt: row.created_at,
+      revision: row.revision,
+    } : null;
+  }
+
+  async commitPatchAccountApp(
+    input: Parameters<AccountRepository["commitPatchAccountApp"]>[0],
+  ): Promise<"updated" | "actor-not-member" | "not-found" | "revision-mismatch"> {
+    const identity = await this.getIdentity(input.actorExternalIdentityId);
+    if (!identity || identity.accountId !== input.actorAccountId || identity.unlinkedAt !== null) {
+      return "actor-not-member";
+    }
+    const requireCurrent = this.db.prepare(
+      `SELECT CASE WHEN EXISTS (SELECT 1 FROM cas_app_members WHERE app_id = ? AND account_id = ?)
+         AND EXISTS (SELECT 1 FROM cas_external_identities WHERE external_identity_id = ?
+           AND account_id = ? AND unlinked_at IS NULL)
+         AND EXISTS (SELECT 1 FROM cas_apps WHERE app_id = ? AND revision = ?)
+       THEN 1 ELSE json_extract('invalid', '$') END AS allowed`,
+    ).bind(input.app.appId, input.actorAccountId, input.actorExternalIdentityId,
+      input.actorAccountId, input.app.appId, input.expectedRevision);
+    const update = this.db.prepare(
+      `UPDATE cas_apps SET display_name = ?, description = ?, status = ?, revision = ?
+       WHERE app_id = ? AND revision = ?`,
+    ).bind(input.app.displayName, input.app.description, input.app.status, input.app.revision,
+      input.app.appId, input.expectedRevision);
+    const audit = this.db.prepare(
+      `INSERT INTO cas_control_audit_events
+        (event_id, app_id, identity_issuer, subject, action, target, request_id,
+         trace_id, caller_channel, oauth_client_handle, tool_name, created_at,
+         original_account_id, external_identity_id, target_account_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, NULL)`,
+    ).bind(input.eventId, input.app.appId, identity.issuer, identity.subject, input.action,
+      input.app.appId, input.requestId ?? null, input.traceId ?? null,
+      input.callerChannel ?? null, input.now, input.actorAccountId, input.actorExternalIdentityId);
+    try {
+      await this.db.batch([
+        requireCurrent,
+        update,
+        audit,
+        this.db.prepare("UPDATE cas_control_meta SET value = value + 1 WHERE key = 'snapshot'"),
+      ]);
+      return "updated";
+    } catch (error) {
+      if (!isJsonFailure(error)) throw error;
+      if (!await this.hasAppMembership(input.actorAccountId, input.app.appId)) return "actor-not-member";
+      const current = await this.db.prepare(
+        "SELECT revision FROM cas_apps WHERE app_id = ?",
+      ).bind(input.app.appId).first<{ revision: number }>();
+      if (!current) return "not-found";
+      return "revision-mismatch";
+    }
+  }
+
   async getAccountAppIdempotency(
     input: Parameters<AccountRepository["getAccountAppIdempotency"]>[0],
   ): Promise<AccountAppIdempotencyRecord | null> {

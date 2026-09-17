@@ -304,6 +304,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     if (appRoute?.operation === "listApps" || appRoute?.operation === "createApp") {
       return handleAccountApps(request, url, appRoute.operation);
     }
+    if (appRoute?.operation === "getApp" || appRoute?.operation === "patchApp") {
+      return handleAccountApps(request, url, appRoute.operation, appRoute.appId);
+    }
     if (appRoute?.operation === "listMembers" || appRoute?.operation === "deleteMember") {
       return handleAccountAppMembers(request, url, appRoute.appId, appRoute.operation);
     }
@@ -313,9 +316,6 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     if (appRoute?.operation === "listPeople") return handlePeople(request, appRoute.appId);
     if (appRoute?.operation === "mintManagedCapability") {
       return handleManagedSpaceCapability(request, appRoute.appId);
-    }
-    if (appRoute?.operation === "patchApp") {
-      return handleAppPatch(request, appRoute.appId);
     }
     if (appRoute?.operation === "inspectOAuthIssuer" || appRoute?.operation === "activateOAuthIssuer") {
       return handleAppIssuerMutation(request, appRoute.appId, appRoute.operation);
@@ -1709,7 +1709,12 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     }
   }
 
-  async function handleAccountApps(request: Request, url: URL, operation: "listApps" | "createApp"): Promise<Response> {
+  async function handleAccountApps(
+    request: Request,
+    url: URL,
+    operation: "listApps" | "createApp" | "getApp" | "patchApp",
+    appId?: string,
+  ): Promise<Response> {
     const auth = await requireAuthenticated(request);
     if (auth instanceof Response) return auth;
     if (!accountService || !auth.payload.accountId) {
@@ -1735,14 +1740,46 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
           headers: { ETag: formatCasAdminETag(app.revision), "Cache-Control": REVISION_CACHE_CONTROL },
         });
       }
+      if (operation === "getApp") {
+        if (!appId) return json({ error: "Not Found" }, 404);
+        const app = await accountService.getApp(auth.payload.accountId, appId);
+        return Response.json(app, {
+          status: 200,
+          headers: { ETag: formatCasAdminETag(app.revision), "Cache-Control": REVISION_CACHE_CONTROL },
+        });
+      }
+      if (operation === "patchApp") {
+        if (!auth.payload.externalIdentityId) return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED);
+        if (!(await passCsrf(request, auth.payload))) return csrfRejected();
+        const parsed = PatchAppRequestSchema.safeParse(await readJsonBody(request));
+        if (!parsed.success) return invalidRequest("A valid App patch is required");
+        if (!appId) return json({ error: "Not Found" }, 404);
+        const revision = await accountService.patchApp({
+          actorAccountId: auth.payload.accountId,
+          actorExternalIdentityId: auth.payload.externalIdentityId,
+          appId,
+          patch: parsed.data,
+          ifMatch: request.headers.get("If-Match") ?? undefined,
+          requestId: request.headers.get("X-Request-Id") ?? undefined,
+          traceId: request.headers.get("X-Trace-Id") ?? undefined,
+          callerChannel: "admin-webui",
+        });
+        return new Response(null, {
+          status: 204,
+          headers: { ETag: formatCasAdminETag(revision), "Cache-Control": REVISION_CACHE_CONTROL },
+        });
+      }
       return json(await accountService.listApps({
         actorAccountId: auth.payload.accountId,
         ...pageQuery(queryFromUrl(url)),
       }), 200);
     } catch (error) {
       if (error instanceof AccountServiceError) {
-        const status = error.code === "ACCOUNT_BLOCKED" || error.code === "APP_CREATION_AUTHORITY_REQUIRED" ? 403
+        const status = error.code === "ACCOUNT_BLOCKED" || error.code === "APP_CREATION_AUTHORITY_REQUIRED"
+          || error.code === "APP_MEMBERSHIP_REQUIRED" ? 403
           : error.code === "INVALID_CURSOR" || error.code === "INVALID_REQUEST" ? 400
+            : error.code === "PRECONDITION_REQUIRED" ? 428
+              : error.code === "REVISION_MISMATCH" ? 412
             : error.code === "IDEMPOTENCY_CONFLICT" ? 409
               : 404;
         return json({ error: error.code }, status);
@@ -1818,22 +1855,6 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     return "error" in result
       ? json(transformAppAdminError({ ...result }), casAdminErrorHttpStatus[result.error])
       : json(result, 200);
-  }
-
-  async function handleAppPatch(request: Request, appId: string): Promise<Response> {
-    const auth = await requireAuthenticated(request);
-    if (auth instanceof Response) return auth;
-    if (!(await passCsrf(request, auth.payload))) return csrfRejected();
-    const parsed = PatchAppRequestSchema.safeParse(await readJsonBody(request));
-    if (!parsed.success) return invalidRequest("A valid App patch is required");
-    const result = await controlPlane.patchApp(serviceContext(auth.payload, request), appId, parsed.data, {
-      ifMatch: request.headers.get("If-Match") ?? undefined,
-    });
-    if ("error" in result) return json(transformAppAdminError({ ...result }), casAdminErrorHttpStatus[result.error]);
-    return new Response(null, {
-      status: 204,
-      headers: { ETag: formatCasAdminETag(result.revision), "Cache-Control": REVISION_CACHE_CONTROL },
-    });
   }
 
   async function handleMemberInvitationAcceptance(request: Request, token: string): Promise<Response> {

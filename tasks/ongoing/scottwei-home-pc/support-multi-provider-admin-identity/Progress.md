@@ -30,10 +30,19 @@ managed issuer instance into both the current Account path and remaining legacy
 operations. The App adapter no longer rewrites list or create requests.
 Remote reachability was verified after publication with `repoledger doctor`.
 
-Next: migrate App get/patch and the remaining App operations to AccountService
-and Account-keyed repository transactions. After their consumers move, delete
-legacy HTTP contracts, identity-keyed columns/tables, dual writes, and startup
-identity migration rather than adding compatibility flags.
+The fifth no-legacy cleanup checkpoint is ready to publish. `GET/PATCH
+/admin/apps/{appId}` now use `AccountService` and Account-keyed D1 operations
+directly. Reads require stable Account membership. Updates require an active
+authenticated ExternalIdentity, CSRF, a valid current ETag, strict patch input,
+and atomically update the App, advance the control snapshot, and write exact
+Account/ExternalIdentity audit attribution. The adapter no longer rewrites App
+detail requests to `/admin/stacks`.
+
+Next: migrate the remaining App issuer, invitation, capability, Playground, and
+root-domain operations to AccountService and Account-keyed repository
+transactions. After their consumers move, delete legacy HTTP contracts,
+identity-keyed columns/tables, dual writes, and startup identity migration
+rather than adding compatibility flags.
 
 On 2026-09-17, the requesting user directed this worktree to claim and continue
 the task. `repoledger doctor` resolved the worktree identity as
@@ -440,6 +449,14 @@ cutover markers. Then complete the current-model and real-provider/email tests.
 
 ## Validation
 
+- Account-keyed App detail/update passed the full cloud-neutral service suite
+  (145 tests), the full BFF suite (59 tests), and the App adapter suite (10
+  tests). Both affected packages passed typecheck and editor diagnostics found
+  no errors. The focused Miniflare transaction test passed and proves stable
+  Account membership, atomic revision update, Account/ExternalIdentity audit
+  attribution, and stale-revision rollback. In the complete 10-test D1 file,
+  the new test and seven other tests passed while two pre-existing slow tests
+  exceeded their 5-second limits; neither failure entered the changed path.
 - The full cloud-neutral service suite passed 143 tests, including direct App
   listing by stable Account membership. The modified Miniflare D1 App/member
   test passed in isolation, the App compatibility adapter passed 10 tests, and

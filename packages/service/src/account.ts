@@ -16,7 +16,7 @@ import type {
   PrimaryVerifiedEmail,
   ProviderKind,
 } from "@unicas/admin-protocol";
-import { AppAccountAuditQuerySchema, CAS_ADMIN_IDEMPOTENCY_RETENTION_MS, PlatformAccountAuditQuerySchema, PlatformPrincipalQuerySchema } from "@unicas/admin-protocol";
+import { AppAccountAuditQuerySchema, CAS_ADMIN_IDEMPOTENCY_RETENTION_MS, parseCasAdminETag, PlatformAccountAuditQuerySchema, PlatformPrincipalQuerySchema } from "@unicas/admin-protocol";
 import { generateAccountId, generateEventId, generateExternalIdentityId, generateStackId } from "./control-ids.js";
 import { decodeControlListCursor, encodeControlListCursor } from "./control-cursor.js";
 import type { ControlOAuthIssuerRecord, ManagedOAuthIssuerProvisioner } from "./control-admin.js";
@@ -139,6 +139,19 @@ export interface AccountRepository {
     readonly afterAppId: string;
     readonly limit: number;
   }): Promise<readonly App[]>;
+  getAccountApp(accountId: AccountId, appId: AppId): Promise<App | null>;
+  commitPatchAccountApp(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly app: App;
+    readonly expectedRevision: number;
+    readonly eventId: string;
+    readonly action: "stack.patched" | "app.suspended" | "app.restored";
+    readonly requestId?: string;
+    readonly traceId?: string;
+    readonly callerChannel?: string;
+    readonly now: number;
+  }): Promise<"updated" | "actor-not-member" | "not-found" | "revision-mismatch">;
   getAccountAppIdempotency(input: {
     readonly accountId: AccountId;
     readonly key: string;
@@ -267,6 +280,8 @@ export type AccountServiceErrorCode =
   | "FRESH_AUTHENTICATION_REQUIRED"
   | "APP_MEMBERSHIP_REQUIRED"
   | "APP_CREATION_AUTHORITY_REQUIRED"
+  | "PRECONDITION_REQUIRED"
+  | "REVISION_MISMATCH"
   | "IDEMPOTENCY_CONFLICT"
   | "INVALID_CURSOR"
   | "INVALID_REQUEST"
@@ -447,6 +462,74 @@ export class AccountService {
         ? encodeControlListCursor({ version: 1, snapshot, last: items.at(-1)!.appId })
         : null,
     };
+  }
+
+  async getApp(actorAccountId: AccountId, appId: AppId): Promise<App> {
+    const actor = await this.#resolveCanonicalAccount(actorAccountId);
+    this.#requireUsableAccount(actor);
+    const app = await this.repository.getAccountApp(actor.accountId, appId);
+    if (!app) throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
+    return app;
+  }
+
+  async patchApp(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly appId: AppId;
+    readonly patch: Readonly<Partial<Pick<App, "displayName" | "description" | "status">>>;
+    readonly ifMatch?: string;
+    readonly requestId?: string;
+    readonly traceId?: string;
+    readonly callerChannel?: string;
+  }): Promise<number> {
+    const expectedRevision = input.ifMatch === undefined ? null : parseCasAdminETag(input.ifMatch);
+    if (input.ifMatch === undefined || input.ifMatch.trim().length === 0) {
+      throw new AccountServiceError("PRECONDITION_REQUIRED");
+    }
+    if (expectedRevision === null) throw new AccountServiceError("REVISION_MISMATCH");
+    const actor = await this.#resolveCanonicalAccount(input.actorAccountId);
+    this.#requireUsableAccount(actor);
+    await this.requireActiveIdentity(actor.accountId, input.actorExternalIdentityId);
+    const current = await this.repository.getAccountApp(actor.accountId, input.appId);
+    if (!current) throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
+    if (current.revision !== expectedRevision) throw new AccountServiceError("REVISION_MISMATCH");
+    const rawName = input.patch.displayName;
+    const rawDescription = input.patch.description;
+    const rawStatus = input.patch.status;
+    if (rawName === undefined && rawDescription === undefined && rawStatus === undefined) {
+      throw new AccountServiceError("INVALID_REQUEST");
+    }
+    if (rawName !== undefined && validateDisplayName(rawName)) throw new AccountServiceError("INVALID_REQUEST");
+    if (rawDescription !== undefined && (typeof rawDescription !== "string" || rawDescription.length > 2_000)) {
+      throw new AccountServiceError("INVALID_REQUEST");
+    }
+    if (rawStatus !== undefined && rawStatus !== "active" && rawStatus !== "suspended") {
+      throw new AccountServiceError("INVALID_REQUEST");
+    }
+    const displayName = rawName?.trim() ?? current.displayName;
+    const description = rawDescription?.trim() ?? current.description;
+    const status = rawStatus ?? current.status;
+    if (displayName === current.displayName && description === current.description && status === current.status) {
+      return current.revision;
+    }
+    const result = await this.repository.commitPatchAccountApp({
+      actorAccountId: actor.accountId,
+      actorExternalIdentityId: input.actorExternalIdentityId,
+      app: { ...current, displayName, description, status, revision: current.revision + 1 },
+      expectedRevision,
+      eventId: generateEventId(),
+      action: status !== current.status
+        ? status === "suspended" ? "app.suspended" : "app.restored"
+        : "stack.patched",
+      requestId: input.requestId,
+      traceId: input.traceId,
+      callerChannel: input.callerChannel,
+      now: this.now(),
+    });
+    if (result === "actor-not-member") throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
+    if (result === "not-found") throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
+    if (result === "revision-mismatch") throw new AccountServiceError("REVISION_MISMATCH");
+    return current.revision + 1;
   }
 
   async createApp(input: {

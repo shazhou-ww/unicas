@@ -49,6 +49,8 @@ function fixture() {
     listAccountMembershipAppIds: vi.fn(async () => []),
     readControlSnapshot: vi.fn(async () => 1),
     listAccountApps: vi.fn(async () => []),
+    getAccountApp: vi.fn(async () => null),
+    commitPatchAccountApp: vi.fn(async () => "updated"),
     getAccountAppIdempotency: vi.fn(async () => null),
     commitCreateAccountApp: vi.fn(async () => "created"),
     listAppMemberships: vi.fn(async () => []),
@@ -194,6 +196,46 @@ describe("Account service", () => {
       accountId,
       afterAppId: "",
       limit: 51,
+    });
+  });
+
+  test("reads and patches Apps through stable Account membership", async () => {
+    const { repository, service } = fixture();
+    const app = {
+      appId: "cas_app_a",
+      displayName: "App A",
+      description: "Before",
+      status: "active" as const,
+      createdAt: 1,
+      revision: 2,
+    };
+    vi.mocked(repository.getAccountApp).mockResolvedValue(app);
+
+    await expect(service.getApp(accountId, app.appId)).resolves.toEqual(app);
+    await expect(service.patchApp({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      appId: app.appId,
+      patch: { status: "suspended" },
+      ifMatch: '"2"',
+    })).resolves.toBe(3);
+    expect(repository.commitPatchAccountApp).toHaveBeenCalledWith(expect.objectContaining({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      expectedRevision: 2,
+      action: "app.suspended",
+      app: expect.objectContaining({ appId: app.appId, status: "suspended", revision: 3 }),
+    }));
+
+    await expect(service.patchApp({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      appId: app.appId,
+      patch: { description: "Changed" },
+    })).rejects.toMatchObject({ code: "PRECONDITION_REQUIRED" });
+    vi.mocked(repository.getAccountApp).mockResolvedValue(null);
+    await expect(service.getApp(accountId, "cas_missing")).rejects.toMatchObject({
+      code: "APP_MEMBERSHIP_REQUIRED",
     });
   });
 

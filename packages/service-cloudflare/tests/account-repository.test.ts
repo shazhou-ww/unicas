@@ -291,6 +291,56 @@ describe("D1 Account repository", () => {
     })).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
   });
 
+  test("reads and atomically patches an App through Account membership", async () => {
+    const { db, service } = await fixture();
+    const actor = await service.createForExternalIdentity({
+      provider: "github",
+      issuer: "https://github.com",
+      subject: "app-editor",
+    });
+    await db.prepare(
+      "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES ('cas_app_edit', 'App', 'Before', 'active', 1, 1)",
+    ).run();
+    await db.prepare(
+      "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES ('cas_app_edit', ?, ?, 1, ?)",
+    ).bind(actor.authenticatedIdentity.issuer, actor.authenticatedIdentity.subject, actor.account.accountId).run();
+
+    await expect(service.getApp(actor.account.accountId, "cas_app_edit")).resolves.toMatchObject({
+      appId: "cas_app_edit",
+      description: "Before",
+      revision: 1,
+    });
+    await expect(service.patchApp({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      appId: "cas_app_edit",
+      patch: { description: "After", status: "suspended" },
+      ifMatch: '\"1\"',
+      requestId: "request-edit",
+      callerChannel: "admin-webui",
+    })).resolves.toBe(2);
+    expect(await db.prepare(
+      "SELECT description, status, revision FROM cas_apps WHERE app_id = 'cas_app_edit'",
+    ).first()).toEqual({ description: "After", status: "suspended", revision: 2 });
+    expect(await db.prepare(
+      "SELECT action, original_account_id, external_identity_id FROM cas_control_audit_events WHERE app_id = 'cas_app_edit'",
+    ).first()).toEqual({
+      action: "app.suspended",
+      original_account_id: actor.account.accountId,
+      external_identity_id: actor.authenticatedIdentity.externalIdentityId,
+    });
+    await expect(service.patchApp({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      appId: "cas_app_edit",
+      patch: { description: "Stale" },
+      ifMatch: '\"1\"',
+    })).rejects.toMatchObject({ code: "REVISION_MISMATCH" });
+    expect(await db.prepare(
+      "SELECT description, revision FROM cas_apps WHERE app_id = 'cas_app_edit'",
+    ).first()).toEqual({ description: "After", revision: 2 });
+  });
+
   test("manages platform authorities and block state by Account ID", async () => {
     const { db, service } = await fixture();
     const actor = await service.createForExternalIdentity({

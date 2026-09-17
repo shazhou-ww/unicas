@@ -130,12 +130,15 @@ describe("App admin physical compatibility adapter", () => {
     await expect(response.json()).resolves.toEqual({ appId: "app-1" });
   });
 
-  test("maps legacy membership errors to the App contract", async () => {
-    const { response } = await invoke(
+  test("forwards Account-keyed App detail without legacy rewriting", async () => {
+    const { response, legacyHandler } = await invoke(
       { operation: "getApp", appId: "app-1" },
       "/admin/apps/app-1",
-      { error: "STACK_MEMBERSHIP_REQUIRED", message: "stack membership required" },
+      { error: "APP_MEMBERSHIP_REQUIRED", message: "App membership required" },
     );
+    expect(legacyHandler).toHaveBeenCalledWith(expect.objectContaining({
+      url: "https://console.unicas.work/admin/apps/app-1",
+    }));
     await expect(response.json()).resolves.toEqual({
       error: "APP_MEMBERSHIP_REQUIRED",
       message: "App membership required",

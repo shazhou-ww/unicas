@@ -712,6 +712,27 @@ function memoryAccountRepository(
     },
     listAccountMembershipAppIds: async () => [],
     readControlSnapshot: () => platform.readSnapshot(),
+    getAccountApp: async (requested, appId) => {
+      const identity = identityForAccount(requested);
+      const app = fakeStacks.get(appId);
+      if (!identity || !app?.members.has(`${identity.issuer}\n${identity.subject}`)) return null;
+      const { members: _members, stackId, ...record } = app;
+      return { appId: stackId, ...record };
+    },
+    commitPatchAccountApp: async input => {
+      const identity = identities.get(input.actorExternalIdentityId);
+      const app = fakeStacks.get(input.app.appId);
+      if (!identity || identity.accountId !== input.actorAccountId
+        || !app?.members.has(`${identity.issuer}\n${identity.subject}`)) return "actor-not-member";
+      if (app.revision !== input.expectedRevision) return "revision-mismatch";
+      Object.assign(app, {
+        displayName: input.app.displayName,
+        description: input.app.description,
+        status: input.app.status,
+        revision: input.app.revision,
+      });
+      return "updated";
+    },
     listPlatformAccountAuditEvents: async input => {
       const events = await platform.listAuditEvents({
         action: input.action,
@@ -2049,9 +2070,26 @@ describe("cas-admin-webui BFF", () => {
 
   test("App status mutations enforce CSRF, strict input, and minimal responses", async () => {
     const provider = await createMockProvider();
-    const bff = await createBff(provider);
+    const platform = new MemoryPlatformAccessRepository();
+    platform.grant(ISSUER, "google-user-123");
+    const accounts = memoryAccountRepository(platform, "google-user-123");
+    const bff = await createBff(
+      provider,
+      undefined,
+      {},
+      platform,
+      fakeControlPlane(),
+      undefined,
+      undefined,
+      undefined,
+      accounts,
+    );
     const { cookie, csrf } = await signIn(bff, provider);
     const appId = await createStack(bff, cookie, csrf, "App");
+    const detail = await authRequest(bff, `/admin/apps/${appId}`, cookie);
+    expect(detail.status).toBe(200);
+    expect(detail.headers.get("ETag")).toBe('\"1\"');
+    expect(await detail.json()).toMatchObject({ appId, displayName: "App", status: "active" });
     const headers = { "X-CSRF-Token": csrf, "Content-Type": "application/json", "If-Match": '"1"' };
     const noCsrf = await authRequest(bff, `/admin/apps/${appId}`, cookie, {
       method: "PATCH",
