@@ -30,7 +30,7 @@
     "jose": "^6.2.10",
     "marked": "^18.0.13",
     "miniflare": "5.20260811.1-alpha",
-    "repoledger": "0.4.0",
+    "repoledger": "0.4.1",
     "rimraf": "^6.1.3",
     "typescript": "^5.9.0",
     "vitest": "^3.2.0"

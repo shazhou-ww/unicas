@@ -51,7 +51,7 @@ describe("repository task policy", () => {
 
   test("pins and composes repoledger validation", () => {
     const packageJson = JSON.parse(readFileSync(PACKAGE_JSON, "utf8"));
-    expect(packageJson.devDependencies?.repoledger).toBe("0.4.0");
+    expect(packageJson.devDependencies?.repoledger).toBe("0.4.1");
     expect(packageJson.scripts?.["check:tasks"]).toBe(
       "repoledger check && vitest run tests/task-policy.test.mjs",
     );
