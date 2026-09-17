@@ -66,7 +66,9 @@ The requesting user subsequently asked for entity lifecycle stereotypes. The
 business/data-model ER view now marks Session and MCPGrant as ephemeral
 immutable (`<<EI>>`) and AuditEvent, AccountAlias, and LegacyIdentityMap as
 append only (`<<AO>>`); all unmarked entities remain mutable. This annotation
-refinement awaits publication and does not imply checkpoint approval.
+refinement is published on `origin/main` as
+`72b7b4552a65057755aaadfa850b31acda85f1f9` and does not imply checkpoint
+approval.
 
 Next: obtain explicit business/data-model, architecture, and interface
 decisions on the published review artifacts. Do not begin the implementation
@@ -203,6 +205,8 @@ protected by any pending checkpoint.
 - Mermaid CLI 11.12.0 rendered both ER views after adding entity display aliases
   for `<<AO>>` and `<<EI>>`; visual inspection confirmed all five labels were
   preserved literally without obscuring entity fields or relationships.
+  Annotation commit `72b7b4552a65057755aaadfa850b31acda85f1f9`
+  was pushed and verified reachable from refreshed `origin/main`.
 
 ## Blockers
 
