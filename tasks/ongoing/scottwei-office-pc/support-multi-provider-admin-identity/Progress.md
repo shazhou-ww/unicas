@@ -675,6 +675,11 @@ cutover markers. Then complete the current-model and real-provider/email tests.
   all 8 focused D1 repository tests. The remaining Principal-keyed tables and
   App compatibility adapter still back the internal legacy control-plane
   repository, so deleting them awaits its Account-native replacement.
+- This no-legacy cleanup checkpoint and the production OAuth provisioning guide
+  are published on the shared primary branch. The next implementation action is
+  to replace the internal Principal-keyed App control-plane repository and then
+  remove its compatibility adapter and tables; split Console and MCP GitHub
+  OAuth credentials before real-provider enablement.
 
 ## Blockers
 
