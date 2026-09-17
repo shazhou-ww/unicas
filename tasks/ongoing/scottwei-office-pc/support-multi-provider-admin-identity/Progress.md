@@ -83,9 +83,18 @@ After reviewing the revised direction, the requesting user stated on 2026-09-17
 that there were no remaining issues and directed the plan documents to be
 committed before iterative implementation under `task-exec`. This explicitly
 approves the revised business/data model, architecture, and interface artifacts.
+The approval gate is published on `origin/main` as
+`3be539500b757a7c3cec4c732a6397b4a31ef0e9`.
 
-Next: publish these approval records, then begin the first implementation slice
-with additive Account protocol/service types and persistence foundations.
+The first implementation slice is complete locally. It adds strict additive
+Account protocol types and schemas while retaining the existing Principal
+contracts, a 128-bit `acct_` ID generator, and additive D1 tables for Account,
+Profile, ExternalIdentity, AccountPlatformAuthority, AccountAlias, the permanent
+legacy identity map, and the migration journal. Existing Principal-keyed tables
+and runtime paths remain active. The slice awaits checkpoint publication.
+
+Next: publish the Account foundation checkpoint, then implement the cloud-neutral
+Account service and D1 repository behind compatibility-safe ports.
 
 ## Decisions
 
@@ -137,6 +146,12 @@ with additive Account protocol/service types and persistence foundations.
   remaining issues and that implementation should begin after plan publication
   as approval of the revised business/data model, architecture, and interface
   checkpoints. It does not constitute delivery acceptance.
+- Introduce Account persistence additively before changing authorization reads.
+  Existing Principal schemas and tables remain available through the migration
+  window; the first implementation checkpoint does not infer or link Accounts
+  from email.
+- Generate Account IDs from 16 random bytes encoded as unpadded base64url,
+  producing the approved `acct_` prefix plus 22-character wire value.
 - Reconcile the previously stale progress wording with review-artifact commit
   `d3ef9fd44b7c141993d4307a750c39c817cf225a`; publication does not imply approval.
 
@@ -252,6 +267,20 @@ with additive Account protocol/service types and persistence foundations.
   `4f02dea51c7da183369141f0eec706c758bb90e0` and verified reachable after a
   remote refresh, with all three protected implementation checkpoints still
   pending in that publication.
+- Approval commit `3be539500b757a7c3cec4c732a6397b4a31ef0e9` was pushed and
+  verified reachable from refreshed `origin/main`; `repoledger doctor` passed
+  before implementation began.
+- `@unicas/admin-protocol` passed all 98 tests across 7 files, including 5 new
+  Account schema tests, and passed its production/test TypeScript builds.
+- The focused Account ID test generated 100 unique values matching the approved
+  128-bit `acct_` wire shape.
+- The focused Cloudflare schema suite passed all 6 tests, including additive
+  Account migration idempotency, composite authority uniqueness, authority
+  enum enforcement, and active external identity uniqueness/history behavior.
+- The full `@unicas/service-cloudflare` suite passed all 248 tests across 25
+  files after the shared control schema change. `@unicas/admin-protocol`,
+  `@unicas/service`, and `@unicas/service-cloudflare` all passed typecheck, and
+  editor diagnostics reported no errors in the changed implementation files.
 
 ## Blockers
 

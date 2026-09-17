@@ -1,6 +1,11 @@
 export { AppPeopleQuerySchema, PlatformPeopleQuerySchema } from "./people.js";
 export type { AppPeopleQuery, PlatformPeopleQuery, AppPerson, PlatformPerson, PeoplePage } from "./people.js";
 export type {
+  AccountAvatar,
+  AccountId,
+  AccountPlatformAuthority,
+  AccountSelf,
+  AccountSummary,
   App,
   AppAdminMeResponse,
   AppControlAuditEvent,
@@ -34,11 +39,17 @@ export type {
   CasStackStatus,
   CasOAuthIssuerMetadataType,
   CasOAuthIssuerStatus,
+  ExternalIdentityDetail,
+  ExternalIdentitySummary,
   Principal,
   Profile,
   ManagedSpaceCapability,
+  PlatformAccountSummary,
+  PrimaryVerifiedEmail,
+  ProviderKind,
   SpaceRootRefBalance,
   SpaceRootRefEvent,
+  VerifiedEmailSource,
 } from "./types.js";
 export type { AppId } from "@unicas/tenant-protocol";
 export { CAS_STACK_MEMBER_AUTHORITY } from "./types.js";
@@ -51,6 +62,11 @@ export {
 export type { CasAdminApiContract } from "./contract.js";
 
 export {
+  AccountAvatarSchema,
+  AccountIdSchema,
+  AccountPlatformAuthoritySchema,
+  AccountSelfSchema,
+  AccountSummarySchema,
   AppControlAuditEventSchema,
   AppMemberInvitationSchema,
   AppMembershipSchema,
@@ -75,11 +91,17 @@ export {
   CasStackMemberSchema,
   CasStackOAuthIssuerSchema,
   CasStackSchema,
+  ExternalIdentityDetailSchema,
+  ExternalIdentitySummarySchema,
+  PlatformAccountSummarySchema,
+  PrimaryVerifiedEmailSchema,
   PrincipalSchema,
   ProfileSchema,
+  ProviderKindSchema,
   ManagedSpaceCapabilitySchema,
   SpaceRootRefBalanceSchema,
   SpaceRootRefEventSchema,
+  VerifiedEmailSourceSchema,
 } from "./schemas.js";
 
 export {

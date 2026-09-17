@@ -64,6 +64,68 @@ describe("App-scoped Space schema", () => {
 });
 
 describe("control schema", () => {
+  test("creates additive Account identity tables with constrained relationships", async () => {
+    const database = await createDb();
+    await migrateControlSchema(database);
+    await migrateControlSchema(database);
+
+    const tables = await database.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
+    ).all<{ name: string }>();
+    const names = new Set(tables.results!.map(row => row.name));
+    for (const expected of [
+      "cas_accounts",
+      "cas_account_profiles",
+      "cas_external_identities",
+      "cas_account_platform_authorities",
+      "cas_account_aliases",
+      "cas_identity_migration_map",
+      "cas_identity_migration_journal",
+    ]) expect(names.has(expected), `missing table ${expected}`).toBe(true);
+
+    const authorityColumns = await database.prepare(
+      "PRAGMA table_info(cas_account_platform_authorities)",
+    ).all<{ name: string; pk: number }>();
+    expect(authorityColumns.results!
+      .filter(column => column.pk > 0)
+      .sort((left, right) => left.pk - right.pk)
+      .map(column => column.name)).toEqual(["account_id", "authority"]);
+
+    const firstAccountId = `acct_${"a".repeat(22)}`;
+    const secondAccountId = `acct_${"b".repeat(22)}`;
+    const insertAccount = database.prepare(
+      "INSERT INTO cas_accounts (account_id, credential_version, created_at, updated_at) VALUES (?, 1, 1, 1)",
+    );
+    await insertAccount.bind(firstAccountId).run();
+    await insertAccount.bind(secondAccountId).run();
+    await database.prepare(
+      "INSERT INTO cas_account_platform_authorities (account_id, authority, granted_at) VALUES (?, 'platform.admin', 1)",
+    ).bind(firstAccountId).run();
+    await expect(database.prepare(
+      "INSERT INTO cas_account_platform_authorities (account_id, authority, granted_at) VALUES (?, 'platform.admin', 2)",
+    ).bind(firstAccountId).run()).rejects.toThrow();
+    await expect(database.prepare(
+      "INSERT INTO cas_account_platform_authorities (account_id, authority, granted_at) VALUES (?, 'owner', 2)",
+    ).bind(firstAccountId).run()).rejects.toThrow();
+
+    await database.prepare(
+      "INSERT INTO cas_external_identities (external_identity_id, account_id, provider, issuer, subject, linked_at) VALUES ('ext-1', ?, 'google', 'https://accounts.google.com', 'subject-1', 1)",
+    ).bind(firstAccountId).run();
+    await expect(database.prepare(
+      "INSERT INTO cas_external_identities (external_identity_id, account_id, provider, issuer, subject, linked_at) VALUES ('ext-2', ?, 'google', 'https://accounts.google.com', 'subject-1', 2)",
+    ).bind(secondAccountId).run()).rejects.toThrow();
+    await database.prepare(
+      "UPDATE cas_external_identities SET unlinked_at = 3 WHERE external_identity_id = 'ext-1'",
+    ).run();
+    await database.prepare(
+      "INSERT INTO cas_external_identities (external_identity_id, account_id, provider, issuer, subject, linked_at) VALUES ('ext-2', ?, 'google', 'https://accounts.google.com', 'subject-1', 4)",
+    ).bind(secondAccountId).run();
+
+    expect(await database.prepare(
+      "SELECT COUNT(*) AS count FROM cas_external_identities WHERE issuer = 'https://accounts.google.com' AND subject = 'subject-1'",
+    ).first()).toEqual({ count: 2 });
+  });
+
   test("upgrades persisted stack-scoped tables before creating App indexes", async () => {
     const database = await createDb();
     await database.exec("CREATE TABLE cas_oauth_issuer_inspections (inspection_id TEXT PRIMARY KEY, stack_id TEXT NOT NULL, issuer TEXT NOT NULL, audience TEXT NOT NULL, metadata_url TEXT NOT NULL, metadata_type TEXT NOT NULL, authorization_endpoint TEXT NOT NULL, token_endpoint TEXT NOT NULL, jwks_uri TEXT NOT NULL, registration_endpoint TEXT, scopes_supported TEXT NOT NULL DEFAULT '[]', code_challenge_methods_supported TEXT NOT NULL DEFAULT '[]', metadata_digest TEXT NOT NULL, jwks_digest TEXT NOT NULL, challenge_hash TEXT NOT NULL, capability_max_lifetime_seconds INTEGER NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, used_at INTEGER, revision INTEGER NOT NULL DEFAULT 1)");

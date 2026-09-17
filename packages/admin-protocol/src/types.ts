@@ -1,5 +1,5 @@
 import type { AppId } from "@unicas/tenant-protocol";
-import type { CurrentPlatformAccess } from "./platform-access.js";
+import type { CurrentPlatformAccess, PlatformAuthority } from "./platform-access.js";
 
 /**
  * Content-addressed node digest wire shape.
@@ -33,6 +33,61 @@ export interface Principal {
 export interface Profile {
   readonly displayName: string | null;
   readonly emailForDisplay: string | null;
+}
+
+/** Opaque UniCAS-generated durable administrator account identifier. */
+export type AccountId = string;
+
+export type ProviderKind = "google" | "microsoft" | "github";
+
+export type VerifiedEmailSource = "google-oidc" | "github-emails-api" | "unicas-email-challenge";
+
+export interface PrimaryVerifiedEmail {
+  readonly normalizedEmail: string;
+  readonly source: VerifiedEmailSource;
+  readonly verifiedAt: number;
+}
+
+export type AccountAvatar =
+  | { readonly kind: "image"; readonly url: string }
+  | { readonly kind: "fallback"; readonly initials: string; readonly colorIndex: number };
+
+export interface ExternalIdentitySummary {
+  readonly externalIdentityId: string;
+  readonly provider: ProviderKind;
+  readonly accountHint: string | null;
+  readonly linkedAt: number;
+  readonly lastAuthenticatedAt: number | null;
+  readonly currentLogin: boolean;
+}
+
+export interface ExternalIdentityDetail extends ExternalIdentitySummary {
+  readonly issuer: string;
+  readonly subject: string;
+}
+
+export interface AccountSummary {
+  readonly accountId: AccountId;
+  readonly displayName: string | null;
+  readonly primaryVerifiedEmail: PrimaryVerifiedEmail | null;
+  readonly avatar: AccountAvatar;
+}
+
+export interface AccountSelf extends AccountSummary {
+  readonly blockedAt: number | null;
+  readonly platformAuthorities: readonly PlatformAuthority[];
+  readonly identities: readonly ExternalIdentitySummary[];
+}
+
+export interface PlatformAccountSummary extends AccountSummary {
+  readonly blockedAt: number | null;
+  readonly platformAuthorities: readonly PlatformAuthority[];
+}
+
+export interface AccountPlatformAuthority {
+  readonly accountId: AccountId;
+  readonly authority: PlatformAuthority;
+  readonly grantedAt: number;
 }
 
 export type AppStatus = "active" | "suspended";

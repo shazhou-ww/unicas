@@ -2,8 +2,14 @@ import { z } from "zod";
 import { AppIdSchema } from "@unicas/tenant-protocol";
 import type { CasManagedCapability } from "./http.js";
 import type { CasAdminErrorResponse } from "./errors.js";
+import { PlatformAuthoritySchema } from "./platform-access.js";
 import { CasAdminErrorCodes } from "./errors.js";
 import type {
+  AccountAvatar,
+  AccountId,
+  AccountPlatformAuthority,
+  AccountSelf,
+  AccountSummary,
   App,
   AppControlAuditEvent,
   AppMemberInvitation,
@@ -26,7 +32,11 @@ import type {
   CasStack,
   CasStackMember,
   CasStackOAuthIssuer,
+  ExternalIdentityDetail,
+  ExternalIdentitySummary,
   ManagedSpaceCapability,
+  PlatformAccountSummary,
+  PrimaryVerifiedEmail,
   Principal,
   Profile,
   SpaceRootRefBalance,
@@ -70,6 +80,89 @@ export const ProfileSchema: z.ZodType<Profile> = z.object({
   displayName: z.string().nullable().describe("Display-only name; never an authorization key."),
   emailForDisplay: z.string().nullable().describe("Display-only email; never an authorization key."),
 }).readonly().meta({ id: "Profile" });
+
+export const AccountIdSchema: z.ZodType<AccountId> = z.string()
+  .regex(/^acct_[A-Za-z0-9_-]{22}$/, "Expected an acct_ prefix followed by a 128-bit base64url identifier")
+  .describe("Opaque UniCAS-generated durable administrator account identifier.")
+  .meta({ id: "AccountId" });
+
+export const ProviderKindSchema = z.enum(["google", "microsoft", "github"])
+  .describe("Configured administrator authentication provider.")
+  .meta({ id: "ProviderKind" });
+
+export const VerifiedEmailSourceSchema = z.enum(["google-oidc", "github-emails-api", "unicas-email-challenge"])
+  .describe("Verifier that established control of the primary contact address.")
+  .meta({ id: "VerifiedEmailSource" });
+
+export const PrimaryVerifiedEmailSchema: z.ZodType<PrimaryVerifiedEmail> = z.object({
+  normalizedEmail: z.email().max(254)
+    .refine(value => value === value.trim().toLowerCase(), "Expected a trim().toLowerCase() email")
+    .describe("Current primary contact normalized with trim().toLowerCase()."),
+  source: VerifiedEmailSourceSchema,
+  verifiedAt: TimestampSchema,
+}).strict().readonly().meta({ id: "PrimaryVerifiedEmail" });
+
+export const AccountAvatarSchema: z.ZodType<AccountAvatar> = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("image"), url: z.url() }).strict().readonly(),
+  z.object({
+    kind: z.literal("fallback"),
+    initials: NonEmptyStringSchema,
+    colorIndex: z.number().int().nonnegative(),
+  }).strict().readonly(),
+]).meta({ id: "AccountAvatar" });
+
+const ExternalIdentitySummaryShape = {
+  externalIdentityId: NonEmptyStringSchema,
+  provider: ProviderKindSchema,
+  accountHint: z.string().nullable(),
+  linkedAt: TimestampSchema,
+  lastAuthenticatedAt: TimestampSchema.nullable(),
+  currentLogin: z.boolean(),
+};
+
+export const ExternalIdentitySummarySchema: z.ZodType<ExternalIdentitySummary> = z.object({
+  ...ExternalIdentitySummaryShape,
+}).strict().readonly().meta({ id: "ExternalIdentitySummary" });
+
+export const ExternalIdentityDetailSchema: z.ZodType<ExternalIdentityDetail> = z.object({
+  ...ExternalIdentitySummaryShape,
+  issuer: z.url(),
+  subject: NonEmptyStringSchema,
+}).strict().readonly().meta({ id: "ExternalIdentityDetail" });
+
+const AccountSummaryShape = {
+  accountId: AccountIdSchema,
+  displayName: z.string().nullable(),
+  primaryVerifiedEmail: PrimaryVerifiedEmailSchema.nullable(),
+  avatar: AccountAvatarSchema,
+};
+
+export const AccountSummarySchema: z.ZodType<AccountSummary> = z.object({
+  ...AccountSummaryShape,
+}).strict().readonly().meta({ id: "AccountSummary" });
+
+const PlatformAuthoritiesSchema = z.array(PlatformAuthoritySchema)
+  .refine(values => new Set(values).size === values.length, "Expected unique platform authorities")
+  .readonly();
+
+export const AccountSelfSchema: z.ZodType<AccountSelf> = z.object({
+  ...AccountSummaryShape,
+  blockedAt: TimestampSchema.nullable(),
+  platformAuthorities: PlatformAuthoritiesSchema,
+  identities: z.array(ExternalIdentitySummarySchema).readonly(),
+}).strict().readonly().meta({ id: "AccountSelf" });
+
+export const PlatformAccountSummarySchema: z.ZodType<PlatformAccountSummary> = z.object({
+  ...AccountSummaryShape,
+  blockedAt: TimestampSchema.nullable(),
+  platformAuthorities: PlatformAuthoritiesSchema,
+}).strict().readonly().meta({ id: "PlatformAccountSummary" });
+
+export const AccountPlatformAuthoritySchema: z.ZodType<AccountPlatformAuthority> = z.object({
+  accountId: AccountIdSchema,
+  authority: PlatformAuthoritySchema,
+  grantedAt: TimestampSchema,
+}).strict().readonly().meta({ id: "AccountPlatformAuthority" });
 
 export const AppSchema: z.ZodType<App> = z.object({
   appId: AppIdSchema.describe("Opaque UniCAS-generated App identifier."),

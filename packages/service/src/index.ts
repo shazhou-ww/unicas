@@ -170,6 +170,7 @@ export {
   toAdminError,
 } from "./control-errors.js";
 export {
+  generateAccountId,
   generateEventId,
   generateInvitationId,
   generateInvitationToken,
