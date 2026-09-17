@@ -227,9 +227,22 @@ Microsoft provider and fake email sender. It listens only on loopback and sends
 no external email. Run it with `pnpm --filter @unicas/admin-protocol exec tsx
 --conditions=development ../../tasks/ongoing/scottwei-office-pc/support-multi-provider-admin-identity/ChallengeFixture.mts`.
 
-Next: publish checkpoint twelve, then implement remote MCP shared provider login
-and Account-bound credential-version enforcement; deployment-stage and rollback
-rehearsals also remain before implementation completion.
+The thirteenth implementation slice adds configured Google, Microsoft, and
+GitHub MCP login through the existing provider adapters. New grants bind Account,
+ExternalIdentity, and credential version; callback, consent, token exchange and
+refresh, request admission, and sensitive operations recheck current Account
+state. Legacy grants use only the permanent one-to-one map at initial generation
+1, and refresh persists the binding without adopting a newer generation.
+Production OAuth transactions use encrypted D1 session storage and atomic
+consumption. Consent no longer falls back to exposing raw provider subjects.
+
+The validated challenge and MCP checkpoints are published by this integration;
+implementation completion and delivery acceptance are still pending. The local
+fixture now also exercises provider selection and consent at `/oauth/authorize`.
+
+Next: finish browser/CLI legacy-session rotation and migration accounting,
+deployment-stage controls, and rollback/forward-recovery rehearsals. Then run the
+remaining acceptance matrix and prepare real-provider/email user acceptance.
 
 ## Decisions
 
@@ -576,18 +589,30 @@ rehearsals also remain before implementation completion.
   displayed `fixture-app`, and obtained HTTP 200 from `/admin/me` without
   horizontal overflow. Fixture routing includes the production compatibility
   adapter; initial fixture-only asset/routing omissions were corrected.
+- MCP Account/provider tests cover Google compatibility, Microsoft/GitHub
+  callbacks, route/provider mismatches, consent-time credential revocation,
+  request-time admission/authority checks, safe legacy mapping, and concurrent
+  D1 transaction consumption. The complete Cloudflare suite passed 282 tests
+  across 31 files after moving SQL into the existing storage/migration adapters.
+- MCP browser fixture checks at 1440px desktop and 390px mobile verified Account
+  labels without raw subject, focus, and non-overflowing consent/selector layout.
+  Microsoft and GitHub consent both reached the mock client completion endpoint.
+  No real provider credentials or external email were used.
+- Production Console/Worker build, Cloudflare typecheck, docs checks (3 tests),
+  and actual Wrangler deployment dry-run passed. Session-cleanup follow-up tests
+  passed 15 checks covering Worker routing and persisted session expiry/pruning.
 
 ## Blockers
 
-The earlier shared-ledger Claim evidence error is no longer reported after
-upgrading repoledger to 0.4.1 and refreshing remote main. Implementation can
-continue under the existing approved scope; the other identity retains ownership
-of Console navigation work.
+The navigation task owner's remote link, approval, and archive corrections were
+merged without rewriting its decisions. The only remaining pre-push diagnostic
+was archive publication reachability for an ancestor of the local merge; this
+integration publishes that ancestry and must be verified with `repoledger doctor`
+after push. No additional task-policy test has been restored.
 
-Checkpoint twelve's validated follow-up is ready for publication; the earlier
-implementation is preserved in the local WIP commit.
-The two concurrent test formatting changes were preserved in the user-requested
-WIP commit. No production deployment or real mail delivery was performed.
+Production provider registration, sender-domain onboarding, and real email
+delivery remain unverified. No production deployment was performed. The task
+remains ongoing until the remaining migration/rollout work and acceptance pass.
 
 ## Outcome
 
