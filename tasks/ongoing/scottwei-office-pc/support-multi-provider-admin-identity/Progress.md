@@ -160,8 +160,22 @@ two-stage link and guarded unlink routes using encrypted one-time continuations,
 then rotates to a session bound to the new credential version. The slice is
 published on `origin/main` as `63fcd90c5a39e08baafafbd8198da534b3681e06`.
 
-Next: publish the link/unlink checkpoint, then implement Account self-service
-protocol/client/Console surfaces and Account-keyed relationship commands.
+The eighth implementation slice is published. The administrator v2 protocol
+and client now expose Account self, profile update, and linked-identity reads
+without generic resource revisions. `AccountService` projects profile,
+verified contact, platform authorities, stable avatar fallback, linked login
+methods, and configured link choices; the D1 adapter persists field-level user
+profile choices. The BFF requires an Account-bound session, strict profile
+input, and CSRF for mutations. Link/unlink starts negotiate a JSON redirect for
+the Console while retaining redirect compatibility. The user menu opens a
+full-width Account view with profile editing, read-only verified contact,
+provider rows, fresh-auth link/unlink dialogs, and final-identity protection.
+The slice is published on `origin/main` as
+`46a6381eb61a89f84de87635cde52145e4d30fb6`.
+
+Next: replace remaining Principal-keyed administrator relationship commands
+and projections with Account-keyed contracts while retaining compatibility
+routes during migration.
 
 ## Decisions
 
@@ -426,6 +440,26 @@ protocol/client/Console surfaces and Account-keyed relationship commands.
   passed.
 - Fresh-auth link/unlink commit `63fcd90c5a39e08baafafbd8198da534b3681e06`
   was pushed and verified reachable from refreshed `origin/main`.
+- `@unicas/admin-protocol` passed all 102 tests across 7 files, including
+  Account endpoint, strict schema, route, OpenAPI, and image-fallback coverage;
+  protocol typecheck passed. The regenerated administrator v2 OpenAPI document
+  passed all 4 repository drift checks.
+- `@unicas/admin-client` passed all 18 transport tests and typecheck.
+  `@unicas/service` passed all 134 tests across 18 files and typecheck, including
+  Account self projection and field-level profile updates.
+- `@unicas/admin-webui` passed all 91 tests across 11 files, test and production
+  typechecks, and its Vite production build. Account workflow tests cover
+  profile PATCH without revision, configured-only link choices, fresh-auth
+  unlink with a remaining identity, and final-login protection.
+- The Miniflare Account flow proves self/profile/identity BFF operations and
+  JSON-negotiated link navigation before completing link/unlink with session
+  rotation. The full `@unicas/service-cloudflare` suite passed all 264 tests
+  across 29 files and typecheck passed. Editor diagnostics reported no errors
+  in the changed Account implementation files.
+- `pnpm check:tasks` passed all 17 ledger tasks and all 6 policy tests before
+  publication. Account self-service commit
+  `46a6381eb61a89f84de87635cde52145e4d30fb6` was pushed and verified reachable
+  from refreshed `origin/main`.
 
 ## Blockers
 
