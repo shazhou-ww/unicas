@@ -254,9 +254,23 @@ pre-launch replacement, superseding both earlier rollout proposals. Previously
 implemented compatibility paths are removal work, not completed target behavior.
 The principle does not authorize this session to clear unspecified resources.
 
-Next: remove legacy contracts/adapters and identity-keyed persistence from the
-affected administrator surfaces, along with dual writes, migration-only state,
-and old session/grant upgrades. Update consumers/tests and validate fresh Account
+The first no-legacy cleanup checkpoint removes browser/CLI session auto-upgrade,
+MCP grant mapping, obsolete session migration ports, and Principal/email-allowlist
+fallback admission in MCP OAuth. Old Account-unbound credentials require fresh
+login. Both MCP transports no longer register the 15 v1 tools or the
+`get_current_principal` alias. CLI dispatch and implementations for `principal`,
+`whoami`, `stacks`, `members`, `oauth-issuer`, `ref-domains`, and `audit` are
+removed. Existing current-tool tests retain security, ETag, idempotency, and audit
+coverage; retired entry points have explicit rejection assertions.
+
+Validation for this checkpoint: all workspace typechecks, 49 CLI tests,
+278 Cloudflare tests across 31 files, and 3 documentation tests passed. Normal
+current-session metadata, credential revocation, and client cookie updates remain.
+The cleanup performs no external data reset.
+
+Next: remove remaining legacy HTTP contracts/adapters and identity-keyed
+persistence, dual writes, and startup identity migration. Update consumers/tests
+and validate fresh Account
 initialization and explicit bootstrap. Do not build compatibility stage flags or
 cutover markers. Then complete the current-model and real-provider/email tests.
 

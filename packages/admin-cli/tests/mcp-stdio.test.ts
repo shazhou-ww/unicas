@@ -70,7 +70,7 @@ async function startStdioServer(fetchImpl: typeof fetch): Promise<{ stdin: PassT
 describe("unicas mcp (stdio server)", () => {
   test("answers initialize, lists the tool contract, and serves tools/call from the admin client", async () => {
     await seedSession();
-    const server = new FakeAdminApi();
+    const server = new FakeAdminApi({ adminVocabulary: "app" });
     const { stdin, reader, done } = await startStdioServer(server.fetch);
 
     stdin.write(`${JSON.stringify({
@@ -98,14 +98,14 @@ describe("unicas mcp (stdio server)", () => {
     const tools = (toolsList.result as { tools: Array<{ name: string }> }).tools;
     expect(tools.map((tool) => tool.name)).toEqual(TOOL_CATALOG.map((tool) => tool.name));
     expect(tools.map((tool) => tool.name)).toContain("mint_managed_space_capability");
-    expect(tools.map((tool) => tool.name)).toContain("get_oauth_issuer");
+    expect(tools.map((tool) => tool.name)).toContain("get_app_oauth_issuer");
     expect(tools.map((tool) => tool.name)).not.toContain("add_issuer_key");
 
     stdin.write(`${JSON.stringify({
       jsonrpc: "2.0",
       id: 3,
       method: "tools/call",
-      params: { name: "whoami", arguments: {} },
+      params: { name: "get_current_account", arguments: {} },
     })}\n`);
 
     const call = await reader.next();
@@ -116,7 +116,7 @@ describe("unicas mcp (stdio server)", () => {
     };
     expect(callResult.isError).toBe(false);
     expect(callResult.structuredContent).toMatchObject({
-      identity: { subject: "sub-1" },
+      account: { accountId: `acct_${"a".repeat(22)}` },
     });
     expect(callResult.structuredContent.memberships).toHaveLength(1);
 
@@ -125,9 +125,9 @@ describe("unicas mcp (stdio server)", () => {
       id: 4,
       method: "tools/call",
       params: {
-        name: "invite_member",
+        name: "invite_app_member",
         arguments: {
-          stackId: "cas_stack_a",
+          appId: "cas_stack_a",
           email: "alice@example.com",
           confirmEmail: "mallory@example.com",
           idempotencyKey: "invite-1",
@@ -150,7 +150,7 @@ describe("unicas mcp (stdio server)", () => {
     expect(me?.cookie).toContain("cas_admin_session=");
   });
 
-  test("serves the App identity through the version-distinct principal tool", async () => {
+  test("rejects the retired Principal alias and serves the current Account tool", async () => {
     await seedSession();
     const server = new FakeAdminApi({ adminVocabulary: "app" });
     const { stdin, reader, done } = await startStdioServer(server.fetch);
@@ -175,13 +175,7 @@ describe("unicas mcp (stdio server)", () => {
     })}\n`);
 
     const call = await reader.next();
-    expect(call.result).toMatchObject({
-      isError: false,
-      structuredContent: {
-        principal: { subject: "sub-1" },
-        memberships: [{ appId: "cas_stack_a" }],
-      },
-    });
+    expect(call.error ?? (call.result as { isError?: boolean })?.isError).toBeTruthy();
 
     stdin.write(`${JSON.stringify({
       jsonrpc: "2.0",
@@ -317,7 +311,7 @@ describe("unicas mcp (stdio server)", () => {
     })}\n`);
     await reader.next();
     stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized", params: {} })}\n`);
-    stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "whoami", arguments: {} } })}\n`);
+    stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_current_account", arguments: {} } })}\n`);
 
     const call = await reader.next();
     const callResult = call.result as { isError?: boolean; structuredContent?: { message?: string } };

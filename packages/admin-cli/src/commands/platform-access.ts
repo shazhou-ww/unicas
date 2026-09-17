@@ -3,7 +3,7 @@ import type { PlatformAuthority } from "@unicas/admin-client";
 import { printJson } from "../output.js";
 import type { CliContext } from "./common.js";
 import { confirmOrPrompt, requireSubcommand, withAdminClient } from "./common.js";
-import { parseBoundedLimit } from "./stacks.js";
+import { parseBoundedLimit } from "./common.js";
 
 export async function platformAccessCommand(ctx: CliContext, subcommand: string | undefined, argv: string[]): Promise<void> {
   requireSubcommand(subcommand, "usage: unicas platform-access list|get|grant|revoke|block|restore", ["list", "get", "grant", "revoke", "block", "restore"]);

@@ -46,8 +46,7 @@ tool call, so removing a member takes effect without waiting for token expiry.
 Current Platform Access is checked before OAuth grant issuance and on every MCP
 request. Platform tools additionally require `platform.admin`; `create_app`
 requires `apps.create`. Existing access and refresh grants cannot preserve
-revoked authority. `ADMIN_EMAIL_ALLOWLIST` is only a pre-migration fallback,
-not a current authorization source.
+revoked authority. Email allowlisting is not an MCP authorization source.
 
 Access tokens expire after 15 minutes. Refresh grants expire after 8 hours and
 refresh tokens rotate. Tokens are audience-bound to the canonical `/mcp`
@@ -57,9 +56,8 @@ New grants bind `accountId`, `externalIdentityId`, the exact authenticated
 issuer/subject, provider, and `credentialVersion`. The Account and current
 admission are checked at callback, consent, token exchange/refresh, and every
 MCP request. A credential-version change is never silently adopted by an old
-grant. Legacy grants resolve only through the permanent one-to-one migration
-map at initial version 1; blocked, changed, unlinked, and unmapped identities
-must sign in again. Refresh persists the resolved binding in grant properties.
+grant. Grants without a complete Account binding are rejected and require fresh
+login; no legacy identity mapping or credential upgrade is performed.
 
 Production authorization and consent transactions use encrypted records in
 control D1 and atomic deletion on use, with a ten-minute expiry. Outstanding
@@ -74,7 +72,7 @@ requirements are therefore identical.
 
 App read tools:
 
-- `get_current_account` (`get_current_principal` remains a deprecated alias)
+- `get_current_account`
 - `list_apps`, `get_app`, `list_app_members`
 - `get_app_oauth_issuer`, `get_app_managed_issuer`
 - `list_app_playground_file_roots`
@@ -121,9 +119,9 @@ ETag and exact `confirmInvitationId`; success returns only `{ etag }`. Creation
 returns `{ invitationId, acceptUrl, expiresAt, etag }`, and acceptance returns
 only `{ appId }`. App membership is checked by the server independently of scopes.
 
-The shared catalog is the authoritative tool inventory. The v1 tools, including `whoami`, `list_stacks`, and
-`list_root_domain_refs`, remain structurally unchanged for explicit compatibility.
-They are not aliases for the App tools.
+The shared catalog is the authoritative tool inventory. Retired v1 tools and
+the `get_current_principal` alias are not registered. Clients must use the
+current Account/App tools; no compatibility aliases are provided.
 
 An App's signing authority is exclusively a discovered OAuth issuer:
 the App inspection tool creates an independent candidate and does not disable

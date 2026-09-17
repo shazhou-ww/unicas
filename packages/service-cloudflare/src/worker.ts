@@ -36,7 +36,7 @@ import { D1PeopleRepository } from "./people-repository.js";
 import { D1AccountRepository } from "./account-repository.js";
 import { D1EmailChallengeRepository } from "./email-challenge-repository.js";
 import { CloudflareEmailChallengeSender } from "./email-challenge-sender.js";
-import { migrateLegacyAdminIdentities, resolveLegacyAccountCredential } from "./identity-migration.js";
+import { migrateLegacyAdminIdentities } from "./identity-migration.js";
 import { CloudflareOAuthDiscoveryPort } from "./oauth-discovery.js";
 import { CloudflareManagedIssuer } from "./managed-issuer.js";
 import {
@@ -397,7 +397,6 @@ function adminHandlerFor(env: Env): Promise<(request: Request) => Promise<Respon
         platformAuditRepository: platformRepository,
         peopleRepository: new D1PeopleRepository(env.CAS_CONTROL_DB),
         accountRepository,
-        resolveLegacyCredential: (issuer, subject) => resolveLegacyAccountCredential(env.CAS_CONTROL_DB, issuer, subject),
         emailChallengeRepository: new D1EmailChallengeRepository(env.CAS_CONTROL_DB),
         emailChallengeSender: env.EMAIL && config.emailFrom
           ? new CloudflareEmailChallengeSender(env.EMAIL, config.emailFrom)

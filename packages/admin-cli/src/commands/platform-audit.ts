@@ -3,7 +3,7 @@ import type { PlatformAuditAction } from "@unicas/admin-client";
 import { printJson } from "../output.js";
 import type { CliContext } from "./common.js";
 import { withAdminClient } from "./common.js";
-import { parseBoundedLimit } from "./stacks.js";
+import { parseBoundedLimit } from "./common.js";
 
 const actions = new Set<PlatformAuditAction>([
   "platform_invitation.created",

@@ -32,41 +32,31 @@ beforeEach(async () => {
 afterEach(async () => miniflare.dispose());
 
 describe("adapter-hosted control-plane MCP server", () => {
-  test("lists tools and maps whoami to the OAuth identity", async () => {
-    const handler = handlerFor(grant(["control:read"]));
+  test("lists only current tools and returns the Account identity", async () => {
+    const accountService = new AccountService(new D1AccountRepository(db));
+    const actor = await accountService.createForExternalIdentity({ provider: "google", issuer: "https://accounts.google.com", subject: "alice-sub", displayName: "Alice" });
+    const handler = handlerFor(grant(["control:read"]), { accountService });
     const listed = await mcpRequest(handler, "tools/list", {});
     const body = await listed.json() as { result: { tools: Array<{ name: string; description?: string }> } };
-    expect(body.result.tools.map((tool) => tool.name)).toEqual([
-      "whoami", ...APP_ADMIN_MCP_TOOL_LIST.map((tool) => tool.name),
-      "list_stacks", "get_stack", "list_members", "get_oauth_issuer",
-      "list_ref_domains", "list_control_audit_events",
-      "list_root_domain_refs", "list_root_domain_events", "create_stack",
-      "update_stack", "invite_member", "remove_member", "inspect_oauth_issuer", "activate_oauth_issuer",
-    ]);
+    expect(body.result.tools.map((tool) => tool.name)).toEqual(APP_ADMIN_MCP_TOOL_LIST.map((tool) => tool.name));
     for (const definition of APP_ADMIN_MCP_TOOL_LIST) {
       expect(body.result.tools.find((tool) => tool.name === definition.name)?.description)
         .toBe(definition.registration.description);
     }
-    const whoami = await callTool(handler, "whoami", {});
-    expect(whoami.structuredContent).toMatchObject({
-      identity: { subject: "alice-sub", displayName: "Alice", emailForDisplay: "alice@example.com" },
-      memberships: [],
-    });
-    const principal = await callTool(handler, "get_current_principal", {});
-    expect(principal.structuredContent).toMatchObject({
-      principal: { issuer: "https://accounts.google.com", subject: "alice-sub" },
-      profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+    const current = await callTool(handler, "get_current_account", {});
+    expect(current.structuredContent).toMatchObject({
+      account: { accountId: actor.account.accountId, displayName: "Alice" },
       memberships: [],
     });
   });
 
   test("enforces read, write, security, and deployment-policy gates", async () => {
-    expect((await callTool(handlerFor(grant([])), "whoami", {})).content[0]?.text).toContain("control:read");
-    expect((await callTool(handlerFor(grant(["control:write"])), "create_stack", {
+    expect((await callTool(handlerFor(grant([])), "get_current_account", {})).content[0]?.text).toContain("control:read");
+    expect((await callTool(handlerFor(grant(["control:write"])), "create_app", {
       displayName: "Operations", idempotencyKey: "create-ops-1",
     })).content[0]?.text).toContain("disabled by deployment policy");
-    expect((await callTool(handlerFor(grant(["control:write"]), { mutationsEnabled: true }), "invite_member", {
-      stackId: "cas_stack", email: "bob@example.com", confirmEmail: "bob@example.com", idempotencyKey: "invite-1",
+    expect((await callTool(handlerFor(grant(["control:write"]), { mutationsEnabled: true }), "invite_app_member", {
+      appId: "cas_app", email: "bob@example.com", confirmEmail: "bob@example.com", idempotencyKey: "invite-1",
     })).content[0]?.text).toContain("control:security");
     expect((await callTool(handlerFor(grant(["control:security"])), "mint_managed_space_capability", {
       appId: "cas_app",
@@ -98,25 +88,6 @@ describe("adapter-hosted control-plane MCP server", () => {
     expect(await db.prepare("SELECT COUNT(*) AS count FROM cas_apps").first()).toEqual({ count: 0 });
   });
 
-  test("creates idempotent stacks, records MCP audit attribution, and guards writes with ETags", async () => {
-    const handler = handlerFor(grant(["control:read", "control:write"]), { mutationsEnabled: true });
-    const first = await callTool(handler, "create_stack", { displayName: "Operations", idempotencyKey: "create-ops-1" });
-    expect(first.structuredContent).toMatchObject({ displayName: "Operations", revision: 1, etag: '"1"' });
-    const replay = await callTool(handler, "create_stack", { displayName: "Operations", idempotencyKey: "create-ops-1" });
-    expect(replay.structuredContent.stackId).toBe(first.structuredContent.stackId);
-    const stale = await callTool(handler, "update_stack", { stackId: first.structuredContent.stackId, description: "Production", etag: '"0"' });
-    expect(stale).toMatchObject({ isError: true, structuredContent: { error: "REVISION_MISMATCH" } });
-    const updated = await callTool(handler, "update_stack", { stackId: first.structuredContent.stackId, description: "Production", etag: '"1"' });
-    expect(updated.structuredContent).toMatchObject({ description: "Production", revision: 2, etag: '"2"' });
-    const audit = await callTool(handler, "list_control_audit_events", { stackId: first.structuredContent.stackId, limit: 10 });
-    const items = audit.structuredContent.items as Array<Record<string, unknown>>;
-    expect(items.find((item) => item.action === "stack.created")).toMatchObject({
-      caller: {
-        channel: "mcp", oauthClientHandle: "a".repeat(64), toolName: "create_stack",
-      }
-    });
-  });
-
   test("serves App CRUD and audit without exposing Stack-shaped fields", async () => {
     const accountService = new AccountService(new D1AccountRepository(db), () => 1000);
     const actorAccount = await accountService.createForExternalIdentity({
@@ -139,6 +110,9 @@ describe("adapter-hosted control-plane MCP server", () => {
     });
     expect(created.structuredContent).not.toHaveProperty("stackId");
     const appId = String(created.structuredContent.appId);
+
+    expect((await callTool(handler, "create_app", { displayName: "Documents", idempotencyKey: "create-app-1" })).structuredContent).toEqual(created.structuredContent);
+    expect((await callTool(handler, "update_app", { appId, description: "Stale", etag: '"0"' })).structuredContent).toMatchObject({ error: "REVISION_MISMATCH" });
 
     const listed = await callTool(handler, "list_apps", { limit: 10 });
     expect(listed.structuredContent).toMatchObject({ items: [{ appId, displayName: "Documents" }] });
@@ -378,66 +352,6 @@ describe("adapter-hosted control-plane MCP server", () => {
       etag: '"1"',
       confirmRootId: "root-1",
     })).structuredContent).toEqual({ ok: true });
-  });
-
-  test("invites, lists, and removes members through the extracted admin service", async () => {
-    const handler = handlerFor(grant(["control:read", "control:write", "control:security"]), { mutationsEnabled: true });
-    const stack = await callTool(handler, "create_stack", { displayName: "Members", idempotencyKey: "members-stack-1" });
-    const stackId = String(stack.structuredContent.stackId);
-    const invitation = await callTool(handler, "invite_member", {
-      stackId,
-      email: "bob@example.com",
-      confirmEmail: "bob@example.com",
-      idempotencyKey: "invite-bob-1",
-    });
-    const replay = await callTool(handler, "invite_member", {
-      stackId,
-      email: "bob@example.com",
-      confirmEmail: "bob@example.com",
-      idempotencyKey: "invite-bob-1",
-    });
-    expect(replay.structuredContent).toEqual(invitation.structuredContent);
-    const acceptUrl = String(invitation.structuredContent.acceptUrl);
-    const token = acceptUrl.split("/").pop()!;
-    expect(await createControlPlaneOperations(db).acceptMemberInvitation({
-      identity: { identityIssuer: "https://accounts.google.com", subject: "bob-sub" },
-      profile: { displayName: "Bob", emailForDisplay: "bob@example.com" },
-      verifiedEmailEvidence: [emailEvidence("bob@example.com", "bob-auth")],
-    }, { path: { token } })).toMatchObject({ subject: "bob-sub", displayName: "Bob" });
-    const members = await callTool(handler, "list_members", { stackId, limit: 10 });
-    expect(members.structuredContent.items).toEqual([
-      expect.objectContaining({ subject: "alice-sub" }),
-      expect.objectContaining({ subject: "bob-sub", displayName: "Bob", emailForDisplay: "bob@example.com" }),
-    ]);
-    const stale = await callTool(handler, "remove_member", {
-      stackId,
-      identityIssuer: "https://accounts.google.com",
-      subject: "bob-sub",
-      confirmSubject: "bob-sub",
-      etag: '"0"',
-    });
-    expect(stale).toMatchObject({ isError: true, structuredContent: { error: "REVISION_MISMATCH" } });
-    expect((await callTool(handler, "remove_member", {
-      stackId,
-      identityIssuer: "https://accounts.google.com",
-      subject: "bob-sub",
-      confirmSubject: "bob-sub",
-      etag: '"1"',
-    })).structuredContent).toEqual({ ok: true });
-  });
-
-  test("reads adapter-provided root-domain audit data", async () => {
-    const auditReader = {
-      fetch: async (input: RequestInfo | URL) => {
-        const url = new URL(String(input));
-        expect(url.pathname).toBe("/_internal/audit/domains");
-        return Response.json({ domains: [{ stackId: url.searchParams.get("stackId"), refDomain: "doc", revision: 2 }] });
-      }
-    };
-    const handler = handlerFor(grant(["control:read", "control:write"]), { mutationsEnabled: true, auditReader });
-    const stack = await callTool(handler, "create_stack", { displayName: "Audit", idempotencyKey: "create-audit-1" });
-    expect((await callTool(handler, "list_ref_domains", { stackId: stack.structuredContent.stackId })).structuredContent)
-      .toEqual({ domains: [{ stackId: stack.structuredContent.stackId, refDomain: "doc", revision: 2 }] });
   });
 
   test("maps physical audit dimensions to App and Space MCP output", async () => {

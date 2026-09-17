@@ -10,15 +10,11 @@ import { appOAuthIssuerCommand } from "../src/commands/app-oauth-issuer.js";
 import { appRefDomainsCommand } from "../src/commands/app-refdomains.js";
 import { appsCommand } from "../src/commands/apps.js";
 import { logoutCommand } from "../src/commands/logout.js";
-import { membersCommand } from "../src/commands/members.js";
-import { oauthIssuerCommand } from "../src/commands/oauth-issuer.js";
-import { accountCommand, principalCommand } from "../src/commands/principal.js";
+import { accountCommand } from "../src/commands/principal.js";
 import { platformInvitationsCommand } from "../src/commands/platform-invitations.js";
 import { platformAuditCommand } from "../src/commands/platform-audit.js";
 import { platformAccessCommand } from "../src/commands/platform-access.js";
-import { stacksCommand } from "../src/commands/stacks.js";
 import { statusCommand } from "../src/commands/status.js";
-import { whoamiCommand } from "../src/commands/whoami.js";
 import type { TokenStore } from "../src/store.js";
 import { FAKE_ORIGIN, FakeAdminApi } from "./helpers/fake-server.js";
 
@@ -61,7 +57,7 @@ describe("command layer", () => {
   test("persists server-rotated session credentials", async () => {
     await seedLoggedIn(ctx.store);
     const previous = await ctx.store.load();
-    const server = new FakeAdminApi();
+    const server = new FakeAdminApi({ adminVocabulary: "app" });
     const rotating = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, async (input, init) => {
       const response = await server.fetch(input, init);
       response.headers.set("Set-Cookie", "cas_admin_session=rotated; HttpOnly; Path=/admin");
@@ -69,38 +65,16 @@ describe("command layer", () => {
       return response;
     });
     captureStdout();
-    await whoamiCommand(rotating);
+    await accountCommand(rotating);
     expect(await ctx.store.load()).toMatchObject({ ...previous, cookie: "cas_admin_session=rotated", csrfToken: "rotated-csrf", savedAt: expect.any(Number) });
   });
 
-  test("whoami prints the operator identity as JSON", async () => {
-    await seedLoggedIn(ctx.store);
-    const server = new FakeAdminApi();
-    ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
-    const { writes } = captureStdout();
-    await whoamiCommand(ctx);
-    const parsed = JSON.parse(writes.join("")) as { identity: { subject: string } };
-    expect(parsed.identity.subject).toBe("sub-1");
-    expect(server.requests[0]!.cookie).toContain("cas_admin_session=");
-  });
-
-  test("whoami fails with exit code 2 when not logged in", async () => {
-    await expect(whoamiCommand(ctx)).rejects.toMatchObject({
+  test("account fails with exit code 2 when not logged in", async () => {
+    await expect(accountCommand(ctx)).rejects.toMatchObject({
       name: "CliError",
       exitCode: 2,
       message: /unicas login/,
     });
-  });
-
-  test("principal prints the App administrator identity as JSON", async () => {
-    await seedLoggedIn(ctx.store);
-    const server = new FakeAdminApi({ adminVocabulary: "app" });
-    ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
-    const { writes } = captureStdout();
-    await principalCommand(ctx);
-    const parsed = JSON.parse(writes.join("")) as { principal: { subject: string }; memberships: Array<{ appId: string }> };
-    expect(parsed.principal.subject).toBe("sub-1");
-    expect(parsed.memberships).toEqual([expect.objectContaining({ appId: "cas_stack_a" })]);
   });
 
   test("account prints stable Account data without Principal identity", async () => {
@@ -339,40 +313,12 @@ describe("command layer", () => {
     ])).rejects.toThrow(/confirm-account-id/);
   });
 
-  test("stacks create auto-generates an idempotency key", async () => {
+  test("apps update can change only the description", async () => {
     await seedLoggedIn(ctx.store);
-    const server = new FakeAdminApi();
+    const server = new FakeAdminApi({ adminVocabulary: "app" });
     ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
-    const { writes } = captureStdout();
-    await stacksCommand(ctx, "create", ["Ops"]);
-    const parsed = JSON.parse(writes.join("")) as { stackId: string; displayName: string };
-    expect(parsed.stackId).toBe("cas_stack_new");
-    expect(parsed.displayName).toBe("Ops");
-    const create = server.requests.find((request) => request.method === "POST" && request.pathname === "/admin/stacks")!;
-    expect((create.body as { displayName: string }).displayName).toBe("Ops");
-    expect(server.requests.some((request) => request.pathname === "/admin/stacks" && request.method === "POST")).toBe(true);
-  });
-
-  test("stacks update resolves the current ETag when none is passed", async () => {
-    await seedLoggedIn(ctx.store);
-    const server = new FakeAdminApi();
-    ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
-    const { writes } = captureStdout();
-    await stacksCommand(ctx, "update", ["cas_stack_a", "Renamed"]);
-    const parsed = JSON.parse(writes.join("")) as { displayName: string };
-    expect(parsed.displayName).toBe("Renamed");
-    const get = server.requests.find((request) => request.method === "GET" && request.pathname === "/admin/stacks/cas_stack_a")!;
-    expect(get).toBeDefined();
-    const patch = server.requests.find((request) => request.method === "PATCH")!;
-    expect(patch.pathname).toBe("/admin/stacks/cas_stack_a");
-    expect(patch.body).toMatchObject({ displayName: "Renamed" });
-  });
-
-  test("stacks update can change only the description", async () => {
-    await seedLoggedIn(ctx.store);
-    const server = new FakeAdminApi();
-    ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
-    await stacksCommand(ctx, "update", ["cas_stack_a", "--description", "Production"]);
+    captureStdout();
+    await appsCommand(ctx, "update", ["cas_app_a", "--description", "Production"]);
     const patch = server.requests.find((request) => request.method === "PATCH")!;
     expect(patch.body).toEqual({ description: "Production" });
   });
@@ -386,37 +332,6 @@ describe("command layer", () => {
     expect(writes.join("")).toMatch(/Ended the UniCAS admin session/);
     expect(await ctx.store.load()).toEqual({ adminOrigin: "", cookie: "", csrfToken: "" });
     expect(server.requests.some((request) => request.pathname === "/admin/auth/logout" && request.method === "POST")).toBe(true);
-  });
-
-  test("a non-TTY destructive command demands an explicit confirmation flag", async () => {
-    await seedLoggedIn(ctx.store);
-    const server = new FakeAdminApi();
-    ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
-    await expect(
-      membersCommand(ctx, "remove", [
-        "cas_stack_a",
-        "--identity-issuer",
-        "https://accounts.google.com",
-        "--subject",
-        "bob",
-        "--etag",
-        '"rev-3"',
-      ]),
-    ).rejects.toThrow(/confirm-subject/);
-  });
-
-  test("OAuth issuer inspect and activate use the standard discovery flow", async () => {
-    await seedLoggedIn(ctx.store);
-    const server = new FakeAdminApi();
-    ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
-    const { writes } = captureStdout();
-    await oauthIssuerCommand(ctx, "inspect", ["cas_stack_a", "https://issuer.example"]);
-    expect(JSON.parse(writes.join(""))).toMatchObject({ inspectionId: "oinsp_test", status: "pending" });
-    writes.length = 0;
-    await oauthIssuerCommand(ctx, "activate", ["cas_stack_a", "oinsp_test", "--activation-proof", "proof"]);
-    expect(JSON.parse(writes.join(""))).toMatchObject({ status: "active", revision: 2 });
-    expect(server.requests.some((request) => request.pathname.endsWith("/oauth-issuer") && request.method === "GET")).toBe(true);
-    expect(server.requests.some((request) => request.pathname.endsWith("/oauth-issuer") && request.method === "PUT")).toBe(true);
   });
 
   test("App OAuth issuer inspect and activate use App routes and ETags", async () => {

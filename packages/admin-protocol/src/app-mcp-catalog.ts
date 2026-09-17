@@ -47,16 +47,6 @@ export const APP_ADMIN_MCP_TOOLS = {
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
   }),
-  get_current_principal: tool({
-    name: "get_current_principal",
-    requiredScope: "control:read",
-    registration: {
-      title: "Current UniCAS Principal",
-      description: "Deprecated compatibility alias returning the current administrator response. Use get_current_account.",
-      inputSchema: z.object({}),
-      annotations: { readOnlyHint: true, destructiveHint: false },
-    },
-  }),
   list_apps: tool({
     name: "list_apps",
     requiredScope: "control:read",

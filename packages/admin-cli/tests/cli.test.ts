@@ -26,8 +26,8 @@ describe("cli dispatch", () => {
     expect(output).toContain("unicas app-oauth-issuer inspect");
     expect(output).toContain("unicas app-audit root-domain-refs");
     expect(output).toContain("--space-id S");
-    expect(output).toContain("Legacy v1 compatibility");
-    expect(output).toContain("unicas stacks create");
+    expect(output).not.toContain("Legacy v1 compatibility");
+    expect(output).not.toContain("unicas stacks create");
   });
 
   test("prints help when invoked without arguments", async () => {
@@ -46,6 +46,10 @@ describe("cli dispatch", () => {
 
   test("rejects an unknown command", async () => {
     await expect(main(["frobnicate"])).rejects.toThrow(/unknown command 'frobnicate'/);
+  });
+
+  test.each(["principal", "whoami", "stacks", "members", "oauth-issuer", "ref-domains", "audit"])("rejects retired command %s without a compatibility alias", async command => {
+    await expect(main([command])).rejects.toThrow(`unknown command '${command}'`);
   });
 
   test("dispatches the App command family before session access", async () => {

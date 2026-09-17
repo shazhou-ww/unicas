@@ -118,14 +118,6 @@ class MemorySessionRepository implements ControlSessionRepository {
     fakeSessions.delete(sessionId);
   }
 
-  async rotateLegacy(input: Parameters<NonNullable<ControlSessionRepository["rotateLegacy"]>>[0]): Promise<boolean> {
-    const previous = fakeSessions.get(input.previousSessionId);
-    if (!previous || previous.encryptedPayload !== input.previousEncryptedPayload) return false;
-    fakeSessions.set(input.sessionId, { ...previous, sessionId: input.sessionId, encryptedPayload: input.encryptedPayload });
-    fakeSessions.delete(input.previousSessionId);
-    return true;
-  }
-
   async pruneExpired(): Promise<number> {
     const expired = [...fakeSessions.values()].filter((session) => session.expiresAt <= this.#now());
     for (const session of expired) fakeSessions.delete(session.sessionId);
@@ -946,42 +938,32 @@ async function signInAs(
 }
 
 describe("cas-admin-webui BFF", () => {
-  test("persists legacy session rotation before mutation and denies changed generations", async () => {
+  test("rejects retired sessions without upgrading them or executing mutations", async () => {
     const platform = new MemoryPlatformAccessRepository();
     platform.grant(ISSUER, "legacy-subject");
     const repository = memoryAccountRepository(platform, "legacy-subject");
-    const binding = { accountId: testAccountId("legacy-subject"), externalIdentityId: "ext-legacy-subject" };
     const sessions = new MemorySessionRepository();
     const keys = { current: randomKey() };
     const cryptography = new SessionCrypto(keys);
     const controlPlane = fakeControlPlane();
-    const audit = vi.spyOn(controlPlane, "recordSessionAudit").mockImplementation(async context => {
-      expect(fakeSessions.has("old-session")).toBe(false);
-      expect(context.account).toMatchObject({ ...binding, credentialVersion: 1 });
-    });
+    const patch = vi.spyOn(repository, "getAccount");
     const bff = createAdminBff({
       config: { googleClientId: CLIENT_ID, googleClientSecret: CLIENT_SECRET, sessionEncryptionKeys: keys, publicOrigin: PUBLIC_ORIGIN, sessionCookieSecure: false },
       sessionStore: sessions, controlPlane, platformAccessRepository: platform, accountRepository: repository,
-      resolveLegacyCredential: async () => binding,
     });
     const legacy = { v: 1 as const, authenticated: true, identityIssuer: ISSUER, subject: "legacy-subject", displayName: "Legacy", emailForDisplay: null, csrfToken: "old-csrf" };
     await sessions.create("old-session", await cryptography.encrypt(legacy), 60_000);
-    expect((await authRequest(bff, "/admin/auth/logout", "cas_admin_session=old-session", { method: "POST" })).status).toBe(403);
-    expect(fakeSessions.has("old-session")).toBe(true);
     const read = await authRequest(bff, "/admin/account", "cas_admin_session=old-session");
-    expect(read.status).toBe(200);
-    expect(read.headers.get("X-CSRF-Token")).toBeTruthy();
+    expect(read.status).toBe(401);
+    expect(read.headers.get("Set-Cookie")).toBeNull();
     expect(fakeSessions.has("old-session")).toBe(false);
-    const replacement = cookieFrom(read)!;
-    const persisted = await cryptography.decrypt((await sessions.read(replacement.split("=")[1]!))!.encryptedPayload);
-    expect(persisted).toMatchObject({ ...binding, credentialVersion: 1 });
     await sessions.create("old-session", await cryptography.encrypt(legacy), 60_000);
-    expect((await authRequest(bff, "/admin/auth/logout", "cas_admin_session=old-session", { method: "POST", headers: { "X-CSRF-Token": "old-csrf" } })).status).toBe(204);
-    expect(audit).toHaveBeenCalledTimes(1);
-    const account = await repository.getAccount(binding.accountId);
-    vi.spyOn(repository, "getAccount").mockResolvedValue({ ...account!, credentialVersion: 2 });
-    await sessions.create("old-session", await cryptography.encrypt(legacy), 60_000);
-    expect((await authRequest(bff, "/admin/account", "cas_admin_session=old-session")).status).toBe(401);
+    expect((await authRequest(bff, "/admin/account/profile", "cas_admin_session=old-session", {
+      method: "PATCH", headers: { "X-CSRF-Token": "old-csrf", "Content-Type": "application/json" },
+      body: JSON.stringify({ displayName: "Changed" }),
+    })).status).toBe(401);
+    expect(patch).not.toHaveBeenCalled();
+    expect(fakeSessions.size).toBe(0);
   });
 
   test("unauthenticated visitors land on a login page before OIDC", async () => {

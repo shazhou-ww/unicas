@@ -27,7 +27,6 @@ export interface ControlPlaneMcpEnvConfig {
   SESSION_ENCRYPTION_KEYS?: string;
   OIDC_ISSUER?: string;
   OIDC_DISCOVERY_URL?: string;
-  ADMIN_EMAIL_ALLOWLIST?: string;
   CAS_AUDIT_READER_KEY?: string;
   MCP_MUTATIONS_ENABLED?: string;
 }
@@ -43,16 +42,6 @@ export function mcpConfigFromEnv(env: ControlPlaneMcpEnvConfig): ControlPlaneMcp
     resource: `${publicOrigin}/mcp`,
     allowedOriginHostnames: [...new Set(configuredOrigins)],
   };
-}
-
-export function emailAllowed(email: string | null, configuredAllowlist: string | undefined): boolean {
-  if (email === null) return false;
-  if (configuredAllowlist === undefined) return true;
-  const allowed = new Set(configuredAllowlist
-    .split(",")
-    .map((value) => value.trim().toLowerCase())
-    .filter((value) => value.length > 0));
-  return allowed.size > 0 && allowed.has(email.toLowerCase());
 }
 
 function normalizeOrigin(value: string): string {

@@ -9,7 +9,7 @@ import {
   requireSubcommand,
   withAdminClient,
 } from "./common.js";
-import { parseBoundedLimit } from "./stacks.js";
+import { parseBoundedLimit } from "./common.js";
 
 export async function appMembersCommand(ctx: CliContext, subcommand: string | undefined, argv: string[]): Promise<void> {
   requireSubcommand(subcommand, "usage: unicas app-members list|invite|remove|invitations|revoke-invitation", ["list", "invite", "remove", "invitations", "revoke-invitation"]);

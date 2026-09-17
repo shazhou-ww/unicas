@@ -22,7 +22,6 @@ import type { ControlPlaneMcpEnvConfig } from "./config.js";
 import { createControlPlaneMcpServer } from "./server.js";
 import type { ControlPlaneMcpGrantProps } from "./server.js";
 import {
-  bindLegacyMcpCredential,
   checkMcpAccountAccess,
 } from "./platform-access.js";
 
@@ -80,14 +79,12 @@ export function createControlPlaneMcpWorker(
       ctx: ExecutionContext,
     ): Promise<Response> {
       const requestConfig = mcpConfigFromEnv(env);
-      const originalProps = (ctx as ExecutionContextWithProps).props;
-      if (!originalProps)
+      const props = (ctx as ExecutionContextWithProps).props;
+      if (!props)
         return Response.json(
           { error: "MCP_AUTH_CONTEXT_MISSING" },
           { status: 500 },
         );
-      const props = await bindLegacyMcpCredential(env.CAS_CONTROL_DB, originalProps);
-      if (!props) return Response.json({ error: "MCP_ACCESS_NOT_ALLOWED" }, { status: 403 });
       const platformRepository = new D1PlatformAccessRepository(env.CAS_CONTROL_DB);
       const platformAccess = new PlatformAccessService(platformRepository);
       const accountService = new AccountService(new D1AccountRepository(env.CAS_CONTROL_DB));
@@ -148,13 +145,12 @@ export function createControlPlaneMcpWorker(
       if (!props || typeof props.identityIssuer !== "string" || typeof props.subject !== "string") {
         throw new OAuthError("invalid_grant", { description: "Account credential is unavailable" });
       }
-      const bound = await bindLegacyMcpCredential(database, props as ControlPlaneMcpGrantProps);
-      if (!bound) throw new OAuthError("invalid_grant", { description: "Account credential is unavailable" });
-      const accessError = await checkMcpAccountAccess(new AccountService(new D1AccountRepository(database)), bound);
+      const grant = props as ControlPlaneMcpGrantProps;
+      const accessError = await checkMcpAccountAccess(new AccountService(new D1AccountRepository(database)), grant);
       if (accessError) throw new OAuthError(accessError.status === 503 ? "temporarily_unavailable" : "invalid_grant", {
         description: "Account credential is unavailable",
       });
-      return { newProps: bound, accessTokenProps: { ...bound, scopes: requestedScope } };
+      return { accessTokenProps: { ...grant, scopes: requestedScope } };
     },
     resourceMetadata: {
       resource: config.resource,

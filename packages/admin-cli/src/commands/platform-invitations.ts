@@ -3,7 +3,7 @@ import type { PlatformAuthority } from "@unicas/admin-client";
 import { printJson } from "../output.js";
 import type { CliContext } from "./common.js";
 import { confirmOrPrompt, idempotencyKeyFromFlag, requireSubcommand, withAdminClient } from "./common.js";
-import { parseBoundedLimit } from "./stacks.js";
+import { parseBoundedLimit } from "./common.js";
 
 export async function platformInvitationsCommand(
   ctx: CliContext,

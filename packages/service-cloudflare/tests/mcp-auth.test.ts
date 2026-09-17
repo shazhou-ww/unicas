@@ -1,7 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { migrateControlSchema } from "../src/control-schema.js";
-import { bindLegacyMcpCredential } from "../src/mcp/platform-access.js";
 import { ControlSessionStore } from "../src/control-sessions.js";
 import type {
   AuthRequest,
@@ -11,7 +10,8 @@ import type {
 import type { OidcClient } from "@unicas/control-auth";
 import { AccountServiceError, ProviderRegistry, type AccountResolution, type ProviderAdapter } from "@unicas/service";
 import {
-  createOAuthAuthorizationHandler,
+  createOAuthAuthorizationHandler as createHandler,
+  type OAuthAuthorizationHandlerOptions,
   type OAuthAuthorizationEnv,
 } from "../src/mcp/auth.js";
 
@@ -26,6 +26,22 @@ const oauthRequest: AuthRequest = {
   resource: "https://cas.example/mcp",
   issuer: "https://cas.example",
 };
+
+const accountResolution = {
+  account: { accountId: `acct_${"a".repeat(22)}`, credentialVersion: 1 },
+  authenticatedIdentity: { externalIdentityId: "external-1", issuer: "https://accounts.example", subject: "alice-sub" },
+  platformAuthorities: ["apps.create"], hasAppMembership: false,
+} as AccountResolution;
+
+function createOAuthAuthorizationHandler(options: Partial<OAuthAuthorizationHandlerOptions>) {
+  return createHandler({
+    accountServiceFactory: () => ({
+      resolveExternalIdentity: async () => accountResolution,
+      authorizeCredential: async () => accountResolution,
+    }),
+    ...options,
+  });
+}
 
 describe("control-plane MCP OAuth authorization", () => {
   test("atomically consumes production D1 callback transactions once", async () => {
@@ -45,32 +61,9 @@ describe("control-plane MCP OAuth authorization", () => {
       const responses = await Promise.all([callback(), callback()]);
       expect(responses.map(response => response.status).sort()).toEqual([200, 400]);
       const accountId = `acct_${"a".repeat(22)}`;
-      await database.batch([
-        database.prepare("INSERT INTO cas_accounts (account_id, credential_version, created_at, updated_at) VALUES (?, 1, 1, 1)").bind(accountId),
-        database.prepare("INSERT INTO cas_external_identities (external_identity_id, account_id, provider, issuer, subject, linked_at) VALUES ('legacy-ext', ?, 'google', 'https://accounts.example', 'legacy-sub', 1)").bind(accountId),
-        database.prepare("INSERT INTO cas_identity_migration_map (identity_issuer, subject, account_id, external_identity_id, created_at) VALUES ('https://accounts.example', 'legacy-sub', ?, 'legacy-ext', 1)").bind(accountId),
-      ]);
-      const legacy = { identityIssuer: "https://accounts.example", subject: "legacy-sub" };
-      expect(await bindLegacyMcpCredential(database, legacy)).toMatchObject({ accountId, externalIdentityId: "legacy-ext", credentialVersion: 1 });
       const sessions = new ControlSessionStore(database, () => 1000);
-      await sessions.create("new-browser", "encrypted", 500, { accountId, externalIdentityId: "legacy-ext", credentialVersion: 1 });
-      expect(await database.prepare("SELECT account_id, external_identity_id, credential_version FROM cas_admin_sessions WHERE session_id = 'new-browser'").first()).toEqual({ account_id: accountId, external_identity_id: "legacy-ext", credential_version: 1 });
-      await sessions.create("legacy-browser", "old-encrypted-payload", 500);
-      const rotation = {
-        previousSessionId: "legacy-browser", previousEncryptedPayload: "old-encrypted-payload",
-        encryptedPayload: "new-encrypted-payload", accountId, externalIdentityId: "legacy-ext", credentialVersion: 1,
-      };
-      const rotations = await Promise.all([
-        sessions.rotateLegacy({ ...rotation, sessionId: "rotated-one" }),
-        sessions.rotateLegacy({ ...rotation, sessionId: "rotated-two" }),
-      ]);
-      expect(rotations.filter(Boolean)).toHaveLength(1);
-      expect(await sessions.read("legacy-browser")).toBeNull();
-      expect(await sessions.read(rotations[0] ? "rotated-one" : "rotated-two")).toMatchObject({ expiresAt: 1500 });
-      expect(await database.prepare("SELECT mapped_count FROM cas_identity_migration_journal WHERE stage = 'browser-cli-session-rotation'").first()).toEqual({ mapped_count: 1 });
-      await database.prepare("UPDATE cas_accounts SET credential_version = 2 WHERE account_id = ?").bind(accountId).run();
-      expect(await bindLegacyMcpCredential(database, legacy)).toBeNull();
-      expect(await bindLegacyMcpCredential(database, { ...legacy, subject: "unmapped" })).toBeNull();
+      await sessions.create("new-browser", "encrypted", 500, { accountId, externalIdentityId: "current-ext", credentialVersion: 1 });
+      expect(await database.prepare("SELECT account_id, external_identity_id, credential_version FROM cas_admin_sessions WHERE session_id = 'new-browser'").first()).toEqual({ account_id: accountId, external_identity_id: "current-ext", credential_version: 1 });
     } finally {
       await runtime.dispose();
     }
@@ -166,10 +159,10 @@ describe("control-plane MCP OAuth authorization", () => {
 
   test("authenticates with Google, requires consent, and completes a scoped grant", async () => {
     const fixture = createFixture();
-    const authorizePrincipal = vi.fn(async () => "allowed" as const);
+    const resolveExternalIdentity = vi.fn(async () => accountResolution);
     const handler = createOAuthAuthorizationHandler({
       oidcFactory: () => fixture.oidc,
-      authorizePrincipal,
+      accountServiceFactory: () => ({ resolveExternalIdentity, authorizeCredential: async () => accountResolution }),
     });
 
     const started = await handler.fetch(new Request("https://cas.example/oauth/authorize"), fixture.env);
@@ -200,10 +193,7 @@ describe("control-plane MCP OAuth authorization", () => {
     expect(callback.headers.get("Content-Security-Policy"))
       .toContain("form-action https://cas.example https://vscode.dev");
     expect(callback.headers.get("Referrer-Policy")).toBe("no-referrer");
-    expect(authorizePrincipal).toHaveBeenCalledWith(fixture.env, {
-      issuer: "https://accounts.example",
-      subject: "alice-sub",
-    });
+    expect(resolveExternalIdentity).toHaveBeenCalledWith("https://accounts.example", "alice-sub");
     const consentId = hiddenValue(consentHtml, "consent_id");
     const csrfToken = hiddenValue(consentHtml, "csrf_token");
     const consentCookie = cookieFrom(callback);
@@ -235,6 +225,9 @@ describe("control-plane MCP OAuth authorization", () => {
     expect(completed.userId).not.toContain("alice-sub");
     expect(completed.metadata).not.toMatchObject({ clientId: oauthRequest.clientId });
     expect(completed.props).toEqual({
+      accountId: accountResolution.account.accountId,
+      externalIdentityId: "external-1",
+      credentialVersion: 1,
       authProvider: "google",
       authenticatedAt: expect.any(Number),
       identityIssuer: "https://accounts.example",
@@ -257,9 +250,12 @@ describe("control-plane MCP OAuth authorization", () => {
     expect(JSON.stringify(completed.props)).not.toContain("google-access-token");
   });
 
-  test("rejects a verified Google identity outside the current allowlist", async () => {
-    const fixture = createFixture({ allowlist: "operator@example.com" });
-    const handler = createOAuthAuthorizationHandler({ oidcFactory: () => fixture.oidc });
+  test("rejects a verified Google identity without an Account", async () => {
+    const fixture = createFixture();
+    const handler = createOAuthAuthorizationHandler({
+      oidcFactory: () => fixture.oidc,
+      accountServiceFactory: () => ({ resolveExternalIdentity: async () => null, authorizeCredential: async () => accountResolution }),
+    });
     const started = await handler.fetch(new Request("https://cas.example/oauth/authorize"), fixture.env);
     const transactionId = new URL(started.headers.get("Location")!).searchParams.get("state")!;
     const callback = await handler.fetch(new Request(
@@ -271,11 +267,10 @@ describe("control-plane MCP OAuth authorization", () => {
     expect(fixture.completeAuthorization).not.toHaveBeenCalled();
   });
 
-  test("current platform admission replaces the legacy email allowlist for MCP grants", async () => {
-    const fixture = createFixture({ allowlist: "operator@example.com" });
+  test("current Account admission permits MCP consent", async () => {
+    const fixture = createFixture();
     const handler = createOAuthAuthorizationHandler({
       oidcFactory: () => fixture.oidc,
-      authorizePrincipal: async () => "allowed",
     });
     const started = await handler.fetch(new Request("https://cas.example/oauth/authorize"), fixture.env);
     const transactionId = new URL(started.headers.get("Location")!).searchParams.get("state")!;
@@ -296,7 +291,13 @@ describe("control-plane MCP OAuth authorization", () => {
       const fixture = createFixture();
       const handler = createOAuthAuthorizationHandler({
         oidcFactory: () => fixture.oidc,
-        authorizePrincipal: async () => authorization,
+        accountServiceFactory: () => ({
+          resolveExternalIdentity: async () => {
+            if (authorization === "unavailable") throw new Error("offline");
+            return { ...accountResolution, platformAuthorities: [] };
+          },
+          authorizeCredential: async () => accountResolution,
+        }),
       });
       const started = await handler.fetch(new Request("https://cas.example/oauth/authorize"), fixture.env);
       const transactionId = new URL(started.headers.get("Location")!).searchParams.get("state")!;
@@ -357,7 +358,7 @@ describe("control-plane MCP OAuth authorization", () => {
   });
 });
 
-function createFixture(options: { allowlist?: string; request?: AuthRequest } = {}) {
+function createFixture(options: { request?: AuthRequest } = {}) {
   const kv = new Map<string, string>();
   const completeAuthorization = vi.fn(async (_options: CompleteAuthorizationOptions) => ({
     redirectTo: "https://vscode.dev/redirect?code=unicas-code",
@@ -411,7 +412,6 @@ function createFixture(options: { allowlist?: string; request?: AuthRequest } = 
     PUBLIC_ORIGIN: "https://legacy.example",
     OAUTH_STATE_ENCRYPTION_KEY: btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""),
     OIDC_ISSUER: "https://accounts.example",
-    ADMIN_EMAIL_ALLOWLIST: options.allowlist,
   };
   return { env, kv, oidc, completeAuthorization };
 }

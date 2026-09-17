@@ -7,8 +7,7 @@ Platform Access, then redirects the browser back to the CLI's loopback with a on
 that the CLI exchanges (PKCE) for a session cookie + CSRF token, persisted
 locally. The CLI never talks to Google and needs no client id or secret.
 Commands call the typed `@unicas/admin-client` over the `/admin` HTTP API;
-`unicas mcp` exposes the same 47-tool contract (32 App/platform tools plus 15 frozen v1
-tools) as the MCP ingress hosted by
+`unicas mcp` exposes the same current App/Account tool contract as the MCP ingress hosted by
 `@unicas/service-cloudflare` as a stdio MCP server backed by that client (for
 clients whose MCP support cannot do OAuth, for example DeepSeek Harness).
 
@@ -19,7 +18,7 @@ https://console.unicas.work/admin  <- /admin control-plane API (BFF session)
 unicas CLI  <- /admin/auth/cli/authorize (BFF does Google OIDC) -> cli/exchange
         |     persists ~/.unicas/session.json
         |
-        +-- plain commands:   unicas principal / unicas apps list ...
+        +-- plain commands:   unicas account / unicas apps list ...
         `-- stdio MCP server: unicas mcp   (DSH: command "unicas", args ["mcp"])
 ```
 
@@ -50,8 +49,7 @@ pnpm --filter @unicas/admin-cli unicas login
    `unicas-cli`, S256 PKCE, loopback redirect).
 2. The BFF redirects to Google (its own confidential client + secret,
    server-side), the operator signs in and consents, and the BFF verifies
-   current Platform Access by immutable Principal. The email allowlist is only
-   a pre-migration fallback when Platform Access is not configured.
+  current Account admission before issuing a session.
 3. The BFF redirects the browser back to the CLI's loopback with a one-time
    code; the CLI validates `state`, then POSTs `{ code, codeVerifier }` to
    `/admin/auth/cli/exchange` and receives the session cookie + CSRF token.
@@ -63,7 +61,6 @@ pnpm --filter @unicas/admin-cli unicas login
 | Command | MCP tool |
 | --- | --- |
 | `unicas account` | `get_current_account` |
-| `unicas principal` (deprecated compatibility alias) | `get_current_principal` |
 | `unicas apps list [--limit N] [--cursor C]` | `list_apps` |
 | `unicas apps get <appId>` | `get_app` |
 | `unicas apps create <displayName> [--idempotency-key K]` | `create_app` |
@@ -91,16 +88,17 @@ pnpm --filter @unicas/admin-cli unicas login
 | `unicas mcp` | Run as a stdio MCP server |
 
 MCP additionally exposes App invitation acceptance, managed issuer/capability,
-and Principal-owned Playground root operations. `whoami`, `stacks`, `members`,
-`oauth-issuer`, `ref-domains`, and `audit` retain their v1 Stack/Tenant schemas
-as explicitly labeled compatibility commands.
+and Account-owned Playground root operations. Retired commands (`principal`,
+`whoami`, `stacks`, `members`, `oauth-issuer`, `ref-domains`, and `audit`) are
+not supported and have no compatibility aliases. Use the current commands above.
+Old credentials without Account binding require a new login instead of migration.
 
 Plain commands print the tool's `structuredContent` as JSON on stdout;
 diagnostics go to stderr.
 
 ## Guardrails
 
-- **ETags.** App update, member removal, issuer activation, and MCP Playground mutations
+- **ETags.** App update, issuer activation, and MCP Playground mutations
   need the current ETag. When `--etag` is omitted the CLI reads it first
   (`get_app` / `get_app_oauth_issuer`).
 - **Platform authority.** Every platform command requires current

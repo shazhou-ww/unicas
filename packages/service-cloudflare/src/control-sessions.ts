@@ -62,33 +62,6 @@ export class ControlSessionStore implements ControlSessionRepository {
     };
   }
 
-  async rotateLegacy(input: Parameters<NonNullable<ControlSessionRepository["rotateLegacy"]>>[0]): Promise<boolean> {
-    const now = this.#now();
-    try {
-      await this.#db.batch([
-        this.#db.prepare(
-          `INSERT INTO cas_admin_sessions
-            (session_id, encrypted_payload, expires_at, created_at, last_seen_at, account_id, external_identity_id, credential_version)
-           SELECT ?, ?, expires_at, ?, ?, ?, ?, ? FROM cas_admin_sessions
-           WHERE session_id = ? AND encrypted_payload = ? AND expires_at > ?`,
-        ).bind(input.sessionId, input.encryptedPayload, now, now, input.accountId, input.externalIdentityId,
-          input.credentialVersion, input.previousSessionId, input.previousEncryptedPayload, now),
-        this.#db.prepare("SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('invalid', '$') END AS rotated"),
-        this.#db.prepare("DELETE FROM cas_admin_sessions WHERE session_id = ?").bind(input.previousSessionId),
-        this.#db.prepare(
-          `INSERT INTO cas_identity_migration_journal (stage, source_count, mapped_count, failure_count, completed_at)
-           VALUES ('browser-cli-session-rotation', 1, 1, 0, ?)
-           ON CONFLICT(stage) DO UPDATE SET source_count = source_count + 1,
-             mapped_count = mapped_count + 1, completed_at = excluded.completed_at`,
-        ).bind(now),
-      ]);
-      return true;
-    } catch (error) {
-      if (error instanceof Error && /malformed JSON/i.test(error.message)) return false;
-      throw error;
-    }
-  }
-
   async delete(sessionId: string): Promise<void> {
     await this.#db
       .prepare("DELETE FROM cas_admin_sessions WHERE session_id = ?")

@@ -207,13 +207,4 @@ export interface ControlSessionRepository {
   touch(sessionId: string, ttlMs: number): Promise<void>;
   delete(sessionId: string): Promise<void>;
   pruneExpired(): Promise<number>;
-  rotateLegacy?(input: {
-    readonly previousSessionId: string;
-    readonly previousEncryptedPayload: string;
-    readonly sessionId: string;
-    readonly encryptedPayload: string;
-    readonly accountId: string;
-    readonly externalIdentityId: string;
-    readonly credentialVersion: number;
-  }): Promise<boolean>;
 }

@@ -9,7 +9,7 @@ import {
   resolveAppEtag,
   withAdminClient,
 } from "./common.js";
-import { parseBoundedLimit } from "./stacks.js";
+import { parseBoundedLimit } from "./common.js";
 
 export async function appsCommand(ctx: CliContext, subcommand: string | undefined, argv: string[]): Promise<void> {
   requireSubcommand(subcommand, "usage: unicas apps list|get|create|update", ["list", "get", "create", "update"]);

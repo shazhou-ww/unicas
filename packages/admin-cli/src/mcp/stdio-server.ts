@@ -64,22 +64,6 @@ export async function runMcpStdioServer(options: McpStdioServerOptions): Promise
 }
 
 type ToolHandler = (admin: AdminClient, args: Record<string, unknown>) => Promise<unknown>;
-type LegacyToolName =
-  | "whoami"
-  | "list_stacks"
-  | "get_stack"
-  | "list_members"
-  | "get_oauth_issuer"
-  | "list_ref_domains"
-  | "list_control_audit_events"
-  | "list_root_domain_refs"
-  | "list_root_domain_events"
-  | "create_stack"
-  | "update_stack"
-  | "invite_member"
-  | "remove_member"
-  | "inspect_oauth_issuer"
-  | "activate_oauth_issuer";
 
 function registerCatalogTool(
   server: McpServer,
@@ -235,16 +219,8 @@ const TOOL_HANDLERS = {
     return admin.revokeAppMemberInvitation({ appId: str(args.appId), invitationId: str(args.invitationId) }, str(args.etag));
   },
 
-  async whoami(admin) {
-    return admin.me();
-  },
-
   async get_current_account(admin) {
     return currentAccountOutput(await admin.getCurrentPrincipal());
-  },
-
-  async get_current_principal(admin) {
-    return admin.getCurrentPrincipal();
   },
 
   async list_apps(admin, args) {
@@ -417,103 +393,7 @@ const TOOL_HANDLERS = {
       pick(args, ["spaceId", "after", "limit"]),
     );
   },
-
-  async list_stacks(admin, args) {
-    return admin.listStacks(pick(args, ["limit", "cursor"]));
-  },
-
-  async get_stack(admin, args) {
-    return (await admin.getStack({ stackId: str(args.stackId) })).value;
-  },
-
-  async create_stack(admin, args) {
-    return admin.createStack(
-      { displayName: str(args.displayName) },
-      { idempotencyKey: args.idempotencyKey as string | undefined },
-    );
-  },
-
-  async update_stack(admin, args) {
-    const stackId = str(args.stackId);
-    const etag = await resolveEtag(admin, () => admin.getStack({ stackId }), "stack", args.etag);
-    const { value } = await admin.patchStack(
-      { stackId },
-      {
-        ...(args.displayName !== undefined ? { displayName: str(args.displayName) } : {}),
-        ...(args.description !== undefined ? { description: str(args.description) } : {}),
-      },
-      etag,
-    );
-    return value;
-  },
-
-  async list_members(admin, args) {
-    return admin.listMembers({ stackId: str(args.stackId) }, pick(args, ["limit", "cursor"]));
-  },
-
-  async invite_member(admin, args) {
-    requireMatch(args.confirmEmail, args.email, "confirmEmail must exactly match the invited email");
-    return admin.createMemberInvitation(
-      { stackId: str(args.stackId) },
-      { emailConstraint: str(args.email) },
-      { idempotencyKey: args.idempotencyKey as string | undefined },
-    );
-  },
-
-  async remove_member(admin, args) {
-    const stackId = str(args.stackId);
-    const identityIssuer = str(args.identityIssuer);
-    const subject = str(args.subject);
-    requireMatch(args.confirmSubject, subject, "confirmSubject must exactly match subject");
-    const etag = await resolveEtag(admin, () => admin.getStack({ stackId }), "stack", args.etag);
-    return admin.deleteMember({ stackId }, { identityIssuer, subject }, etag);
-  },
-
-  async get_oauth_issuer(admin, args) {
-    const result = await admin.getOAuthIssuer({ stackId: str(args.stackId) });
-    return { ...result.value, etag: result.etag };
-  },
-
-  async inspect_oauth_issuer(admin, args) {
-    const result = await admin.inspectOAuthIssuer(
-      { stackId: str(args.stackId) },
-      { issuer: str(args.issuer) },
-    );
-    return { ...result.value, etag: result.etag };
-  },
-
-  async activate_oauth_issuer(admin, args) {
-    const stackId = str(args.stackId);
-    const etag = await resolveEtag(admin, () => admin.getOAuthIssuer({ stackId }), "OAuth issuer", args.etag);
-    const result = await admin.activateOAuthIssuer({ stackId }, {
-      inspectionId: str(args.inspectionId),
-      activationProof: str(args.activationProof),
-    }, etag);
-    return { ...result.value, etag: result.etag };
-  },
-
-  async list_ref_domains(admin, args) {
-    return admin.listRefDomains({ stackId: str(args.stackId) });
-  },
-
-  async list_control_audit_events(admin, args) {
-    return admin.listControlAuditEvents({ stackId: str(args.stackId) }, pick(args, ["limit", "cursor"]));
-  },
-
-  async list_root_domain_refs(admin, args) {
-    return admin.listRootDomainRefs(
-      { stackId: str(args.stackId), refDomain: str(args.refDomain) },
-      pick(args, ["tenantId", "limit", "cursor"]),
-    );
-  },
-
-  async list_root_domain_events(admin, args) {
-    return admin.listRootDomainEvents(
-      { stackId: str(args.stackId), refDomain: str(args.refDomain) },
-      pick(args, ["tenantId", "after", "limit"]),
-    );
-  },
-} satisfies Readonly<Record<AppAdminMcpToolName | LegacyToolName, ToolHandler>>;
+} satisfies Readonly<Record<AppAdminMcpToolName, ToolHandler>>;
 
 function currentAccountOutput(current: Awaited<ReturnType<AdminClient["getCurrentPrincipal"]>>) {
   return {

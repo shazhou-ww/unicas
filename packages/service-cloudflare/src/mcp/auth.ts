@@ -9,9 +9,9 @@ import {
   OidcClient,
   s256Challenge,
 } from "@unicas/control-auth";
-import { CONTROL_PLANE_MCP_SCOPES, emailAllowed } from "./config.js";
+import { CONTROL_PLANE_MCP_SCOPES } from "./config.js";
 import type { ControlPlaneMcpGrantProps } from "./server.js";
-import { ProviderRegistry, type AccountService, type ProviderAdapter, type VerifiedEmailEvidence } from "@unicas/service";
+import { AccountServiceError, ProviderRegistry, type AccountService, type ProviderAdapter, type VerifiedEmailEvidence } from "@unicas/service";
 import type { ProviderKind } from "@unicas/admin-protocol";
 import { checkMcpAccountAccess, type McpAccountCredential } from "./platform-access.js";
 import { GoogleProviderAdapter, createGitHubProvider, createMicrosoftPersonalProvider } from "../admin-bff/providers.js";
@@ -37,14 +37,11 @@ export interface OAuthAuthorizationEnv {
   OAUTH_STATE_ENCRYPTION_KEY?: string;
   OIDC_ISSUER?: string;
   OIDC_DISCOVERY_URL?: string;
-  ADMIN_EMAIL_ALLOWLIST?: string;
 }
 
-export type PrincipalAuthorizationResult = "allowed" | "denied" | "unavailable";
-
-interface PendingGoogleAuthorization {
-  readonly kind: "google" | "provider";
-  readonly provider?: ProviderKind;
+interface PendingProviderAuthorization {
+  readonly kind: "provider";
+  readonly provider: ProviderKind;
   readonly oauthRequest: AuthRequest;
   readonly oidcNonce: string;
   readonly oidcCodeVerifier: string;
@@ -53,7 +50,7 @@ interface PendingGoogleAuthorization {
 interface PendingConsent {
   readonly kind: "consent";
   readonly oauthRequest: AuthRequest;
-  readonly identity: McpAccountCredential & {
+  readonly identity: Required<McpAccountCredential> & {
     readonly authProvider?: ProviderKind;
     readonly authenticatedAt?: number;
     readonly identityIssuer: string;
@@ -66,19 +63,15 @@ interface PendingConsent {
   readonly csrfToken: string;
 }
 
-type PendingAuthorization = PendingGoogleAuthorization | PendingConsent;
+type PendingAuthorization = PendingProviderAuthorization | PendingConsent;
 
 export interface OAuthAuthorizationHandlerOptions {
   readonly oidcFactory?: (env: OAuthAuthorizationEnv) => OidcClient;
   readonly providerRegistryFactory?: (env: OAuthAuthorizationEnv) => ProviderRegistry;
-  readonly accountServiceFactory?: (env: OAuthAuthorizationEnv) => Pick<AccountService, "resolveExternalIdentity" | "authorizeCredential">;
-  readonly authorizePrincipal?: (
-    env: OAuthAuthorizationEnv,
-    principal: { readonly issuer: string; readonly subject: string },
-  ) => Promise<PrincipalAuthorizationResult>;
+  readonly accountServiceFactory: (env: OAuthAuthorizationEnv) => Pick<AccountService, "resolveExternalIdentity" | "authorizeCredential">;
 }
 
-export function createOAuthAuthorizationHandler(options: OAuthAuthorizationHandlerOptions = {}) {
+export function createOAuthAuthorizationHandler(options: OAuthAuthorizationHandlerOptions) {
   return {
     async fetch(request: Request, env: OAuthAuthorizationEnv): Promise<Response> {
       const url = new URL(request.url);
@@ -162,7 +155,7 @@ async function finishProviderAuthentication(
     return authFailure("Invalid or expired authorization state");
   }
   const transaction = await takeTransaction(env, transactionId);
-  if (!transaction || transaction.kind === "consent" || (transaction.provider ?? "google") !== provider) {
+  if (!transaction || transaction.kind !== "provider" || transaction.provider !== provider) {
     return authFailure("Invalid or expired authorization state");
   }
   try {
@@ -175,33 +168,15 @@ async function finishProviderAuthentication(
       nonce: transaction.oidcNonce,
       authenticationEventId: randomToken(),
     });
-    let accountBinding: Pick<ControlPlaneMcpGrantProps, "accountId" | "externalIdentityId" | "credentialVersion"> = {};
-    if (options.accountServiceFactory) {
-      const account = await options.accountServiceFactory(env).resolveExternalIdentity(
-        identity.issuer, identity.subject,
-      );
-      if (!account || (!account.hasAppMembership && account.platformAuthorities.length === 0)) {
-        return authFailure("This account is not allowed to access the UniCAS control plane", 403);
-      }
-      accountBinding = {
-        accountId: account.account.accountId,
-        externalIdentityId: account.authenticatedIdentity.externalIdentityId,
-        credentialVersion: account.account.credentialVersion,
-      };
-    } else if (options.authorizePrincipal) {
-      const admission = await options.authorizePrincipal(env, {
-        issuer: identity.issuer,
-        subject: identity.subject,
-      });
-      if (admission === "denied") {
-        return authFailure("This account is not allowed to access the UniCAS control plane", 403);
-      }
-      if (admission === "unavailable") {
-        return authFailure("Platform access could not be verified", 503);
-      }
-    } else if (!identity.verifiedEmailEvidence.some(evidence => emailAllowed(evidence.normalizedEmail, env.ADMIN_EMAIL_ALLOWLIST))) {
+    const account = await options.accountServiceFactory(env).resolveExternalIdentity(identity.issuer, identity.subject);
+    if (!account || (!account.hasAppMembership && account.platformAuthorities.length === 0)) {
       return authFailure("This account is not allowed to access the UniCAS control plane", 403);
     }
+    const accountBinding = {
+      accountId: account.account.accountId,
+      externalIdentityId: account.authenticatedIdentity.externalIdentityId,
+      credentialVersion: account.account.credentialVersion,
+    };
     const client = await oauthProvider(env).lookupClient(transaction.oauthRequest.clientId);
     if (!client) return authFailure("OAuth client is no longer registered");
     const consentId = randomToken();
@@ -232,8 +207,8 @@ async function finishProviderAuthentication(
       publicOrigin,
       clientRedirectOrigin,
     );
-  } catch {
-    return authFailure("Authentication could not be completed");
+  } catch (error) {
+    return authFailure("Authentication could not be completed", error instanceof AccountServiceError ? 403 : 503);
   }
 }
 
@@ -260,10 +235,8 @@ async function finishConsent(request: Request, env: OAuthAuthorizationEnv, optio
   if (decision !== "approve") {
     return oauthDeniedRedirect(pending.oauthRequest);
   }
-  if (options.accountServiceFactory) {
-    const error = await checkMcpAccountAccess(options.accountServiceFactory(env), pending.identity);
-    if (error) return error;
-  }
+  const error = await checkMcpAccountAccess(options.accountServiceFactory(env), pending.identity);
+  if (error) return error;
   const grantedScopes = pending.oauthRequest.scope.filter(
     (scope): scope is (typeof CONTROL_PLANE_MCP_SCOPES)[number] =>
       CONTROL_PLANE_MCP_SCOPES.includes(scope as (typeof CONTROL_PLANE_MCP_SCOPES)[number]),
@@ -278,7 +251,7 @@ async function finishConsent(request: Request, env: OAuthAuthorizationEnv, optio
   };
   const { redirectTo } = await oauthProvider(env).completeAuthorization({
     request: pending.oauthRequest,
-    userId: pending.identity.accountId ?? await identityHandle(pending.identity.identityIssuer, pending.identity.subject),
+    userId: pending.identity.accountId,
     metadata: {
       clientHandle: oauthClientHandle,
       clientName: pending.clientName,
@@ -607,10 +580,6 @@ function readCookie(request: Request, name: string): string | null {
 
 function randomToken(): string {
   return base64UrlEncode(crypto.getRandomValues(new Uint8Array(24)));
-}
-
-async function identityHandle(issuer: string, subject: string): Promise<string> {
-  return sha256Hex(`${issuer}\0${subject}`);
 }
 
 async function sha256Hex(value: string): Promise<string> {

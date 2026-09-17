@@ -46,23 +46,6 @@ export class IdentityMigrationError extends Error {
   }
 }
 
-export async function resolveLegacyAccountCredential(
-  database: D1Database,
-  issuer: string,
-  subject: string,
-): Promise<{ accountId: AccountId; externalIdentityId: string } | null> {
-  return database.prepare(
-    `SELECT mapping.account_id AS accountId, mapping.external_identity_id AS externalIdentityId
-     FROM cas_identity_migration_map mapping
-     JOIN cas_accounts account ON account.account_id = mapping.account_id
-     JOIN cas_external_identities identity ON identity.external_identity_id = mapping.external_identity_id
-     WHERE mapping.identity_issuer = ? AND mapping.subject = ?
-       AND identity.account_id = mapping.account_id AND identity.issuer = mapping.identity_issuer
-       AND identity.subject = mapping.subject AND identity.unlinked_at IS NULL
-       AND account.blocked_at IS NULL AND account.credential_version = 1`,
-  ).bind(issuer, subject).first<{ accountId: AccountId; externalIdentityId: string }>();
-}
-
 export async function migrateLegacyAdminIdentities(
   db: D1Database,
   options: {
