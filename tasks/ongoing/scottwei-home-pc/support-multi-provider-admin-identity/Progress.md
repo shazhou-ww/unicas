@@ -54,7 +54,7 @@ legacy service CRUD, repository port, and protocol types are deleted. The D1
 table and the managed-capability refDomain's internal legacy name remain only
 until the planned schema cleanup; neither is externally callable as Playground.
 
-The eighth no-legacy cleanup checkpoint is ready to publish. App ref-domain,
+The eighth no-legacy cleanup checkpoint is published as `44d7e51`. App ref-domain,
 Root Ref balance, and Root Ref event HTTP reads now bypass legacy `/admin/stacks`
 routing and authorize directly through stable `(accountId, appId)` membership.
 Remote MCP audit reads use the same Account authorization and no longer call
