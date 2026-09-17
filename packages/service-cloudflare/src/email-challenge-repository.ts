@@ -166,7 +166,18 @@ export class D1EmailChallengeRepository implements EmailChallengeRepository {
          last_sent_at = ?
        WHERE challenge_id = ? AND send_count = ? AND last_sent_at = ?
          AND verified_at IS NULL AND consumed_at IS NULL AND invalidated_at IS NULL AND expires_at > ?
-         AND attempt_count < max_attempts`,
+         AND attempt_count < max_attempts
+         AND NOT EXISTS (
+           SELECT 1 FROM cas_email_challenges history
+           WHERE history.invitation_kind = ? AND history.invitation_id = ?
+             AND history.invitation_token_hash = ? AND history.identity_issuer = ?
+             AND history.subject = ? AND history.normalized_email = ? AND history.last_sent_at > ?
+         ) AND COALESCE((
+           SELECT SUM(history.send_count) FROM cas_email_challenges history
+           WHERE history.invitation_kind = ? AND history.invitation_id = ?
+             AND history.invitation_token_hash = ? AND history.identity_issuer = ?
+             AND history.subject = ? AND history.normalized_email = ? AND history.last_sent_at > ?
+         ), 0) < ?`,
     ).bind(
       input.codeHash,
       input.now,
@@ -174,6 +185,21 @@ export class D1EmailChallengeRepository implements EmailChallengeRepository {
       record.sendCount,
       record.lastSentAt,
       input.now,
+      record.invitationKind,
+      record.invitationId,
+      record.invitationTokenHash,
+      record.issuer,
+      record.subject,
+      record.normalizedEmail,
+      input.now - input.minimumIntervalMs,
+      record.invitationKind,
+      record.invitationId,
+      record.invitationTokenHash,
+      record.issuer,
+      record.subject,
+      record.normalizedEmail,
+      input.now - input.windowMs,
+      input.maxSends,
     ).run();
     return result.meta.changes === 1
       ? { kind: "resent", expiresAt: record.expiresAt }

@@ -220,8 +220,14 @@ as `fa54fc2`. The repoledger upgrade to pinned version 0.4.1 is committed as
 neither local commit has been pushed. `repoledger doctor` now passes, and
 `repoledger status` confirms this task remains owned by `scottwei-office-pc`.
 
-Next: finish challenge browser checks and security regression coverage before
-publishing checkpoint twelve. Remote MCP still needs shared provider login
+Challenge browser and focused regression checks are now complete locally.
+The [local browser fixture](./ChallengeFixture.mts) exercises the real BFF,
+App compatibility adapter, D1 challenge and invitation transactions with a fake
+Microsoft provider and fake email sender. It listens only on loopback and sends
+no external email. Run it with `pnpm --filter @unicas/admin-protocol exec tsx
+--conditions=development ../../tasks/ongoing/scottwei-office-pc/support-multi-provider-admin-identity/ChallengeFixture.mts`.
+
+Next: publish checkpoint twelve, then implement remote MCP shared provider login
 and Account-bound credential-version enforcement; deployment-stage and rollback
 rehearsals also remain before implementation completion.
 
@@ -559,6 +565,17 @@ rehearsals also remain before implementation completion.
   prints commands; it is not the Wrangler dry-run validation.
 - A focused D1 rerun passed 4 tests after binding verification's compare-and-set
   to the code hash, including a deterministic resend-versus-verify race.
+- The aggregate resend-budget regression initially reproduced a bypass; resend
+  now checks the same cross-callback send window inside its atomic UPDATE.
+  D1/BFF/platform invitation regressions passed all 63 tests after the fix.
+  A test-only invitation deadline was extended beyond the simulated resend
+  interval to remove a 60-second expiry-boundary flake.
+- Browser inspection at 1440px desktop and 390px mobile widths verified the
+  actual challenge page, masked destination, invalid-code feedback, focus, and
+  layout. The full browser flow verified the challenge, accepted the invitation,
+  displayed `fixture-app`, and obtained HTTP 200 from `/admin/me` without
+  horizontal overflow. Fixture routing includes the production compatibility
+  adapter; initial fixture-only asset/routing omissions were corrected.
 
 ## Blockers
 
@@ -567,8 +584,8 @@ upgrading repoledger to 0.4.1 and refreshing remote main. Implementation can
 continue under the existing approved scope; the other identity retains ownership
 of Console navigation work.
 
-Checkpoint twelve is committed as WIP but remains unpublished and incomplete.
-Challenge browser validation and remaining security checks are still required.
+Checkpoint twelve's validated follow-up is ready for publication; the earlier
+implementation is preserved in the local WIP commit.
 The two concurrent test formatting changes were preserved in the user-requested
 WIP commit. No production deployment or real mail delivery was performed.
 

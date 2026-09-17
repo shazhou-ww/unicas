@@ -382,13 +382,13 @@ class MemoryPlatformAccessRepository implements PlatformAccessRepository, Platfo
     this.members.delete(this.key({ issuer, subject }));
   }
 
-  async addInvitation(token: string, emailConstraint: string | null): Promise<void> {
+  async addInvitation(token: string, emailConstraint: string | null, expiresAt = Date.now() + 60_000): Promise<void> {
     this.invitations.set(await sha256Hex(token), {
       invitationId: "invitation-1",
       appId: "app-invited",
       status: "pending",
       emailConstraint,
-      expiresAt: Date.now() + 60_000,
+      expiresAt,
     });
   }
 
@@ -1092,7 +1092,7 @@ describe("cas-admin-webui BFF", () => {
     let clock = Date.now();
     const token = "m".repeat(32);
     const platform = new MemoryPlatformAccessRepository();
-    await platform.addInvitation(token, "alice@example.com");
+    await platform.addInvitation(token, "alice@example.com", clock + 600_000);
     const challengeRepository = new MemoryEmailChallengeRepository();
     const deliveries: { to: string; code: string }[] = [];
     const microsoft: ProviderAdapter = {

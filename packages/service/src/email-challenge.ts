@@ -58,6 +58,7 @@ export interface EmailChallengeRepository {
     readonly codeHash: string;
     readonly now: number;
     readonly minimumIntervalMs: number;
+    readonly windowMs: number;
     readonly maxSends: number;
   }): Promise<
     | { readonly kind: "resent"; readonly expiresAt: number }
@@ -216,6 +217,7 @@ export class EmailChallengeService {
       codeHash: await hashCode(input.challengeId, secret, code),
       now,
       minimumIntervalMs: this.#resendIntervalMs,
+      windowMs: this.#ttlMs,
       maxSends: this.#maxSends,
     });
     if (result.kind !== "resent") throw new EmailChallengeError();

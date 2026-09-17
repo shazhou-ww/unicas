@@ -90,10 +90,11 @@ describe("D1 email challenge repository", () => {
     await expect(service.create({ ...input, authenticationEventId: "authentication-event-2" }))
       .rejects.toBeInstanceOf(EmailChallengeError);
     now += 100;
-    await service.create({ ...input, authenticationEventId: "authentication-event-2" });
+    const latest = await service.create({ ...input, authenticationEventId: "authentication-event-2" });
     now += 100;
     await expect(service.create({ ...input, authenticationEventId: "authentication-event-3" }))
       .rejects.toBeInstanceOf(EmailChallengeError);
+    await expect(service.resend(latest)).rejects.toBeInstanceOf(EmailChallengeError);
   });
 
   test("enforces exact bindings, expiry, attempt limits, and resend limits atomically", async () => {
