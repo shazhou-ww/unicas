@@ -8,6 +8,26 @@ const STACK = "cas_stack_a";
 const APP = "cas_app_a";
 const ACCOUNT = `acct_${"a".repeat(22)}`;
 
+it("persists rotated cookies and CSRF before the next request", async () => {
+  let saved: AdminClientSession | null = null;
+  const requests: Headers[] = [];
+  const client = createAdminClient({
+    baseUrl: "https://admin.test",
+    getSession: async () => ({ cookie: "cas_admin_session=old", csrfToken: "old-csrf" }),
+    onSessionChanged: async next => { saved = next; },
+    fetcher: async (_input, init) => {
+      requests.push(new Headers(init?.headers));
+      return Response.json({ identity: {}, memberships: [] }, {
+        headers: requests.length === 1 ? { "Set-Cookie": "cas_admin_session=new; HttpOnly; Path=/admin", "X-CSRF-Token": "new-csrf" } : {},
+      });
+    },
+  });
+  await client.me();
+  expect(saved).toEqual({ cookie: "cas_admin_session=new", csrfToken: "new-csrf" });
+  await client.me();
+  expect(requests[1]!.get("Cookie")).toBe("cas_admin_session=new");
+});
+
 /** Minimal in-memory fake of the /admin BFF API. */
 class MockAdminService {
   readonly requests: { path: string; search: string; method: string; cookie: string | null; origin: string | null; csrf: string | null; ifMatch: string | null; idempotencyKey: string | null; body?: string }[] = [];

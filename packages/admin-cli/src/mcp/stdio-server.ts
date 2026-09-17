@@ -39,13 +39,17 @@ export async function runMcpStdioServer(options: McpStdioServerOptions): Promise
   const holder: { admin?: AdminClient } = {};
   const getOrCreateAdmin = async (): Promise<AdminClient> => {
     if (holder.admin !== undefined) return holder.admin;
-    const session = await options.store.load();
+    let session = await options.store.load();
     if (session.cookie.length === 0 || session.csrfToken.length === 0) {
       throw new Error("Not logged in. Run `unicas login` first.");
     }
     holder.admin = createAdminClient({
       baseUrl: options.adminOrigin,
       getSession: async () => ({ cookie: session.cookie, csrfToken: session.csrfToken }),
+      onSessionChanged: async next => {
+        session = { ...session, ...next };
+        await options.store.save(session);
+      },
       fetcher: options.fetchImpl,
     });
     return holder.admin;

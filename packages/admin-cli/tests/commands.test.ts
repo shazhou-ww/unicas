@@ -58,6 +58,21 @@ async function seedLoggedIn(store: TokenStore): Promise<void> {
 }
 
 describe("command layer", () => {
+  test("persists server-rotated session credentials", async () => {
+    await seedLoggedIn(ctx.store);
+    const previous = await ctx.store.load();
+    const server = new FakeAdminApi();
+    const rotating = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, async (input, init) => {
+      const response = await server.fetch(input, init);
+      response.headers.set("Set-Cookie", "cas_admin_session=rotated; HttpOnly; Path=/admin");
+      response.headers.set("X-CSRF-Token", "rotated-csrf");
+      return response;
+    });
+    captureStdout();
+    await whoamiCommand(rotating);
+    expect(await ctx.store.load()).toMatchObject({ ...previous, cookie: "cas_admin_session=rotated", csrfToken: "rotated-csrf", savedAt: expect.any(Number) });
+  });
+
   test("whoami prints the operator identity as JSON", async () => {
     await seedLoggedIn(ctx.store);
     const server = new FakeAdminApi();

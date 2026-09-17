@@ -55,11 +55,15 @@ export async function withAdminClient<T>(
   ctx: CliContext,
   fn: (admin: AdminClient) => Promise<T>,
 ): Promise<T> {
-  const session = await ctx.store.load();
+  let session = await ctx.store.load();
   requireLoggedIn(session);
   const admin = createAdminClient({
     baseUrl: ctx.config.adminOrigin,
     getSession: async () => ({ cookie: session.cookie, csrfToken: session.csrfToken }),
+    onSessionChanged: async next => {
+      session = { ...session, ...next };
+      await ctx.store.save(session);
+    },
     fetcher: ctx.fetchImpl,
   });
   return fn(admin);

@@ -198,9 +198,22 @@ export interface StoredSession {
 
 /** Cloud-neutral persistence port for BFF login and authenticated sessions. */
 export interface ControlSessionRepository {
-  create(sessionId: string, encryptedPayload: string, ttlMs: number): Promise<void>;
+  create(sessionId: string, encryptedPayload: string, ttlMs: number, account?: {
+    readonly accountId: string;
+    readonly externalIdentityId: string;
+    readonly credentialVersion: number;
+  }): Promise<void>;
   read(sessionId: string): Promise<StoredSession | null>;
   touch(sessionId: string, ttlMs: number): Promise<void>;
   delete(sessionId: string): Promise<void>;
   pruneExpired(): Promise<number>;
+  rotateLegacy?(input: {
+    readonly previousSessionId: string;
+    readonly previousEncryptedPayload: string;
+    readonly sessionId: string;
+    readonly encryptedPayload: string;
+    readonly accountId: string;
+    readonly externalIdentityId: string;
+    readonly credentialVersion: number;
+  }): Promise<boolean>;
 }

@@ -240,9 +240,23 @@ The validated challenge and MCP checkpoints are published by this integration;
 implementation completion and delivery acceptance are still pending. The local
 fixture now also exercises provider selection and consent at `/oauth/authorize`.
 
-Next: finish browser/CLI legacy-session rotation and migration accounting,
-deployment-stage controls, and rollback/forward-recovery rehearsals. Then run the
-remaining acceptance matrix and prepare real-provider/email user acceptance.
+The fourteenth slice persists legacy browser/CLI session rotation before request
+dispatch, checks original CSRF before mutations, preserves remaining expiry in
+the atomic rotation, writes Account metadata, and counts successful migrations.
+Only the permanent legacy map at initial credential generation is accepted;
+partial or mismatched bindings fail closed. Admin client, CLI, and stdio MCP
+persist server-rotated cookie/CSRF pairs without replaying mutations.
+
+The rollout portion of Architecture is reopened for explicit review in
+[RolloutReview](./RolloutReview.md). The current Account-based binary does not
+implement the previously described legacy/shadow runtime modes. The proposed
+refinement uses pinned release revisions for those rehearsals and retains
+Account-only runtime gates plus a persistent multi-provider cutover boundary.
+This is a proposal, not an approved change to the original architecture.
+
+Next: obtain the user's decision on RolloutReview before implementing the
+affected deployment gates. Then complete rollback/forward-recovery rehearsals,
+the remaining acceptance matrix, and real-provider/email user acceptance.
 
 ## Decisions
 
@@ -309,7 +323,7 @@ remaining acceptance matrix and prepare real-provider/email user acceptance.
 | --- | --- | --- |
 | Scope | Approved | Requesting user, 2026-09-16: explicitly responded that there were no issues after being asked to approve or reject the goal, scope, out of scope, constraints, acceptance criteria, provider set, and prerequisite in [Task](./Task.md). |
 | Business and data model | Approved | Requesting user, 2026-09-17: after reviewing the Account `blockedAt`, authority child-row, primary verified contact, generic-revision removal, and `credentialVersion` refinements published in `4f02dea51c7da183369141f0eec706c758bb90e0`, stated there were no remaining issues and directed iterative implementation. |
-| Architecture | Approved | Requesting user, 2026-09-17: approved proceeding after the revised architecture was published in `4f02dea51c7da183369141f0eec706c758bb90e0`, including command-shaped authority changes and credential-version revocation. |
+| Architecture | Pending | Original Account/service boundaries were approved by the requesting user on 2026-09-17. Deployment/rollback composition only is reopened for [RolloutReview](./RolloutReview.md); no revised rollout implementation may proceed before explicit approval. |
 | Interface | Approved | Requesting user, 2026-09-17: approved proceeding after the revised interface and HTML comparison were published in `4f02dea51c7da183369141f0eec706c758bb90e0`. |
 | Delivery acceptance | Pending | Present the integrated revision and complete validation, security/privacy, deployment/rollback, and manual test evidence after implementation publication. |
 
@@ -601,6 +615,11 @@ remaining acceptance matrix and prepare real-provider/email user acceptance.
 - Production Console/Worker build, Cloudflare typecheck, docs checks (3 tests),
   and actual Wrangler deployment dry-run passed. Session-cleanup follow-up tests
   passed 15 checks covering Worker routing and persisted session expiry/pruning.
+- Session rotation validation passed: full Cloudflare suite 283 tests across
+  31 files, admin client 20 tests, CLI 48 tests, and all workspace typechecks.
+  Tests cover one-winner D1 rotation, preserved expiry, migration counts,
+  Account metadata, old-cookie invalidation before mutations, original CSRF
+  validation, stale-generation denial, and client/CLI persistence.
 
 ## Blockers
 
@@ -609,6 +628,10 @@ merged without rewriting its decisions. The only remaining pre-push diagnostic
 was archive publication reachability for an ancestor of the local merge; this
 integration publishes that ancestry and must be verified with `repoledger doctor`
 after push. No additional task-policy test has been restored.
+
+Human architecture decision required: [RolloutReview](./RolloutReview.md).
+The earlier unrelated ledger publication blocker has been resolved and verified
+by successful repository-wide `repoledger doctor` and `pnpm check:tasks` runs.
 
 Production provider registration, sender-domain onboarding, and real email
 delivery remain unverified. No production deployment was performed. The task

@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { migrateControlSchema } from "../src/control-schema.js";
 import { bindLegacyMcpCredential } from "../src/mcp/platform-access.js";
+import { ControlSessionStore } from "../src/control-sessions.js";
 import type {
   AuthRequest,
   CompleteAuthorizationOptions,
@@ -51,6 +52,22 @@ describe("control-plane MCP OAuth authorization", () => {
       ]);
       const legacy = { identityIssuer: "https://accounts.example", subject: "legacy-sub" };
       expect(await bindLegacyMcpCredential(database, legacy)).toMatchObject({ accountId, externalIdentityId: "legacy-ext", credentialVersion: 1 });
+      const sessions = new ControlSessionStore(database, () => 1000);
+      await sessions.create("new-browser", "encrypted", 500, { accountId, externalIdentityId: "legacy-ext", credentialVersion: 1 });
+      expect(await database.prepare("SELECT account_id, external_identity_id, credential_version FROM cas_admin_sessions WHERE session_id = 'new-browser'").first()).toEqual({ account_id: accountId, external_identity_id: "legacy-ext", credential_version: 1 });
+      await sessions.create("legacy-browser", "old-encrypted-payload", 500);
+      const rotation = {
+        previousSessionId: "legacy-browser", previousEncryptedPayload: "old-encrypted-payload",
+        encryptedPayload: "new-encrypted-payload", accountId, externalIdentityId: "legacy-ext", credentialVersion: 1,
+      };
+      const rotations = await Promise.all([
+        sessions.rotateLegacy({ ...rotation, sessionId: "rotated-one" }),
+        sessions.rotateLegacy({ ...rotation, sessionId: "rotated-two" }),
+      ]);
+      expect(rotations.filter(Boolean)).toHaveLength(1);
+      expect(await sessions.read("legacy-browser")).toBeNull();
+      expect(await sessions.read(rotations[0] ? "rotated-one" : "rotated-two")).toMatchObject({ expiresAt: 1500 });
+      expect(await database.prepare("SELECT mapped_count FROM cas_identity_migration_journal WHERE stage = 'browser-cli-session-rotation'").first()).toEqual({ mapped_count: 1 });
       await database.prepare("UPDATE cas_accounts SET credential_version = 2 WHERE account_id = ?").bind(accountId).run();
       expect(await bindLegacyMcpCredential(database, legacy)).toBeNull();
       expect(await bindLegacyMcpCredential(database, { ...legacy, subject: "unmapped" })).toBeNull();

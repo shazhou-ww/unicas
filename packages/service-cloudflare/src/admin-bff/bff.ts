@@ -101,6 +101,10 @@ export interface CreateAdminBffOptions {
   readonly peopleRepository?: PeopleRepository;
   readonly providerRegistry?: ProviderRegistry;
   readonly accountRepository?: AccountRepository;
+  readonly resolveLegacyCredential?: (issuer: string, subject: string) => Promise<{
+    readonly accountId: import("@unicas/admin-protocol").AccountId;
+    readonly externalIdentityId: string;
+  } | null>;
   readonly emailChallengeRepository?: EmailChallengeRepository;
   readonly emailChallengeSender?: EmailChallengeSender;
 }
@@ -215,7 +219,15 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
 
   return async function adminFetch(request: Request): Promise<Response> {
     try {
-      return await dispatch(request);
+      const migration = await rotateLegacySession(request);
+      if (migration instanceof Response) return migration;
+      const response = await dispatch(migration?.request ?? request);
+      if (migration && !response.headers.has("Set-Cookie")) {
+        response.headers.set("Set-Cookie", sessionCookieHeader(cookieOptions, migration.sessionId));
+        response.headers.set("X-CSRF-Token", migration.csrfToken);
+        response.headers.set("Cache-Control", "no-store");
+      }
+      return response;
     } catch (error) {
       // Unexpected failure: keep the response structured and observable.
       console.error("cas-admin BFF unhandled error", error);
@@ -688,7 +700,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         cliState: preLogin.cliState!,
         cliRedirectUri: preLogin.cliRedirectUri!,
       };
-      await sessionStore.create(oneTimeCode, await sessionCrypto.encrypt(cliPayload), CLI_CODE_TTL_MS);
+      await persistSession(oneTimeCode, cliPayload, CLI_CODE_TTL_MS);
       if (sessionId) await sessionStore.delete(sessionId);
       const redirect = new URL(cliPayload.cliRedirectUri);
       redirect.searchParams.set("code", oneTimeCode);
@@ -863,7 +875,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     previousSessionId: string | null,
   ): Promise<string> {
     const authenticatedId = generateSessionId();
-    await sessionStore.create(authenticatedId, await sessionCrypto.encrypt(authenticatedPayload), sessionTtlMs);
+    await persistSession(authenticatedId, authenticatedPayload, sessionTtlMs);
     if (previousSessionId) await sessionStore.delete(previousSessionId);
     await controlPlane.recordSessionAudit(
       serviceContext(authenticatedPayload, request),
@@ -1586,7 +1598,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       credentialVersion: payload.credentialVersion,
     };
     const sessionId = generateSessionId();
-    await sessionStore.create(sessionId, await sessionCrypto.encrypt(authenticatedPayload), sessionTtlMs);
+    await persistSession(sessionId, authenticatedPayload, sessionTtlMs);
     await controlPlane.recordSessionAudit(
       serviceContext(authenticatedPayload, request),
       "session.login",
@@ -1852,7 +1864,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         : undefined,
     };
     const nextSessionId = generateSessionId();
-    await sessionStore.create(nextSessionId, await sessionCrypto.encrypt(nextPayload), sessionTtlMs);
+    await persistSession(nextSessionId, nextPayload, sessionTtlMs);
     await sessionStore.delete(sessionId);
     const response = json(result, 200);
     response.headers.set("Set-Cookie", sessionCookieHeader(cookieOptions, nextSessionId));
@@ -1905,7 +1917,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       admittedViaInvitation: true,
     };
     const nextSessionId = generateSessionId();
-    await sessionStore.create(nextSessionId, await sessionCrypto.encrypt(nextPayload), sessionTtlMs);
+    await persistSession(nextSessionId, nextPayload, sessionTtlMs);
     await sessionStore.delete(sessionId);
     return new Response(null, {
       status: 204,
@@ -2396,6 +2408,62 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
   // Session / auth helpers
   // ------------------------------------------------------------------
 
+  async function rotateLegacySession(request: Request): Promise<{
+    readonly request: Request;
+    readonly sessionId: string;
+    readonly csrfToken: string;
+  } | Response | null> {
+    if (!accountService) return null;
+    const previousSessionId = readSessionId(request);
+    const stored = previousSessionId ? await sessionStore.read(previousSessionId) : null;
+    if (!stored || !previousSessionId) return null;
+    let payload: AdminSessionPayload;
+    try { payload = await sessionCrypto.decrypt(stored.encryptedPayload); } catch { return null; }
+    if (!payload.authenticated || payload.identityIssuer === TEST_ACCOUNT_ISSUER) return null;
+    if (payload.accountId !== undefined || payload.externalIdentityId !== undefined || payload.credentialVersion !== undefined) return null;
+    if (isMutating(request.method) && !(await passCsrf(request, payload))) return csrfRejected();
+    const binding = await options.resolveLegacyCredential?.(payload.identityIssuer, payload.subject);
+    if (!binding || !sessionStore.rotateLegacy) {
+      await sessionStore.delete(previousSessionId);
+      return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED, "login required");
+    }
+    try {
+      const resolved = await accountService.authorizeCredential({ ...binding, credentialVersion: 1 });
+      if (resolved.authenticatedIdentity.issuer !== payload.identityIssuer
+        || resolved.authenticatedIdentity.subject !== payload.subject) throw new AccountServiceError("IDENTITY_ACCOUNT_MISMATCH");
+      const nextPayload: AdminSessionPayload = {
+        ...payload, ...binding, credentialVersion: 1,
+        authProvider: resolved.authenticatedIdentity.provider,
+        csrfToken: generateCsrfToken(),
+        verifiedEmailEvidence: undefined,
+      };
+      const sessionId = generateSessionId();
+      const rotated = await sessionStore.rotateLegacy({
+        previousSessionId, previousEncryptedPayload: stored.encryptedPayload,
+        sessionId, encryptedPayload: await sessionCrypto.encrypt(nextPayload),
+        ...binding, credentialVersion: 1,
+      });
+      if (!rotated) return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED, "login required");
+      const headers = new Headers(request.headers);
+      const cookies = parseCookies(request);
+      cookies[cookieName] = sessionId;
+      headers.set("Cookie", Object.entries(cookies).map(([name, value]) => `${name}=${value}`).join("; "));
+      if (isMutating(request.method)) headers.set("X-CSRF-Token", nextPayload.csrfToken);
+      return { request: new Request(request, { headers }), sessionId, csrfToken: nextPayload.csrfToken };
+    } catch (error) {
+      if (!(error instanceof AccountServiceError)) throw error;
+      await sessionStore.delete(previousSessionId);
+      return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED, "login required");
+    }
+  }
+
+  async function persistSession(sessionId: string, payload: AdminSessionPayload | CliOneTimeCodePayload, ttlMs: number): Promise<void> {
+    const account = payload.accountId && payload.externalIdentityId && payload.credentialVersion !== undefined
+      ? { accountId: payload.accountId, externalIdentityId: payload.externalIdentityId, credentialVersion: payload.credentialVersion }
+      : undefined;
+    await sessionStore.create(sessionId, await sessionCrypto.encrypt(payload), ttlMs, account);
+  }
+
   function readSessionId(request: Request): string | null {
     const cookies = parseCookies(request);
     const value = cookies[cookieName];
@@ -2410,24 +2478,15 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       if (accountService && payload.authenticated && payload.identityIssuer !== TEST_ACCOUNT_ISSUER) {
         try {
           if (payload.accountId && payload.externalIdentityId && payload.credentialVersion !== undefined) {
-            await accountService.authorizeCredential({
+            const resolved = await accountService.authorizeCredential({
               accountId: payload.accountId,
               externalIdentityId: payload.externalIdentityId,
               credentialVersion: payload.credentialVersion,
             });
+            if (resolved.authenticatedIdentity.issuer !== payload.identityIssuer
+              || resolved.authenticatedIdentity.subject !== payload.subject) throw new AccountServiceError("IDENTITY_ACCOUNT_MISMATCH");
           } else {
-            const resolution = await accountService.resolveExternalIdentity(
-              payload.identityIssuer,
-              payload.subject,
-            );
-            if (!resolution) throw new AccountServiceError("IDENTITY_NOT_FOUND");
-            return {
-              ...payload,
-              accountId: resolution.account.accountId,
-              externalIdentityId: resolution.authenticatedIdentity.externalIdentityId,
-              credentialVersion: resolution.account.credentialVersion,
-              authProvider: resolution.authenticatedIdentity.provider,
-            };
+            throw new AccountServiceError("IDENTITY_NOT_FOUND");
           }
         } catch (error) {
           if (!(error instanceof AccountServiceError)) throw error;

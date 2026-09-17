@@ -295,6 +295,16 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
       headers.set("X-CSRF-Token", current.csrfToken);
     }
     const response = await fetcher(`${baseUrl}${route}`, { ...init, headers });
+    const csrfToken = response.headers.get("X-CSRF-Token");
+    const cookieName = current.cookie.split("=", 1)[0]?.trim();
+    const replacement = response.headers.getSetCookie()
+      .map(value => value.split(";", 1)[0]!.trim())
+      .find(value => cookieName && value.startsWith(`${cookieName}=`));
+    if (replacement && csrfToken) {
+      const next = { cookie: replacement, csrfToken };
+      await config.onSessionChanged?.(next);
+      session = next;
+    }
     if (response.status === 401) {
       // The session expired or the operator was removed; force re-login.
       session = null;
