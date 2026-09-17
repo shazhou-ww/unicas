@@ -13,7 +13,7 @@ Updated: 2026-09-17
 
 ## Current state
 
-Task completed and archived. Implementation moves platform administration navigation from standalone sidebar section to UserMenu dropdown.
+Task archived. Implementation moves platform administration navigation from standalone sidebar section to UserMenu dropdown.
 
 ## Decisions
 
@@ -25,19 +25,19 @@ Task completed and archived. Implementation moves platform administration naviga
 
 | Checkpoint | Status | Review artifact and decision evidence |
 | --- | --- | --- |
-| Scope | Approved | User approved scope and directed implementation. |
-| Interface | Approved | Code review passed, all tests green. |
+| Scope | Approved | User, 2026-09-17: reviewed Task.md and directed implementation. |
+| Interface | Approved | User, 2026-09-17: reviewed code diff, 91 tests green, approved commit. |
 | Business and data model | Not applicable | Navigation-only change, no data model impact. |
 | Architecture | Not applicable | No architectural changes. |
-| Delivery acceptance | Approved | User reviewed code and approved commit to main. |
+| Delivery acceptance | Approved | User, 2026-09-17: reviewed final commit, directed push to main. |
 
 ## Publication milestones
 
 | Milestone | Evidence | Status |
 | --- | --- | --- |
-| Claim | Commit in main branch. | Published |
-| Implementation complete | 91 tests passed, check:tasks passed. | Published |
-| Archive | Task moved to tasks/archived/. | Published |
+| Claim | Commit `a5588e2` on `origin/main`. | Published |
+| Implementation complete | Commit `49e8171` on `origin/main`. | Published |
+| Archive | Published to origin/main. | Published |
 
 ## Validation
 
