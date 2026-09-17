@@ -34,8 +34,8 @@ never copy one task between repositories.
 1. Read the repository's agent instructions and `tasks/README.md`; local policy
    may refine this skill.
 2. Run `repoledger doctor` before claiming or resuming when the repository has
-   adopted the CLI. It refreshes the shared branch and validates full history,
-   repository state, and the worktree identity; `--offline` is insufficient.
+   adopted the CLI. It validates local repository state and the effective Git
+   identity. Refresh the shared branch separately before publication.
 3. Use `repoledger status` as the deterministic task-position inventory, then
    read only the relevant backlog and ongoing definitions needed to judge
    semantic overlap and ownership. `status` does not establish readiness or
@@ -43,22 +43,24 @@ never copy one task between repositories.
 4. Preserve unrelated changes and never move another identity's task to clear
    a conflict.
 
-The authoritative identity is the lowercase kebab-case value of
-`task-ledger.identity` in worktree-scoped Git config. It requires
-`extensions.worktreeConfig=true` and a matching
-`tasks/ongoing/<identity>/.gitkeep` on the refreshed shared primary branch.
-Never infer it or fall back to `task-ledger.defaultIdentity`; that global value
-is only an initialization suggestion. If setup is missing, follow the
+The authoritative identity is the lowercase kebab-case effective value of
+`task-ledger.identity` from Git config. A global value provides a default across
+repositories, and a worktree-scoped value may override it when that worktree
+needs a different identity. Require a matching local
+`tasks/ongoing/<identity>/.gitkeep`; never infer identity from paths, branches,
+users, agents, or visible lanes. Identity configuration belongs to Git, not
+repoledger. If setup is missing, follow the
 [adoption guide](./references/adoption.md) before task work.
 
 Run `repoledger check --task <task-name>` after changing one task and
-`repoledger check` for repository-wide changes and CI. Focused checks still
-enforce global configuration, layout, identity-lane, and duplicate-position
-safety. The CLI validates facts but never decides admission, semantic overlap,
-ownership consent, acceptance, or lifecycle state. Explicit `init --apply` and
+`repoledger check` for backlog plus the current worktree's ongoing tasks. Use
+`repoledger check --all-identities --archived` only when repository-wide or CI
+coverage is intended. Focused checks remain inside the selected scope. The CLI
+validates local facts but never decides admission, semantic overlap, ownership
+consent, acceptance, or lifecycle state. Explicit `init --apply` and
 `task ... --apply` operations may perform a prevalidated local mutation, but
-never stage, commit, push, merge, or publish it. Without the CLI, apply the
-fallback checks and moves below.
+never fetch, inspect history, stage, commit, push, merge, or publish it. Without
+the CLI, apply the fallback checks and moves below.
 
 ## Publish Milestones
 
