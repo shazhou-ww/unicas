@@ -130,5 +130,5 @@ work begins.
 - [Playground cache boundary](/packages/admin-webui/src/ui/playground-cache.ts)
 - [Admin package boundaries](/.github/instructions/packages.instructions.md)
 - [Related Console navigation task](/tasks/archived/simplify-console-administration-navigation/Task.md)
-- [Related administrator identity task](/tasks/ongoing/scottwei-office-pc/support-multi-provider-admin-identity/Task.md)
+- [Related administrator identity task](/tasks/ongoing/scottwei-home-pc/support-multi-provider-admin-identity/Task.md)
 - [TanStack Query](https://tanstack.com/query)

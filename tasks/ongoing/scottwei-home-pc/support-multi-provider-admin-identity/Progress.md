@@ -16,6 +16,14 @@ Updated: 2026-09-17
 
 ## Current state
 
+On 2026-09-17, the requesting user directed this worktree to claim and continue
+the task. `repoledger doctor` resolved the worktree identity as
+`scottwei-home-pc`; the CLI-validated transfer from `scottwei-office-pc` is
+published by the dedicated ownership-transfer commit with all repository task
+references updated. This records the same operator continuing the task across
+the office and home worktrees; implementation resumes only after remote
+reachability is verified.
+
 On 2026-09-17, the requesting user explicitly approved the narrow callback
 contract adjustment: Console and CLI browser authentication use
 `/admin/auth/callback/{provider}` and remote MCP OAuth uses
@@ -325,6 +333,10 @@ cutover markers. Then complete the current-model and real-provider/email tests.
 
 ## Decisions
 
+- Treat the requesting user's direct 2026-09-17 instruction to claim and
+  continue this attached task as explicit authorization to transfer ownership
+  from `scottwei-office-pc` to this worktree's validated
+  `scottwei-home-pc` identity.
 - Requesting user, 2026-09-17: accepted pre-launch replacement with no retained
   legacy and disposable data. This supersedes earlier decisions below only where
   they require compatibility, preservation of old records, or migration rollout.
@@ -403,6 +415,7 @@ cutover markers. Then complete the current-model and real-provider/email tests.
 | Claim | `origin/main` commit `1b33a29c6ebcc9e7ed66fe273b4ca7c020e43584`. | Published |
 | Ownership transfer | `origin/main` commit `1db432c0820218ff821f233b322165149eb1d5f5`, coordinated from `scottwei-home-pc` to `copilot-unicas-standalone`. | Published |
 | Ownership transfer to `scottwei-office-pc` | `origin/main` commit `8a58b31971d3d6b4ea47eca8bc6dbf1c5eac2dc2`, coordinated from `copilot-unicas-standalone` to `scottwei-office-pc`. | Published |
+| Ownership transfer to `scottwei-home-pc` | User-authorized cross-machine continuation from `scottwei-office-pc`, published by this dedicated ownership-transfer commit. | Published |
 | Implementation complete | Pending. | Pending |
 | Archive | Pending. | Pending |
 
