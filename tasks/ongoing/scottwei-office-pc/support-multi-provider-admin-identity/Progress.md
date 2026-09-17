@@ -59,8 +59,8 @@ artifact now presents the target model as two complementary Mermaid ER views,
 and the interface artifact links an illustrative
 [before/after HTML prototype](./InterfaceDesign.html) for the Sign in, Account,
 and People surfaces. These presentation refinements do not change the reviewed
-contracts or imply approval; they await publication with the pending checkpoint
-state.
+contracts or imply approval; they are published on `origin/main` as
+`24eeb2b04add73bed1ca00b37d988c490e78d0e2` with the checkpoints still pending.
 
 Next: obtain explicit business/data-model, architecture, and interface
 decisions on the published review artifacts. Do not begin the implementation
@@ -186,7 +186,9 @@ protected by any pending checkpoint.
   the Sign in, Account, and People comparisons had no horizontal document
   overflow, incoherent overlap, or clipped controls. `pnpm check:tasks` passed
   with all 16 ledger tasks and all 6 task-policy tests after the review-artifact
-  changes.
+  changes. Review-artifact commit
+  `24eeb2b04add73bed1ca00b37d988c490e78d0e2` was pushed and verified reachable
+  from refreshed `origin/main`.
 
 ## Blockers
 
