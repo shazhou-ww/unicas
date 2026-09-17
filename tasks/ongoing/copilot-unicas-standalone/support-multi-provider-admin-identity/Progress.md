@@ -19,7 +19,8 @@ Updated: 2026-09-17
 Claim commit `1b33a29c6ebcc9e7ed66fe273b4ca7c020e43584` initially assigned the
 task to `scottwei-home-pc`. On 2026-09-17, the requesting user explicitly
 directed `copilot-unicas-standalone` to take over the task. The validated
-ledger transfer is applied locally and pending publication. The prerequisite
+ledger transfer is published on `origin/main` as
+`1db432c0820218ff821f233b322165149eb1d5f5`. The prerequisite
 `add-platform-access-management` task is archived with its implementation,
 production verification, delivery acceptance, and archive publication recorded.
 No backlog or ongoing task has overlapping multi-provider administrator identity
@@ -44,9 +45,8 @@ evidence model, one-to-one migration and rollback boundary, provider and service
 composition, fresh-auth linking/unlinking, Account-keyed contracts,
 Console/CLI/MCP behavior, and privacy/error rules.
 
-Next: publish the coordinated ownership transfer to `origin/main`, verify the
-commit is reachable there, then request explicit business/data-model,
-architecture, and interface decisions. Do not begin the implementation
+Next: obtain explicit business/data-model, architecture, and interface
+decisions on the published review artifacts. Do not begin the implementation
 protected by any pending checkpoint.
 
 ## Decisions
@@ -82,7 +82,7 @@ protected by any pending checkpoint.
 | Milestone | Evidence | Status |
 | --- | --- | --- |
 | Claim | `origin/main` commit `1b33a29c6ebcc9e7ed66fe273b4ca7c020e43584`. | Published |
-| Ownership transfer | Coordinated transfer from `scottwei-home-pc` to `copilot-unicas-standalone`; commit pending. | Pending |
+| Ownership transfer | `origin/main` commit `1db432c0820218ff821f233b322165149eb1d5f5`, coordinated from `scottwei-home-pc` to `copilot-unicas-standalone`. | Published |
 | Implementation complete | Pending. | Pending |
 | Archive | Pending. | Pending |
 
@@ -126,6 +126,10 @@ protected by any pending checkpoint.
 - `pnpm exec repoledger check --task support-multi-provider-admin-identity`
   passed before and immediately after the previewed transfer was applied with
   `--take-from scottwei-home-pc --update-all-refs`.
+- `pnpm check:tasks` passed before transfer publication: all 16 ledger tasks and
+  all 6 focused task-policy tests passed. Transfer commit
+  `1db432c0820218ff821f233b322165149eb1d5f5` was then pushed and verified
+  reachable from refreshed `origin/main`; the worktree was clean and aligned.
 
 ## Blockers
 
