@@ -981,7 +981,7 @@ describe("cas-admin-webui BFF", () => {
     expect(login.headers.get("Set-Cookie")).toBeNull();
     const html = await login.text();
     expect(html).toContain("Sign in");
-    expect(html).toContain("/admin/auth/oidc?returnTo=%2Fadmin%2F");
+    expect(html).toContain("/admin/auth/start/google?returnTo=%2Fadmin%2F");
     expect(html).toContain("Continue with Google");
     expect(html).toContain("/admin/assets/index.css?v=issuer-discovery-v1");
   });
@@ -1042,6 +1042,11 @@ describe("cas-admin-webui BFF", () => {
     ));
     expect(mismatch.headers.get("Location")).toBe("/admin/auth/login?error=oidc-failed");
     expect((await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/start/github`))).status).toBe(404);
+    for (const path of [
+      "/admin/auth/oidc",
+      "/admin/auth/callback",
+      "/oauth/google/callback",
+    ]) expect((await bff(new Request(`${PUBLIC_ORIGIN}${path}`))).status).toBe(404);
 
     const restarted = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/start/microsoft`));
     const restartedCookie = cookieFrom(restarted)!;
@@ -1433,7 +1438,7 @@ describe("cas-admin-webui BFF", () => {
       name: "Alice",
     };
     const callback = await bff(new Request(
-      `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(oidcState)}`,
+      `${PUBLIC_ORIGIN}/admin/auth/callback/google?code=mock-code&state=${encodeURIComponent(oidcState)}`,
       { headers: { Cookie: preLoginCookie } },
     ));
     expect(callback.status).toBe(302);
@@ -1472,7 +1477,7 @@ describe("cas-admin-webui BFF", () => {
     const nonce = googleUrl.searchParams.get("nonce")!;
     provider.pendingClaims = { iss: ISSUER, sub: "cli-user-1", aud: CLIENT_ID, nonce, email: "alice@example.com", email_verified: true };
     const callback = await bff(new Request(
-      `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(googleUrl.searchParams.get("state")!)}`,
+      `${PUBLIC_ORIGIN}/admin/auth/callback/google?code=mock-code&state=${encodeURIComponent(googleUrl.searchParams.get("state")!)}`,
       { headers: { Cookie: preLoginCookie } },
     ));
     const oneTimeCode = new URL(callback.headers.get("Location")!).searchParams.get("code")!;
@@ -1502,7 +1507,7 @@ describe("cas-admin-webui BFF", () => {
     };
     const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const callback = await bff(new Request(
-      `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(googleUrl.searchParams.get("state")!)}`,
+      `${PUBLIC_ORIGIN}/admin/auth/callback/google?code=mock-code&state=${encodeURIComponent(googleUrl.searchParams.get("state")!)}`,
       { headers: { Cookie: preLoginCookie } },
     ));
     logged.mockRestore();
@@ -1584,7 +1589,7 @@ describe("cas-admin-webui BFF", () => {
     provider.expectTokenBody = (body) => {
       expect(body.get("grant_type")).toBe("authorization_code");
       expect(body.get("code")).toBe("mock-code");
-      expect(body.get("redirect_uri")).toBe(`${PUBLIC_ORIGIN}/admin/auth/callback`);
+      expect(body.get("redirect_uri")).toBe(`${PUBLIC_ORIGIN}/admin/auth/callback/google`);
       expect(body.get("client_id")).toBe(CLIENT_ID);
       expect(body.get("client_secret")).toBe(CLIENT_SECRET);
       expect(body.get("code_verifier")).toBeTruthy();
@@ -1615,7 +1620,7 @@ describe("cas-admin-webui BFF", () => {
       const bff = await createBff(provider, undefined, {
         emailAllowlist: ["alice@example.com"],
       });
-      const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/oidc`));
+      const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/start/google`));
       const cookie = cookieFrom(login)!;
       const location = new URL(login.headers.get("Location")!);
       const state = location.searchParams.get("state")!;
@@ -1629,7 +1634,7 @@ describe("cas-admin-webui BFF", () => {
       };
 
       const callback = await bff(new Request(
-        `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(state)}`,
+        `${PUBLIC_ORIGIN}/admin/auth/callback/google?code=mock-code&state=${encodeURIComponent(state)}`,
         { headers: { Cookie: cookie } },
       ));
       expect(callback.status).toBe(302);
@@ -1698,7 +1703,7 @@ describe("cas-admin-webui BFF", () => {
     };
 
     const callback = await bff(new Request(
-      `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(state)}`,
+      `${PUBLIC_ORIGIN}/admin/auth/callback/google?code=mock-code&state=${encodeURIComponent(state)}`,
       { headers: { Cookie: preLoginCookie } },
     ));
     expect(callback.status).toBe(302);
@@ -1734,7 +1739,7 @@ describe("cas-admin-webui BFF", () => {
     };
 
     const callback = await bff(new Request(
-      `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(state)}`,
+      `${PUBLIC_ORIGIN}/admin/auth/callback/google?code=mock-code&state=${encodeURIComponent(state)}`,
       { headers: { Cookie: preLoginCookie } },
     ));
     expect(callback.status).toBe(302);
@@ -1751,7 +1756,7 @@ describe("cas-admin-webui BFF", () => {
     const bff = await createBff(provider, undefined, {}, repo);
 
     // Sign in while still active.
-    const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/oidc?returnTo=/admin/`));
+    const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/start/google?returnTo=/admin/`));
     const preLoginCookie = cookieFrom(login)!;
     const location = new URL(login.headers.get("Location")!);
     const state = location.searchParams.get("state")!;
@@ -1836,7 +1841,7 @@ describe("cas-admin-webui BFF", () => {
     repo.grantViaMembership(ISSUER, "google-user-123");
     const bff = await createBff(provider, undefined, { emailAllowlist: ["allowed@example.com"] }, repo);
 
-    const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/oidc`));
+    const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/start/google`));
     const cookie = cookieFrom(login)!;
     const location = new URL(login.headers.get("Location")!);
     const state = location.searchParams.get("state")!;
@@ -1851,7 +1856,7 @@ describe("cas-admin-webui BFF", () => {
     };
 
     const callback = await bff(new Request(
-      `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(state)}`,
+      `${PUBLIC_ORIGIN}/admin/auth/callback/google?code=mock-code&state=${encodeURIComponent(state)}`,
       { headers: { Cookie: cookie } },
     ));
     expect(callback.status).toBe(302);
@@ -1892,10 +1897,10 @@ describe("cas-admin-webui BFF", () => {
   test("callback with a mismatched state is rejected", async () => {
     const provider = await createMockProvider();
     const bff = await createBff(provider);
-    const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/oidc`));
+    const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/start/google`));
     const cookie = cookieFrom(login)!;
     const callback = await bff(new Request(
-      `${PUBLIC_ORIGIN}/admin/auth/callback?code=code&state=wrong-state`,
+      `${PUBLIC_ORIGIN}/admin/auth/callback/google?code=code&state=wrong-state`,
       { headers: { Cookie: cookie } },
     ));
     expect(callback.status).toBe(302);
@@ -1905,7 +1910,7 @@ describe("cas-admin-webui BFF", () => {
   test("id_token with a wrong nonce is rejected", async () => {
     const provider = await createMockProvider();
     const bff = await createBff(provider);
-    const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/oidc`));
+    const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/start/google`));
     const cookie = cookieFrom(login)!;
     const location = new URL(login.headers.get("Location")!);
     const state = location.searchParams.get("state")!;
@@ -1918,7 +1923,7 @@ describe("cas-admin-webui BFF", () => {
       name: null,
     };
     const callback = await bff(new Request(
-      `${PUBLIC_ORIGIN}/admin/auth/callback?code=code&state=${encodeURIComponent(state)}`,
+      `${PUBLIC_ORIGIN}/admin/auth/callback/google?code=code&state=${encodeURIComponent(state)}`,
       { headers: { Cookie: cookie } },
     ));
     expect(callback.status).toBe(302);
@@ -2230,7 +2235,7 @@ describe("cas-admin-webui BFF", () => {
     };
 
     const callback = await bff(new Request(
-      `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(authorization.searchParams.get("state")!)}`,
+      `${PUBLIC_ORIGIN}/admin/auth/callback/google?code=mock-code&state=${encodeURIComponent(authorization.searchParams.get("state")!)}`,
       { headers: { Cookie: preLoginCookie } },
     ));
     expect(callback.status).toBe(302);
@@ -2295,7 +2300,7 @@ describe("cas-admin-webui BFF", () => {
         name: "Invitee",
       };
       const callback = await bff(new Request(
-        `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(authorization.searchParams.get("state")!)}`,
+        `${PUBLIC_ORIGIN}/admin/auth/callback/google?code=mock-code&state=${encodeURIComponent(authorization.searchParams.get("state")!)}`,
         { headers: { Cookie: preLoginCookie } },
       ));
       expect(callback.status).toBe(302);
@@ -2761,7 +2766,7 @@ describe("cas-admin-webui BFF", () => {
       name: "External User",
     };
     const callback = await bff(new Request(
-      `${PUBLIC_ORIGIN}/admin/auth/callback?code=mock-code&state=${encodeURIComponent(authorization.searchParams.get("state")!)}`,
+      `${PUBLIC_ORIGIN}/admin/auth/callback/google?code=mock-code&state=${encodeURIComponent(authorization.searchParams.get("state")!)}`,
       { headers: { Cookie: cookieFrom(start)! } },
     ));
     expect(callback.headers.get("Location")).toBe(`/admin/#/platform-invitations/${token}`);
