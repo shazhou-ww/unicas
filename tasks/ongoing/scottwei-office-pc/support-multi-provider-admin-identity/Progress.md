@@ -214,9 +214,13 @@ invalidation, and atomic App/platform invitation evidence consumption. Worker
 composition adds the structured Email binding and hourly expiry cleanup.
 Production sender-domain onboarding and real email delivery are not verified.
 
-Next: coordinate correction of the other identity's missing Claim evidence
-listed under Blockers, then rerun `repoledger doctor` and `pnpm check:tasks`.
-Finish challenge browser checks and security regression coverage before
+At the user's request, the in-progress implementation was committed locally
+as `fa54fc2`. The repoledger upgrade to pinned version 0.4.1 is committed as
+`0b06d58`. A subsequent pull of `origin/main` reported already up to date;
+neither local commit has been pushed. `repoledger doctor` now passes, and
+`repoledger status` confirms this task remains owned by `scottwei-office-pc`.
+
+Next: finish challenge browser checks and security regression coverage before
 publishing checkpoint twelve. Remote MCP still needs shared provider login
 and Account-bound credential-version enforcement; deployment-stage and rollback
 rehearsals also remain before implementation completion.
@@ -558,20 +562,15 @@ rehearsals also remain before implementation completion.
 
 ## Blockers
 
-Publication/readiness is blocked by a concurrent task-ledger error:
-`history.evidence.commit-missing` in
-`tasks/ongoing/xiaoju-neko-vm/simplify-console-administration-navigation/Progress.md`.
-Its Claim is marked Published with evidence `完成`, not an immutable shared-branch
-commit hash. Both `pnpm check:tasks` and a refreshed `pnpm exec repoledger doctor`
-report this error. The owning identity must record its actual Claim publication
-evidence; this task does not modify another owner's ledger.
+The earlier shared-ledger Claim evidence error is no longer reported after
+upgrading repoledger to 0.4.1 and refreshing remote main. Implementation can
+continue under the existing approved scope; the other identity retains ownership
+of Console navigation work.
 
-Checkpoint twelve remains uncommitted and unpublished. Challenge browser
-validation and the remaining security checks are not complete. Concurrent edits
-to CLI command tests and WebUI shell tests were observed and left untouched.
-The validation results above precede those concurrent edits and are not evidence
-for their current contents. No production deployment or real mail delivery was
-performed.
+Checkpoint twelve is committed as WIP but remains unpublished and incomplete.
+Challenge browser validation and remaining security checks are still required.
+The two concurrent test formatting changes were preserved in the user-requested
+WIP commit. No production deployment or real mail delivery was performed.
 
 ## Outcome
 
