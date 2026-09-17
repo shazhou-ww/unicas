@@ -57,7 +57,11 @@ import {
   SessionCrypto,
   sessionCookieHeader,
 } from "./session.js";
-import type { AdminSessionPayload, CliOneTimeCodePayload } from "./session.js";
+import type {
+  AdminSessionPayload,
+  CliOneTimeCodePayload,
+  IdentityMutationContinuation,
+} from "./session.js";
 import { checkCsrfToken, checkSameOrigin } from "./csrf.js";
 import { transformAppAdminError } from "../app-admin-adapter.js";
 import { InvitationTokenCrypto } from "../invitation-token-crypto.js";
@@ -234,6 +238,14 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     if (pathname === "/admin/auth/cli/exchange" && method === "POST") {
       return handleCliExchange(request);
     }
+    const linkStart = /^\/admin\/auth\/link\/(google|microsoft|github)$/.exec(pathname);
+    if (linkStart && method === "POST") {
+      return handleLinkStart(request, linkStart[1] as ProviderKind);
+    }
+    const unlinkStart = /^\/admin\/auth\/unlink\/([^/]+)$/.exec(pathname);
+    if (unlinkStart && method === "POST") {
+      return handleUnlinkStart(request, decodeURIComponent(unlinkStart[1]!));
+    }
 
     const inviteMatch = /^\/admin\/invitations\/([^/]+)$/.exec(pathname);
     if (inviteMatch && method === "GET") {
@@ -388,6 +400,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       readonly codeChallenge: string;
       readonly redirectUri: string;
     },
+    identityMutationContinuation?: IdentityMutationContinuation,
   ): Promise<Response> {
     const provider = providerRegistry.get(providerKind);
     if (!provider) return new Response("Not Found", { status: 404 });
@@ -410,6 +423,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       codeVerifier,
       returnTo,
       invitationContinuation,
+      identityMutationContinuation,
       cliClientId: cli?.clientId,
       cliState: cli?.state,
       cliCodeChallenge: cli?.codeChallenge,
@@ -525,6 +539,10 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       }));
       await auditLoginFailure(reason);
       return oidcCallbackFailure(preLogin, reason);
+    }
+
+    if (preLogin.identityMutationContinuation) {
+      return completeIdentityMutation(request, sessionId!, preLogin, identity);
     }
 
     const invitationContinuation = preLogin.invitationContinuation;
@@ -986,6 +1004,185 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       codeChallenge: cliCodeChallenge,
       redirectUri,
     });
+  }
+
+  async function handleLinkStart(request: Request, targetProvider: ProviderKind): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!(await passCsrf(request, auth.payload))) return csrfRejected();
+    if (!accountService || !auth.payload.accountId || !auth.payload.externalIdentityId
+      || auth.payload.credentialVersion === undefined || !auth.payload.authProvider
+      || !providerRegistry.get(targetProvider)) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account linking is unavailable");
+    }
+    const response = await startProviderLogin(
+      auth.payload.authProvider,
+      "/admin/#/account",
+      undefined,
+      undefined,
+      {
+        kind: "link-current",
+        accountId: auth.payload.accountId,
+        expectedCredentialVersion: auth.payload.credentialVersion,
+        targetProvider,
+        currentExternalIdentityId: auth.payload.externalIdentityId,
+        currentIssuer: auth.payload.identityIssuer,
+        currentSubject: auth.payload.subject,
+        currentProvider: auth.payload.authProvider,
+        currentDisplayName: auth.payload.displayName,
+        currentEmailForDisplay: auth.payload.emailForDisplay,
+      },
+    );
+    await sessionStore.delete(auth.sessionId);
+    return response;
+  }
+
+  async function handleUnlinkStart(request: Request, targetExternalIdentityId: string): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!(await passCsrf(request, auth.payload))) return csrfRejected();
+    if (!accountService || !auth.payload.accountId || auth.payload.credentialVersion === undefined) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account unlinking is unavailable");
+    }
+    const body = await readJsonBody<{ remainingExternalIdentityId?: unknown }>(request);
+    if (!body || typeof body.remainingExternalIdentityId !== "string") {
+      return invalidRequest("remainingExternalIdentityId is required");
+    }
+    let remaining;
+    try {
+      remaining = await accountService.requireActiveIdentity(
+        auth.payload.accountId,
+        body.remainingExternalIdentityId,
+      );
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        return json({ error: error.code }, error.code === "IDENTITY_ACCOUNT_MISMATCH" ? 409 : 404);
+      }
+      throw error;
+    }
+    if (!providerRegistry.get(remaining.provider)) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Remaining login provider is unavailable");
+    }
+    const response = await startProviderLogin(
+      remaining.provider,
+      "/admin/#/account",
+      undefined,
+      undefined,
+      {
+        kind: "unlink",
+        accountId: auth.payload.accountId,
+        expectedCredentialVersion: auth.payload.credentialVersion,
+        targetExternalIdentityId,
+        remainingExternalIdentityId: remaining.externalIdentityId,
+        remainingIssuer: remaining.issuer,
+        remainingSubject: remaining.subject,
+        remainingProvider: remaining.provider,
+      },
+    );
+    await sessionStore.delete(auth.sessionId);
+    return response;
+  }
+
+  async function completeIdentityMutation(
+    request: Request,
+    sessionId: string,
+    preLogin: AdminSessionPayload,
+    identity: AuthenticatedProviderResult,
+  ): Promise<Response> {
+    if (!accountService || !preLogin.identityMutationContinuation) {
+      await sessionStore.delete(sessionId);
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE);
+    }
+    const mutation = preLogin.identityMutationContinuation;
+    try {
+      if (mutation.kind === "link-current") {
+        if (identity.issuer !== mutation.currentIssuer || identity.subject !== mutation.currentSubject) {
+          throw new AccountServiceError("IDENTITY_ACCOUNT_MISMATCH");
+        }
+        const response = await startProviderLogin(
+          mutation.targetProvider,
+          "/admin/#/account",
+          undefined,
+          undefined,
+          {
+            ...mutation,
+            kind: "link-target",
+            currentAuthenticatedAt: identity.authenticatedAt,
+            currentVerifiedEmailEvidence: identity.verifiedEmailEvidence,
+          },
+        );
+        await sessionStore.delete(sessionId);
+        return response;
+      }
+
+      if (mutation.kind === "link-target") {
+        if (identity.provider !== mutation.targetProvider) {
+          throw new AccountServiceError("IDENTITY_ACCOUNT_MISMATCH");
+        }
+        const resolution = await accountService.linkExternalIdentity({
+          accountId: mutation.accountId,
+          currentExternalIdentityId: mutation.currentExternalIdentityId,
+          credentialVersion: mutation.expectedCredentialVersion,
+          currentAuthenticatedAt: mutation.currentAuthenticatedAt,
+          target: identity,
+        });
+        return createAuthenticatedSession(request, {
+          v: 1,
+          authenticated: true,
+          identityIssuer: mutation.currentIssuer,
+          subject: mutation.currentSubject,
+          displayName: mutation.currentDisplayName,
+          emailForDisplay: mutation.currentEmailForDisplay,
+          csrfToken: generateCsrfToken(),
+          authProvider: mutation.currentProvider,
+          authenticatedAt: mutation.currentAuthenticatedAt,
+          verifiedEmailEvidence: mutation.currentVerifiedEmailEvidence,
+          accountId: resolution.account.accountId,
+          externalIdentityId: mutation.currentExternalIdentityId,
+          credentialVersion: resolution.account.credentialVersion,
+        }, "/admin/#/account", sessionId);
+      }
+
+      if (identity.issuer !== mutation.remainingIssuer || identity.subject !== mutation.remainingSubject) {
+        throw new AccountServiceError("IDENTITY_ACCOUNT_MISMATCH");
+      }
+      const resolution = await accountService.unlinkExternalIdentity({
+        accountId: mutation.accountId,
+        credentialVersion: mutation.expectedCredentialVersion,
+        targetExternalIdentityId: mutation.targetExternalIdentityId,
+        remainingExternalIdentityId: mutation.remainingExternalIdentityId,
+        remainingAuthenticatedAt: identity.authenticatedAt,
+      });
+      return createAuthenticatedSession(request, {
+        v: 1,
+        authenticated: true,
+        identityIssuer: identity.issuer,
+        subject: identity.subject,
+        displayName: identity.displayName,
+        emailForDisplay: identity.verifiedEmailEvidence[0]?.normalizedEmail ?? null,
+        csrfToken: generateCsrfToken(),
+        authProvider: identity.provider,
+        authenticatedAt: identity.authenticatedAt,
+        verifiedEmailEvidence: identity.verifiedEmailEvidence,
+        accountId: resolution.account.accountId,
+        externalIdentityId: mutation.remainingExternalIdentityId,
+        credentialVersion: resolution.account.credentialVersion,
+      }, "/admin/#/account", sessionId);
+    } catch (error) {
+      await sessionStore.delete(sessionId);
+      if (error instanceof AccountServiceError) {
+        const code = error.code === "IDENTITY_LINK_CONFLICT"
+          ? "link-conflict"
+          : error.code === "FINAL_IDENTITY_CANNOT_BE_UNLINKED"
+            ? "final-identity"
+            : "authentication-state-changed";
+        return new Response(null, {
+          status: 302,
+          headers: { Location: `/admin/#/account?identityError=${code}` },
+        });
+      }
+      throw error;
+    }
   }
 
   async function handleCliExchange(request: Request): Promise<Response> {

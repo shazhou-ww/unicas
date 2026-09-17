@@ -5,6 +5,8 @@ import type {
   ProviderKind,
 } from "@unicas/admin-protocol";
 import { generateAccountId, generateExternalIdentityId } from "./control-ids.js";
+import type { AuthenticatedProviderResult } from "./authentication.js";
+import { AUTHENTICATION_FLOW_TTL_MS } from "./authentication.js";
 
 const MAX_ALIAS_DEPTH = 8;
 
@@ -51,6 +53,21 @@ export interface AccountRepository {
   listPlatformAuthorities(accountId: AccountId): Promise<readonly PlatformAuthority[]>;
   hasAppMembership(accountId: AccountId): Promise<boolean>;
   createAccountWithIdentity(input: AccountWithIdentityCreate): Promise<"created" | "identity-conflict">;
+  commitLinkIdentity(input: {
+    readonly accountId: AccountId;
+    readonly expectedCredentialVersion: number;
+    readonly identity: ExternalIdentityRecord;
+    readonly displayName: string | null;
+    readonly avatarUrl: string | null;
+    readonly now: number;
+  }): Promise<"linked" | "identity-conflict" | "version-mismatch" | "blocked">;
+  commitUnlinkIdentity(input: {
+    readonly accountId: AccountId;
+    readonly expectedCredentialVersion: number;
+    readonly targetExternalIdentityId: string;
+    readonly remainingExternalIdentityId: string;
+    readonly now: number;
+  }): Promise<"unlinked" | "not-found" | "final-identity" | "version-mismatch" | "blocked">;
 }
 
 export interface AccountCreateInput {
@@ -75,7 +92,9 @@ export type AccountServiceErrorCode =
   | "CREDENTIAL_VERSION_MISMATCH"
   | "IDENTITY_NOT_FOUND"
   | "IDENTITY_ACCOUNT_MISMATCH"
-  | "IDENTITY_LINK_CONFLICT";
+  | "IDENTITY_LINK_CONFLICT"
+  | "FINAL_IDENTITY_CANNOT_BE_UNLINKED"
+  | "FRESH_AUTHENTICATION_REQUIRED";
 
 export class AccountServiceError extends Error {
   constructor(readonly code: AccountServiceErrorCode) {
@@ -167,6 +186,87 @@ export class AccountService {
     };
   }
 
+  async requireActiveIdentity(accountId: AccountId, externalIdentityId: string): Promise<ExternalIdentityRecord> {
+    const identity = await this.repository.getIdentity(externalIdentityId);
+    if (!identity || identity.unlinkedAt !== null) throw new AccountServiceError("IDENTITY_NOT_FOUND");
+    if (identity.accountId !== accountId) throw new AccountServiceError("IDENTITY_ACCOUNT_MISMATCH");
+    return identity;
+  }
+
+  async linkExternalIdentity(input: {
+    readonly accountId: AccountId;
+    readonly currentExternalIdentityId: string;
+    readonly credentialVersion: number;
+    readonly currentAuthenticatedAt: number;
+    readonly target: AuthenticatedProviderResult;
+  }): Promise<AccountResolution> {
+    this.#requireFresh(input.currentAuthenticatedAt);
+    this.#requireFresh(input.target.authenticatedAt);
+    const current = await this.authorizeCredential({
+      accountId: input.accountId,
+      externalIdentityId: input.currentExternalIdentityId,
+      credentialVersion: input.credentialVersion,
+    });
+    const existing = await this.repository.getActiveIdentity(input.target.issuer, input.target.subject);
+    if (existing) {
+      if (existing.accountId !== input.accountId) {
+        throw new AccountServiceError("IDENTITY_LINK_CONFLICT");
+      }
+      return current;
+    }
+    const externalIdentityId = generateExternalIdentityId();
+    const result = await this.repository.commitLinkIdentity({
+      accountId: input.accountId,
+      expectedCredentialVersion: input.credentialVersion,
+      identity: {
+        externalIdentityId,
+        accountId: input.accountId,
+        provider: input.target.provider,
+        issuer: input.target.issuer,
+        subject: input.target.subject,
+        linkedAt: this.now(),
+        lastAuthenticatedAt: input.target.authenticatedAt,
+        unlinkedAt: null,
+      },
+      displayName: input.target.displayName,
+      avatarUrl: input.target.avatarUrl,
+      now: this.now(),
+    });
+    if (result === "identity-conflict") throw new AccountServiceError("IDENTITY_LINK_CONFLICT");
+    if (result === "version-mismatch") throw new AccountServiceError("CREDENTIAL_VERSION_MISMATCH");
+    if (result === "blocked") throw new AccountServiceError("ACCOUNT_BLOCKED");
+    const resolution = await this.resolveExternalIdentity(current.authenticatedIdentity.issuer, current.authenticatedIdentity.subject);
+    if (!resolution) throw new AccountServiceError("IDENTITY_NOT_FOUND");
+    return resolution;
+  }
+
+  async unlinkExternalIdentity(input: {
+    readonly accountId: AccountId;
+    readonly credentialVersion: number;
+    readonly targetExternalIdentityId: string;
+    readonly remainingExternalIdentityId: string;
+    readonly remainingAuthenticatedAt: number;
+  }): Promise<AccountResolution> {
+    this.#requireFresh(input.remainingAuthenticatedAt);
+    const remaining = await this.repository.getIdentity(input.remainingExternalIdentityId);
+    if (!remaining || remaining.unlinkedAt !== null) throw new AccountServiceError("IDENTITY_NOT_FOUND");
+    if (remaining.accountId !== input.accountId) throw new AccountServiceError("IDENTITY_ACCOUNT_MISMATCH");
+    const result = await this.repository.commitUnlinkIdentity({
+      accountId: input.accountId,
+      expectedCredentialVersion: input.credentialVersion,
+      targetExternalIdentityId: input.targetExternalIdentityId,
+      remainingExternalIdentityId: input.remainingExternalIdentityId,
+      now: this.now(),
+    });
+    if (result === "final-identity") throw new AccountServiceError("FINAL_IDENTITY_CANNOT_BE_UNLINKED");
+    if (result === "version-mismatch") throw new AccountServiceError("CREDENTIAL_VERSION_MISMATCH");
+    if (result === "blocked") throw new AccountServiceError("ACCOUNT_BLOCKED");
+    if (result === "not-found") throw new AccountServiceError("IDENTITY_NOT_FOUND");
+    const resolution = await this.resolveExternalIdentity(remaining.issuer, remaining.subject);
+    if (!resolution) throw new AccountServiceError("IDENTITY_NOT_FOUND");
+    return resolution;
+  }
+
   async #resolveCanonicalAccount(initialAccountId: AccountId): Promise<AccountRecord> {
     let accountId = initialAccountId;
     const visited = new Set<AccountId>();
@@ -184,5 +284,12 @@ export class AccountService {
 
   #requireUsableAccount(account: AccountRecord): void {
     if (account.blockedAt !== null) throw new AccountServiceError("ACCOUNT_BLOCKED");
+  }
+
+  #requireFresh(authenticatedAt: number): void {
+    const now = this.now();
+    if (authenticatedAt > now || now - authenticatedAt > AUTHENTICATION_FLOW_TTL_MS) {
+      throw new AccountServiceError("FRESH_AUTHENTICATION_REQUIRED");
+    }
   }
 }

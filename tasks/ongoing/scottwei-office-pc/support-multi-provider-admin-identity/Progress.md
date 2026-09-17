@@ -148,8 +148,20 @@ acceptance dual-writes Account ownership/authorities and atomically initializes
 only an empty primary verified contact. The slice is published on `origin/main`
 as `06393d3f43d7a813427d1d007280f593fc9bb59b`.
 
-Next: publish the provider runtime checkpoint, then implement fresh-auth
-identity linking/unlinking and Account self-service APIs.
+The seventh implementation slice is complete locally. `AccountService` and the
+D1 repository implement fresh-auth identity linking/unlinking with active-
+identity ownership, target conflict, blocked Account, credential-version, and
+final-identity invariants. Link inserts one active ExternalIdentity, fills only
+empty provider-owned profile values, and increments credential version in one
+batch. Unlink requires a different freshly authenticated remaining identity,
+closes rather than deletes the target link, clears profile values sourced by it,
+and increments credential version atomically. The BFF adds CSRF-protected
+two-stage link and guarded unlink routes using encrypted one-time continuations,
+then rotates to a session bound to the new credential version. The slice awaits
+checkpoint publication.
+
+Next: publish the link/unlink checkpoint, then implement Account self-service
+protocol/client/Console surfaces and Account-keyed relationship commands.
 
 ## Decisions
 
@@ -402,6 +414,16 @@ identity linking/unlinking and Account self-service APIs.
   the provider runtime slice.
 - Provider runtime commit `06393d3f43d7a813427d1d007280f593fc9bb59b` was
   pushed and verified reachable from refreshed `origin/main`.
+- Cloud-neutral Account tests cover fresh/stale proofs, other-Account conflicts,
+  idempotent same-Account links, remaining-identity ownership, final-identity
+  denial, and credential-version advancement. The full service suite passed all
+  133 tests across 18 files.
+- D1 repository tests prove link/unlink history, profile-source precedence and
+  cleanup, active identity uniqueness, and version changes. A Miniflare-backed
+  BFF test completes Google reauthentication, GitHub link, Google remaining-
+  identity reauthentication, GitHub unlink, and session rotations end to end.
+  The full Cloudflare suite passed all 263 tests across 29 files and typecheck
+  passed.
 
 ## Blockers
 

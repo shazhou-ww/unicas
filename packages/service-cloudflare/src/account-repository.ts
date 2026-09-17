@@ -120,6 +120,155 @@ export class D1AccountRepository implements AccountRepository {
       throw error;
     }
   }
+
+  async commitLinkIdentity(
+    input: Parameters<AccountRepository["commitLinkIdentity"]>[0],
+  ): Promise<"linked" | "identity-conflict" | "version-mismatch" | "blocked"> {
+    const requireAccount = this.db.prepare(
+      `SELECT CASE WHEN EXISTS (SELECT 1 FROM cas_accounts
+        WHERE account_id = ? AND blocked_at IS NULL AND credential_version = ?)
+       THEN 1 ELSE json_extract('invalid', '$') END AS allowed`,
+    ).bind(input.accountId, input.expectedCredentialVersion);
+    const insertIdentity = this.db.prepare(
+      `INSERT INTO cas_external_identities
+        (external_identity_id, account_id, provider, issuer, subject, linked_at,
+         last_authenticated_at, unlinked_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+    ).bind(
+      input.identity.externalIdentityId,
+      input.identity.accountId,
+      input.identity.provider,
+      input.identity.issuer,
+      input.identity.subject,
+      input.identity.linkedAt,
+      input.identity.lastAuthenticatedAt,
+    );
+    const updateProfile = this.db.prepare(
+      `UPDATE cas_account_profiles SET
+         display_name = COALESCE(display_name, ?),
+         display_name_source = CASE WHEN display_name IS NULL AND ? IS NOT NULL THEN ? ELSE display_name_source END,
+         avatar_url = COALESCE(avatar_url, ?),
+         avatar_source = CASE WHEN avatar_url IS NULL AND ? IS NOT NULL THEN ? ELSE avatar_source END,
+         updated_at = CASE WHEN display_name IS NULL AND ? IS NOT NULL OR avatar_url IS NULL AND ? IS NOT NULL
+           THEN ? ELSE updated_at END
+       WHERE account_id = ?`,
+    ).bind(
+      input.displayName,
+      input.displayName,
+      input.identity.externalIdentityId,
+      input.avatarUrl,
+      input.avatarUrl,
+      input.identity.externalIdentityId,
+      input.displayName,
+      input.avatarUrl,
+      input.now,
+      input.accountId,
+    );
+    const incrementVersion = this.db.prepare(
+      "UPDATE cas_accounts SET credential_version = credential_version + 1, updated_at = ? WHERE account_id = ? AND blocked_at IS NULL AND credential_version = ?",
+    ).bind(input.now, input.accountId, input.expectedCredentialVersion);
+    const requireIncremented = this.db.prepare(
+      "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('invalid', '$') END AS incremented",
+    );
+    try {
+      await this.db.batch([requireAccount, insertIdentity, updateProfile, incrementVersion, requireIncremented]);
+      return "linked";
+    } catch (error) {
+      if (!isJsonFailure(error) && !isUniqueFailure(error)) throw error;
+      const existing = await this.getActiveIdentity(input.identity.issuer, input.identity.subject);
+      if (existing) return "identity-conflict";
+      const account = await this.getAccount(input.accountId);
+      if (account?.blockedAt !== null) return "blocked";
+      return "version-mismatch";
+    }
+  }
+
+  async commitUnlinkIdentity(
+    input: Parameters<AccountRepository["commitUnlinkIdentity"]>[0],
+  ): Promise<"unlinked" | "not-found" | "final-identity" | "version-mismatch" | "blocked"> {
+    const requireAccount = this.db.prepare(
+      `SELECT CASE WHEN EXISTS (SELECT 1 FROM cas_accounts
+        WHERE account_id = ? AND blocked_at IS NULL AND credential_version = ?)
+       THEN 1 ELSE json_extract('invalid', '$') END AS allowed`,
+    ).bind(input.accountId, input.expectedCredentialVersion);
+    const requireRemaining = this.db.prepare(
+      `SELECT CASE WHEN ? <> ?
+        AND EXISTS (SELECT 1 FROM cas_external_identities
+          WHERE external_identity_id = ? AND account_id = ? AND unlinked_at IS NULL)
+        AND EXISTS (SELECT 1 FROM cas_external_identities
+          WHERE external_identity_id = ? AND account_id = ? AND unlinked_at IS NULL)
+        AND (SELECT COUNT(*) FROM cas_external_identities
+          WHERE account_id = ? AND unlinked_at IS NULL) >= 2
+       THEN 1 ELSE json_extract('invalid', '$') END AS allowed`,
+    ).bind(
+      input.targetExternalIdentityId,
+      input.remainingExternalIdentityId,
+      input.targetExternalIdentityId,
+      input.accountId,
+      input.remainingExternalIdentityId,
+      input.accountId,
+      input.accountId,
+    );
+    const unlink = this.db.prepare(
+      "UPDATE cas_external_identities SET unlinked_at = ? WHERE external_identity_id = ? AND account_id = ? AND unlinked_at IS NULL",
+    ).bind(input.now, input.targetExternalIdentityId, input.accountId);
+    const requireUnlinked = this.db.prepare(
+      "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('invalid', '$') END AS unlinked",
+    );
+    const clearProfileSource = this.db.prepare(
+      `UPDATE cas_account_profiles SET
+         display_name = CASE WHEN display_name_source = ? THEN NULL ELSE display_name END,
+         display_name_source = CASE WHEN display_name_source = ? THEN NULL ELSE display_name_source END,
+         avatar_url = CASE WHEN avatar_source = ? THEN NULL ELSE avatar_url END,
+         avatar_source = CASE WHEN avatar_source = ? THEN NULL ELSE avatar_source END,
+         updated_at = CASE WHEN display_name_source = ? OR avatar_source = ? THEN ? ELSE updated_at END
+       WHERE account_id = ?`,
+    ).bind(
+      input.targetExternalIdentityId,
+      input.targetExternalIdentityId,
+      input.targetExternalIdentityId,
+      input.targetExternalIdentityId,
+      input.targetExternalIdentityId,
+      input.targetExternalIdentityId,
+      input.now,
+      input.accountId,
+    );
+    const incrementVersion = this.db.prepare(
+      "UPDATE cas_accounts SET credential_version = credential_version + 1, updated_at = ? WHERE account_id = ? AND blocked_at IS NULL AND credential_version = ?",
+    ).bind(input.now, input.accountId, input.expectedCredentialVersion);
+    const requireIncremented = this.db.prepare(
+      "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('invalid', '$') END AS incremented",
+    );
+    try {
+      await this.db.batch([
+        requireAccount,
+        requireRemaining,
+        unlink,
+        requireUnlinked,
+        clearProfileSource,
+        incrementVersion,
+        requireIncremented,
+      ]);
+      return "unlinked";
+    } catch (error) {
+      if (!isJsonFailure(error)) throw error;
+      const account = await this.getAccount(input.accountId);
+      if (account?.blockedAt !== null) return "blocked";
+      if (account?.credentialVersion !== input.expectedCredentialVersion) return "version-mismatch";
+      const target = await this.getIdentity(input.targetExternalIdentityId);
+      const remaining = await this.getIdentity(input.remainingExternalIdentityId);
+      if (!target || target.accountId !== input.accountId || target.unlinkedAt !== null
+        || !remaining || remaining.accountId !== input.accountId || remaining.unlinkedAt !== null) {
+        return "not-found";
+      }
+      const active = await this.db.prepare(
+        "SELECT COUNT(*) AS count FROM cas_external_identities WHERE account_id = ? AND unlinked_at IS NULL",
+      ).bind(input.accountId).first<{ count: number }>();
+      return (active?.count ?? 0) < 2 || input.targetExternalIdentityId === input.remainingExternalIdentityId
+        ? "final-identity"
+        : "not-found";
+    }
+  }
 }
 
 function accountRecord(row: AccountRow): AccountRecord {
@@ -153,4 +302,12 @@ function externalIdentityRecord(row: ExternalIdentityRow): ExternalIdentityRecor
     lastAuthenticatedAt: row.last_authenticated_at,
     unlinkedAt: row.unlinked_at,
   };
+}
+
+function isJsonFailure(error: unknown): boolean {
+  return error instanceof Error && /malformed JSON/i.test(error.message);
+}
+
+function isUniqueFailure(error: unknown): boolean {
+  return error instanceof Error && /UNIQUE constraint failed/i.test(error.message);
 }

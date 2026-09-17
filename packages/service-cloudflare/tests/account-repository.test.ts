@@ -71,4 +71,65 @@ describe("D1 Account repository", () => {
       credentialVersion: 1,
     })).rejects.toMatchObject({ code: "CREDENTIAL_VERSION_MISMATCH" });
   });
+
+  test("atomically links and unlinks identities while advancing credential version", async () => {
+    const { db, repository, service } = await fixture();
+    const created = await service.createForExternalIdentity({
+      provider: "google",
+      issuer: "https://accounts.google.com",
+      subject: "alice",
+    });
+    const linked = await service.linkExternalIdentity({
+      accountId: created.account.accountId,
+      currentExternalIdentityId: created.authenticatedIdentity.externalIdentityId,
+      credentialVersion: 1,
+      currentAuthenticatedAt: 950,
+      target: {
+        provider: "github",
+        issuer: "https://github.com",
+        subject: "42",
+        displayName: "Alice",
+        avatarUrl: "https://avatars.githubusercontent.com/u/42",
+        accountHint: "alice",
+        verifiedEmailEvidence: [],
+        authenticatedAt: 975,
+        authenticationEventId: "github-auth",
+      },
+    });
+    expect(linked.account.credentialVersion).toBe(2);
+    const github = await repository.getActiveIdentity("https://github.com", "42");
+    expect(github).toMatchObject({ accountId: created.account.accountId, provider: "github" });
+    expect(await db.prepare(
+      "SELECT display_name, display_name_source, avatar_source FROM cas_account_profiles WHERE account_id = ?",
+    ).bind(created.account.accountId).first()).toMatchObject({
+      display_name: "Alice",
+      display_name_source: github!.externalIdentityId,
+      avatar_source: github!.externalIdentityId,
+    });
+
+    const remaining = await service.unlinkExternalIdentity({
+      accountId: created.account.accountId,
+      credentialVersion: 2,
+      targetExternalIdentityId: github!.externalIdentityId,
+      remainingExternalIdentityId: created.authenticatedIdentity.externalIdentityId,
+      remainingAuthenticatedAt: 990,
+    });
+    expect(remaining.account.credentialVersion).toBe(3);
+    expect(await repository.getActiveIdentity("https://github.com", "42")).toBeNull();
+    expect(await db.prepare(
+      "SELECT display_name, display_name_source, avatar_url, avatar_source FROM cas_account_profiles WHERE account_id = ?",
+    ).bind(created.account.accountId).first()).toEqual({
+      display_name: null,
+      display_name_source: null,
+      avatar_url: null,
+      avatar_source: null,
+    });
+    await expect(service.unlinkExternalIdentity({
+      accountId: created.account.accountId,
+      credentialVersion: 3,
+      targetExternalIdentityId: created.authenticatedIdentity.externalIdentityId,
+      remainingExternalIdentityId: created.authenticatedIdentity.externalIdentityId,
+      remainingAuthenticatedAt: 995,
+    })).rejects.toMatchObject({ code: "FINAL_IDENTITY_CANNOT_BE_UNLINKED" });
+  });
 });

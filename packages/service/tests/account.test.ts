@@ -35,6 +35,8 @@ function fixture() {
     listPlatformAuthorities: vi.fn(async () => ["apps.create"]),
     hasAppMembership: vi.fn(async () => false),
     createAccountWithIdentity: vi.fn(async () => "created"),
+    commitLinkIdentity: vi.fn(async () => "linked"),
+    commitUnlinkIdentity: vi.fn(async () => "unlinked"),
   };
   return { repository, service: new AccountService(repository, () => 1000) };
 }
@@ -80,6 +82,14 @@ describe("Account service", () => {
       .rejects.toMatchObject({ code: "IDENTITY_ACCOUNT_MISMATCH" });
   });
 
+  test("selects only an active identity owned by the requested Account", async () => {
+    const { repository, service } = fixture();
+    await expect(service.requireActiveIdentity(accountId, identity.externalIdentityId)).resolves.toBe(identity);
+    vi.mocked(repository.getIdentity).mockResolvedValue({ ...identity, unlinkedAt: 5 });
+    await expect(service.requireActiveIdentity(accountId, identity.externalIdentityId))
+      .rejects.toMatchObject({ code: "IDENTITY_NOT_FOUND" });
+  });
+
   test("fails closed on alias cycles and excessive depth", async () => {
     const { repository, service } = fixture();
     const aliasAccountId = `acct_${"b".repeat(22)}`;
@@ -121,5 +131,96 @@ describe("Account service", () => {
       issuer: identity.issuer,
       subject: identity.subject,
     })).rejects.toMatchObject({ code: "IDENTITY_LINK_CONFLICT" });
+  });
+
+  test("links an unowned fresh identity and increments credential generation", async () => {
+    const { repository, service } = fixture();
+    vi.mocked(repository.getAccount).mockImplementation(async requested => requested === accountId
+      ? { ...account, credentialVersion: vi.mocked(repository.commitLinkIdentity).mock.calls.length > 0 ? 4 : 3 }
+      : null);
+    const result = await service.linkExternalIdentity({
+      accountId,
+      currentExternalIdentityId: identity.externalIdentityId,
+      credentialVersion: 3,
+      currentAuthenticatedAt: 950,
+      target: {
+        provider: "github",
+        issuer: "https://github.com",
+        subject: "42",
+        displayName: "Alice",
+        avatarUrl: null,
+        accountHint: "alice",
+        verifiedEmailEvidence: [],
+        authenticatedAt: 975,
+        authenticationEventId: "target-auth",
+      },
+    });
+    expect(repository.commitLinkIdentity).toHaveBeenCalledWith(expect.objectContaining({
+      accountId,
+      expectedCredentialVersion: 3,
+      identity: expect.objectContaining({ provider: "github", subject: "42" }),
+    }));
+    expect(result.account.credentialVersion).toBe(4);
+  });
+
+  test("rejects stale proof and identities owned by another Account", async () => {
+    const { repository, service } = fixture();
+    const target = {
+      provider: "github" as const,
+      issuer: "https://github.com",
+      subject: "42",
+      displayName: null,
+      avatarUrl: null,
+      accountHint: null,
+      verifiedEmailEvidence: [],
+      authenticatedAt: 975,
+      authenticationEventId: "target-auth",
+    };
+    await expect(service.linkExternalIdentity({
+      accountId,
+      currentExternalIdentityId: identity.externalIdentityId,
+      credentialVersion: 3,
+      currentAuthenticatedAt: -600_000,
+      target,
+    })).rejects.toMatchObject({ code: "FRESH_AUTHENTICATION_REQUIRED" });
+    vi.mocked(repository.getActiveIdentity).mockResolvedValue({
+      ...identity,
+      accountId: `acct_${"b".repeat(22)}`,
+      issuer: target.issuer,
+      subject: target.subject,
+    });
+    await expect(service.linkExternalIdentity({
+      accountId,
+      currentExternalIdentityId: identity.externalIdentityId,
+      credentialVersion: 3,
+      currentAuthenticatedAt: 950,
+      target,
+    })).rejects.toMatchObject({ code: "IDENTITY_LINK_CONFLICT" });
+  });
+
+  test("unlinks only with a fresh different remaining identity", async () => {
+    const { repository, service } = fixture();
+    const remaining = { ...identity, externalIdentityId: "ext-remaining", provider: "github" as const };
+    vi.mocked(repository.getIdentity).mockImplementation(async id => id === remaining.externalIdentityId ? remaining : identity);
+    vi.mocked(repository.getActiveIdentity).mockImplementation(async (issuer, subject) =>
+      issuer === remaining.issuer && subject === remaining.subject ? remaining : identity);
+    vi.mocked(repository.getAccount).mockImplementation(async requested => requested === accountId
+      ? { ...account, credentialVersion: vi.mocked(repository.commitUnlinkIdentity).mock.calls.length > 0 ? 4 : 3 }
+      : null);
+    await expect(service.unlinkExternalIdentity({
+      accountId,
+      credentialVersion: 3,
+      targetExternalIdentityId: identity.externalIdentityId,
+      remainingExternalIdentityId: remaining.externalIdentityId,
+      remainingAuthenticatedAt: 975,
+    })).resolves.toMatchObject({ account: { credentialVersion: 4 }, authenticatedIdentity: remaining });
+    vi.mocked(repository.commitUnlinkIdentity).mockResolvedValue("final-identity");
+    await expect(service.unlinkExternalIdentity({
+      accountId,
+      credentialVersion: 4,
+      targetExternalIdentityId: remaining.externalIdentityId,
+      remainingExternalIdentityId: identity.externalIdentityId,
+      remainingAuthenticatedAt: 975,
+    })).rejects.toMatchObject({ code: "FINAL_IDENTITY_CANNOT_BE_UNLINKED" });
   });
 });
