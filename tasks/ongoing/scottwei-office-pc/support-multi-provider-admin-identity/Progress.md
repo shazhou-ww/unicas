@@ -6,7 +6,7 @@ Updated: 2026-09-17
 
 - [x] Publish the claim to the shared primary branch.
 - [x] Obtain scope approval before substantive implementation.
-- [ ] Complete each applicable interface, business and data model, and
+- [x] Complete each applicable interface, business and data model, and
       architecture approval before the affected implementation.
 - [ ] Commit and publish substantive work at meaningful checkpoints.
 - [ ] Publish implementation completion while the task is still ongoing.
@@ -76,13 +76,16 @@ status, `credentialVersion` is only the credential-revocation generation,
 platform authorities are child rows keyed by `(accountId, authority)`, the
 Account retains at most one primary verified contact, and new model operations
 do not expose generic resource revisions. The canonical Task and all three
-review artifacts now reflect these decisions locally. The requesting user said
-there were no remaining issues and directed publication followed by iterative
-implementation; the revised artifacts must be published before that approval is
-recorded as the next ledger milestone.
+review artifacts reflect these decisions and are published on `origin/main` as
+`4f02dea51c7da183369141f0eec706c758bb90e0`.
 
-Next: publish the revised review artifacts with their pending checkpoint state,
-then record and publish the user's explicit approvals before implementation.
+After reviewing the revised direction, the requesting user stated on 2026-09-17
+that there were no remaining issues and directed the plan documents to be
+committed before iterative implementation under `task-exec`. This explicitly
+approves the revised business/data model, architecture, and interface artifacts.
+
+Next: publish these approval records, then begin the first implementation slice
+with additive Account protocol/service types and persistence foundations.
 
 ## Decisions
 
@@ -130,6 +133,10 @@ then record and publish the user's explicit approvals before implementation.
   and invitation flows. Keep `credentialVersion` solely as the generation that
   invalidates all Account sessions and MCP grants and protects multi-step
   link/unlink operations from stale authentication state.
+- Treat the requesting user's direct 2026-09-17 statement that there were no
+  remaining issues and that implementation should begin after plan publication
+  as approval of the revised business/data model, architecture, and interface
+  checkpoints. It does not constitute delivery acceptance.
 - Reconcile the previously stale progress wording with review-artifact commit
   `d3ef9fd44b7c141993d4307a750c39c817cf225a`; publication does not imply approval.
 
@@ -138,9 +145,9 @@ then record and publish the user's explicit approvals before implementation.
 | Checkpoint | Status | Review artifact and decision evidence |
 | --- | --- | --- |
 | Scope | Approved | Requesting user, 2026-09-16: explicitly responded that there were no issues after being asked to approve or reject the goal, scope, out of scope, constraints, acceptance criteria, provider set, and prerequisite in [Task](./Task.md). |
-| Business and data model | Pending | Review [Business and data model](./BusinessDataModel.md): Account, ExternalIdentity, primary verified contact, Profile precedence, authority and membership ownership, evidence freshness, credential version, future Merge aliases, one-to-one migration, rollback boundary, retention, and redaction. Explicit user or delegated identity/security-owner approval is required before protected model work. |
-| Architecture | Pending | Review [Architecture](./Architecture.md): provider adapters, `control-auth`, cloud-neutral service ports, D1/Email bindings, BFF/MCP composition, account resolution, command-shaped authority changes, credential-version revocation, linking state machines, deployment stages, and compatibility. Explicit user or delegated architecture-owner approval is required before protected structural work. |
-| Interface | Pending | Review [Interface](./InterfaceDesign.md): Account wire types, Account-keyed membership and authority commands, provider selection/callbacks, Console account flows, CLI/MCP presentation, compatibility sunset, errors, and privacy. Explicit user or delegated product/API-owner approval is required before protected interface work. |
+| Business and data model | Approved | Requesting user, 2026-09-17: after reviewing the Account `blockedAt`, authority child-row, primary verified contact, generic-revision removal, and `credentialVersion` refinements published in `4f02dea51c7da183369141f0eec706c758bb90e0`, stated there were no remaining issues and directed iterative implementation. |
+| Architecture | Approved | Requesting user, 2026-09-17: approved proceeding after the revised architecture was published in `4f02dea51c7da183369141f0eec706c758bb90e0`, including command-shaped authority changes and credential-version revocation. |
+| Interface | Approved | Requesting user, 2026-09-17: approved proceeding after the revised interface and HTML comparison were published in `4f02dea51c7da183369141f0eec706c758bb90e0`. |
 | Delivery acceptance | Pending | Present the integrated revision and complete validation, security/privacy, deployment/rollback, and manual test evidence after implementation publication. |
 
 ## Publication milestones
@@ -240,12 +247,15 @@ then record and publish the user's explicit approvals before implementation.
   exercised Account profile feedback, unlink feedback, and privileged People
   detail; the revised `blockedAt`, read-only contact, and credential-version
   text rendered without horizontal overflow at 1440px.
+- Revised Task, business/data-model, architecture, interface, and HTML prototype
+  artifacts were published on `origin/main` as
+  `4f02dea51c7da183369141f0eec706c758bb90e0` and verified reachable after a
+  remote refresh, with all three protected implementation checkpoints still
+  pending in that publication.
 
 ## Blockers
 
-- Business/data-model, architecture, and interface approvals are pending. Do not
-  begin implementation protected by those checkpoints until the published
-  artifacts receive explicit decisions and those decisions are published.
+None.
 
 ## Outcome
 
