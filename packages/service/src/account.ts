@@ -2,6 +2,7 @@ import type {
   AccountSelf,
   AccountId,
   AccountSummary,
+  App,
   AppControlAuditEvent,
   AppId,
   AppMembership,
@@ -120,6 +121,11 @@ export interface AccountRepository {
   hasAppMembership(accountId: AccountId, appId?: AppId): Promise<boolean>;
   listAccountMembershipAppIds(accountId: AccountId): Promise<readonly AppId[]>;
   readControlSnapshot(): Promise<number>;
+  listAccountApps(input: {
+    readonly accountId: AccountId;
+    readonly afterAppId: string;
+    readonly limit: number;
+  }): Promise<readonly App[]>;
   listAppMemberships(input: {
     readonly appId: AppId;
     readonly afterAccountId: string;
@@ -377,6 +383,38 @@ export class AccountService {
     await this.#resolveCanonicalAccount(input.accountId).then(account => this.#requireUsableAccount(account));
     const result = await this.repository.updateProfile({ ...input, now: this.now() });
     if (result === "identity-not-found") throw new AccountServiceError("IDENTITY_NOT_FOUND");
+  }
+
+  async listApps(input: {
+    readonly actorAccountId: AccountId;
+    readonly limit?: number;
+    readonly cursor?: string;
+  }): Promise<{ readonly items: readonly App[]; readonly nextCursor: string | null }> {
+    const actor = await this.#resolveCanonicalAccount(input.actorAccountId);
+    this.#requireUsableAccount(actor);
+    const limit = input.limit ?? 50;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new AccountServiceError("INVALID_REQUEST");
+    }
+    const cursor = input.cursor === undefined ? null : decodeControlListCursor(input.cursor);
+    if (input.cursor !== undefined && !cursor) throw new AccountServiceError("INVALID_CURSOR");
+    const snapshot = await this.repository.readControlSnapshot();
+    if (cursor && cursor.snapshot !== snapshot) throw new AccountServiceError("INVALID_CURSOR");
+    const rows = await this.repository.listAccountApps({
+      accountId: actor.accountId,
+      afterAppId: cursor?.last ?? "",
+      limit: limit + 1,
+    });
+    if (await this.repository.readControlSnapshot() !== snapshot) {
+      throw new AccountServiceError("INVALID_CURSOR");
+    }
+    const items = rows.slice(0, limit);
+    return {
+      items,
+      nextCursor: rows.length > limit
+        ? encodeControlListCursor({ version: 1, snapshot, last: items.at(-1)!.appId })
+        : null,
+    };
   }
 
   async listAppMembers(input: {

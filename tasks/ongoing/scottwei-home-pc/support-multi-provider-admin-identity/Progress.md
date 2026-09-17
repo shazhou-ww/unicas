@@ -16,6 +16,19 @@ Updated: 2026-09-17
 
 ## Current state
 
+The third no-legacy cleanup checkpoint is complete locally. `GET /admin/apps`
+now runs directly through `AccountService` and `D1AccountRepository`, pages Apps
+by stable `accountId`, and no longer rewrites the request or response through
+Principal-keyed `/admin/stacks`. The BFF, adapter, cloud-neutral service, and D1
+tests cover the direct path. No schema or write-path compatibility was removed
+in this read-only checkpoint.
+
+Next: migrate `POST /admin/apps` to an Account-keyed idempotency scope and
+atomic App/first-membership/audit transaction while preserving the existing
+managed issuer provisioning port at the service boundary. Then migrate the
+remaining App operations before deleting legacy HTTP contracts, identity-keyed
+columns/tables, dual writes, and startup identity migration.
+
 On 2026-09-17, the requesting user directed this worktree to claim and continue
 the task. `repoledger doctor` resolved the worktree identity as
 `scottwei-home-pc`; the CLI-validated transfer from `scottwei-office-pc` is
@@ -421,6 +434,17 @@ cutover markers. Then complete the current-model and real-provider/email tests.
 
 ## Validation
 
+- The full cloud-neutral service suite passed 143 tests, including direct App
+  listing by stable Account membership. The modified Miniflare D1 App/member
+  test passed in isolation, the App compatibility adapter passed 10 tests, and
+  the focused in-memory linked-Account BFF test proved `/admin/apps` calls the
+  repository with the authenticated stable `accountId`. Full D1 Account
+  repository execution reached one unrelated existing platform-authority test
+  after the modified case and timed out at its 5-second per-test limit; the
+  changed case itself passed. A parallel Miniflare run also encountered a
+  loopback port collision, so Miniflare checks were rerun separately.
+- `@unicas/service` and `@unicas/service-cloudflare` typechecks passed, and
+  editor diagnostics reported no errors in the changed implementation files.
 - `pnpm exec repoledger doctor` passed at the repository root after refreshing
   `origin/main`: 16 tasks, full history, and a valid worktree identity.
 - The pinned CLI rejected the skill's newer `status` and `check --task` commands;

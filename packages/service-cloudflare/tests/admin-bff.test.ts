@@ -1350,6 +1350,15 @@ describe("cas-admin-webui BFF", () => {
       listPlatformAuthorities: async () => ["platform.admin"],
       hasAppMembership: async () => false,
       listAccountMembershipAppIds: async () => [],
+      readControlSnapshot: async () => 1,
+      listAccountApps: vi.fn(async input => input.accountId === accountId ? [{
+        appId: "cas_app_a",
+        displayName: "App A",
+        description: "",
+        status: "active",
+        createdAt: 1,
+        revision: 1,
+      }] : []),
       createAccountWithIdentity: async () => "identity-conflict",
     };
     const adapter = (kind: "google" | "github"): ProviderAdapter => ({
@@ -1402,6 +1411,17 @@ describe("cas-admin-webui BFF", () => {
     expect(currentBody.account.accountId).toBe(accountId);
     expect(currentBody.authenticatedIdentity.provider).toBe("github");
     expect(currentBody.authenticatedIdentity).not.toHaveProperty("subject");
+    const apps = await authRequest(bff, "/admin/apps", githubCookie);
+    expect(apps.status).toBe(200);
+    await expect(apps.json()).resolves.toEqual({
+      items: [expect.objectContaining({ appId: "cas_app_a", displayName: "App A" })],
+      nextCursor: null,
+    });
+    expect(accountRepository.listAccountApps).toHaveBeenCalledWith({
+      accountId,
+      afterAppId: "",
+      limit: 51,
+    });
 
     account = { ...account, credentialVersion: 2, updatedAt: 2 };
     expect((await authRequest(bff, "/admin/me", githubCookie)).status).toBe(401);

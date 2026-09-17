@@ -299,6 +299,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       || appRoute?.operation === "patchAccountProfile") {
       return handleAccountApi(request, appRoute.operation);
     }
+    if (appRoute?.operation === "listApps") return handleAccountApps(request, url);
     if (appRoute?.operation === "listMembers" || appRoute?.operation === "deleteMember") {
       return handleAccountAppMembers(request, url, appRoute.appId, appRoute.operation);
     }
@@ -1698,6 +1699,28 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
           : error.code === "INVALID_CURSOR" || error.code === "INVALID_REQUEST" ? 400
             : error.code === "LAST_MEMBER" ? 409
               : 404;
+        return json({ error: error.code }, status);
+      }
+      throw error;
+    }
+  }
+
+  async function handleAccountApps(request: Request, url: URL): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!accountService || !auth.payload.accountId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
+    }
+    try {
+      return json(await accountService.listApps({
+        actorAccountId: auth.payload.accountId,
+        ...pageQuery(queryFromUrl(url)),
+      }), 200);
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "ACCOUNT_BLOCKED" ? 403
+          : error.code === "INVALID_CURSOR" || error.code === "INVALID_REQUEST" ? 400
+            : 404;
         return json({ error: error.code }, status);
       }
       throw error;

@@ -1,5 +1,5 @@
 import type { D1Database, D1PreparedStatement } from "@cloudflare/workers-types";
-import type { AccountId, AppId, PlatformAuthority, PrimaryVerifiedEmail } from "@unicas/admin-protocol";
+import type { AccountId, App, AppId, PlatformAuthority, PrimaryVerifiedEmail } from "@unicas/admin-protocol";
 import type {
   AccountAppMembershipRecord,
   AppAccountAuditRecord,
@@ -252,6 +252,33 @@ export class D1AccountRepository implements AccountRepository {
       "SELECT value FROM cas_control_meta WHERE key = 'snapshot'",
     ).first<{ value: number }>();
     return row?.value ?? 0;
+  }
+
+  async listAccountApps(
+    input: Parameters<AccountRepository["listAccountApps"]>[0],
+  ): Promise<readonly App[]> {
+    const rows = await this.db.prepare(
+      `SELECT app.app_id, app.display_name, app.description, app.status, app.created_at, app.revision
+       FROM cas_apps AS app
+       JOIN cas_app_members AS member ON member.app_id = app.app_id
+       WHERE member.account_id = ? AND app.app_id > ?
+       ORDER BY app.app_id LIMIT ?`,
+    ).bind(input.accountId, input.afterAppId, input.limit).all<{
+      app_id: AppId;
+      display_name: string;
+      description: string;
+      status: App["status"];
+      created_at: number;
+      revision: number;
+    }>();
+    return (rows.results ?? []).map(row => ({
+      appId: row.app_id,
+      displayName: row.display_name,
+      description: row.description,
+      status: row.status,
+      createdAt: row.created_at,
+      revision: row.revision,
+    }));
   }
 
   async listAppMemberships(

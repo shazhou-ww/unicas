@@ -48,6 +48,7 @@ function fixture() {
     hasAppMembership: vi.fn(async () => false),
     listAccountMembershipAppIds: vi.fn(async () => []),
     readControlSnapshot: vi.fn(async () => 1),
+    listAccountApps: vi.fn(async () => []),
     listAppMemberships: vi.fn(async () => []),
     commitRemoveAppMembership: vi.fn(async () => "removed"),
     getPlatformAccount: vi.fn(async () => null),
@@ -170,6 +171,28 @@ describe("Account service", () => {
       appId: "cas_app_a",
       targetAccountId: accountId,
     })).rejects.toMatchObject({ code: "LAST_MEMBER" });
+  });
+
+  test("lists Apps only through the stable Account membership key", async () => {
+    const { repository, service } = fixture();
+    vi.mocked(repository.listAccountApps).mockResolvedValue([{
+      appId: "cas_app_a",
+      displayName: "App A",
+      description: "",
+      status: "active",
+      createdAt: 1,
+      revision: 1,
+    }]);
+
+    await expect(service.listApps({ actorAccountId: accountId })).resolves.toEqual({
+      items: [expect.objectContaining({ appId: "cas_app_a", displayName: "App A" })],
+      nextCursor: null,
+    });
+    expect(repository.listAccountApps).toHaveBeenCalledWith({
+      accountId,
+      afterAppId: "",
+      limit: 51,
+    });
   });
 
   test("projects current memberships with one Account summary", async () => {

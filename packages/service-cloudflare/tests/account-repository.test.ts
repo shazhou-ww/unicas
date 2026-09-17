@@ -199,6 +199,11 @@ describe("D1 Account repository", () => {
       ).run();
     }
 
+    await expect(service.listApps({ actorAccountId: actor.account.accountId })).resolves.toEqual({
+      items: [expect.objectContaining({ appId: "cas_app_a", displayName: "App" })],
+      nextCursor: null,
+    });
+
     const page = await service.listAppMembers({
       actorAccountId: actor.account.accountId,
       appId: "cas_app_a",

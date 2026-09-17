@@ -144,17 +144,17 @@ describe("App admin physical compatibility adapter", () => {
     });
   });
 
-  test("rewrites App list requests and responses explicitly", async () => {
+  test("forwards Account-keyed App list requests without legacy rewriting", async () => {
     const { response, legacyHandler } = await invoke(
       { operation: "listApps" },
       "/admin/apps?limit=10",
       {
-        items: [{ stackId: "app-1", displayName: "App 1", description: "", status: "active", createdAt: 1, revision: 3 }],
+        items: [{ appId: "app-1", displayName: "App 1", description: "", status: "active", createdAt: 1, revision: 3 }],
         nextCursor: null,
       },
     );
     expect(legacyHandler).toHaveBeenCalledWith(expect.objectContaining({
-      url: "https://console.unicas.work/admin/stacks?limit=10",
+      url: "https://console.unicas.work/admin/apps?limit=10",
     }));
     await expect(response.json()).resolves.toEqual({
       items: [{ appId: "app-1", displayName: "App 1", description: "", status: "active", createdAt: 1, revision: 3 }],
