@@ -9,6 +9,13 @@ flows, CLI/MCP presentation, compatibility policy, and privacy/error semantics
 below. Approval permits implementation of these interfaces after the business
 and data model and architecture checkpoints are also approved.
 
+## Visual change prototype
+
+[Open the before/after HTML prototype](./InterfaceDesign.html) to compare the
+planned Sign in, Account, and People surfaces with the current interaction
+shape. The prototype illustrates information hierarchy and workflow changes;
+the contracts and behavior in this document remain normative.
+
 ## Interface principles
 
 - `accountId` is the only durable administrator relationship key.

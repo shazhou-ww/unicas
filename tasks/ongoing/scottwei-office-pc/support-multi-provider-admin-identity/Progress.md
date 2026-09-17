@@ -54,6 +54,14 @@ evidence model, one-to-one migration and rollback boundary, provider and service
 composition, fresh-auth linking/unlinking, Account-keyed contracts,
 Console/CLI/MCP behavior, and privacy/error rules.
 
+At the requesting user's direction on 2026-09-17, the business/data-model
+artifact now presents the target model as two complementary Mermaid ER views,
+and the interface artifact links an illustrative
+[before/after HTML prototype](./InterfaceDesign.html) for the Sign in, Account,
+and People surfaces. These presentation refinements do not change the reviewed
+contracts or imply approval; they await publication with the pending checkpoint
+state.
+
 Next: obtain explicit business/data-model, architecture, and interface
 decisions on the published review artifacts. Do not begin the implementation
 protected by any pending checkpoint.
@@ -78,6 +86,14 @@ protected by any pending checkpoint.
   `copilot-unicas-standalone` to `scottwei-office-pc`. Keep the required
   worktree-scoped binding; the matching device-global value remains an
   initialization suggestion rather than an identity fallback.
+- Split the target ER model into Account/authorization and
+  credential/audit/compatibility views after visual rendering showed that one
+  13-entity canvas made cardinalities and relationship labels harder to read.
+  Repeated Account and ExternalIdentity boxes denote the same entities.
+- Keep [Interface](./InterfaceDesign.md) normative. The linked standalone HTML
+  is a responsive review aid that compares only the current interaction shape
+  with planned information hierarchy and workflows; it is not a final visual
+  specification or production Console implementation.
 - Reconcile the previously stale progress wording with review-artifact commit
   `d3ef9fd44b7c141993d4307a750c39c817cf225a`; publication does not imply approval.
 
@@ -157,6 +173,20 @@ protected by any pending checkpoint.
   apply results reported no blockers, warnings, or reference edits. Transfer
   commit `8a58b31971d3d6b4ea47eca8bc6dbf1c5eac2dc2` was pushed and verified
   reachable from refreshed `origin/main`.
+- Mermaid CLI 11.12.0 rendered both revised ER views through the installed Edge
+  browser into nonempty PNGs (106,075 and 110,898 bytes); visual inspection
+  confirmed legible entity fields, cardinalities, and relationship labels.
+- The standalone HTML prototype loaded without editor diagnostics and passed
+  Playwright interaction checks for scenario tabs, Microsoft invitation
+  challenge, link and unlink dialogs, and the privileged identity-detail
+  drawer. The Account-based People table did not contain exact issuer/subject
+  data, and a closed drawer was absent from the accessibility tree with focus
+  restored to its trigger after closing.
+- Playwright screenshots at 1440px desktop and 390px mobile widths confirmed
+  the Sign in, Account, and People comparisons had no horizontal document
+  overflow, incoherent overlap, or clipped controls. `pnpm check:tasks` passed
+  with all 16 ledger tasks and all 6 task-policy tests after the review-artifact
+  changes.
 
 ## Blockers
 

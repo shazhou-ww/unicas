@@ -33,19 +33,172 @@ as identity continuity.
 
 ## Target model
 
-```text
-Account
-|-- Profile (one)
-|-- ExternalIdentity (one or more active links)
-|-- VerifiedEmail (zero or more)
-|-- PlatformAccess (zero or one)
-|-- AppMembership (zero or more)
-|-- Session (zero or more)
-`-- PlaygroundFileRoot (zero or more)
+The target ER model is shown in two views so relationship cardinalities remain
+legible. `ACCOUNT` and `EXTERNAL_IDENTITY` refer to the same entities wherever
+they are repeated.
 
-AccountAlias: source Account -> canonical Account (reserved for future Merge)
-AuditEvent: original Account + exact authenticated ExternalIdentity
+### Account and authorization relationships
+
+```mermaid
+erDiagram
+  ACCOUNT {
+    string account_id PK
+    string status
+    int auth_revision
+    datetime created_at
+    datetime updated_at
+  }
+
+  ACCOUNT_PROFILE {
+    string account_id PK, FK
+    string display_name
+    string avatar
+    string display_name_source
+    string avatar_source
+    int revision
+    datetime updated_at
+  }
+
+  EXTERNAL_IDENTITY {
+    string external_identity_id PK
+    string account_id FK
+    string provider
+    string issuer
+    string subject
+    datetime linked_at
+    datetime last_authenticated_at
+    datetime unlinked_at
+  }
+
+  VERIFIED_EMAIL {
+    string verified_email_id PK
+    string account_id FK
+    string source_identity_id FK
+    string normalized_email
+    string source
+    datetime verified_at
+    datetime last_observed_at
+    datetime retired_at
+  }
+
+  PLATFORM_ACCESS {
+    string account_id PK, FK
+    string authorities
+    int revision
+    datetime created_at
+    datetime updated_at
+  }
+
+  APP {
+    string app_id PK
+  }
+
+  APP_MEMBERSHIP {
+    string app_id PK, FK
+    string account_id PK, FK
+    datetime joined_at
+    int revision
+  }
+
+  PLAYGROUND_FILE_ROOT {
+    string root_id PK
+    string app_id FK
+    string account_id FK
+  }
+
+  ACCOUNT ||--|| ACCOUNT_PROFILE : has
+  ACCOUNT ||--|{ EXTERNAL_IDENTITY : authenticates_through
+  ACCOUNT ||--o{ VERIFIED_EMAIL : owns
+  ACCOUNT o|--o| VERIFIED_EMAIL : selects_primary
+  EXTERNAL_IDENTITY o|--o{ VERIFIED_EMAIL : verifies
+  ACCOUNT ||--o| PLATFORM_ACCESS : may_hold
+  ACCOUNT ||--o{ APP_MEMBERSHIP : holds
+  APP ||--o{ APP_MEMBERSHIP : grants
+  ACCOUNT ||--o{ PLAYGROUND_FILE_ROOT : owns
+  APP ||--o{ PLAYGROUND_FILE_ROOT : contains
 ```
+
+### Credential, audit, and compatibility relationships
+
+```mermaid
+erDiagram
+  ACCOUNT {
+    string account_id PK
+    string status
+    int auth_revision
+  }
+
+  EXTERNAL_IDENTITY {
+    string external_identity_id PK
+    string account_id FK
+    string provider
+    string issuer
+    string subject
+    datetime linked_at
+    datetime last_authenticated_at
+    datetime unlinked_at
+  }
+
+  SESSION {
+    string session_id PK
+    string account_id FK
+    string external_identity_id FK
+    int auth_revision
+    datetime expires_at
+  }
+
+  MCP_GRANT {
+    string grant_id PK
+    string account_id FK
+    string external_identity_id FK
+    int auth_revision
+    datetime expires_at
+  }
+
+  AUDIT_EVENT {
+    string audit_event_id PK
+    string original_account_id FK
+    string external_identity_id FK
+    string issuer
+    string subject
+    string provider
+    string action
+    string result
+    datetime occurred_at
+  }
+
+  ACCOUNT_ALIAS {
+    string source_account_id PK, FK
+    string canonical_account_id FK
+    datetime created_at
+    string reason
+  }
+
+  LEGACY_IDENTITY_MAP {
+    string issuer PK
+    string subject PK
+    string account_id FK
+    string external_identity_id FK
+    datetime created_at
+  }
+
+  ACCOUNT ||--|{ EXTERNAL_IDENTITY : authenticates_through
+  ACCOUNT ||--o{ SESSION : authorizes
+  EXTERNAL_IDENTITY ||--o{ SESSION : authenticated
+  ACCOUNT ||--o{ MCP_GRANT : authorizes
+  EXTERNAL_IDENTITY ||--o{ MCP_GRANT : authenticated
+  ACCOUNT ||--o{ AUDIT_EVENT : originally_attributed
+  EXTERNAL_IDENTITY ||--o{ AUDIT_EVENT : exactly_attributed
+  ACCOUNT ||--o| ACCOUNT_ALIAS : aliases_from
+  ACCOUNT ||--o{ ACCOUNT_ALIAS : aliases_to
+  ACCOUNT ||--o| LEGACY_IDENTITY_MAP : migrated_from
+  EXTERNAL_IDENTITY ||--o| LEGACY_IDENTITY_MAP : migrated_from
+```
+
+The views show durable domain and compatibility relationships. Request-scoped
+`VerifiedEmailEvidence` is intentionally not an entity; email challenges,
+one-time continuations, and migration-journal rows are operational records
+described in the later persistence and migration sections.
 
 ### Account
 
