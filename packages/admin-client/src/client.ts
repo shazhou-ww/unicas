@@ -59,7 +59,7 @@ import type {
   PlatformAccountDetail,
   PlatformAccountPage,
   PlatformAuditAction,
-  PlatformAuditPage,
+  PlatformAccountAuditPage,
   PlatformAuthority,
   PlatformInvitation,
   PlatformInvitationPage,
@@ -144,12 +144,12 @@ export interface AdminClient {
   acceptPlatformInvitation(path: { readonly token: string }): Promise<void>;
   listPlatformAuditEvents(query?: {
     readonly action?: PlatformAuditAction;
-    readonly actorPrincipalRef?: string;
-    readonly targetPrincipalRef?: string;
+    readonly actorAccountId?: AccountId;
+    readonly targetAccountId?: AccountId;
     readonly createdAfter?: number;
     readonly limit?: number;
     readonly cursor?: string;
-  }): Promise<PlatformAuditPage>;
+  }): Promise<PlatformAccountAuditPage>;
   listAppPlaygroundFileRoots(path: { readonly appId: AppId }): Promise<{ readonly items: readonly CasPlaygroundFileRoot[] }>;
   createAppPlaygroundFileRoot(
     path: { readonly appId: AppId },
@@ -187,7 +187,11 @@ export interface AdminClient {
   listAppRefDomains(path: { readonly appId: AppId }): Promise<{ readonly domains: readonly AppRefDomain[] }>;
   listAppControlAuditEvents(
     path: { readonly appId: AppId },
-    query?: CasAdminPageQuery & { readonly after?: string },
+    query?: CasAdminPageQuery & {
+      readonly after?: string;
+      readonly actorAccountId?: AccountId;
+      readonly targetAccountId?: AccountId;
+    },
   ): Promise<CasAdminPage<AppControlAuditEvent>>;
   listSpaceRootDomainRefs(
     path: { readonly appId: AppId; readonly refDomain: string },

@@ -106,5 +106,12 @@ describe("tool catalog", () => {
       authorities: ["apps.create"],
       etag: '"1"',
     }).success).toBe(false);
+
+    const platformAudit = getToolDefinition("list_platform_audit_events");
+    expect(platformAudit?.inputSchema.safeParse({
+      actorAccountId: `acct_${"a".repeat(22)}`,
+      targetAccountId: `acct_${"b".repeat(22)}`,
+    }).success).toBe(true);
+    expect(platformAudit?.inputSchema.safeParse({ actorPrincipalRef: "principal-1" }).success).toBe(false);
   });
 });

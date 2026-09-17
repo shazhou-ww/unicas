@@ -739,7 +739,14 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
 
   #auditStatement(record: ControlAuditRecord): D1PreparedStatement {
     return this.#db.prepare(
-      "INSERT INTO cas_control_audit_events (event_id, app_id, identity_issuer, subject, action, target, request_id, trace_id, caller_channel, oauth_client_handle, tool_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      `INSERT INTO cas_control_audit_events
+        (event_id, app_id, identity_issuer, subject, action, target, request_id,
+         trace_id, caller_channel, oauth_client_handle, tool_name, created_at,
+         original_account_id, external_identity_id, target_account_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+         (SELECT account_id FROM cas_external_identities WHERE issuer = ? AND subject = ? AND unlinked_at IS NULL),
+         (SELECT external_identity_id FROM cas_external_identities WHERE issuer = ? AND subject = ? AND unlinked_at IS NULL),
+         (SELECT account_id FROM cas_external_identities WHERE issuer || ':' || subject = ? ORDER BY linked_at LIMIT 1))`,
     ).bind(
       record.eventId,
       record.stackId,
@@ -753,6 +760,11 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
       record.oauthClientHandle,
       record.toolName,
       record.createdAt,
+      record.identityIssuer,
+      record.subject,
+      record.identityIssuer,
+      record.subject,
+      record.target,
     );
   }
 

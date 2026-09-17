@@ -116,13 +116,11 @@ export async function migrateLegacyAdminIdentities(
     + (SELECT COUNT(*) FROM cas_platform_audit_events) AS count`);
   const auditMapped = await count(db, `SELECT
     (SELECT COUNT(*) FROM cas_control_audit_events AS event
-      WHERE EXISTS (SELECT 1 FROM cas_identity_migration_map AS map
-        WHERE map.identity_issuer = event.identity_issuer AND map.subject = event.subject))
+      WHERE event.original_account_id IS NOT NULL AND event.external_identity_id IS NOT NULL)
     + (SELECT COUNT(*) FROM cas_platform_audit_events AS event
-      WHERE EXISTS (SELECT 1 FROM cas_identity_migration_map AS map
-        WHERE map.identity_issuer = event.actor_issuer AND map.subject = event.actor_subject)
-      AND (event.target_issuer IS NULL OR EXISTS (SELECT 1 FROM cas_identity_migration_map AS map
-        WHERE map.identity_issuer = event.target_issuer AND map.subject = event.target_subject))) AS count`);
+      WHERE event.actor_account_id IS NOT NULL AND event.actor_external_identity_id IS NOT NULL
+      AND (event.target_issuer IS NULL OR (event.target_account_id IS NOT NULL
+        AND event.target_external_identity_id IS NOT NULL))) AS count`);
   await recordStage(db, "audit-resolution", auditSource, auditMapped, auditSource - auditMapped, completedAt);
 
   const report = await reconcileLegacyAdminIdentities(db, identities);
@@ -221,6 +219,35 @@ async function backfillRelationships(db: D1Database): Promise<void> {
     SELECT account_id FROM cas_identity_migration_map AS map
     WHERE map.identity_issuer = cas_control_idempotency.identity_issuer AND map.subject = cas_control_idempotency.subject)
     WHERE account_id IS NULL`).run();
+  await db.prepare(`UPDATE cas_control_audit_events SET
+      original_account_id = COALESCE(original_account_id, (
+        SELECT account_id FROM cas_identity_migration_map AS map
+        WHERE map.identity_issuer = cas_control_audit_events.identity_issuer
+          AND map.subject = cas_control_audit_events.subject)),
+      external_identity_id = COALESCE(external_identity_id, (
+        SELECT external_identity_id FROM cas_identity_migration_map AS map
+        WHERE map.identity_issuer = cas_control_audit_events.identity_issuer
+          AND map.subject = cas_control_audit_events.subject)),
+      target_account_id = COALESCE(target_account_id, (
+        SELECT account_id FROM cas_identity_migration_map AS map
+        WHERE map.identity_issuer || ':' || map.subject = cas_control_audit_events.target))`).run();
+  await db.prepare(`UPDATE cas_platform_audit_events SET
+      actor_account_id = COALESCE(actor_account_id, (
+        SELECT account_id FROM cas_identity_migration_map AS map
+        WHERE map.identity_issuer = cas_platform_audit_events.actor_issuer
+          AND map.subject = cas_platform_audit_events.actor_subject)),
+      actor_external_identity_id = COALESCE(actor_external_identity_id, (
+        SELECT external_identity_id FROM cas_identity_migration_map AS map
+        WHERE map.identity_issuer = cas_platform_audit_events.actor_issuer
+          AND map.subject = cas_platform_audit_events.actor_subject)),
+      target_account_id = COALESCE(target_account_id, (
+        SELECT account_id FROM cas_identity_migration_map AS map
+        WHERE map.identity_issuer = cas_platform_audit_events.target_issuer
+          AND map.subject = cas_platform_audit_events.target_subject)),
+      target_external_identity_id = COALESCE(target_external_identity_id, (
+        SELECT external_identity_id FROM cas_identity_migration_map AS map
+        WHERE map.identity_issuer = cas_platform_audit_events.target_issuer
+          AND map.subject = cas_platform_audit_events.target_subject))`).run();
   await db.prepare(`INSERT OR IGNORE INTO cas_account_platform_authorities (account_id, authority, granted_at)
     SELECT map.account_id, 'platform.admin', principal.created_at
     FROM cas_platform_principals AS principal JOIN cas_identity_migration_map AS map

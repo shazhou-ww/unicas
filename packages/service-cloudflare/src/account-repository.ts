@@ -2,11 +2,14 @@ import type { D1Database, D1PreparedStatement } from "@cloudflare/workers-types"
 import type { AccountId, AppId, PlatformAuthority, PrimaryVerifiedEmail } from "@unicas/admin-protocol";
 import type {
   AccountAppMembershipRecord,
+  AppAccountAuditRecord,
+  AccountProfileRecord,
   AccountPlatformViewRecord,
   AccountRecord,
   AccountRepository,
   AccountWithIdentityCreate,
   ExternalIdentityRecord,
+  PlatformAccountAuditRecord,
 } from "@unicas/service";
 
 interface AccountRow {
@@ -56,6 +59,58 @@ interface AccountPlatformRow extends AccountRow {
   last_active_at: number | null;
 }
 
+interface AccountAuditRow {
+  event_id: string;
+  app_id: AppId | null;
+  action: string;
+  target: string;
+  target_invitation_id: string | null;
+  result: "succeeded" | "denied";
+  request_id: string | null;
+  trace_id: string | null;
+  caller_channel: "admin-webui" | "mcp" | null;
+  oauth_client_handle: string | null;
+  tool_name: string | null;
+  created_at: number;
+  details_json: string;
+  actor_account_id: AccountId;
+  actor_blocked_at: number | null;
+  actor_credential_version: number;
+  actor_primary_verified_email: string | null;
+  actor_email_verification_source: PrimaryVerifiedEmail["source"] | null;
+  actor_email_verified_at: number | null;
+  actor_created_at: number;
+  actor_updated_at: number;
+  actor_display_name: string | null;
+  actor_avatar_url: string | null;
+  actor_display_name_source: string | null;
+  actor_avatar_source: string | null;
+  actor_profile_updated_at: number;
+  actor_external_identity_id: string;
+  actor_provider: ExternalIdentityRecord["provider"];
+  actor_issuer: string;
+  actor_subject: string;
+  actor_linked_at: number;
+  actor_last_authenticated_at: number | null;
+  actor_unlinked_at: number | null;
+  actor_account_hint: string | null;
+  actor_identity_display_name: string | null;
+  actor_identity_avatar_url: string | null;
+  target_account_id: AccountId | null;
+  target_blocked_at: number | null;
+  target_credential_version: number | null;
+  target_primary_verified_email: string | null;
+  target_email_verification_source: PrimaryVerifiedEmail["source"] | null;
+  target_email_verified_at: number | null;
+  target_created_at: number | null;
+  target_updated_at: number | null;
+  target_display_name: string | null;
+  target_avatar_url: string | null;
+  target_display_name_source: string | null;
+  target_avatar_source: string | null;
+  target_profile_updated_at: number | null;
+}
+
 const platformAccountProjection = `SELECT account.account_id, account.blocked_at,
   account.credential_version, account.primary_verified_email,
   account.email_verification_source, account.email_verified_at,
@@ -75,6 +130,43 @@ const platformAccountProjection = `SELECT account.account_id, account.blocked_at
   ), 0) AS last_active_at
   FROM cas_accounts account
   JOIN cas_account_profiles profile ON profile.account_id = account.account_id`;
+
+const accountAuditProjection = `actor_account.account_id AS actor_account_id,
+  actor_account.blocked_at AS actor_blocked_at,
+  actor_account.credential_version AS actor_credential_version,
+  actor_account.primary_verified_email AS actor_primary_verified_email,
+  actor_account.email_verification_source AS actor_email_verification_source,
+  actor_account.email_verified_at AS actor_email_verified_at,
+  actor_account.created_at AS actor_created_at,
+  actor_account.updated_at AS actor_updated_at,
+  actor_profile.display_name AS actor_display_name,
+  actor_profile.avatar_url AS actor_avatar_url,
+  actor_profile.display_name_source AS actor_display_name_source,
+  actor_profile.avatar_source AS actor_avatar_source,
+  actor_profile.updated_at AS actor_profile_updated_at,
+  actor_identity.external_identity_id AS actor_external_identity_id,
+  actor_identity.provider AS actor_provider,
+  actor_identity.issuer AS actor_issuer,
+  actor_identity.subject AS actor_subject,
+  actor_identity.linked_at AS actor_linked_at,
+  actor_identity.last_authenticated_at AS actor_last_authenticated_at,
+  actor_identity.unlinked_at AS actor_unlinked_at,
+  actor_identity.account_hint AS actor_account_hint,
+  actor_identity.display_name AS actor_identity_display_name,
+  actor_identity.avatar_url AS actor_identity_avatar_url,
+  target_account.account_id AS target_account_id,
+  target_account.blocked_at AS target_blocked_at,
+  target_account.credential_version AS target_credential_version,
+  target_account.primary_verified_email AS target_primary_verified_email,
+  target_account.email_verification_source AS target_email_verification_source,
+  target_account.email_verified_at AS target_email_verified_at,
+  target_account.created_at AS target_created_at,
+  target_account.updated_at AS target_updated_at,
+  target_profile.display_name AS target_display_name,
+  target_profile.avatar_url AS target_avatar_url,
+  target_profile.display_name_source AS target_display_name_source,
+  target_profile.avatar_source AS target_avatar_source,
+  target_profile.updated_at AS target_profile_updated_at`;
 
 export class D1AccountRepository implements AccountRepository {
   constructor(readonly db: D1Database) { }
@@ -216,8 +308,8 @@ export class D1AccountRepository implements AccountRepository {
       `INSERT INTO cas_control_audit_events
         (event_id, app_id, identity_issuer, subject, action, target, request_id,
          trace_id, caller_channel, oauth_client_handle, tool_name, created_at,
-         original_account_id, external_identity_id)
-       SELECT ?, ?, issuer, subject, 'member.removed', ?, ?, ?, ?, NULL, NULL, ?, ?, ?
+         original_account_id, external_identity_id, target_account_id)
+       SELECT ?, ?, issuer, subject, 'member.removed', ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?
        FROM cas_external_identities
        WHERE external_identity_id = ? AND account_id = ? AND unlinked_at IS NULL
          AND EXISTS (SELECT 1 FROM cas_app_members WHERE app_id = ? AND account_id = ?)`,
@@ -231,6 +323,7 @@ export class D1AccountRepository implements AccountRepository {
       input.now,
       input.actorAccountId,
       input.actorExternalIdentityId,
+      input.targetAccountId,
       input.actorExternalIdentityId,
       input.actorAccountId,
       input.appId,
@@ -448,6 +541,86 @@ export class D1AccountRepository implements AccountRepository {
       if (failure === "unclassified") throw error;
       return failure;
     }
+  }
+
+  async getAppAuditEventPosition(appId: AppId, eventId: string) {
+    const row = await this.db.prepare(
+      "SELECT created_at, event_id FROM cas_control_audit_events WHERE app_id = ? AND event_id = ?",
+    ).bind(appId, eventId).first<{ created_at: number; event_id: string }>();
+    return row ? { createdAt: row.created_at, eventId: row.event_id } : null;
+  }
+
+  async listAppAccountAuditEvents(
+    input: Parameters<AccountRepository["listAppAccountAuditEvents"]>[0],
+  ): Promise<readonly AppAccountAuditRecord[]> {
+    const rows = await this.db.prepare(
+      `SELECT event.event_id, event.app_id, event.action, event.target,
+         NULL AS target_invitation_id, 'succeeded' AS result, event.request_id,
+         event.trace_id, event.caller_channel, event.oauth_client_handle,
+         event.tool_name, event.created_at, '{}' AS details_json,
+         ${accountAuditProjection}
+       FROM cas_control_audit_events event
+       JOIN cas_accounts actor_account ON actor_account.account_id = event.original_account_id
+       JOIN cas_account_profiles actor_profile ON actor_profile.account_id = actor_account.account_id
+       JOIN cas_external_identities actor_identity ON actor_identity.external_identity_id = event.external_identity_id
+       LEFT JOIN cas_accounts target_account ON target_account.account_id = event.target_account_id
+       LEFT JOIN cas_account_profiles target_profile ON target_profile.account_id = target_account.account_id
+       WHERE event.app_id = ?
+         AND (? IS NULL OR event.original_account_id = ?)
+         AND (? IS NULL OR event.target_account_id = ?)
+         AND (event.created_at > ? OR (event.created_at = ? AND event.event_id > ?))
+       ORDER BY event.created_at, event.event_id LIMIT ?`,
+    ).bind(
+      input.appId,
+      input.actorAccountId ?? null,
+      input.actorAccountId ?? null,
+      input.targetAccountId ?? null,
+      input.targetAccountId ?? null,
+      input.afterCreatedAt,
+      input.afterCreatedAt,
+      input.afterEventId,
+      input.limit,
+    ).all<AccountAuditRow>();
+    return (rows.results ?? []).map(appAuditRecord);
+  }
+
+  async listPlatformAccountAuditEvents(
+    input: Parameters<AccountRepository["listPlatformAccountAuditEvents"]>[0],
+  ): Promise<readonly PlatformAccountAuditRecord[]> {
+    const rows = await this.db.prepare(
+      `SELECT event.event_id, NULL AS app_id, event.action, '' AS target,
+         event.target_invitation_id, event.result, event.request_id,
+         NULL AS trace_id, NULL AS caller_channel, NULL AS oauth_client_handle,
+         NULL AS tool_name, event.created_at, event.details_json,
+         ${accountAuditProjection}
+       FROM cas_platform_audit_events event
+       JOIN cas_accounts actor_account ON actor_account.account_id = event.actor_account_id
+       JOIN cas_account_profiles actor_profile ON actor_profile.account_id = actor_account.account_id
+       JOIN cas_external_identities actor_identity ON actor_identity.external_identity_id = event.actor_external_identity_id
+       LEFT JOIN cas_accounts target_account ON target_account.account_id = event.target_account_id
+       LEFT JOIN cas_account_profiles target_profile ON target_profile.account_id = target_account.account_id
+       WHERE (? IS NULL OR event.action = ?)
+         AND (? IS NULL OR event.actor_account_id = ?)
+         AND (? IS NULL OR event.target_account_id = ?)
+         AND (? IS NULL OR event.created_at > ?)
+         AND (? IS NULL OR event.created_at < ? OR (event.created_at = ? AND event.event_id < ?))
+       ORDER BY event.created_at DESC, event.event_id DESC LIMIT ?`,
+    ).bind(
+      input.action ?? null,
+      input.action ?? null,
+      input.actorAccountId ?? null,
+      input.actorAccountId ?? null,
+      input.targetAccountId ?? null,
+      input.targetAccountId ?? null,
+      input.createdAfter ?? null,
+      input.createdAfter ?? null,
+      input.beforeCreatedAt ?? null,
+      input.beforeCreatedAt ?? null,
+      input.beforeCreatedAt ?? null,
+      input.beforeEventId ?? null,
+      input.limit,
+    ).all<AccountAuditRow>();
+    return (rows.results ?? []).map(platformAuditRecord);
   }
 
   async createAccountWithIdentity(input: AccountWithIdentityCreate): Promise<"created" | "identity-conflict"> {
@@ -815,5 +988,111 @@ function accountPlatformRecord(row: AccountPlatformRow): AccountPlatformViewReco
     platformAuthorities,
     appMembershipCount: row.app_membership_count,
     lastActiveAt: row.last_active_at,
+  };
+}
+
+function auditActor(row: AccountAuditRow) {
+  return {
+    account: accountRecord({
+      account_id: row.actor_account_id,
+      blocked_at: row.actor_blocked_at,
+      credential_version: row.actor_credential_version,
+      primary_verified_email: row.actor_primary_verified_email,
+      email_verification_source: row.actor_email_verification_source,
+      email_verified_at: row.actor_email_verified_at,
+      created_at: row.actor_created_at,
+      updated_at: row.actor_updated_at,
+    }),
+    profile: {
+      accountId: row.actor_account_id,
+      displayName: row.actor_display_name,
+      avatarUrl: row.actor_avatar_url,
+      displayNameSource: row.actor_display_name_source,
+      avatarSource: row.actor_avatar_source,
+      updatedAt: row.actor_profile_updated_at,
+    },
+    identity: externalIdentityRecord({
+      external_identity_id: row.actor_external_identity_id,
+      account_id: row.actor_account_id,
+      provider: row.actor_provider,
+      issuer: row.actor_issuer,
+      subject: row.actor_subject,
+      linked_at: row.actor_linked_at,
+      last_authenticated_at: row.actor_last_authenticated_at,
+      unlinked_at: row.actor_unlinked_at,
+      account_hint: row.actor_account_hint,
+      display_name: row.actor_identity_display_name,
+      avatar_url: row.actor_identity_avatar_url,
+    }),
+  };
+}
+
+function auditTarget(row: AccountAuditRow): {
+  readonly targetAccount: AccountRecord | null;
+  readonly targetProfile: AccountProfileRecord | null;
+} {
+  if (row.target_account_id === null) return { targetAccount: null, targetProfile: null };
+  if (row.target_credential_version === null || row.target_created_at === null
+    || row.target_updated_at === null || row.target_profile_updated_at === null) {
+    throw new Error("Incomplete target Account audit projection");
+  }
+  return {
+    targetAccount: accountRecord({
+      account_id: row.target_account_id,
+      blocked_at: row.target_blocked_at,
+      credential_version: row.target_credential_version,
+      primary_verified_email: row.target_primary_verified_email,
+      email_verification_source: row.target_email_verification_source,
+      email_verified_at: row.target_email_verified_at,
+      created_at: row.target_created_at,
+      updated_at: row.target_updated_at,
+    }),
+    targetProfile: {
+      accountId: row.target_account_id,
+      displayName: row.target_display_name,
+      avatarUrl: row.target_avatar_url,
+      displayNameSource: row.target_display_name_source,
+      avatarSource: row.target_avatar_source,
+      updatedAt: row.target_profile_updated_at,
+    },
+  };
+}
+
+function appAuditRecord(row: AccountAuditRow): AppAccountAuditRecord {
+  return {
+    ...auditActor(row),
+    ...auditTarget(row),
+    eventId: row.event_id,
+    appId: row.app_id,
+    action: row.action,
+    target: row.target,
+    requestId: row.request_id,
+    traceId: row.trace_id,
+    callerChannel: row.caller_channel,
+    oauthClientHandle: row.oauth_client_handle,
+    toolName: row.tool_name,
+    createdAt: row.created_at,
+  };
+}
+
+function platformAuditRecord(row: AccountAuditRow): PlatformAccountAuditRecord {
+  let details: Readonly<Record<string, string | number | boolean | null>> = {};
+  try {
+    const parsed = JSON.parse(row.details_json) as unknown;
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      && Object.values(parsed).every(value => value === null || ["string", "number", "boolean"].includes(typeof value))) {
+      details = parsed as Readonly<Record<string, string | number | boolean | null>>;
+    }
+  } catch { /* Invalid legacy details remain redacted. */ }
+  return {
+    ...auditActor(row),
+    ...auditTarget(row),
+    eventId: row.event_id,
+    action: row.action as PlatformAccountAuditRecord["action"],
+    targetInvitationId: row.target_invitation_id,
+    result: row.result,
+    requestId: row.request_id,
+    createdAt: row.created_at,
+    details,
   };
 }

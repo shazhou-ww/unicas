@@ -218,7 +218,7 @@ describe("command layer", () => {
 
     await platformAuditCommand(ctx, [
       "--action", "platform_invitation.created",
-      "--actor-principal-ref", "principal-1",
+      "--actor-account-id", `acct_${"a".repeat(22)}`,
       "--created-after", "10",
       "--limit", "10",
       "--cursor", "next",
@@ -227,7 +227,7 @@ describe("command layer", () => {
     expect(JSON.parse(writes.join(""))).toMatchObject({ items: [{ eventId: "platform-event-1" }] });
     expect(server.requests[0]).toMatchObject({
       pathname: "/admin/platform/audit-events",
-      search: "?action=platform_invitation.created&actorPrincipalRef=principal-1&createdAfter=10&limit=10&cursor=next",
+      search: `?action=platform_invitation.created&actorAccountId=acct_${"a".repeat(22)}&createdAfter=10&limit=10&cursor=next`,
     });
   });
 
@@ -430,7 +430,11 @@ describe("command layer", () => {
     expect(JSON.parse(writes.join(""))).toMatchObject({ domains: [{ appId: "cas_app_a", refDomain: "doc" }] });
     writes.length = 0;
     await appAuditCommand(ctx, "control", ["cas_app_a", "--after", "event-0"]);
-    expect(JSON.parse(writes.join(""))).toMatchObject({ items: [{ appId: "cas_app_a", actor: { subject: "sub-1" } }] });
+    expect(JSON.parse(writes.join(""))).toMatchObject({ items: [{
+      appId: "cas_app_a",
+      actorAccount: { accountId: `acct_${"a".repeat(22)}` },
+      authenticatedIdentity: { subject: "sub-1" },
+    }] });
     writes.length = 0;
     await appAuditCommand(ctx, "root-domain-refs", ["cas_app_a", "doc", "--space-id", "space-1"]);
     expect(JSON.parse(writes.join(""))).toMatchObject({ refs: [{ spaceId: "space-1" }] });

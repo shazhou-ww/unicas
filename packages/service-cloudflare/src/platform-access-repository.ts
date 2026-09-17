@@ -511,7 +511,37 @@ export class D1PlatformAccessRepository implements PlatformAccessRepository, Pla
   }
 
   #audit(event: PlatformAuditRecord) {
-    return this.db.prepare("INSERT INTO cas_platform_audit_events (event_id, actor_issuer, actor_subject, target_issuer, target_subject, target_invitation_id, action, result, request_id, created_at, details_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(event.eventId, event.actorPrincipal.issuer, event.actorPrincipal.subject, event.targetPrincipal?.issuer ?? null, event.targetPrincipal?.subject ?? null, event.targetInvitationId ?? null, event.action, event.result, event.requestId ?? null, event.createdAt, JSON.stringify(event.details ?? {}));
+    return this.db.prepare(
+      `INSERT INTO cas_platform_audit_events
+        (event_id, actor_issuer, actor_subject, target_issuer, target_subject,
+         target_invitation_id, action, result, request_id, created_at, details_json,
+         actor_account_id, actor_external_identity_id, target_account_id, target_external_identity_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+         (SELECT account_id FROM cas_external_identities WHERE issuer = ? AND subject = ? AND unlinked_at IS NULL),
+         (SELECT external_identity_id FROM cas_external_identities WHERE issuer = ? AND subject = ? AND unlinked_at IS NULL),
+         (SELECT account_id FROM cas_external_identities WHERE issuer = ? AND subject = ? AND unlinked_at IS NULL),
+         (SELECT external_identity_id FROM cas_external_identities WHERE issuer = ? AND subject = ? AND unlinked_at IS NULL))`,
+    ).bind(
+      event.eventId,
+      event.actorPrincipal.issuer,
+      event.actorPrincipal.subject,
+      event.targetPrincipal?.issuer ?? null,
+      event.targetPrincipal?.subject ?? null,
+      event.targetInvitationId ?? null,
+      event.action,
+      event.result,
+      event.requestId ?? null,
+      event.createdAt,
+      JSON.stringify(event.details ?? {}),
+      event.actorPrincipal.issuer,
+      event.actorPrincipal.subject,
+      event.actorPrincipal.issuer,
+      event.actorPrincipal.subject,
+      event.targetPrincipal?.issuer ?? null,
+      event.targetPrincipal?.subject ?? null,
+      event.targetPrincipal?.issuer ?? null,
+      event.targetPrincipal?.subject ?? null,
+    );
   }
 
   #requirePlatformAdmin(actor: Principal) {

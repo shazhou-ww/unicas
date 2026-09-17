@@ -6,6 +6,7 @@ import {
   ExternalIdentityDetailSchema,
   PrimaryVerifiedEmailSchema,
   PlatformAccountDetailSchema,
+  PlatformAccountAuditEventSchema,
 } from "../src/index.js";
 
 const accountId = `acct_${"a".repeat(22)}`;
@@ -118,6 +119,40 @@ describe("Account protocol model", () => {
       ...detail,
       principalRef: "principal-1",
       principal: { issuer: "https://issuer.example", subject: "subject-1" },
+    }).success).toBe(false);
+  });
+
+  test("keeps privileged audit identity detail subordinate to the actor Account", () => {
+    const event = {
+      eventId: "event-1",
+      action: "platform_access.blocked",
+      actorAccount: {
+        accountId,
+        displayName: "Alex Morgan",
+        primaryVerifiedEmail: null,
+        avatar: { kind: "fallback", initials: "AM", colorIndex: 2 },
+      },
+      authenticatedIdentity: {
+        externalIdentityId: "ext-google-alex",
+        provider: "google",
+        accountHint: null,
+        linkedAt: 1,
+        lastAuthenticatedAt: 2,
+        currentLogin: false,
+        issuer: "https://accounts.google.com",
+        subject: "104891",
+      },
+      targetAccount: null,
+      targetInvitationId: null,
+      result: "succeeded",
+      requestId: null,
+      createdAt: 2,
+      details: {},
+    };
+    expect(PlatformAccountAuditEventSchema.safeParse(event).success).toBe(true);
+    expect(PlatformAccountAuditEventSchema.safeParse({
+      ...event,
+      actorPrincipalRef: "principal-1",
     }).success).toBe(false);
   });
 });

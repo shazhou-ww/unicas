@@ -185,7 +185,7 @@ const TOOL_HANDLERS = {
 
   async list_platform_audit_events(admin, args) {
     return admin.listPlatformAuditEvents({
-      ...pick(args, ["actorPrincipalRef", "targetPrincipalRef", "createdAfter", "limit", "cursor"]),
+      ...pick(args, ["actorAccountId", "targetAccountId", "createdAfter", "limit", "cursor"]),
       ...(args.action === undefined ? {} : { action: str(args.action) as PlatformAuditAction }),
     });
   },
@@ -396,7 +396,7 @@ const TOOL_HANDLERS = {
   async list_app_control_audit_events(admin, args) {
     return admin.listAppControlAuditEvents(
       { appId: str(args.appId) },
-      pick(args, ["limit", "cursor", "after"]),
+      pick(args, ["limit", "cursor", "after", "actorAccountId", "targetAccountId"]),
     );
   },
 

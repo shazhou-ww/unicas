@@ -15,6 +15,7 @@ export async function handleAppAdminCompatibilityRequest(
   if (route.operation === "listMembers" || route.operation === "deleteMember") {
     return legacyHandler(request);
   }
+  if (route.operation === "listControlAuditEvents") return legacyHandler(request);
   if (route.operation === "listPeople" || route.operation === "mintManagedCapability" || route.operation === "patchApp"
     || route.operation === "listMemberInvitations" || route.operation === "revokeMemberInvitation"
     || route.operation === "inspectOAuthIssuer" || route.operation === "activateOAuthIssuer") {

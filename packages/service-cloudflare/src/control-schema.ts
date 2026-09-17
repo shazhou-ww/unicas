@@ -27,7 +27,7 @@ const CONTROL_TABLE_MIGRATIONS = [
   "CREATE TABLE IF NOT EXISTS cas_app_managed_issuers (app_id TEXT NOT NULL, issuer TEXT NOT NULL, audience TEXT NOT NULL, metadata_url TEXT NOT NULL, authorization_endpoint TEXT NOT NULL, token_endpoint TEXT NOT NULL, jwks_uri TEXT NOT NULL, scopes_supported TEXT NOT NULL DEFAULT '[]', code_challenge_methods_supported TEXT NOT NULL DEFAULT '[]', status TEXT NOT NULL CHECK (status IN ('active','disabled')), verified_at INTEGER NOT NULL, jwks_digest TEXT NOT NULL, capability_max_lifetime_seconds INTEGER NOT NULL DEFAULT 3600 CHECK (capability_max_lifetime_seconds BETWEEN 60 AND 604800), revision INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (app_id), UNIQUE (issuer))",
   "CREATE TABLE IF NOT EXISTS cas_oauth_issuer_inspections (inspection_id TEXT NOT NULL, app_id TEXT NOT NULL, issuer TEXT NOT NULL, audience TEXT NOT NULL, metadata_url TEXT NOT NULL, metadata_type TEXT NOT NULL CHECK (metadata_type IN ('oauth','oidc')), authorization_endpoint TEXT NOT NULL, token_endpoint TEXT NOT NULL, jwks_uri TEXT NOT NULL, registration_endpoint TEXT, scopes_supported TEXT NOT NULL DEFAULT '[]', code_challenge_methods_supported TEXT NOT NULL DEFAULT '[]', metadata_digest TEXT NOT NULL, jwks_digest TEXT NOT NULL, challenge_hash TEXT NOT NULL, capability_max_lifetime_seconds INTEGER NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, used_at INTEGER, revision INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (inspection_id))",
   "CREATE TABLE IF NOT EXISTS cas_oauth_issuer_inspection_keys (inspection_id TEXT NOT NULL, kid TEXT NOT NULL, algorithm TEXT NOT NULL, public_jwk TEXT NOT NULL, PRIMARY KEY (inspection_id, kid))",
-  "CREATE TABLE IF NOT EXISTS cas_control_audit_events (event_id TEXT NOT NULL, app_id TEXT, identity_issuer TEXT NOT NULL, subject TEXT NOT NULL, action TEXT NOT NULL, target TEXT NOT NULL, request_id TEXT, trace_id TEXT, caller_channel TEXT, oauth_client_handle TEXT, tool_name TEXT, created_at INTEGER NOT NULL, original_account_id TEXT, external_identity_id TEXT, PRIMARY KEY (event_id))",
+  "CREATE TABLE IF NOT EXISTS cas_control_audit_events (event_id TEXT NOT NULL, app_id TEXT, identity_issuer TEXT NOT NULL, subject TEXT NOT NULL, action TEXT NOT NULL, target TEXT NOT NULL, request_id TEXT, trace_id TEXT, caller_channel TEXT, oauth_client_handle TEXT, tool_name TEXT, created_at INTEGER NOT NULL, original_account_id TEXT, external_identity_id TEXT, target_account_id TEXT, PRIMARY KEY (event_id))",
   "CREATE TABLE IF NOT EXISTS cas_control_idempotency (identity_issuer TEXT NOT NULL, subject TEXT NOT NULL, method TEXT NOT NULL, canonical_route TEXT NOT NULL, idempotency_key TEXT NOT NULL, payload_hash TEXT NOT NULL, response_json TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, account_id TEXT, PRIMARY KEY (identity_issuer, subject, method, canonical_route, idempotency_key))",
   "CREATE TABLE IF NOT EXISTS cas_admin_sessions (session_id TEXT NOT NULL, encrypted_payload TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL, last_seen_at INTEGER NOT NULL, account_id TEXT, external_identity_id TEXT, credential_version INTEGER, PRIMARY KEY (session_id))",
   "CREATE TABLE IF NOT EXISTS cas_control_meta (key TEXT NOT NULL, value INTEGER NOT NULL, PRIMARY KEY (key))",
@@ -42,6 +42,9 @@ const CONTROL_INDEX_MIGRATIONS = [
   "CREATE UNIQUE INDEX IF NOT EXISTS cas_app_members_by_account ON cas_app_members(app_id, account_id) WHERE account_id IS NOT NULL",
   "CREATE INDEX IF NOT EXISTS cas_playground_file_roots_by_account ON cas_playground_file_roots(app_id, account_id, name, root_id) WHERE account_id IS NOT NULL",
   "CREATE INDEX IF NOT EXISTS cas_control_audit_by_account ON cas_control_audit_events(original_account_id, created_at, event_id) WHERE original_account_id IS NOT NULL",
+  "CREATE INDEX IF NOT EXISTS cas_control_audit_by_target_account ON cas_control_audit_events(target_account_id, created_at, event_id) WHERE target_account_id IS NOT NULL",
+  "CREATE INDEX IF NOT EXISTS cas_platform_audit_by_actor_account ON cas_platform_audit_events(actor_account_id, created_at, event_id) WHERE actor_account_id IS NOT NULL",
+  "CREATE INDEX IF NOT EXISTS cas_platform_audit_by_target_account ON cas_platform_audit_events(target_account_id, created_at, event_id) WHERE target_account_id IS NOT NULL",
   "CREATE INDEX IF NOT EXISTS cas_admin_sessions_by_account ON cas_admin_sessions(account_id, credential_version, expires_at) WHERE account_id IS NOT NULL",
   "CREATE INDEX IF NOT EXISTS cas_invitations_by_token_hash ON cas_app_member_invitations(token_hash)",
   "CREATE INDEX IF NOT EXISTS cas_platform_invitations_by_token_hash ON cas_platform_invitations(token_hash)",
@@ -90,6 +93,7 @@ export async function migrateControlSchema(db: D1Database): Promise<void> {
   await ensureColumns(db, "cas_control_audit_events", {
     original_account_id: "TEXT",
     external_identity_id: "TEXT",
+    target_account_id: "TEXT",
   });
   await ensureColumns(db, "cas_control_idempotency", { account_id: "TEXT" });
   await ensureColumns(db, "cas_admin_sessions", {

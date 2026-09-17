@@ -348,4 +348,83 @@ describe("D1 Account repository", () => {
       "SELECT blocked_at, credential_version FROM cas_accounts WHERE account_id = ?",
     ).bind(target.account.accountId).first()).toEqual({ blocked_at: null, credential_version: 2 });
   });
+
+  test("projects privileged audit events by Account while retaining exact historical identity", async () => {
+    const { db, service } = await fixture();
+    const actor = await service.createForExternalIdentity({
+      provider: "google",
+      issuer: "https://accounts.google.com",
+      subject: "audit-actor",
+      displayName: "Audit Actor",
+    });
+    const target = await service.createForExternalIdentity({
+      provider: "github",
+      issuer: "https://github.com",
+      subject: "202",
+      displayName: "Audit Target",
+    });
+    await db.prepare(
+      "INSERT INTO cas_account_platform_authorities (account_id, authority, granted_at) VALUES (?, 'platform.admin', 1)",
+    ).bind(actor.account.accountId).run();
+    await db.prepare(
+      "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES ('cas_app_a', 'App', '', 'active', 1, 1)",
+    ).run();
+    await db.prepare(
+      "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES ('cas_app_a', ?, ?, 1, ?)",
+    ).bind(actor.authenticatedIdentity.issuer, actor.authenticatedIdentity.subject, actor.account.accountId).run();
+    await db.prepare(
+      `INSERT INTO cas_control_audit_events
+        (event_id, app_id, identity_issuer, subject, action, target, created_at,
+         original_account_id, external_identity_id, target_account_id)
+       VALUES ('app-audit', 'cas_app_a', ?, ?, 'member.removed', ?, 10, ?, ?, ?)`,
+    ).bind(
+      actor.authenticatedIdentity.issuer,
+      actor.authenticatedIdentity.subject,
+      target.account.accountId,
+      actor.account.accountId,
+      actor.authenticatedIdentity.externalIdentityId,
+      target.account.accountId,
+    ).run();
+    await db.prepare(
+      `INSERT INTO cas_platform_audit_events
+        (event_id, actor_issuer, actor_subject, action, result, created_at,
+         actor_account_id, actor_external_identity_id, target_account_id)
+       VALUES ('platform-audit', ?, ?, 'platform_access.blocked', 'succeeded', 11, ?, ?, ?)`,
+    ).bind(
+      actor.authenticatedIdentity.issuer,
+      actor.authenticatedIdentity.subject,
+      actor.account.accountId,
+      actor.authenticatedIdentity.externalIdentityId,
+      target.account.accountId,
+    ).run();
+    await db.prepare(
+      "UPDATE cas_external_identities SET unlinked_at = 12 WHERE external_identity_id = ?",
+    ).bind(actor.authenticatedIdentity.externalIdentityId).run();
+
+    await expect(service.listAppAuditEvents({
+      actorAccountId: actor.account.accountId,
+      appId: "cas_app_a",
+      query: { targetAccountId: target.account.accountId },
+    })).resolves.toMatchObject({
+      items: [{
+        actorAccount: { accountId: actor.account.accountId },
+        authenticatedIdentity: {
+          externalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+          issuer: actor.authenticatedIdentity.issuer,
+          subject: actor.authenticatedIdentity.subject,
+        },
+        targetAccount: { accountId: target.account.accountId },
+      }]
+    });
+    await expect(service.listPlatformAuditEvents({
+      actorAccountId: actor.account.accountId,
+      query: { actorAccountId: actor.account.accountId, targetAccountId: target.account.accountId },
+    })).resolves.toMatchObject({
+      items: [{
+        actorAccount: { accountId: actor.account.accountId },
+        targetAccount: { accountId: target.account.accountId },
+        authenticatedIdentity: { externalIdentityId: actor.authenticatedIdentity.externalIdentityId },
+      }]
+    });
+  });
 });

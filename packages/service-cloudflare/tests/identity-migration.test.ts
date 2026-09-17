@@ -92,6 +92,17 @@ describe("legacy administrator identity migration", () => {
       "SELECT event_id, actor_issuer, actor_subject, target_issuer, target_subject, action, result, created_at FROM cas_platform_audit_events",
     ).first()).toEqual(platformAuditBefore);
     expect(await db.prepare(
+      "SELECT original_account_id, external_identity_id FROM cas_control_audit_events WHERE event_id = 'control-event'",
+    ).first()).toMatchObject({ original_account_id: expect.stringMatching(/^acct_/), external_identity_id: expect.stringMatching(/^ext_/) });
+    expect(await db.prepare(
+      "SELECT actor_account_id, actor_external_identity_id, target_account_id, target_external_identity_id FROM cas_platform_audit_events WHERE event_id = 'platform-event'",
+    ).first()).toMatchObject({
+      actor_account_id: expect.stringMatching(/^acct_/),
+      actor_external_identity_id: expect.stringMatching(/^ext_/),
+      target_account_id: expect.stringMatching(/^acct_/),
+      target_external_identity_id: expect.stringMatching(/^ext_/),
+    });
+    expect(await db.prepare(
       "SELECT COUNT(*) AS count FROM cas_identity_migration_journal WHERE failure_count = 0",
     ).first()).toEqual({ count: 6 });
   });

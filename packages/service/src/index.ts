@@ -21,6 +21,9 @@ export { AccountService, AccountServiceError, projectAccountSummary } from "./ac
 export type {
   AccountAppMembershipRecord,
   AccountPlatformViewRecord,
+  AccountAuditActorRecord,
+  AppAccountAuditRecord,
+  PlatformAccountAuditRecord,
   AccountCreateInput,
   AccountProfileRecord,
   AccountRecord,

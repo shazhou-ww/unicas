@@ -54,6 +54,9 @@ function fixture() {
     listPlatformAccounts: vi.fn(async () => []),
     commitPlatformAuthority: vi.fn(async () => "updated"),
     commitPlatformBlock: vi.fn(async () => "updated"),
+    getAppAuditEventPosition: vi.fn(async () => null),
+    listAppAccountAuditEvents: vi.fn(async () => []),
+    listPlatformAccountAuditEvents: vi.fn(async () => []),
     createAccountWithIdentity: vi.fn(async () => "created"),
     commitLinkIdentity: vi.fn(async () => "linked"),
     commitUnlinkIdentity: vi.fn(async () => "unlinked"),
@@ -230,6 +233,68 @@ describe("Account service", () => {
       targetAccountId: accountId,
       blocked: true,
     })).rejects.toMatchObject({ code: "SELF_BLOCK_FORBIDDEN" });
+  });
+
+  test("projects privileged audit actors from Accounts and exact identities", async () => {
+    const { repository, service } = fixture();
+    vi.mocked(repository.hasAppMembership).mockResolvedValue(true);
+    vi.mocked(repository.listPlatformAuthorities).mockResolvedValue(["platform.admin"]);
+    const auditActor = {
+      account,
+      profile: {
+        accountId,
+        displayName: "Alice Example",
+        avatarUrl: null,
+        displayNameSource: "user",
+        avatarSource: "user",
+        updatedAt: 2,
+      },
+      identity,
+    };
+    vi.mocked(repository.listAppAccountAuditEvents).mockResolvedValue([{
+      ...auditActor,
+      eventId: "event-app",
+      appId: "cas_app_a",
+      targetAccount: null,
+      targetProfile: null,
+      action: "member.removed",
+      target: `acct_${"b".repeat(22)}`,
+      requestId: null,
+      traceId: null,
+      callerChannel: "admin-webui",
+      oauthClientHandle: null,
+      toolName: null,
+      createdAt: 3,
+    }]);
+    await expect(service.listAppAuditEvents({ actorAccountId: accountId, appId: "cas_app_a" }))
+      .resolves.toMatchObject({
+        items: [{
+          actorAccount: { accountId },
+          authenticatedIdentity: { issuer: identity.issuer, subject: identity.subject },
+          targetAccount: null,
+        }]
+      });
+
+    vi.mocked(repository.listPlatformAccountAuditEvents).mockResolvedValue([{
+      ...auditActor,
+      eventId: "event-platform",
+      action: "platform_access.authority_changed",
+      targetAccount: account,
+      targetProfile: auditActor.profile,
+      targetInvitationId: null,
+      result: "succeeded",
+      requestId: null,
+      createdAt: 4,
+      details: { authority: "apps.create" },
+    }]);
+    await expect(service.listPlatformAuditEvents({ actorAccountId: accountId }))
+      .resolves.toMatchObject({
+        items: [{
+          actorAccount: { accountId },
+          targetAccount: { accountId },
+          authenticatedIdentity: { externalIdentityId: identity.externalIdentityId },
+        }]
+      });
   });
 
   test("fails closed on alias cycles and excessive depth", async () => {

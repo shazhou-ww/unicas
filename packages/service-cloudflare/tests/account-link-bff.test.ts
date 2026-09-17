@@ -246,6 +246,27 @@ describe("BFF Account identity mutations", () => {
       `https://console.example/admin/apps/cas_app_a/members?accountId=${encodeURIComponent(targetMember.account.accountId)}`,
       { method: "DELETE", headers: { Cookie: initialCookie } },
     ))).json()).toEqual({ ok: true });
+    expect(await (await bff(new Request(
+      `https://console.example/admin/apps/cas_app_a/audit-events?actorAccountId=${encodeURIComponent(created.account.accountId)}&targetAccountId=${encodeURIComponent(targetMember.account.accountId)}`,
+      { headers: { Cookie: initialCookie } },
+    ))).json()).toMatchObject({
+      items: [{
+        actorAccount: { accountId: created.account.accountId },
+        authenticatedIdentity: { externalIdentityId: created.authenticatedIdentity.externalIdentityId },
+        targetAccount: { accountId: targetMember.account.accountId },
+      }]
+    });
+    expect(await (await bff(new Request(
+      `https://console.example/admin/platform/audit-events?actorAccountId=${encodeURIComponent(created.account.accountId)}&targetAccountId=${encodeURIComponent(targetMember.account.accountId)}`,
+      { headers: { Cookie: initialCookie } },
+    ))).json()).toMatchObject({
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          actorAccount: expect.objectContaining({ accountId: created.account.accountId }),
+          targetAccount: expect.objectContaining({ accountId: targetMember.account.accountId }),
+        }),
+      ])
+    });
     expect((await bff(new Request(
       `https://console.example/admin/apps/cas_app_a/members?accountId=${encodeURIComponent(created.account.accountId)}`,
       { method: "DELETE", headers: { Cookie: initialCookie } },

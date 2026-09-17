@@ -2,7 +2,7 @@ import { z } from "zod";
 import { AppIdSchema } from "@unicas/tenant-protocol";
 import type { CasManagedCapability } from "./http.js";
 import type { CasAdminErrorResponse } from "./errors.js";
-import { PlatformAuthoritySchema } from "./platform-access.js";
+import { PlatformAuditActionSchema, PlatformAuthoritySchema } from "./platform-access.js";
 import { CasAdminErrorCodes } from "./errors.js";
 import type {
   AccountAvatar,
@@ -37,6 +37,7 @@ import type {
   ManagedSpaceCapability,
   PlatformAccountSummary,
   PlatformAccountDetail,
+  PlatformAccountAuditEvent,
   PlatformAccountListItem,
   PrimaryVerifiedEmail,
   Principal,
@@ -209,6 +210,19 @@ export const PlatformAccountDetailSchema: z.ZodType<PlatformAccountDetail> = z.o
   memberships: z.array(AppMembershipSchema).readonly(),
 }).strict().readonly().meta({ id: "PlatformAccountDetail" });
 
+export const PlatformAccountAuditEventSchema: z.ZodType<PlatformAccountAuditEvent> = z.object({
+  eventId: NonEmptyStringSchema,
+  action: PlatformAuditActionSchema,
+  actorAccount: AccountSummarySchema,
+  authenticatedIdentity: ExternalIdentityDetailSchema,
+  targetAccount: AccountSummarySchema.nullable(),
+  targetInvitationId: NonEmptyStringSchema.nullable(),
+  result: z.enum(["succeeded", "denied"]),
+  requestId: z.string().nullable(),
+  createdAt: TimestampSchema,
+  details: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
+}).strict().readonly().meta({ id: "PlatformAccountAuditEvent" });
+
 export const AppMemberInvitationSchema: z.ZodType<AppMemberInvitation> = z.object({
   invitationId: NonEmptyStringSchema.describe("Opaque persistent invitation identity."),
   appId: AppIdSchema.describe("App the accepted invitation joins."),
@@ -279,7 +293,9 @@ export const AppRefDomainSchema: z.ZodType<AppRefDomain> = z.object({
 export const AppControlAuditEventSchema: z.ZodType<AppControlAuditEvent> = z.object({
   eventId: NonEmptyStringSchema,
   appId: AppIdSchema.nullable(),
-  actor: PrincipalSchema,
+  actorAccount: AccountSummarySchema,
+  authenticatedIdentity: ExternalIdentityDetailSchema,
+  targetAccount: AccountSummarySchema.nullable(),
   action: NonEmptyStringSchema,
   target: NonEmptyStringSchema,
   requestId: z.string().nullable(),
@@ -290,7 +306,7 @@ export const AppControlAuditEventSchema: z.ZodType<AppControlAuditEvent> = z.obj
     toolName: z.string().nullable(),
   }).readonly().nullable(),
   createdAt: TimestampSchema,
-}).readonly().meta({ id: "AppControlAuditEvent" });
+}).strict().readonly().meta({ id: "AppControlAuditEvent" });
 
 export const SpaceRootRefBalanceSchema: z.ZodType<SpaceRootRefBalance> = z.object({
   spaceId: NonEmptyStringSchema,

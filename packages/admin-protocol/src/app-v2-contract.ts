@@ -21,12 +21,12 @@ import {
   SpaceRootRefEventSchema,
   ExternalIdentitySummarySchema,
   PlatformAccountDetailSchema,
+  PlatformAccountAuditEventSchema,
   PlatformAccountListItemSchema,
 } from "./schemas.js";
 import {
   CreatePlatformInvitationSchema,
   PlatformAuditActionSchema,
-  PlatformAuditQuerySchema,
   PlatformAuthoritySchema,
   PlatformInvitationQuerySchema,
   PlatformPrincipalQuerySchema,
@@ -374,9 +374,15 @@ export const listAppRefDomainsContract = appProcedure
   .input(z.object({ params: appParams }).readonly())
   .output(z.object({ domains: z.array(AppRefDomainSchema).readonly() }).readonly());
 
+export const AppAccountAuditQuerySchema = pageQuery.unwrap().extend({
+  after: z.string().optional(),
+  actorAccountId: AccountIdSchema.optional(),
+  targetAccountId: AccountIdSchema.optional(),
+}).strict().readonly();
+
 export const listAppControlAuditEventsContract = appProcedure
   .route({ method: "GET", path: `${AppAdminApiBasePath}/{appId}/audit-events`, operationId: "listAppControlAuditEvents", summary: "List App control audit events", inputStructure: "detailed", tags: ["Audit"] })
-  .input(z.object({ params: appParams, query: pageQuery.unwrap().extend({ after: z.string().optional() }).readonly().optional() }).readonly())
+  .input(z.object({ params: appParams, query: AppAccountAuditQuerySchema.optional() }).readonly())
   .output(pageSchema(AppControlAuditEventSchema));
 
 export const listSpaceRootDomainRefsContract = appProcedure
@@ -549,24 +555,19 @@ export const acceptPlatformInvitationContract = appProcedure
   .input(z.object({ params: z.object({ token: z.string().min(1) }).readonly() }).readonly())
   .output(z.void());
 
-const PlatformAuditEventSchema = z.object({
-  eventId: z.string().min(1),
-  action: PlatformAuditActionSchema,
-  actorPrincipalRef: z.string().min(1).nullable(),
-  actorPrincipal: PrincipalSchema,
-  targetPrincipalRef: z.string().min(1).nullable(),
-  targetPrincipal: PrincipalSchema.nullable(),
-  targetInvitationId: z.string().min(1).nullable(),
-  result: z.enum(["succeeded", "denied"]),
-  requestId: z.string().min(1).nullable(),
-  createdAt: z.number().int().nonnegative(),
-  details: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
-}).readonly();
+export const PlatformAccountAuditQuerySchema = z.object({
+  action: PlatformAuditActionSchema.optional(),
+  actorAccountId: AccountIdSchema.optional(),
+  targetAccountId: AccountIdSchema.optional(),
+  createdAfter: z.number().int().nonnegative().optional(),
+  limit: z.number().int().min(1).max(1000).optional(),
+  cursor: z.string().min(1).optional(),
+}).strict().readonly();
 
 export const listPlatformAuditEventsContract = appProcedure
   .route({ method: "GET", path: "/admin/platform/audit-events", operationId: "listPlatformAuditEvents", summary: "List platform authorization audit events", inputStructure: "detailed", tags: ["Platform Audit"] })
-  .input(z.object({ query: PlatformAuditQuerySchema.optional() }).readonly())
-  .output(pageSchema(PlatformAuditEventSchema).meta({ id: "PlatformAuditPage" }));
+  .input(z.object({ query: PlatformAccountAuditQuerySchema.optional() }).readonly())
+  .output(pageSchema(PlatformAccountAuditEventSchema).meta({ id: "PlatformAccountAuditPage" }));
 
 export const appAdminApiContract = {
   identity: {

@@ -213,13 +213,16 @@ export function createControlPlaneMcpServer(
   server.registerTool(
     APP_ADMIN_MCP_TOOLS.list_app_control_audit_events.name,
     APP_ADMIN_MCP_TOOLS.list_app_control_audit_events.registration,
-    async ({ appId, limit, cursor, after }) => {
+    async ({ appId, limit, cursor, after, actorAccountId, targetAccountId }) => {
       const grant = requireGrantScope("control:read");
-      const result = await controlPlane.listControlAuditEvents(
-        serviceContext(grant, "list_app_control_audit_events"),
-        { path: { stackId: appId }, query: { limit, cursor, after } },
-      );
-      return appToolResult({ operation: "listControlAuditEvents", appId }, result);
+      return accountToolResult(async () => {
+        const actor = await requireGrantAccount(grant, options);
+        return options.accountService!.listAppAuditEvents({
+          actorAccountId: actor.account.accountId,
+          appId,
+          query: { limit, cursor, after, actorAccountId, targetAccountId },
+        });
+      });
     },
   );
 
@@ -402,19 +405,17 @@ export function createControlPlaneMcpServer(
   server.registerTool(
     APP_ADMIN_MCP_TOOLS.list_platform_audit_events.name,
     APP_ADMIN_MCP_TOOLS.list_platform_audit_events.registration,
-    async ({ action, actorPrincipalRef, targetPrincipalRef, createdAfter, limit, cursor }) => {
+    async ({ action, actorAccountId, targetAccountId, createdAfter, limit, cursor }) => {
       const grant = requireGrantScope("control:security");
       const authorizationError = await options.authorizePlatformOperation?.(grant, "platform.admin");
       if (authorizationError) return toolResult(authorizationError);
-      if (!options.platformAudit) return toolResult({ error: "SERVICE_UNAVAILABLE" });
-      return platformToolResult(() => options.platformAudit!.list(grantPrincipal(grant), {
-        action,
-        actorPrincipalRef,
-        targetPrincipalRef,
-        createdAfter,
-        limit,
-        cursor,
-      }));
+      return accountToolResult(async () => {
+        const actor = await requireGrantAccount(grant, options);
+        return options.accountService!.listPlatformAuditEvents({
+          actorAccountId: actor.account.accountId,
+          query: { action, actorAccountId, targetAccountId, createdAfter, limit, cursor },
+        });
+      });
     },
   );
 

@@ -593,6 +593,100 @@ class MemoryPlatformAccessRepository implements PlatformAccessRepository, Platfo
   async appendAudit(event: PlatformAuditRecord): Promise<void> { this.platformAudits.push(event); }
 }
 
+function testAccountId(subject: string): `acct_${string}` {
+  const normalized = subject.replace(/[^A-Za-z0-9_-]/g, "_").padEnd(22, "_").slice(0, 22);
+  return `acct_${normalized}`;
+}
+
+function memoryAccountRepository(
+  platform: MemoryPlatformAccessRepository,
+  subject: string,
+): AccountRepository {
+  const accounts = new Map<string, AccountRecord>();
+  const profiles = new Map<string, { accountId: string; displayName: string | null; avatarUrl: string | null; displayNameSource: string | null; avatarSource: string | null; updatedAt: number }>();
+  const identities = new Map<string, ExternalIdentityRecord>();
+  const identityKeys = new Map<string, ExternalIdentityRecord>();
+  function add(
+    account: AccountRecord,
+    profile: { accountId: string; displayName: string | null; avatarUrl: string | null; displayNameSource: string | null; avatarSource: string | null; updatedAt: number },
+    identity: ExternalIdentityRecord,
+  ) {
+    accounts.set(account.accountId, account);
+    profiles.set(profile.accountId, profile);
+    identities.set(identity.externalIdentityId, identity);
+    identityKeys.set(`${identity.issuer}\0${identity.subject}`, identity);
+  }
+  const accountId = testAccountId(subject);
+  const seedIdentity: ExternalIdentityRecord = {
+    externalIdentityId: `ext-${subject}`, accountId, provider: "google", issuer: ISSUER, subject,
+    linkedAt: 1, lastAuthenticatedAt: 1, unlinkedAt: null, accountHint: null, displayName: subject, avatarUrl: null,
+  };
+  add(
+    { accountId, blockedAt: null, credentialVersion: 1, primaryVerifiedEmail: null, createdAt: 1, updatedAt: 1 },
+    { accountId, displayName: subject, avatarUrl: null, displayNameSource: seedIdentity.externalIdentityId, avatarSource: null, updatedAt: 1 },
+    seedIdentity,
+  );
+  const identityForAccount = (requested: string) => [...identities.values()].find(value => value.accountId === requested && value.unlinkedAt === null) ?? null;
+  return {
+    getAccount: async requested => accounts.get(requested) ?? null,
+    getAliasTarget: async () => null,
+    getActiveIdentity: async (issuer, candidateSubject) => identityKeys.get(`${issuer}\0${candidateSubject}`) ?? null,
+    getIdentity: async externalIdentityId => identities.get(externalIdentityId) ?? null,
+    getProfile: async requested => profiles.get(requested) ?? null,
+    listActiveIdentities: async requested => [...identities.values()].filter(value => value.accountId === requested && value.unlinkedAt === null),
+    listPlatformAuthorities: async requested => {
+      const identity = identityForAccount(requested);
+      if (!identity) return [];
+      return (await platform.getAccess({ issuer: identity.issuer, subject: identity.subject }))?.authorities ?? [];
+    },
+    hasAppMembership: async requested => {
+      const identity = identityForAccount(requested);
+      return identity ? platform.hasMembership({ issuer: identity.issuer, subject: identity.subject }) : false;
+    },
+    listAccountMembershipAppIds: async () => [],
+    readControlSnapshot: () => platform.readSnapshot(),
+    listPlatformAccountAuditEvents: async input => {
+      const events = await platform.listAuditEvents({
+        action: input.action,
+        createdAfter: input.createdAfter,
+        beforeCreatedAt: input.beforeCreatedAt,
+        beforeEventId: input.beforeEventId,
+        limit: input.limit,
+      });
+      return events.flatMap(event => {
+        const actorIdentity = identityKeys.get(`${event.actorPrincipal.issuer}\0${event.actorPrincipal.subject}`);
+        if (!actorIdentity) return [];
+        const actorAccount = accounts.get(actorIdentity.accountId)!;
+        const actorProfile = profiles.get(actorIdentity.accountId)!;
+        const targetIdentity = event.targetPrincipal
+          ? identityKeys.get(`${event.targetPrincipal.issuer}\0${event.targetPrincipal.subject}`) ?? null
+          : null;
+        if (input.actorAccountId !== undefined && input.actorAccountId !== actorAccount.accountId) return [];
+        if (input.targetAccountId !== undefined && input.targetAccountId !== targetIdentity?.accountId) return [];
+        return [{
+          account: actorAccount,
+          profile: actorProfile,
+          identity: actorIdentity,
+          eventId: event.eventId,
+          action: event.action,
+          targetAccount: targetIdentity ? accounts.get(targetIdentity.accountId) ?? null : null,
+          targetProfile: targetIdentity ? profiles.get(targetIdentity.accountId) ?? null : null,
+          targetInvitationId: event.targetInvitationId,
+          result: event.result,
+          requestId: event.requestId,
+          createdAt: event.createdAt,
+          details: event.details,
+        }];
+      });
+    },
+    createAccountWithIdentity: async input => {
+      if (identityKeys.has(`${input.identity.issuer}\0${input.identity.subject}`)) return "identity-conflict";
+      add(input.account, input.profile, input.identity);
+      return "created";
+    },
+  } as AccountRepository;
+}
+
 async function createMockProvider(): Promise<MockProvider> {
   const { publicKey, privateKey } = await generateKeyPair("RS256");
   const publicJwk = (await exportJWK(publicKey)) as Record<string, unknown>;
@@ -619,6 +713,7 @@ async function createBff(
   platformInvitationRepository?: PlatformInvitationRepository,
   platformAuditRepository?: PlatformAuditRepository,
   peopleRepository?: PeopleRepository,
+  accountRepository?: AccountRepository,
 ): Promise<(request: Request) => Promise<Response>> {
   const providerFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? new URL(input) : input instanceof URL ? input : new URL(input.url);
@@ -673,6 +768,7 @@ async function createBff(
     platformInvitationRepository,
     platformAuditRepository,
     peopleRepository,
+    accountRepository,
   });
 }
 
@@ -2126,7 +2222,17 @@ describe("cas-admin-webui BFF", () => {
     controlPlane?: ControlPlaneOperations,
   ): Promise<{ bff: (req: Request) => Promise<Response>; cookie: string; csrf: string }> {
     repo.grantAdmin(ISSUER, subject);
-    const bff = await createBff(provider, undefined, {}, repo, controlPlane, repo, repo, peopleRepository);
+    const bff = await createBff(
+      provider,
+      undefined,
+      {},
+      repo,
+      controlPlane,
+      repo,
+      repo,
+      peopleRepository,
+      memoryAccountRepository(repo, subject),
+    );
 
     const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/oidc?returnTo=/admin/`));
     const preLoginCookie = cookieFrom(login)!;
@@ -2461,7 +2567,8 @@ describe("cas-admin-webui BFF", () => {
     expect(await response.json()).toMatchObject({
       items: [{
         action: "platform_invitation.created",
-        actorPrincipalRef: expect.any(String),
+        actorAccount: { accountId: testAccountId("admin-user") },
+        authenticatedIdentity: { issuer: ISSUER, subject: "admin-user" },
         targetInvitationId: expect.any(String),
         requestId: "request-audit",
         details: {},
@@ -2475,7 +2582,17 @@ describe("cas-admin-webui BFF", () => {
     const repo = new MemoryPlatformAccessRepository();
     // Grant apps.create only, NOT platform.admin.
     repo.grant(ISSUER, "non-admin-user");
-    const bff = await createBff(provider, undefined, {}, repo, undefined, repo, repo);
+    const bff = await createBff(
+      provider,
+      undefined,
+      {},
+      repo,
+      undefined,
+      repo,
+      repo,
+      undefined,
+      memoryAccountRepository(repo, "non-admin-user"),
+    );
 
     const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/oidc?returnTo=/admin/`));
     const preLoginCookie = cookieFrom(login)!;

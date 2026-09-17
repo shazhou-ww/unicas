@@ -223,14 +223,14 @@ export class FakeAdminApi {
       return new Response(null, { status: 204, headers: { ETag: '"2"' } });
     }
     if (url.pathname === appAdminRoutes.platformAuditEvents() && method === "GET") {
+      const accountId = `acct_${"a".repeat(22)}`;
       return json({
         items: [{
           eventId: "platform-event-1",
           action: "platform_invitation.created",
-          actorPrincipalRef: "principal-1",
-          actorPrincipal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-          targetPrincipalRef: null,
-          targetPrincipal: null,
+          actorAccount: { accountId, displayName: "Alice", primaryVerifiedEmail: null, avatar: { kind: "fallback", initials: "AL", colorIndex: 1 } },
+          authenticatedIdentity: { externalIdentityId: "ext-alice", provider: "google", accountHint: null, linkedAt: 1, lastAuthenticatedAt: 1, currentLogin: false, issuer: "https://accounts.google.com", subject: "sub-1" },
+          targetAccount: null,
           targetInvitationId: "platform-invite-1",
           result: "succeeded",
           requestId: "request-1",
@@ -396,11 +396,14 @@ export class FakeAdminApi {
       return json({ domains: [{ appId: "cas_app_a", refDomain: "doc", revision: 1 }] });
     }
     if (url.pathname === appAdminRoutes.controlAuditEvents({ appId: "cas_app_a" })) {
+      const accountId = `acct_${"a".repeat(22)}`;
       return json({
         items: [{
           eventId: "event-1",
           appId: "cas_app_a",
-          actor: { issuer: "https://accounts.google.com", subject: "sub-1" },
+          actorAccount: { accountId, displayName: "Alice", primaryVerifiedEmail: null, avatar: { kind: "fallback", initials: "AL", colorIndex: 1 } },
+          authenticatedIdentity: { externalIdentityId: "ext-alice", provider: "google", accountHint: null, linkedAt: 1, lastAuthenticatedAt: 1, currentLogin: false, issuer: "https://accounts.google.com", subject: "sub-1" },
+          targetAccount: null,
           action: "app.updated",
           target: "cas_app_a",
           requestId: null,

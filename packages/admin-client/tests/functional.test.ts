@@ -229,10 +229,18 @@ class MockAdminService {
         items: [{
           eventId: "platform-event-1",
           action: "platform_invitation.created",
-          actorPrincipalRef: "principal-1",
-          actorPrincipal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-          targetPrincipalRef: null,
-          targetPrincipal: null,
+          actorAccount: {
+            accountId: account.accountId,
+            displayName: account.displayName,
+            primaryVerifiedEmail: account.primaryVerifiedEmail,
+            avatar: account.avatar,
+          },
+          authenticatedIdentity: {
+            ...account.identities[0],
+            issuer: "https://accounts.google.com",
+            subject: "sub-1",
+          },
+          targetAccount: null,
           targetInvitationId: "platform-invite-1",
           result: "succeeded",
           requestId: "request-1",
@@ -360,7 +368,18 @@ class MockAdminService {
         items: [{
           eventId: "event-1",
           appId: APP,
-          actor: { issuer: "https://accounts.google.com", subject: "sub-1" },
+          actorAccount: {
+            accountId: account.accountId,
+            displayName: account.displayName,
+            primaryVerifiedEmail: account.primaryVerifiedEmail,
+            avatar: account.avatar,
+          },
+          authenticatedIdentity: {
+            ...account.identities[0],
+            issuer: "https://accounts.google.com",
+            subject: "sub-1",
+          },
+          targetAccount: null,
           action: "app.updated",
           target: APP,
           requestId: null,
@@ -611,15 +630,15 @@ describe("functional admin client", () => {
     expect(await client.revokePlatformInvitation({ invitationId: "platform-invite-1" }, '"1"'))
       .toEqual({ etag: '"2"' });
     await expect(client.acceptPlatformInvitation({ token: "platform-token" })).resolves.toBeUndefined();
-    expect(await client.listPlatformAuditEvents({ action: "platform_invitation.created", createdAfter: 0, limit: 10 }))
-      .toMatchObject({ items: [{ eventId: "platform-event-1" }] });
+    expect(await client.listPlatformAuditEvents({ action: "platform_invitation.created", actorAccountId: ACCOUNT, createdAfter: 0, limit: 10 }))
+      .toMatchObject({ items: [{ eventId: "platform-event-1", actorAccount: { accountId: ACCOUNT } }] });
 
     expect(service.requests).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: "/admin/platform/invitations", search: "?status=pending&limit=10" }),
       expect.objectContaining({ path: "/admin/platform/invitations", method: "POST", idempotencyKey: "platform-create-1" }),
       expect.objectContaining({ path: "/admin/platform/invitations/platform-invite-1", method: "DELETE", ifMatch: '"1"' }),
       expect.objectContaining({ path: "/admin/platform-invitations/platform-token/accept", method: "POST" }),
-      expect.objectContaining({ path: "/admin/platform/audit-events", search: "?action=platform_invitation.created&createdAfter=0&limit=10" }),
+      expect.objectContaining({ path: "/admin/platform/audit-events", search: `?action=platform_invitation.created&actorAccountId=${ACCOUNT}&createdAfter=0&limit=10` }),
     ]));
   });
 
@@ -684,8 +703,8 @@ describe("functional admin client", () => {
     });
     expect(await client.listAppControlAuditEvents(
       { appId: APP },
-      { limit: 10, cursor: "cursor-1", after: "event-0" },
-    )).toMatchObject({ items: [{ appId: APP, actor: { subject: "sub-1" } }] });
+      { limit: 10, cursor: "cursor-1", actorAccountId: ACCOUNT },
+    )).toMatchObject({ items: [{ appId: APP, actorAccount: { accountId: ACCOUNT } }] });
     expect(await client.listSpaceRootDomainRefs(
       { appId: APP, refDomain: "doc" },
       { spaceId: "space-1", limit: 10, cursor: "cursor-1" },
@@ -697,7 +716,7 @@ describe("functional admin client", () => {
     expect(service.requests).toEqual(expect.arrayContaining([
       expect.objectContaining({
         path: `/admin/apps/${APP}/audit-events`,
-        search: "?limit=10&cursor=cursor-1&after=event-0",
+        search: `?limit=10&cursor=cursor-1&actorAccountId=${ACCOUNT}`,
       }),
       expect.objectContaining({
         path: `/admin/apps/${APP}/root-ref-domains/doc/refs`,

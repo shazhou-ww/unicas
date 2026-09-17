@@ -2,16 +2,20 @@ import type {
   AccountSelf,
   AccountId,
   AccountSummary,
+  AppControlAuditEvent,
   AppId,
   AppMembership,
   PlatformAccountDetail,
   PlatformAccountListItem,
   PlatformAccountPage,
+  PlatformAccountAuditEvent,
+  PlatformAccountAuditPage,
+  PlatformAuditAction,
   PlatformAuthority,
   PrimaryVerifiedEmail,
   ProviderKind,
 } from "@unicas/admin-protocol";
-import { PlatformPrincipalQuerySchema } from "@unicas/admin-protocol";
+import { AppAccountAuditQuerySchema, PlatformAccountAuditQuerySchema, PlatformPrincipalQuerySchema } from "@unicas/admin-protocol";
 import { generateAccountId, generateExternalIdentityId } from "./control-ids.js";
 import { decodeControlListCursor, encodeControlListCursor } from "./control-cursor.js";
 import type { AuthenticatedProviderResult } from "./authentication.js";
@@ -72,6 +76,39 @@ export interface AccountPlatformViewRecord {
   readonly lastActiveAt: number | null;
 }
 
+export interface AccountAuditActorRecord {
+  readonly account: AccountRecord;
+  readonly profile: AccountProfileRecord;
+  readonly identity: ExternalIdentityRecord;
+}
+
+export interface AppAccountAuditRecord extends AccountAuditActorRecord {
+  readonly eventId: string;
+  readonly appId: AppId | null;
+  readonly targetAccount: AccountRecord | null;
+  readonly targetProfile: AccountProfileRecord | null;
+  readonly action: string;
+  readonly target: string;
+  readonly requestId: string | null;
+  readonly traceId: string | null;
+  readonly callerChannel: "admin-webui" | "mcp" | null;
+  readonly oauthClientHandle: string | null;
+  readonly toolName: string | null;
+  readonly createdAt: number;
+}
+
+export interface PlatformAccountAuditRecord extends AccountAuditActorRecord {
+  readonly eventId: string;
+  readonly action: PlatformAuditAction;
+  readonly targetAccount: AccountRecord | null;
+  readonly targetProfile: AccountProfileRecord | null;
+  readonly targetInvitationId: string | null;
+  readonly result: "succeeded" | "denied";
+  readonly requestId: string | null;
+  readonly createdAt: number;
+  readonly details: Readonly<Record<string, string | number | boolean | null>>;
+}
+
 export interface AccountRepository {
   getAccount(accountId: AccountId): Promise<AccountRecord | null>;
   getAliasTarget(sourceAccountId: AccountId): Promise<AccountId | null>;
@@ -126,6 +163,24 @@ export interface AccountRepository {
     readonly requestId?: string;
     readonly now: number;
   }): Promise<"updated" | "actor-forbidden" | "target-not-found" | "self-block" | "last-admin">;
+  getAppAuditEventPosition(appId: AppId, eventId: string): Promise<{ readonly createdAt: number; readonly eventId: string } | null>;
+  listAppAccountAuditEvents(input: {
+    readonly appId: AppId;
+    readonly actorAccountId?: AccountId;
+    readonly targetAccountId?: AccountId;
+    readonly afterCreatedAt: number;
+    readonly afterEventId: string;
+    readonly limit: number;
+  }): Promise<readonly AppAccountAuditRecord[]>;
+  listPlatformAccountAuditEvents(input: {
+    readonly action?: PlatformAuditAction;
+    readonly actorAccountId?: AccountId;
+    readonly targetAccountId?: AccountId;
+    readonly createdAfter?: number;
+    readonly beforeCreatedAt?: number;
+    readonly beforeEventId?: string;
+    readonly limit: number;
+  }): Promise<readonly PlatformAccountAuditRecord[]>;
   createAccountWithIdentity(input: AccountWithIdentityCreate): Promise<"created" | "identity-conflict">;
   commitLinkIdentity(input: {
     readonly accountId: AccountId;
@@ -457,6 +512,80 @@ export class AccountService {
     }));
   }
 
+  async listAppAuditEvents(input: {
+    readonly actorAccountId: AccountId;
+    readonly appId: AppId;
+    readonly query?: unknown;
+  }): Promise<{ readonly items: readonly AppControlAuditEvent[]; readonly nextCursor: string | null }> {
+    const actor = await this.#resolveCanonicalAccount(input.actorAccountId);
+    this.#requireUsableAccount(actor);
+    if (!await this.repository.hasAppMembership(actor.accountId, input.appId)) {
+      throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
+    }
+    const parsed = AppAccountAuditQuerySchema.safeParse(normalizeAuditQuery(input.query ?? {}));
+    if (!parsed.success || (parsed.data.after !== undefined && parsed.data.cursor !== undefined)) {
+      throw new AccountServiceError("INVALID_REQUEST");
+    }
+    const { limit = 50, cursor: encodedCursor, after, actorAccountId, targetAccountId } = parsed.data;
+    const filters = { actorAccountId, targetAccountId };
+    const snapshot = await this.repository.readControlSnapshot();
+    let afterCreatedAt = 0;
+    let afterEventId = "";
+    if (after !== undefined) {
+      const position = await this.repository.getAppAuditEventPosition(input.appId, after);
+      if (!position) throw new AccountServiceError("INVALID_REQUEST");
+      afterCreatedAt = position.createdAt;
+      afterEventId = position.eventId;
+    } else if (encodedCursor !== undefined) {
+      const position = decodeAuditCursor(encodedCursor, snapshot, filters);
+      afterCreatedAt = position.createdAt;
+      afterEventId = position.eventId;
+    }
+    const rows = await this.repository.listAppAccountAuditEvents({
+      appId: input.appId,
+      ...filters,
+      afterCreatedAt,
+      afterEventId,
+      limit: limit + 1,
+    });
+    if (await this.repository.readControlSnapshot() !== snapshot) throw new AccountServiceError("INVALID_CURSOR");
+    const page = rows.slice(0, limit);
+    const last = page.at(-1);
+    return {
+      items: page.map(projectAppAuditEvent),
+      nextCursor: rows.length > limit && last
+        ? encodeAuditCursor(snapshot, filters, last.createdAt, last.eventId)
+        : null,
+    };
+  }
+
+  async listPlatformAuditEvents(input: {
+    readonly actorAccountId: AccountId;
+    readonly query?: unknown;
+  }): Promise<PlatformAccountAuditPage> {
+    await this.#requirePlatformAdmin(input.actorAccountId);
+    const parsed = PlatformAccountAuditQuerySchema.safeParse(normalizeAuditQuery(input.query ?? {}));
+    if (!parsed.success) throw new AccountServiceError("INVALID_REQUEST");
+    const { limit = 50, cursor: encodedCursor, ...filters } = parsed.data;
+    const snapshot = await this.repository.readControlSnapshot();
+    const cursor = encodedCursor === undefined ? null : decodeAuditCursor(encodedCursor, snapshot, filters);
+    const rows = await this.repository.listPlatformAccountAuditEvents({
+      ...filters,
+      beforeCreatedAt: cursor?.createdAt,
+      beforeEventId: cursor?.eventId,
+      limit: limit + 1,
+    });
+    if (await this.repository.readControlSnapshot() !== snapshot) throw new AccountServiceError("INVALID_CURSOR");
+    const page = rows.slice(0, limit);
+    const last = page.at(-1);
+    return {
+      items: page.map(projectPlatformAuditEvent),
+      nextCursor: rows.length > limit && last
+        ? encodeAuditCursor(snapshot, filters, last.createdAt, last.eventId)
+        : null,
+    };
+  }
+
   async removeAppMember(input: {
     readonly actorAccountId: AccountId;
     readonly actorExternalIdentityId: string;
@@ -645,4 +774,104 @@ function projectPlatformAccount(record: AccountPlatformViewRecord): PlatformAcco
     appMembershipCount: record.appMembershipCount,
     lastActiveAt: record.lastActiveAt,
   };
+}
+
+function projectAuditIdentity(identity: ExternalIdentityRecord) {
+  return {
+    externalIdentityId: identity.externalIdentityId,
+    provider: identity.provider,
+    accountHint: identity.accountHint,
+    linkedAt: identity.linkedAt,
+    lastAuthenticatedAt: identity.lastAuthenticatedAt,
+    currentLogin: false,
+    issuer: identity.issuer,
+    subject: identity.subject,
+  };
+}
+
+function projectAppAuditEvent(record: AppAccountAuditRecord): AppControlAuditEvent {
+  return {
+    eventId: record.eventId,
+    appId: record.appId,
+    actorAccount: projectAccountSummary(record.account, record.profile),
+    authenticatedIdentity: projectAuditIdentity(record.identity),
+    targetAccount: record.targetAccount && record.targetProfile
+      ? projectAccountSummary(record.targetAccount, record.targetProfile)
+      : null,
+    action: record.action,
+    target: record.target,
+    requestId: record.requestId,
+    traceId: record.traceId,
+    caller: record.callerChannel
+      ? {
+        channel: record.callerChannel,
+        oauthClientHandle: record.oauthClientHandle,
+        toolName: record.toolName,
+      }
+      : null,
+    createdAt: record.createdAt,
+  };
+}
+
+function projectPlatformAuditEvent(record: PlatformAccountAuditRecord): PlatformAccountAuditEvent {
+  return {
+    eventId: record.eventId,
+    action: record.action,
+    actorAccount: projectAccountSummary(record.account, record.profile),
+    authenticatedIdentity: projectAuditIdentity(record.identity),
+    targetAccount: record.targetAccount && record.targetProfile
+      ? projectAccountSummary(record.targetAccount, record.targetProfile)
+      : null,
+    targetInvitationId: record.targetInvitationId,
+    result: record.result,
+    requestId: record.requestId,
+    createdAt: record.createdAt,
+    details: record.details,
+  };
+}
+
+function normalizeAuditQuery(input: unknown): unknown {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) return input;
+  const record = input as Record<string, unknown>;
+  return {
+    ...record,
+    ...(record.limit === undefined ? {} : { limit: Number(record.limit) }),
+    ...(record.createdAfter === undefined ? {} : { createdAfter: Number(record.createdAfter) }),
+  };
+}
+
+function encodeAuditCursor(
+  snapshot: number,
+  filters: object,
+  createdAt: number,
+  eventId: string,
+): string {
+  return encodeControlListCursor({
+    version: 1,
+    snapshot,
+    last: JSON.stringify({ filters, createdAt, eventId }),
+  });
+}
+
+function decodeAuditCursor(
+  encoded: string,
+  snapshot: number,
+  filters: object,
+): { readonly createdAt: number; readonly eventId: string } {
+  const cursor = decodeControlListCursor(encoded);
+  if (!cursor || cursor.snapshot !== snapshot) throw new AccountServiceError("INVALID_CURSOR");
+  try {
+    const parsed = JSON.parse(cursor.last) as Record<string, unknown>;
+    if (JSON.stringify(parsed.filters) !== JSON.stringify(filters)
+      || typeof parsed.createdAt !== "number"
+      || !Number.isSafeInteger(parsed.createdAt)
+      || parsed.createdAt < 0
+      || typeof parsed.eventId !== "string"
+      || parsed.eventId.length === 0) {
+      throw new Error("invalid cursor");
+    }
+    return { createdAt: parsed.createdAt, eventId: parsed.eventId };
+  } catch {
+    throw new AccountServiceError("INVALID_CURSOR");
+  }
 }

@@ -118,9 +118,16 @@ describe("adapter-hosted control-plane MCP server", () => {
   });
 
   test("serves App CRUD and audit without exposing Stack-shaped fields", async () => {
+    const accountService = new AccountService(new D1AccountRepository(db), () => 1000);
+    const actorAccount = await accountService.createForExternalIdentity({
+      provider: "google",
+      issuer: "https://accounts.google.com",
+      subject: "alice-sub",
+      displayName: "Alice",
+    });
     const handler = handlerFor(
       grant(["control:read", "control:write", "control:security"]),
-      { mutationsEnabled: true },
+      { mutationsEnabled: true, accountService },
     );
     const created = await callTool(handler, "create_app", {
       displayName: "Documents",
@@ -163,7 +170,12 @@ describe("adapter-hosted control-plane MCP server", () => {
       expect.objectContaining({ action: "app.restored" }),
       expect.objectContaining({
         appId,
-        actor: { issuer: "https://accounts.google.com", subject: "alice-sub" },
+        actorAccount: expect.objectContaining({ accountId: actorAccount.account.accountId }),
+        authenticatedIdentity: expect.objectContaining({
+          externalIdentityId: actorAccount.authenticatedIdentity.externalIdentityId,
+          issuer: "https://accounts.google.com",
+          subject: "alice-sub",
+        }),
       }),
     ]));
     expect(events.every((event) => !("stackId" in event))).toBe(true);
@@ -257,9 +269,15 @@ describe("adapter-hosted control-plane MCP server", () => {
     expect(JSON.stringify(listed.structuredContent)).not.toMatch(/acceptUrl|tokenHash|sealedToken/);
     expect((await callTool(handler, "list_platform_audit_events", {
       action: "platform_invitation.created",
+      actorAccountId: alice.account.accountId,
       limit: 10,
     })).structuredContent).toMatchObject({
-      items: [{ action: "platform_invitation.created", targetInvitationId: invitationId }],
+      items: [{
+        action: "platform_invitation.created",
+        actorAccount: { accountId: alice.account.accountId },
+        authenticatedIdentity: { externalIdentityId: alice.authenticatedIdentity.externalIdentityId },
+        targetInvitationId: invitationId,
+      }],
     });
     expect((await callTool(handler, "revoke_platform_invitation", {
       invitationId,

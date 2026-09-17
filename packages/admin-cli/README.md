@@ -75,7 +75,7 @@ pnpm --filter @unicas/admin-cli unicas login
 | `unicas app-oauth-issuer inspect <appId> <issuer>` | `inspect_app_oauth_issuer` |
 | `unicas app-oauth-issuer activate <appId> <inspectionId> --activation-proof <jws> [--etag E]` | `activate_app_oauth_issuer` |
 | `unicas app-ref-domains list <appId>` | `list_app_ref_domains` |
-| `unicas app-audit control <appId> [--limit N] [--cursor C] [--after ID]` | `list_app_control_audit_events` |
+| `unicas app-audit control <appId> [--actor-account-id ID] [--target-account-id ID] [--limit N] [--cursor C] [--after ID]` | `list_app_control_audit_events` |
 | `unicas app-audit root-domain-refs <appId> <refDomain> [--space-id S] [--limit N] [--cursor C]` | `list_space_root_domain_refs` |
 | `unicas app-audit root-domain-events <appId> <refDomain> [--space-id S] [--after N] [--limit N]` | `list_space_root_domain_events` |
 | `unicas platform-access list [--query Q] [--effective-access active\|blocked\|no_access] [--authority platform.admin\|apps.create\|none] [--limit N] [--cursor C]` | `list_platform_accounts` |
@@ -85,7 +85,7 @@ pnpm --filter @unicas/admin-cli unicas login
 | `unicas platform-invitations list [--query Q] [--status S] [--limit N] [--cursor C]` | `list_platform_invitations` |
 | `unicas platform-invitations create <email> --authority A [--authority A] [--idempotency-key K]` | `create_platform_invitation` |
 | `unicas platform-invitations revoke <invitationId> --etag E --confirm-invitation-id <invitationId>` | `revoke_platform_invitation` |
-| `unicas platform-audit [--action A] [--actor-principal-ref R] [--target-principal-ref R] [--created-after MS] [--limit N] [--cursor C]` | `list_platform_audit_events` |
+| `unicas platform-audit [--action A] [--actor-account-id ID] [--target-account-id ID] [--created-after MS] [--limit N] [--cursor C]` | `list_platform_audit_events` |
 | `unicas logout` | RFC 7009 revocation + clears the session |
 | `unicas status` | Local session summary (no network) |
 | `unicas mcp` | Run as a stdio MCP server |

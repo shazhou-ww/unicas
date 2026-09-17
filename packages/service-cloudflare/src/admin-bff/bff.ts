@@ -285,6 +285,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     if (appRoute?.operation === "listMembers" || appRoute?.operation === "deleteMember") {
       return handleAccountAppMembers(request, url, appRoute.appId, appRoute.operation);
     }
+    if (appRoute?.operation === "listControlAuditEvents") {
+      return handleAccountAppAudit(request, url, appRoute.appId);
+    }
     if (appRoute?.operation === "listPeople") return handlePeople(request, appRoute.appId);
     if (appRoute?.operation === "mintManagedCapability") {
       return handleManagedSpaceCapability(request, appRoute.appId);
@@ -1366,6 +1369,29 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     }
   }
 
+  async function handleAccountAppAudit(request: Request, url: URL, appId: string): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!accountService || !auth.payload.accountId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
+    }
+    try {
+      return json(await accountService.listAppAuditEvents({
+        actorAccountId: auth.payload.accountId,
+        appId,
+        query: queryFromUrl(url),
+      }), 200);
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "APP_MEMBERSHIP_REQUIRED" || error.code === "ACCOUNT_BLOCKED" ? 403
+          : error.code === "INVALID_CURSOR" || error.code === "INVALID_REQUEST" ? 400
+            : 404;
+        return json({ error: error.code }, status);
+      }
+      throw error;
+    }
+  }
+
   async function handlePeople(request: Request, appId?: string): Promise<Response> {
     const auth = await requireAuthenticated(request);
     if (auth instanceof Response) return auth;
@@ -1947,8 +1973,11 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
           });
         }
         case "listPlatformAuditEvents": {
-          if (!platformAudit) throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
-          return json(await platformAudit.list(actor, queryFromUrl(url)), 200);
+          if (!accountService || !auth.payload.accountId) throw new Error("Account service unavailable");
+          return json(await accountService.listPlatformAuditEvents({
+            actorAccountId: auth.payload.accountId,
+            query: queryFromUrl(url),
+          }), 200);
         }
         default:
           return json({ error: "Not Found" }, 404);

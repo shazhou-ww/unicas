@@ -102,6 +102,24 @@ export interface PlatformAccountPage {
   readonly nextCursor: string | null;
 }
 
+export interface PlatformAccountAuditEvent {
+  readonly eventId: string;
+  readonly action: string;
+  readonly actorAccount: AccountSummary;
+  readonly authenticatedIdentity: ExternalIdentityDetail;
+  readonly targetAccount: AccountSummary | null;
+  readonly targetInvitationId: string | null;
+  readonly result: "succeeded" | "denied";
+  readonly requestId: string | null;
+  readonly createdAt: number;
+  readonly details: Readonly<Record<string, string | number | boolean | null>>;
+}
+
+export interface PlatformAccountAuditPage {
+  readonly items: readonly PlatformAccountAuditEvent[];
+  readonly nextCursor: string | null;
+}
+
 export interface AccountPlatformAuthority {
   readonly accountId: AccountId;
   readonly authority: PlatformAuthority;
@@ -198,7 +216,9 @@ export interface AppRefDomain {
 export interface AppControlAuditEvent {
   readonly eventId: string;
   readonly appId: AppId | null;
-  readonly actor: Principal;
+  readonly actorAccount: AccountSummary;
+  readonly authenticatedIdentity: ExternalIdentityDetail;
+  readonly targetAccount: AccountSummary | null;
   readonly action: string;
   readonly target: string;
   readonly requestId: string | null;

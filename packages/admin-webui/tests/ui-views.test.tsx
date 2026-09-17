@@ -197,14 +197,13 @@ describe("PlatformPrincipalsView", () => {
 });
 
 describe("PlatformAuditView", () => {
-  test("applies Principal filters and preserves them across cursor pagination", async () => {
+  test("applies Account filters and preserves them across cursor pagination", async () => {
     const event = {
       eventId: "event-1",
       action: "platform_invitation.created",
-      actorPrincipalRef: "actor-ref",
-      actorPrincipal: { issuer: "https://accounts.example", subject: "admin" },
-      targetPrincipalRef: null,
-      targetPrincipal: null,
+      actorAccount: accountSummary("Admin", "admin@example.com"),
+      authenticatedIdentity: { externalIdentityId: "ext-admin", provider: "google", accountHint: null, linkedAt: 1, lastAuthenticatedAt: 1, currentLogin: false, issuer: "https://accounts.example", subject: "admin" },
+      targetAccount: null,
       targetInvitationId: "invitation-1",
       result: "succeeded",
       requestId: "request-1",
@@ -221,14 +220,14 @@ describe("PlatformAuditView", () => {
     await screen.findByText("No changes yet.");
     expect(screen.getByRole("table")).toBeVisible();
     expect(screen.getByRole("region", { name: "Change Logs" }).querySelector(".bg-card")).toBeNull();
-    await user.type(screen.getByLabelText("Actor Principal ref"), "actor-ref");
+    await user.type(screen.getByLabelText("Actor Account ID"), ACCOUNT_ID);
     await user.click(screen.getByRole("button", { name: "Apply" }));
     expect(await screen.findByText("platform_invitation.created")).toBeInTheDocument();
     expect(within(screen.getByRole("region", { name: "Change Logs" })).getByRole("table")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Load more" }));
     await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => String(path).includes("cursor=audit-next"))).toBe(true));
     const pagedPath = String(fetchMock.mock.calls.at(-1)?.[0]);
-    expect(pagedPath).toContain("actorPrincipalRef=actor-ref");
+    expect(pagedPath).toContain(`actorAccountId=${ACCOUNT_ID}`);
     expect(pagedPath).toContain("cursor=audit-next");
   });
 });
@@ -717,16 +716,17 @@ describe("IssuerView", () => {
 
 describe("ControlAuditView", () => {
   test("paginates audit events with load more", async () => {
+    const auditIdentity = { externalIdentityId: "ext-alice", provider: "google", accountHint: null, linkedAt: 1, lastAuthenticatedAt: 1, currentLogin: false, issuer: "iss", subject: "alice" };
     fetchMock
       .mockResolvedValueOnce(json({
         items: [
-          { eventId: "evt_1", appId: STACK, actor: { issuer: "iss", subject: "alice" }, action: "app.created", target: STACK, requestId: "r1", traceId: null, caller: null, createdAt: 1 },
-          { eventId: "evt_legacy", appId: STACK, actor: { issuer: "iss", subject: "alice" }, action: "issuer.put", target: STACK, requestId: "r0", traceId: null, caller: null, createdAt: 0 },
+          { eventId: "evt_1", appId: STACK, actorAccount: accountSummary("Alice"), authenticatedIdentity: auditIdentity, targetAccount: null, action: "app.created", target: STACK, requestId: "r1", traceId: null, caller: null, createdAt: 1 },
+          { eventId: "evt_legacy", appId: STACK, actorAccount: accountSummary("Alice"), authenticatedIdentity: auditIdentity, targetAccount: null, action: "issuer.put", target: STACK, requestId: "r0", traceId: null, caller: null, createdAt: 0 },
         ], nextCursor: "cursor-2"
       }))
       .mockResolvedValueOnce(json({
         items: [
-          { eventId: "evt_2", appId: STACK, actor: { issuer: "iss", subject: "bob" }, action: "member.invited", target: "inv_1", requestId: "r2", traceId: null, caller: null, createdAt: 2 },
+          { eventId: "evt_2", appId: STACK, actorAccount: accountSummary("Bob"), authenticatedIdentity: { ...auditIdentity, externalIdentityId: "ext-bob", subject: "bob" }, targetAccount: null, action: "member.invited", target: "inv_1", requestId: "r2", traceId: null, caller: null, createdAt: 2 },
         ], nextCursor: null
       }));
     const user = userEvent.setup();

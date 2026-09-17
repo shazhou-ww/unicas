@@ -176,7 +176,23 @@ describe("CAS admin schemas", () => {
     const auditEvent: AppControlAuditEvent = {
       eventId: "event-1",
       appId: "app-1",
-      actor: { issuer: "https://accounts.example", subject: "subject-1" },
+      actorAccount: {
+        accountId: `acct_${"a".repeat(22)}`,
+        displayName: "Operator",
+        primaryVerifiedEmail: null,
+        avatar: { kind: "fallback", initials: "OP", colorIndex: 1 },
+      },
+      authenticatedIdentity: {
+        externalIdentityId: "ext-1",
+        provider: "google",
+        accountHint: null,
+        linkedAt: 1,
+        lastAuthenticatedAt: 1,
+        currentLogin: false,
+        issuer: "https://accounts.example",
+        subject: "subject-1",
+      },
+      targetAccount: null,
       action: "app.updated",
       target: "apps/app-1",
       requestId: null,
@@ -193,6 +209,10 @@ describe("CAS admin schemas", () => {
     expect(AppOAuthIssuerSchema.safeParse(issuer).success).toBe(true);
     expect(ManagedSpaceCapabilitySchema.safeParse(capability).success).toBe(true);
     expect(AppControlAuditEventSchema.safeParse(auditEvent).success).toBe(true);
+    expect(AppControlAuditEventSchema.safeParse({
+      ...auditEvent,
+      actor: { issuer: "https://accounts.example", subject: "subject-1" },
+    }).success).toBe(false);
     expect(SpaceRootRefBalanceSchema.safeParse(balance).success).toBe(true);
     const operationCount = Object.values(appAdminApiContract)
       .reduce((count, group) => count + Object.keys(group).length, 0);
@@ -242,6 +262,12 @@ describe("CAS admin OpenAPI", () => {
     expect(document.paths?.["/admin/platform/invitations/{invitationId}"]?.delete).toBeDefined();
     expect(document.paths?.["/admin/platform-invitations/{token}/accept"]?.post).toBeDefined();
     expect(document.paths?.["/admin/platform/audit-events"]?.get).toBeDefined();
+    const appAuditParameters = document.paths?.["/admin/apps/{appId}/audit-events"]?.get?.parameters ?? [];
+    expect(JSON.stringify(appAuditParameters)).toContain("actorAccountId");
+    expect(JSON.stringify(appAuditParameters)).toContain("targetAccountId");
+    const platformAuditParameters = document.paths?.["/admin/platform/audit-events"]?.get?.parameters ?? [];
+    expect(JSON.stringify(platformAuditParameters)).toContain("actorAccountId");
+    expect(JSON.stringify(platformAuditParameters)).not.toContain("actorPrincipalRef");
     expect(document.paths?.["/admin/apps/{appId}/member-invitations"]?.get?.operationId).toBe("listAppMemberInvitations");
     const revoke = document.paths?.["/admin/apps/{appId}/member-invitations/{invitationId}"]?.delete;
     expect(revoke?.responses?.["204"]).toHaveProperty("headers.ETag.required", true);

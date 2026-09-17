@@ -54,14 +54,14 @@ Usage:
   unicas app-oauth-issuer activate <appId> <inspectionId> --activation-proof <jws> [--etag E]
 
   unicas app-ref-domains list <appId>
-  unicas app-audit control <appId> [--limit N] [--cursor C] [--after ID]
+  unicas app-audit control <appId> [--actor-account-id ID] [--target-account-id ID] [--limit N] [--cursor C] [--after ID]
   unicas app-audit root-domain-refs <appId> <refDomain> [--space-id S] [--limit N] [--cursor C]
   unicas app-audit root-domain-events <appId> <refDomain> [--space-id S] [--after N] [--limit N]
 
   unicas platform-invitations list [--query Q] [--status pending|accepted|expired|revoked] [--limit N] [--cursor C]
   unicas platform-invitations create <email> --authority platform.admin|apps.create [--authority ...] [--idempotency-key K]
   unicas platform-invitations revoke <invitationId> --etag E [--confirm-invitation-id ID]
-  unicas platform-audit [--action A] [--actor-principal-ref R] [--target-principal-ref R] [--created-after MS] [--limit N] [--cursor C]
+  unicas platform-audit [--action A] [--actor-account-id ID] [--target-account-id ID] [--created-after MS] [--limit N] [--cursor C]
   unicas platform-access list [--query Q] [--effective-access active|blocked|no_access] [--authority platform.admin|apps.create|none] [--limit N] [--cursor C]
   unicas platform-access get <accountId>
   unicas platform-access grant|revoke <accountId> <platform.admin|apps.create> [--confirm-account-id ID]

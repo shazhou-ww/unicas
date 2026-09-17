@@ -53,6 +53,8 @@ export type {
   PlatformAccountDetail,
   PlatformAccountListItem,
   PlatformAccountPage,
+  PlatformAccountAuditEvent,
+  PlatformAccountAuditPage,
   PlatformAccountSummary,
   PlatformAccessStatus,
   EffectivePlatformAccess,
@@ -67,8 +69,6 @@ export type {
   PlatformInvitation,
   PlatformInvitationPage,
   PlatformAuditAction,
-  PlatformAuditEvent,
-  PlatformAuditPage,
   ExternalIdentitySummary,
   ProviderKind,
 } from "@unicas/admin-protocol";
