@@ -120,8 +120,8 @@ Cloudflare adapters now implement Google, Microsoft personal-account, and
 GitHub behavior: Google emits evidence only for `email_verified=true`, Microsoft
 requires consumers-tenant v2 claims and emits no token-email evidence, and
 GitHub keys identity by numeric `/user.id` while accepting only verified Emails
-API entries. The adapters are not yet routed from the BFF. The slice awaits
-checkpoint publication.
+API entries. The adapters are not yet routed from the BFF. The slice is
+published on `origin/main` as `309ed44061c8ebe65b96b7a92626f776dbb52453`.
 
 Next: publish the provider foundation checkpoint, then switch the BFF login,
 CLI, and callback routes to the configured provider registry.
@@ -348,6 +348,8 @@ CLI, and callback routes to the configured provider registry.
   Emails API filtering, and provider token/private-email redaction. The full
   Cloudflare suite passed all 257 tests across 28 files; all four affected
   packages passed typecheck.
+- Provider foundation commit `309ed44061c8ebe65b96b7a92626f776dbb52453` was
+  pushed and verified reachable from refreshed `origin/main`.
 
 ## Blockers
 
