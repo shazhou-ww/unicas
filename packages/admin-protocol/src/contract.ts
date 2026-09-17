@@ -8,7 +8,6 @@ import {
   CasOAuthIssuerInspectionSchema,
   CasOperatorIdentityKeySchema,
   CasOperatorIdentitySchema,
-  CasPlaygroundFileRootSchema,
   CasRefDomainSchema,
   CasRootRefBalanceSchema,
   CasRootRefEventSchema,
@@ -46,10 +45,6 @@ const StackIdSchema = z.string().min(1)
 const RevisionSchema = z.number().int().nonnegative()
   .describe("Exact current resource revision used as the `If-Match` precondition.");
 const stackParams = z.object({ stackId: StackIdSchema }).readonly();
-const fileRootParams = z.object({
-  stackId: StackIdSchema,
-  rootId: z.string().min(1).describe("Playground-owned stable file-root identifier."),
-}).readonly();
 const rootDomainParams = z.object({
   stackId: StackIdSchema,
   refDomain: z.string().min(1).describe("Capability-derived business lifecycle namespace to inspect."),
@@ -140,37 +135,6 @@ export const acceptMemberInvitationContract = adminProcedure
   .route({ method: "POST", path: "/admin/member-invitations/{token}/accept", operationId: "acceptMemberInvitation", summary: "Accept a member invitation", description: "Consumes a valid pending invitation and adds the currently authenticated immutable identity key as an equal-authority stack member. An email-constrained invitation is accepted only when the authenticated account matches. Tokens are single-use and expire at the invitation deadline; callers must not retry with a different identity after acceptance.", inputStructure: "detailed", tags: ["Members"] })
   .input(z.object({ params: invitationParams }).readonly()).output(CasStackMemberSchema);
 
-export const listPlaygroundFileRootsContract = adminProcedure
-  .route({ method: "GET", path: "/admin/stacks/{stackId}/playground/file-roots", operationId: "listPlaygroundFileRoots", summary: "List Playground file roots", description: "Lists Playground-owned business records whose manifest hashes retain CAS DAGs. These records are not CAS node metadata: they provide application meaning and business-root retention. Each revision can be used for a later conditional replacement or deletion.", inputStructure: "detailed", tags: ["Playground"] })
-  .input(z.object({ params: stackParams }).readonly())
-  .output(z.object({ items: z.array(CasPlaygroundFileRootSchema).readonly() }).readonly().meta({ id: "CasAdminListPlaygroundFileRootsResponse" }));
-
-export const createPlaygroundFileRootContract = adminProcedure
-  .route({ method: "POST", path: "/admin/stacks/{stackId}/playground/file-roots", operationId: "createPlaygroundFileRoot", summary: "Create a Playground file root", description: "Creates a Playground business record and acquires retention for its CAS manifest. `rootId` is chosen by the Playground workflow and must be stable; `manifestHash` must identify the prepared immutable manifest. The returned revision is required for future replacement or deletion.", inputStructure: "detailed", successStatus: 201, tags: ["Playground"] })
-  .input(z.object({
-    params: stackParams, body: z.object({
-      rootId: z.string().min(1).describe("Stable Playground business-record identifier."),
-      name: z.string().min(1).describe("Initial administrator-visible file name."),
-      manifestHash: CasHashSchema.describe("Prepared CAS manifest to retain as the file root."),
-    }).readonly()
-  }).readonly())
-  .output(CasPlaygroundFileRootSchema);
-
-export const patchPlaygroundFileRootContract = adminProcedure
-  .route({ method: "PATCH", path: "/admin/stacks/{stackId}/playground/file-roots/{rootId}", operationId: "patchPlaygroundFileRoot", summary: "Update a Playground file root", description: "Replaces the file name and retained manifest under optimistic concurrency. Send the current root revision in `If-Match`. On success the new manifest becomes the business root and the previous manifest is released as one atomic application update; on `REVISION_MISMATCH`, read and reconcile current state before retrying.", inputStructure: "detailed", tags: ["Playground"] })
-  .input(z.object({
-    params: fileRootParams, headers: mutationHeaders, body: z.object({
-      name: z.string().min(1).describe("Replacement administrator-visible file name."),
-      manifestHash: CasHashSchema.describe("Replacement prepared CAS manifest to retain."),
-    }).readonly()
-  }).readonly())
-  .output(CasPlaygroundFileRootSchema);
-
-export const deletePlaygroundFileRootContract = adminProcedure
-  .route({ method: "DELETE", path: "/admin/stacks/{stackId}/playground/file-roots/{rootId}", operationId: "deletePlaygroundFileRoot", summary: "Delete a Playground file root", description: "Deletes the Playground business record and releases its retained manifest under the exact current `If-Match` revision. Released nodes are not necessarily deleted immediately: child references, other Root Refs, and leases continue to protect them until a later garbage-collection pass.", inputStructure: "detailed", tags: ["Playground"] })
-  .input(z.object({ params: fileRootParams, headers: mutationHeaders }).readonly())
-  .output(z.object({ ok: z.literal(true) }).readonly());
-
 export const getOAuthIssuerContract = adminProcedure
   .route({ method: "GET", path: "/admin/stacks/{stackId}/oauth-issuer", operationId: "getOAuthIssuer", summary: "Read the active OAuth issuer", description: "Returns the stack's discovered OAuth issuer binding, including exact issuer/audience values, public endpoint locations, refresh health, maximum capability lifetime, and current revision. With `optional=true`, an unconfigured issuer is represented by `null`; otherwise the absence is reported as `NOT_FOUND`.", inputStructure: "detailed", tags: ["OAuth Issuer"] })
   .input(z.object({
@@ -213,7 +177,7 @@ export const patchManagedIssuerContract = adminProcedure
   .output(CasStackOAuthIssuerSchema);
 
 export const mintManagedCapabilityContract = adminProcedure
-  .route({ method: "POST", path: "/admin/stacks/{stackId}/managed-capabilities", operationId: "mintManagedCapability", summary: "Mint a managed capability", description: "Mints a short-lived tenant bearer capability from the active managed issuer for the administrative Playground workflow. The response includes the exact resource scope, permissions, and expiry. Treat `accessToken` as a secret: keep it in memory, send it only to the tenant plane, and never write it to logs or durable browser storage.", inputStructure: "detailed", successStatus: 201, tags: ["Managed Issuer"] })
+  .route({ method: "POST", path: "/admin/stacks/{stackId}/managed-capabilities", operationId: "mintManagedCapability", summary: "Mint a managed capability", description: "Mints a short-lived tenant bearer capability from the active managed issuer. The response includes the exact resource scope, permissions, and expiry. Treat `accessToken` as a secret: keep it in memory, send it only to the tenant plane, and never write it to logs or durable browser storage.", inputStructure: "detailed", successStatus: 201, tags: ["Managed Issuer"] })
   .input(z.object({ params: stackParams }).readonly()).output(CasManagedCapabilitySchema);
 
 export const listRefDomainsContract = adminProcedure
@@ -264,7 +228,6 @@ export const casAdminApiContract = {
   identity: { me: meContract },
   stacks: { list: listStacksContract, create: createStackContract, get: getStackContract, update: patchStackContract },
   members: { list: listMembersContract, remove: deleteMemberContract, createInvitation: createMemberInvitationContract, acceptInvitation: acceptMemberInvitationContract },
-  playground: { listRoots: listPlaygroundFileRootsContract, createRoot: createPlaygroundFileRootContract, updateRoot: patchPlaygroundFileRootContract, deleteRoot: deletePlaygroundFileRootContract },
   oauthIssuer: { get: getOAuthIssuerContract, inspect: inspectOAuthIssuerContract, activate: activateOAuthIssuerContract },
   managedIssuer: { get: getManagedIssuerContract, update: patchManagedIssuerContract, mintCapability: mintManagedCapabilityContract },
   audit: { listRefDomains: listRefDomainsContract, listControlEvents: listControlAuditEventsContract, listRootRefs: listRootDomainRefsContract, listRootEvents: listRootDomainEventsContract },

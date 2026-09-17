@@ -215,7 +215,7 @@ describe("CAS admin schemas", () => {
     expect(SpaceRootRefBalanceSchema.safeParse(balance).success).toBe(true);
     const operationCount = Object.values(appAdminApiContract)
       .reduce((count, group) => count + Object.keys(group).length, 0);
-    expect(operationCount).toBe(42);
+    expect(operationCount).toBe(38);
   });
 });
 
@@ -225,9 +225,10 @@ describe("CAS admin OpenAPI", () => {
     const allOperations = operations(document);
 
     expect(document.openapi).toBe("3.1.1");
-    expect(Object.keys(document.paths ?? {})).toHaveLength(16);
-    expect(allOperations).toHaveLength(23);
-    expect(new Set(allOperations.map((operation) => operation.operationId)).size).toBe(23);
+    expect(Object.keys(document.paths ?? {})).toHaveLength(14);
+    expect(allOperations).toHaveLength(19);
+    expect(new Set(allOperations.map((operation) => operation.operationId)).size).toBe(19);
+    expect(Object.keys(document.paths ?? {}).some(path => path.includes("/playground/"))).toBe(false);
     expect(document.security).toEqual([{ adminSession: [] }]);
     expect(document.info.description).toContain("## Concurrency and idempotency");
     expect(document.info.description).toContain("## OAuth issuer activation");
@@ -241,8 +242,9 @@ describe("CAS admin OpenAPI", () => {
     const document = await generateAppAdminOpenApiDocument();
     const allOperations = operations(document);
     const serialized = JSON.stringify(document);
-    expect(Object.keys(document.paths ?? {})).toHaveLength(31);
-    expect(allOperations).toHaveLength(42);
+    expect(Object.keys(document.paths ?? {})).toHaveLength(29);
+    expect(allOperations).toHaveLength(38);
+    expect(Object.keys(document.paths ?? {}).some(path => path.includes("/playground/"))).toBe(false);
     expect(document.paths?.["/admin/account"]?.get?.operationId).toBe("getCurrentAccount");
     expect(document.paths?.["/admin/account/profile"]?.patch?.operationId).toBe("patchCurrentAccountProfile");
     expect(document.paths?.["/admin/account/identities"]?.get?.operationId).toBe("listCurrentAccountIdentities");

@@ -38,17 +38,26 @@ and atomically update the App, advance the control snapshot, and write exact
 Account/ExternalIdentity audit attribution. The adapter no longer rewrites App
 detail requests to `/admin/stacks`.
 
-The sixth no-legacy cleanup checkpoint is ready to publish. App People reads
+The sixth no-legacy cleanup checkpoint is published. App People reads
 now authorize through `AccountService` and the stable `(accountId, appId)`
 membership instead of calling the legacy invitation service as a Principal-keyed
 membership probe. Platform People authorization remains separately guarded by
 platform authority.
 
-Next: migrate Playground file-root CRUD to AccountService and Account-keyed
-repository transactions, then migrate the remaining App issuer, invitation,
-capability, and root-domain operations. After their consumers move, delete legacy HTTP contracts,
-identity-keyed columns/tables, dual writes, and startup identity migration
-rather than adding compatibility flags.
+The seventh no-legacy cleanup checkpoint is ready to publish. At the requesting
+user's direction, the pre-launch Playground is retired instead of migrated.
+Both v1 and v2 file-root HTTP paths are absent from route matchers and OpenAPI,
+the admin client exposes no file-root methods, stdio and remote MCP omit all four
+Playground tools, and the Console has no Playground route, tab, view, cache, or
+tenant-client dependency. Retired HTTP methods return 404. The now-unreachable
+legacy service CRUD, repository port, and protocol types are deleted. The D1
+table and the managed-capability refDomain's internal legacy name remain only
+until the planned schema cleanup; neither is externally callable as Playground.
+
+Next: migrate the remaining App issuer, invitation, capability, and root-domain
+operations. After their consumers move, delete legacy HTTP contracts,
+identity-keyed columns/tables (including the retired Playground table), dual
+writes, and startup identity migration rather than adding compatibility flags.
 
 On 2026-09-17, the requesting user directed this worktree to claim and continue
 the task. `repoledger doctor` resolved the worktree identity as
@@ -367,6 +376,10 @@ cutover markers. Then complete the current-model and real-provider/email tests.
 
 ## Decisions
 
+- Requesting user, 2026-09-17: Playground will be removed, so do not migrate its
+  Principal-keyed ownership. Retire the Console and administrator HTTP/MCP
+  entry points now; remove its unreachable storage implementation with the
+  remaining pre-launch legacy schema cleanup.
 - Treat the requesting user's direct 2026-09-17 instruction to claim and
   continue this attached task as explicit authorization to transfer ownership
   from `scottwei-office-pc` to this worktree's validated
@@ -455,6 +468,16 @@ cutover markers. Then complete the current-model and real-provider/email tests.
 
 ## Validation
 
+- Playground retirement passed 103 protocol tests, 18 admin-client tests, 49
+  CLI/stdio MCP tests, 70 current Console tests, and 145 cloud-neutral service
+  tests. Directly affected Worker groups passed 59 BFF, 16 control-service, 8
+  remote MCP, 14 routing, and 19 adapter/managed-issuer/schema tests; the D1
+  audit test that encountered Miniflare runtime exhaustion in a long serial run
+  also passed in a fresh isolated process. All 13 workspace package typechecks,
+  the production Console/Worker build, 4 OpenAPI drift checks, and 114
+  repository checks passed. Route tests and BFF tests explicitly reject v1/v2
+  GET, POST, PATCH, and DELETE file-root paths; OpenAPI and MCP catalog tests
+  assert the retired operations are absent.
 - Account-keyed App People authorization passed its focused regression and the
   full 59-test BFF suite. The regression makes the old invitation membership
   probe throw if called and confirms it remains unused across denied and allowed

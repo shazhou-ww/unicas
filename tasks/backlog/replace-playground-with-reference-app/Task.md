@@ -151,6 +151,6 @@ garbage collection.
 
 - [Platform Access task](/tasks/archived/add-platform-access-management/Task.md)
 - [Current Console UI design](/tasks/archived/add-platform-access-management/UiDesign.md)
-- [Current Playground implementation](/packages/admin-webui/src/ui/views/file-playground.tsx)
+- The former Console Playground implementation was retired before this reference App work begins.
 - [Package and access-plane boundaries](/packages/README.md)
 - [UniCAS architecture](/docs/cas-architecture.md)

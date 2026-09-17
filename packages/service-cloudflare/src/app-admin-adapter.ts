@@ -114,10 +114,6 @@ export function transformAppAdminResponse(route: AppAdminRoute, body: unknown): 
       return mapArrayProperty(body, "refs", value => renameField(value, "tenantId", "spaceId"));
     case "listRootDomainEvents":
       return mapArrayProperty(body, "events", value => renameField(value, "tenantId", "spaceId"));
-    case "listPlaygroundFileRoots":
-    case "createPlaygroundFileRoot":
-    case "patchPlaygroundFileRoot":
-    case "deletePlaygroundFileRoot":
     case "deleteMember":
       return body;
     case "mintManagedCapability":

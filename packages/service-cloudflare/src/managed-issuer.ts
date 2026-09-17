@@ -15,7 +15,7 @@ import type {
   ControlOAuthIssuerRecord,
   ManagedCapabilityIssuer,
 } from "@unicas/service";
-import { managedPlaygroundOwnerKey } from "@unicas/service";
+import { managedIdentityOwnerKey } from "@unicas/service";
 
 const CAPABILITY_LIFETIME_SECONDS = 60 * 60;
 
@@ -74,7 +74,7 @@ export class CloudflareManagedIssuer implements ManagedCapabilityIssuer {
       throw new TypeError("managed issuer binding does not match the stack");
     }
     const material = await this.#material();
-    const identityDigest = await managedPlaygroundOwnerKey(input.stack.stackId, input.identity);
+    const identityDigest = await managedIdentityOwnerKey(input.stack.stackId, input.identity);
     const tenantId = `member_${identityDigest.slice(0, 24)}`;
     const subject = `member:${identityDigest}`;
     const permissions = [
@@ -117,7 +117,7 @@ export class CloudflareManagedIssuer implements ManagedCapabilityIssuer {
       throw new TypeError("managed issuer binding does not match the app");
     }
     const material = await this.#material();
-    const identityDigest = await managedPlaygroundOwnerKey(input.stack.stackId, input.identity);
+    const identityDigest = await managedIdentityOwnerKey(input.stack.stackId, input.identity);
     const spaceId = `member_${identityDigest.slice(0, 24)}`;
     const subject = `member:${identityDigest}`;
     const permissions = [

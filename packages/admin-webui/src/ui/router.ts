@@ -42,7 +42,7 @@ export function matchRoute(pattern: string, path: string): RouteMatch | null {
   return { pattern, params };
 }
 
-export type AppSection = "overview" | "members" | "invitations" | "playground" | "change-logs";
+export type AppSection = "overview" | "members" | "invitations" | "change-logs";
 
 export interface AppRoute {
   readonly appId: string;
@@ -57,7 +57,7 @@ export function parseAppRoute(path: string): AppRoute | null {
   if (segments.length < 2 || segments[0] !== "apps") return null;
   const appId = decodeURIComponent(segments[1]!);
   const section = segments[2] ?? "overview";
-  const validSections: AppSection[] = ["overview", "members", "invitations", "playground", "change-logs"];
+  const validSections: AppSection[] = ["overview", "members", "invitations", "change-logs"];
   if (!validSections.includes(section as AppSection)) return null;
   return { appId, section: section as AppSection, ...(search ? { peopleFilter: new URLSearchParams(search).get("filter") ?? "current" } : {}) };
 }

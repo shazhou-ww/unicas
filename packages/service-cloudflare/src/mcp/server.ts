@@ -167,19 +167,6 @@ export function createControlPlaneMcpServer(
   );
 
   server.registerTool(
-    APP_ADMIN_MCP_TOOLS.list_app_playground_file_roots.name,
-    APP_ADMIN_MCP_TOOLS.list_app_playground_file_roots.registration,
-    async ({ appId }) => {
-      const grant = requireGrantScope("control:read");
-      const result = await controlPlane.listPlaygroundFileRoots(
-        serviceContext(grant, "list_app_playground_file_roots"),
-        { path: { stackId: appId } },
-      );
-      return appToolResult({ operation: "listPlaygroundFileRoots", appId }, result);
-    },
-  );
-
-  server.registerTool(
     APP_ADMIN_MCP_TOOLS.list_app_ref_domains.name,
     APP_ADMIN_MCP_TOOLS.list_app_ref_domains.registration,
     async ({ appId }) => {
@@ -496,48 +483,6 @@ export function createControlPlaneMcpServer(
         });
         return { ok: true };
       });
-    },
-  );
-
-  server.registerTool(
-    APP_ADMIN_MCP_TOOLS.create_app_playground_file_root.name,
-    APP_ADMIN_MCP_TOOLS.create_app_playground_file_root.registration,
-    async ({ appId, rootId, name, manifestHash }) => {
-      const grant = requireMutation("control:write", options);
-      const result = await controlPlane.createPlaygroundFileRoot(
-        serviceContext(grant, "create_app_playground_file_root"),
-        { path: { stackId: appId }, body: { rootId, name, manifestHash } },
-      );
-      return appToolResult({ operation: "createPlaygroundFileRoot", appId }, withEtag(result));
-    },
-  );
-
-  server.registerTool(
-    APP_ADMIN_MCP_TOOLS.update_app_playground_file_root.name,
-    APP_ADMIN_MCP_TOOLS.update_app_playground_file_root.registration,
-    async ({ appId, rootId, name, manifestHash, etag }) => {
-      const grant = requireMutation("control:write", options);
-      const result = await controlPlane.patchPlaygroundFileRoot(
-        serviceContext(grant, "update_app_playground_file_root"),
-        { path: { stackId: appId, rootId }, body: { name, manifestHash } },
-        { ifMatch: etag },
-      );
-      return appToolResult({ operation: "patchPlaygroundFileRoot", appId, rootId }, withEtag(result));
-    },
-  );
-
-  server.registerTool(
-    APP_ADMIN_MCP_TOOLS.delete_app_playground_file_root.name,
-    APP_ADMIN_MCP_TOOLS.delete_app_playground_file_root.registration,
-    async ({ appId, rootId, etag, confirmRootId }) => {
-      const grant = requireMutation("control:write", options);
-      if (confirmRootId !== rootId) return confirmationError("confirmRootId must exactly match rootId");
-      const result = await controlPlane.deletePlaygroundFileRoot(
-        serviceContext(grant, "delete_app_playground_file_root"),
-        { path: { stackId: appId, rootId } },
-        { ifMatch: etag },
-      );
-      return appToolResult({ operation: "deletePlaygroundFileRoot", appId, rootId }, result);
     },
   );
 

@@ -87,8 +87,8 @@ pnpm --filter @unicas/admin-cli unicas login
 | `unicas status` | Local session summary (no network) |
 | `unicas mcp` | Run as a stdio MCP server |
 
-MCP additionally exposes App invitation acceptance, managed issuer/capability,
-and Account-owned Playground root operations. Retired commands (`principal`,
+MCP additionally exposes App invitation acceptance and managed issuer/capability
+operations. Retired commands (`principal`,
 `whoami`, `stacks`, `members`, `oauth-issuer`, `ref-domains`, and `audit`) are
 not supported and have no compatibility aliases. Use the current commands above.
 Old credentials without Account binding require a new login instead of migration.
@@ -102,8 +102,8 @@ diagnostics go to stderr.
 
 ## Guardrails
 
-- **ETags.** App update, issuer activation, and MCP Playground mutations
-  need the current ETag. When `--etag` is omitted the CLI reads it first
+- **ETags.** App update and issuer activation need the current ETag. When
+  `--etag` is omitted the CLI reads it first
   (`get_app` / `get_app_oauth_issuer`).
 - **Platform authority.** Every platform command requires current
   `platform.admin`; `apps create` separately requires current `apps.create`.

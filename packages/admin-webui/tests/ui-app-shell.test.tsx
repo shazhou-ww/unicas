@@ -192,13 +192,11 @@ describe("current App shell", () => {
 
     await screen.findByRole("heading", { name: "Primary App" });
     expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual([
-      "Overview", "Members", "Change Logs", "Playground",
+      "Overview", "Members", "Change Logs",
     ]);
     expect(screen.getByRole("heading", { name: "Managed issuer" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Custom OAuth authorization server" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Usage" })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("tab", { name: "Playground" })).toBeEnabled());
-
     await user.click(screen.getByRole("tab", { name: "Members" }));
     expect(window.location.hash).toBe("#/apps/cas_one/members");
   });
@@ -265,47 +263,4 @@ describe("current App shell", () => {
     expect((patch?.[1]?.headers as Headers).get("If-Match")).toBe('"3"');
   });
 
-  test("disables Playground until the managed issuer is enabled and updates after toggling", async () => {
-    let issuer = managedIssuer("disabled");
-    const base = vi.mocked(fetch).getMockImplementation()!;
-    vi.mocked(fetch).mockImplementation(async (input, init) => {
-      const url = new URL(String(input), "http://localhost");
-      if (url.pathname.endsWith("/managed-issuer")) {
-        if (init?.method === "PATCH") {
-          issuer = managedIssuer(JSON.parse(String(init.body)).enabled ? "active" : "disabled");
-        }
-        return json(issuer);
-      }
-      return base(input, init);
-    });
-    const user = userEvent.setup();
-    render(<App />);
-
-    const playground = await screen.findByRole("tab", { name: "Playground" });
-    expect(playground).toBeDisabled();
-    await user.click(playground);
-    expect(window.location.hash).toBe("#/apps/cas_one/overview");
-    await user.click(await screen.findByRole("button", { name: "Enable managed issuer" }));
-    await waitFor(() => expect(playground).toBeEnabled());
-    await user.click(screen.getByRole("button", { name: "Disable managed issuer" }));
-    await waitFor(() => expect(playground).toBeDisabled());
-  });
-
-  test("routes a disabled Playground to focused managed issuer settings", async () => {
-    window.location.hash = "#/apps/cas_one/playground";
-    const base = vi.mocked(fetch).getMockImplementation()!;
-    vi.mocked(fetch).mockImplementation(async (input, init) => {
-      const url = new URL(String(input), "http://localhost");
-      if (url.pathname.endsWith("/managed-issuer")) return json(managedIssuer("disabled"));
-      return base(input, init);
-    });
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(await screen.findByRole("button", { name: "Go to managed issuer settings" }));
-    await waitFor(() => expect(window.location.hash).toBe("#/apps/cas_one/overview"));
-    const settings = await screen.findByRole("region", { name: "Managed issuer settings" });
-    expect(settings).toHaveFocus();
-    await within(settings).findByRole("button", { name: "Enable managed issuer" });
-  });
 });

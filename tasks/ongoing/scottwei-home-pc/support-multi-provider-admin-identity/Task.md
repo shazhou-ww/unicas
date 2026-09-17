@@ -107,8 +107,10 @@ and reversibility:
   rollback requirements in the review artifacts. No data reset is performed
   merely by recording this decision.
 - Introduce a stable UniCAS account identifier and persistence model that can
-  own App memberships, platform authorities, sessions, Playground ownership, and
-  durable audit attribution independently of an external login identity.
+  own App memberships, platform authorities, sessions, and durable audit
+  attribution independently of an external login identity.
+- Retire the pre-launch Console Playground and its v1/v2 administrator HTTP and
+  MCP entry points instead of migrating its identity-keyed ownership model.
 - Store each external identity as a unique provider/issuer/subject binding to
   one account. Preserve the exact authenticated external identity alongside the
   stable account in security-sensitive audit evidence.
@@ -190,8 +192,11 @@ and reversibility:
 ## Acceptance criteria
 
 - [ ] A newly provisioned administrator has one stable UniCAS account whose App
-  memberships, platform authorities, Playground ownership, and authorization do
-      not change when a linked external login identity is used.
+  memberships, platform authorities, and authorization do not change when a
+  linked external login identity is used.
+- [ ] Console navigation, administrator OpenAPI, clients, stdio MCP, and remote
+  MCP expose no Playground entry point or file-root operation; retired HTTP
+  paths fail closed without compatibility aliases.
 - [ ] Platform Account and App member reads resolve the same Account profile
       and present a consistent primary verified email, display name, and avatar
       or deterministic fallback without duplicating those values in access or

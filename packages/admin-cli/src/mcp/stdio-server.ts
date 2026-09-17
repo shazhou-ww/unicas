@@ -284,40 +284,6 @@ const TOOL_HANDLERS = {
     return admin.deleteAppMember({ appId: str(args.appId), accountId });
   },
 
-  async list_app_playground_file_roots(admin, args) {
-    return admin.listAppPlaygroundFileRoots({ appId: str(args.appId) });
-  },
-
-  async create_app_playground_file_root(admin, args) {
-    const result = await admin.createAppPlaygroundFileRoot(
-      { appId: str(args.appId) },
-      {
-        rootId: str(args.rootId),
-        name: str(args.name),
-        manifestHash: str(args.manifestHash),
-      },
-    );
-    return { ...result.value, etag: result.etag };
-  },
-
-  async update_app_playground_file_root(admin, args) {
-    const result = await admin.patchAppPlaygroundFileRoot(
-      { appId: str(args.appId), rootId: str(args.rootId) },
-      { name: str(args.name), manifestHash: str(args.manifestHash) },
-      str(args.etag),
-    );
-    return { ...result.value, etag: result.etag };
-  },
-
-  async delete_app_playground_file_root(admin, args) {
-    const rootId = str(args.rootId);
-    requireMatch(args.confirmRootId, rootId, "confirmRootId must exactly match rootId");
-    return admin.deleteAppPlaygroundFileRoot(
-      { appId: str(args.appId), rootId },
-      str(args.etag),
-    );
-  },
-
   async get_app_oauth_issuer(admin, args) {
     const result = await admin.getAppOAuthIssuer({ appId: str(args.appId) });
     if (result.value === null) throw new Error("OAuth issuer is not configured");

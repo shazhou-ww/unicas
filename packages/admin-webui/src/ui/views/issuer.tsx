@@ -142,8 +142,7 @@ function IssuerPanel({ appId, focusManagedIssuer = false, onManagedIssuerChanged
             <p className="text-sm text-muted-foreground">
               Admin sign-in grants App management access, not access to Space data.
               The managed issuer is UniCAS's built-in authorization server: it issues short-lived
-              Space capabilities for Playground and gives each App member an isolated personal Space.
-              Enable it to use Playground without running your own authorization server.
+              Space capabilities and gives each App member an isolated personal Space.
               Applications using a custom OAuth issuer do not need to enable it.
             </p>
             {error ? (

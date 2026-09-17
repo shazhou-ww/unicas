@@ -10,7 +10,7 @@ describe("tool catalog", () => {
   test("exposes exactly the remote tool contract", () => {
     expect(TOOL_CATALOG.map((tool) => tool.name)).toEqual(REMOTE_TOOL_NAMES);
     expect(new Set(TOOL_CATALOG.map((tool) => tool.name)).size).toBe(TOOL_CATALOG.length);
-    for (const retired of ["whoami", "get_current_principal", "list_stacks", "get_stack", "list_members", "get_oauth_issuer", "list_ref_domains", "list_control_audit_events", "list_root_domain_refs", "list_root_domain_events", "create_stack", "update_stack", "invite_member", "remove_member", "inspect_oauth_issuer", "activate_oauth_issuer"]) {
+    for (const retired of ["whoami", "get_current_principal", "list_stacks", "get_stack", "list_members", "get_oauth_issuer", "list_ref_domains", "list_control_audit_events", "list_root_domain_refs", "list_root_domain_events", "create_stack", "update_stack", "invite_member", "remove_member", "inspect_oauth_issuer", "activate_oauth_issuer", "list_app_playground_file_roots", "create_app_playground_file_root", "update_app_playground_file_root", "delete_app_playground_file_root"]) {
       expect(getToolDefinition(retired)).toBeUndefined();
     }
   });
@@ -34,7 +34,6 @@ describe("tool catalog", () => {
     expect(getToolDefinition("create_app")?.annotations.idempotentHint).toBe(true);
     expect(getToolDefinition("invite_app_member")?.annotations.idempotentHint).toBe(true);
     expect(getToolDefinition("remove_app_member")?.annotations.destructiveHint).toBe(true);
-    expect(getToolDefinition("delete_app_playground_file_root")?.annotations.destructiveHint).toBe(true);
     expect(getToolDefinition("revoke_platform_authority")?.annotations.idempotentHint).toBe(true);
     expect(getToolDefinition("block_platform_account")?.annotations.destructiveHint).toBe(true);
     expect(getToolDefinition("update_platform_access")).toBeUndefined();

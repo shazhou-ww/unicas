@@ -95,28 +95,6 @@ describe("D1-backed control-plane service", () => {
       .toMatchObject({ displayName: "Renamed", description: "Production", revision: 2 });
   }, 10_000);
 
-  test("isolates Playground file roots per member and enforces root revisions", async () => {
-    const { db, service } = await createService(() => 10_000);
-    const stackId = await createStack(service);
-    await db.prepare("INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at) VALUES (?, ?, ?, ?)")
-      .bind(stackId, bob.identityIssuer, bob.subject, 1)
-      .run();
-    const firstHash = "a".repeat(64);
-    const secondHash = "b".repeat(64);
-    const request = { path: { stackId }, body: { rootId: "root-1", name: "Files", manifestHash: firstHash } };
-
-    expect(await service.createPlaygroundFileRoot(ctx(alice), request)).toMatchObject({ rootId: "root-1", revision: 1 });
-    expect(await service.createPlaygroundFileRoot(ctx(bob), request)).toMatchObject({ rootId: "root-1", revision: 1 });
-    expect(await service.listPlaygroundFileRoots(ctx(alice), { path: { stackId } })).toMatchObject({ items: [{ name: "Files" }] });
-    expect(await service.listPlaygroundFileRoots(ctx(bob), { path: { stackId } })).toMatchObject({ items: [{ name: "Files" }] });
-
-    const patch = { path: { stackId, rootId: "root-1" }, body: { name: "Renamed", manifestHash: secondHash } };
-    expectError(await service.patchPlaygroundFileRoot(ctx(alice), patch, {}), CasAdminErrorCodes.PRECONDITION_REQUIRED);
-    expect(await service.patchPlaygroundFileRoot(ctx(alice), patch, { ifMatch: '"1"' })).toMatchObject({ name: "Renamed", revision: 2 });
-    expectError(await service.patchPlaygroundFileRoot(ctx(alice), patch, { ifMatch: '"1"' }), CasAdminErrorCodes.REVISION_MISMATCH);
-    expect(await service.listPlaygroundFileRoots(ctx(bob), { path: { stackId } })).toMatchObject({ items: [{ name: "Files", revision: 1 }] });
-  });
-
   test("mints a managed Space capability accepted by the App authority adapter", async () => {
     let clock = 1_700_000_000_000;
     const now = () => clock;

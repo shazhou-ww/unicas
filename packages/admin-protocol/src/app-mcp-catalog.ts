@@ -93,15 +93,6 @@ export const APP_ADMIN_MCP_TOOLS = {
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
   }),
-  list_app_playground_file_roots: tool({
-    name: "list_app_playground_file_roots",
-    requiredScope: "control:read",
-    registration: {
-      description: "List Principal-owned Playground file roots for an App.",
-      inputSchema: z.object({ appId }),
-      annotations: { readOnlyHint: true, destructiveHint: false },
-    },
-  }),
   list_app_ref_domains: tool({
     name: "list_app_ref_domains",
     requiredScope: "control:read",
@@ -358,33 +349,6 @@ export const APP_ADMIN_MCP_TOOLS = {
         confirmAccountId: accountId,
       }),
       annotations: { destructiveHint: true, idempotentHint: true },
-    },
-  }),
-  create_app_playground_file_root: tool({
-    name: "create_app_playground_file_root",
-    requiredScope: "control:write",
-    registration: {
-      description: "Create a Principal-owned Playground file root for an App.",
-      inputSchema: z.object({ appId, rootId, name: displayName, manifestHash }),
-      annotations: { destructiveHint: false, idempotentHint: false },
-    },
-  }),
-  update_app_playground_file_root: tool({
-    name: "update_app_playground_file_root",
-    requiredScope: "control:write",
-    registration: {
-      description: "Update a Principal-owned Playground file root using its current ETag.",
-      inputSchema: z.object({ appId, rootId, name: displayName, manifestHash, etag }),
-      annotations: { destructiveHint: false, idempotentHint: false },
-    },
-  }),
-  delete_app_playground_file_root: tool({
-    name: "delete_app_playground_file_root",
-    requiredScope: "control:write",
-    registration: {
-      description: "Delete a Principal-owned Playground file root using its current ETag.",
-      inputSchema: z.object({ appId, rootId, etag, confirmRootId: rootId }),
-      annotations: { destructiveHint: true, idempotentHint: false },
     },
   }),
   inspect_app_oauth_issuer: tool({

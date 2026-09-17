@@ -24,7 +24,6 @@ import type {
   CasOAuthIssuerInspectionKey,
   CasOperatorIdentity,
   CasOperatorIdentityKey,
-  CasPlaygroundFileRoot,
   CasRefChanges,
   CasRefDomain,
   CasRootRefBalance,
@@ -339,15 +338,6 @@ export const CasStackMemberSchema: z.ZodType<CasStackMember> = z.object({
   displayName: z.string().nullable().describe("Display-only identity name captured from authentication claims."),
   emailForDisplay: z.string().nullable().describe("Display-only identity email; it is not an authorization key."),
 }).readonly().meta({ id: "CasStackMember" });
-
-export const CasPlaygroundFileRootSchema: z.ZodType<CasPlaygroundFileRoot> = z.object({
-  rootId: NonEmptyStringSchema.describe("Playground-owned stable business record identifier."),
-  name: NonEmptyStringSchema.describe("Administrator-visible file name."),
-  manifestHash: CasHashSchema.describe("CAS manifest retained by this business root."),
-  revision: RevisionSchema.describe("Current file-root revision required by conditional updates and deletion."),
-  createdAt: TimestampSchema.describe("Time at which the Playground root was created."),
-  updatedAt: TimestampSchema.describe("Time of the latest metadata or manifest change."),
-}).readonly().meta({ id: "CasPlaygroundFileRoot" });
 
 export const CasMemberInvitationSchema: z.ZodType<CasMemberInvitation> = z.object({
   invitationId: NonEmptyStringSchema.describe("Opaque persistent invitation identity. This is not the bearer acceptance token."),

@@ -41,7 +41,6 @@ export type {
   SpaceRootRefEvent,
   CasControlAuditEvent,
   CasOAuthIssuerInspection,
-  CasPlaygroundFileRoot,
   CasRefDomain,
   CasRootRefBalance,
   CasRootRefEvent,

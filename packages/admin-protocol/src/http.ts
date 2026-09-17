@@ -4,7 +4,6 @@ import type {
   CasMemberInvitation,
   CasOperatorIdentity,
   CasOperatorIdentityKey,
-  CasPlaygroundFileRoot,
   CasRefDomain,
   CasRootRefBalance,
   CasRootRefEvent,
@@ -28,47 +27,6 @@ export interface CasAdminStackPath {
 export interface CasAdminRootDomainPath extends CasAdminStackPath {
   readonly refDomain: string;
 }
-
-export interface CasAdminPlaygroundFileRootPath extends CasAdminStackPath {
-  readonly rootId: string;
-}
-
-export interface CasAdminListPlaygroundFileRootsRequest {
-  readonly path: CasAdminStackPath;
-}
-
-export type CasAdminListPlaygroundFileRootsResponse =
-  | { readonly items: readonly CasPlaygroundFileRoot[] }
-  | CasAdminErrorResponse;
-
-export interface CasAdminCreatePlaygroundFileRootRequest {
-  readonly path: CasAdminStackPath;
-  readonly body: {
-    readonly rootId: string;
-    readonly name: string;
-    readonly manifestHash: string;
-  };
-}
-
-export type CasAdminCreatePlaygroundFileRootResponse = CasPlaygroundFileRoot | CasAdminErrorResponse;
-
-export interface CasAdminPatchPlaygroundFileRootRequest {
-  readonly path: CasAdminPlaygroundFileRootPath;
-  readonly headers: CasAdminMutationPreconditions;
-  readonly body: {
-    readonly name: string;
-    readonly manifestHash: string;
-  };
-}
-
-export type CasAdminPatchPlaygroundFileRootResponse = CasPlaygroundFileRoot | CasAdminErrorResponse;
-
-export interface CasAdminDeletePlaygroundFileRootRequest {
-  readonly path: CasAdminPlaygroundFileRootPath;
-  readonly headers: CasAdminMutationPreconditions;
-}
-
-export type CasAdminDeletePlaygroundFileRootResponse = { readonly ok: true } | CasAdminErrorResponse;
 
 export interface CasAdminMeResponse {
   readonly identity: CasOperatorIdentity;
@@ -288,22 +246,6 @@ export interface CasAdminEndpointContracts {
   listMembers: {
     request: CasAdminListMembersRequest;
     response: CasAdminListMembersResponse;
-  };
-  listPlaygroundFileRoots: {
-    request: CasAdminListPlaygroundFileRootsRequest;
-    response: CasAdminListPlaygroundFileRootsResponse;
-  };
-  createPlaygroundFileRoot: {
-    request: CasAdminCreatePlaygroundFileRootRequest;
-    response: CasAdminCreatePlaygroundFileRootResponse;
-  };
-  patchPlaygroundFileRoot: {
-    request: CasAdminPatchPlaygroundFileRootRequest;
-    response: CasAdminPatchPlaygroundFileRootResponse;
-  };
-  deletePlaygroundFileRoot: {
-    request: CasAdminDeletePlaygroundFileRootRequest;
-    response: CasAdminDeletePlaygroundFileRootResponse;
   };
   deleteMember: {
     request: CasAdminDeleteMemberRequest;

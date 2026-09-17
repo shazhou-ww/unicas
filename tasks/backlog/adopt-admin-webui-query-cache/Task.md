@@ -127,7 +127,7 @@ work begins.
 - [Admin WebUI transport](/packages/admin-webui/src/ui/api.ts)
 - [Console shell data loading](/packages/admin-webui/src/ui/app.tsx)
 - [Issuer settings data loading](/packages/admin-webui/src/ui/views/issuer.tsx)
-- [Playground cache boundary](/packages/admin-webui/src/ui/playground-cache.ts)
+- Playground cache boundary retired with the pre-launch Playground UI removal.
 - [Admin package boundaries](/.github/instructions/packages.instructions.md)
 - [Related Console navigation task](/tasks/archived/simplify-console-administration-navigation/Task.md)
 - [Related administrator identity task](/tasks/ongoing/scottwei-home-pc/support-multi-provider-admin-identity/Task.md)

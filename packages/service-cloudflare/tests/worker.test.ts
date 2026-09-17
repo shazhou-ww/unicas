@@ -258,9 +258,8 @@ describe("service-cloudflare public routing", () => {
     const spaceRequest = handlers.tenant.mock.calls[0]![0] as Request;
     expect(spaceRequest.headers.get("X-CAS-App-Id")).toBe("app-1");
     expect(spaceRequest.headers.get("X-CAS-Space-Id")).toBe("space-1");
-    expect(handlers.admin).toHaveBeenCalledWith(expect.objectContaining({
-      url: "https://cas.example/admin/stacks/app-1",
-    }));
+    const adminRequest = handlers.admin.mock.calls[0]![0] as Request;
+    expect(adminRequest.url).toBe("https://cas.example/admin/apps/app-1");
     expect(handlers.migrate).toHaveBeenCalledTimes(1);
     expect(handlers.migrateControl).toHaveBeenCalledTimes(1);
   });

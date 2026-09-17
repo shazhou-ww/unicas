@@ -91,11 +91,10 @@ describe("package dependency boundaries", () => {
     expect(webui.private).toBe(true);
     expect(cloudflareService.private).toBe(true);
 
-    // The WebUI reaches the tenant plane only through public client facades
-    // for its managed-capability Playground.
     expect(webui.dependencies?.["@unicas/admin-client"]).toBe("workspace:*");
-    expect(webui.dependencies?.["@unicas/tenant-client"]).toBe("workspace:*");
-    expect(webui.dependencies?.["@unicas/tenant-file-client"]).toBe("workspace:*");
+    expect(webui.dependencies?.["@unicas/tenant-client"]).toBeUndefined();
+    expect(webui.dependencies?.["@unicas/tenant-file-client"]).toBeUndefined();
+    expect(webui.dependencies?.["@unicas/tenant-browser-cache"]).toBeUndefined();
     expect(webui.dependencies?.["@unicas/admin-protocol"]).toBeUndefined();
     expect(webui.dependencies?.["@unicas/service"]).toBeUndefined();
     expect(webui.dependencies?.["@unicas/control-plane"]).toBeUndefined();

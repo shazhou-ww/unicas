@@ -1,8 +1,4 @@
-/**
- * App administration UI entry. Browser code may hold only the explicit
- * short-lived Playground capability; it never holds Google client secrets,
- * refresh tokens, private keys, or session signing material.
- */
+/** App administration UI entry. */
 export const CAS_ADMIN_UI_PACKAGE = "@unicas/admin-webui/ui" as const;
 
 export { App } from "./app.js";
@@ -14,7 +10,6 @@ export { MembersView } from "./views/members.js";
 export { IssuerView } from "./views/issuer.js";
 export { ControlAuditView } from "./views/control-audit.js";
 export { UsageView } from "./views/usage.js";
-export { PlaygroundView } from "./views/file-playground.js";
 export { AppSidebar } from "./components/app-sidebar.js";
 export { AppDetailTabs } from "./components/app-detail-tabs.js";
 export { PageHeading } from "./components/page-heading.js";

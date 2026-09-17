@@ -13,7 +13,6 @@ import {
   AppRefDomainSchema,
   AppSchema,
   CasHashSchema,
-  CasPlaygroundFileRootSchema,
   ManagedSpaceCapabilitySchema,
   PrincipalSchema,
   ProfileSchema,
@@ -306,26 +305,6 @@ export const acceptAppMemberInvitationContract = appProcedure
   }).readonly())
   .output(z.object({ appId: AppIdSchema }).readonly());
 
-export const listAppPlaygroundFileRootsContract = appProcedure
-  .route({ method: "GET", path: `${AppAdminApiBasePath}/{appId}/playground/file-roots`, operationId: "listAppPlaygroundFileRoots", summary: "List Playground file roots", inputStructure: "detailed", tags: ["Playground"] })
-  .input(z.object({ params: appParams }).readonly())
-  .output(z.object({ items: z.array(CasPlaygroundFileRootSchema).readonly() }).readonly());
-
-export const createAppPlaygroundFileRootContract = appProcedure
-  .route({ method: "POST", path: `${AppAdminApiBasePath}/{appId}/playground/file-roots`, operationId: "createAppPlaygroundFileRoot", summary: "Create a Playground file root", inputStructure: "detailed", successStatus: 201, tags: ["Playground"] })
-  .input(z.object({ params: appParams, body: z.object({ rootId: z.string().min(1), name: z.string().min(1), manifestHash: CasHashSchema }).readonly() }).readonly())
-  .output(CasPlaygroundFileRootSchema);
-
-export const patchAppPlaygroundFileRootContract = appProcedure
-  .route({ method: "PATCH", path: `${AppAdminApiBasePath}/{appId}/playground/file-roots/{rootId}`, operationId: "patchAppPlaygroundFileRoot", summary: "Update a Playground file root", inputStructure: "detailed", tags: ["Playground"] })
-  .input(z.object({ params: appParams.unwrap().extend({ rootId: z.string().min(1) }).readonly(), headers: mutationHeaders, body: z.object({ name: z.string().min(1), manifestHash: CasHashSchema }).readonly() }).readonly())
-  .output(CasPlaygroundFileRootSchema);
-
-export const deleteAppPlaygroundFileRootContract = appProcedure
-  .route({ method: "DELETE", path: `${AppAdminApiBasePath}/{appId}/playground/file-roots/{rootId}`, operationId: "deleteAppPlaygroundFileRoot", summary: "Delete a Playground file root", inputStructure: "detailed", tags: ["Playground"] })
-  .input(z.object({ params: appParams.unwrap().extend({ rootId: z.string().min(1) }).readonly(), headers: mutationHeaders }).readonly())
-  .output(z.object({ ok: z.literal(true) }).readonly());
-
 export const getAppOAuthIssuerContract = appProcedure
   .route({ method: "GET", path: `${AppAdminApiBasePath}/{appId}/oauth-issuer`, operationId: "getAppOAuthIssuer", summary: "Read the App OAuth issuer", inputStructure: "detailed", tags: ["OAuth Issuer"] })
   .input(z.object({ params: appParams, query: z.object({ optional: z.boolean().optional() }).readonly().optional() }).readonly())
@@ -584,12 +563,6 @@ export const appAdminApiContract = {
     listInvitations: listAppMemberInvitationsContract,
     listPeople: listAppPeopleContract,
     revokeInvitation: revokeAppMemberInvitationContract,
-  },
-  playground: {
-    list: listAppPlaygroundFileRootsContract,
-    create: createAppPlaygroundFileRootContract,
-    patch: patchAppPlaygroundFileRootContract,
-    remove: deleteAppPlaygroundFileRootContract,
   },
   issuers: {
     get: getAppOAuthIssuerContract,

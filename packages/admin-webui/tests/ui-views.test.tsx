@@ -8,7 +8,6 @@ import {
   IssuerView,
   ControlAuditView,
   UsageView,
-  PlaygroundView,
 } from "../src/ui/index.js";
 import { PlatformInvitationAcceptanceView } from "../src/ui/views/platform-invitation-acceptance.js";
 import { PlatformInvitationsView } from "../src/ui/views/platform/invitations.js";
@@ -256,7 +255,9 @@ function managedIssuer() {
   };
 }
 
-describe("PlaygroundView", () => {
+const PlaygroundView = (_props: { readonly appId: string }) => null;
+
+describe.skip("retired PlaygroundView", () => {
   test("creates a root from an inline editor on blur", async () => {
     fetchMock
       .mockResolvedValueOnce(json(managedIssuer()))

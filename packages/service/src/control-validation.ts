@@ -95,8 +95,8 @@ export async function sha256Hex(value: string): Promise<string> {
     .join("");
 }
 
-/** Stable, non-PII owner key shared by managed capabilities and Playground state. */
-export function managedPlaygroundOwnerKey(
+/** Stable, non-PII owner key used to isolate managed capabilities by identity. */
+export function managedIdentityOwnerKey(
   stackId: string,
   identity: { readonly identityIssuer: string; readonly subject: string },
 ): Promise<string> {

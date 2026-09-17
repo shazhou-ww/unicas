@@ -5,10 +5,6 @@ export type CasAdminRoute =
   | { operation: "getStack"; stackId: string }
   | { operation: "patchStack"; stackId: string }
   | { operation: "listMembers"; stackId: string }
-  | { operation: "listPlaygroundFileRoots"; stackId: string }
-  | { operation: "createPlaygroundFileRoot"; stackId: string }
-  | { operation: "patchPlaygroundFileRoot"; stackId: string; rootId: string }
-  | { operation: "deletePlaygroundFileRoot"; stackId: string; rootId: string }
   | { operation: "deleteMember"; stackId: string }
   | { operation: "createMemberInvitation"; stackId: string }
   | { operation: "acceptMemberInvitation"; token: string }
@@ -51,10 +47,6 @@ export type AppAdminRoute =
   | { operation: "getApp"; appId: string }
   | { operation: "patchApp"; appId: string }
   | { operation: "listMembers"; appId: string }
-  | { operation: "listPlaygroundFileRoots"; appId: string }
-  | { operation: "createPlaygroundFileRoot"; appId: string }
-  | { operation: "patchPlaygroundFileRoot"; appId: string; rootId: string }
-  | { operation: "deletePlaygroundFileRoot"; appId: string; rootId: string }
   | { operation: "deleteMember"; appId: string }
   | { operation: "createMemberInvitation"; appId: string }
   | { operation: "listMemberInvitations"; appId: string }
@@ -108,10 +100,6 @@ export const casAdminRoutes = {
     `/admin/stacks/${segment(stackId)}/members`,
   memberInvitations: ({ stackId }: { stackId: string }) =>
     `/admin/stacks/${segment(stackId)}/member-invitations`,
-  playgroundFileRoots: ({ stackId }: { stackId: string }) =>
-    `/admin/stacks/${segment(stackId)}/playground/file-roots`,
-  playgroundFileRoot: ({ stackId, rootId }: { stackId: string; rootId: string }) =>
-    `/admin/stacks/${segment(stackId)}/playground/file-roots/${segment(rootId)}`,
   acceptMemberInvitation: ({ token }: { token: string }) =>
     `/admin/member-invitations/${segment(token)}/accept`,
   oauthIssuer: ({ stackId }: { stackId: string }) =>
@@ -167,10 +155,6 @@ export const appAdminRoutes = {
     `/admin/apps/${segment(appId)}/member-invitations`,
   memberInvitation: ({ appId, invitationId }: { appId: string; invitationId: string }) =>
     `/admin/apps/${segment(appId)}/member-invitations/${segment(invitationId)}`,
-  playgroundFileRoots: ({ appId }: { appId: string }) =>
-    `/admin/apps/${segment(appId)}/playground/file-roots`,
-  playgroundFileRoot: ({ appId, rootId }: { appId: string; rootId: string }) =>
-    `/admin/apps/${segment(appId)}/playground/file-roots/${segment(rootId)}`,
   acceptMemberInvitation: ({ token }: { token: string }) =>
     `/admin/member-invitations/${segment(token)}/accept`,
   oauthIssuer: ({ appId }: { appId: string }) =>
@@ -274,20 +258,6 @@ export function matchCasAdminRoute(
 
   if (parts.length === 4 && parts[3] === "member-invitations" && method === "POST") {
     return { operation: "createMemberInvitation", stackId };
-  }
-
-  if (parts.length === 5 && parts[3] === "playground" && parts[4] === "file-roots") {
-    if (method === "GET") return { operation: "listPlaygroundFileRoots", stackId };
-    if (method === "POST") return { operation: "createPlaygroundFileRoot", stackId };
-    return null;
-  }
-
-  if (parts.length === 6 && parts[3] === "playground" && parts[4] === "file-roots") {
-    const rootId = decodeSegment(parts[5]!);
-    if (rootId === null) return null;
-    if (method === "PATCH") return { operation: "patchPlaygroundFileRoot", stackId, rootId };
-    if (method === "DELETE") return { operation: "deletePlaygroundFileRoot", stackId, rootId };
-    return null;
   }
 
   if (parts.length === 4 && parts[3] === "oauth-issuer") {
@@ -417,20 +387,6 @@ export function matchAppAdminRoute(
   if (parts.length === 5 && parts[3] === "member-invitations" && method === "DELETE") {
     const invitationId = decodeSegment(parts[4]!);
     return invitationId === null ? null : { operation: "revokeMemberInvitation", appId, invitationId };
-  }
-
-  if (parts.length === 5 && parts[3] === "playground" && parts[4] === "file-roots") {
-    if (method === "GET") return { operation: "listPlaygroundFileRoots", appId };
-    if (method === "POST") return { operation: "createPlaygroundFileRoot", appId };
-    return null;
-  }
-
-  if (parts.length === 6 && parts[3] === "playground" && parts[4] === "file-roots") {
-    const rootId = decodeSegment(parts[5]!);
-    if (rootId === null) return null;
-    if (method === "PATCH") return { operation: "patchPlaygroundFileRoot", appId, rootId };
-    if (method === "DELETE") return { operation: "deletePlaygroundFileRoot", appId, rootId };
-    return null;
   }
 
   if (parts.length === 4 && parts[3] === "oauth-issuer") {

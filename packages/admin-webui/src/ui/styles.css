@@ -792,10 +792,6 @@ a:focus-visible {
   background: transparent;
 }
 
-.console-app-tabs .console-playground-tab {
-  margin-left: auto;
-}
-
 /* Page Heading */
 .console-page-heading {
   display: flex;

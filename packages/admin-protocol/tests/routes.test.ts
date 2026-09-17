@@ -14,10 +14,6 @@ describe("CAS admin routes", () => {
     ["GET", casAdminRoutes.stack({ stackId: "stack/a" }), "getStack"],
     ["PATCH", casAdminRoutes.stack({ stackId: "stack/a" }), "patchStack"],
     ["GET", casAdminRoutes.members({ stackId: "stack/a" }), "listMembers"],
-    ["GET", casAdminRoutes.playgroundFileRoots({ stackId: "stack/a" }), "listPlaygroundFileRoots"],
-    ["POST", casAdminRoutes.playgroundFileRoots({ stackId: "stack/a" }), "createPlaygroundFileRoot"],
-    ["PATCH", casAdminRoutes.playgroundFileRoot({ stackId: "stack/a", rootId: "root/1" }), "patchPlaygroundFileRoot"],
-    ["DELETE", casAdminRoutes.playgroundFileRoot({ stackId: "stack/a", rootId: "root/1" }), "deletePlaygroundFileRoot"],
     ["DELETE", casAdminRoutes.members({ stackId: "stack/a" }), "deleteMember"],
     ["POST", casAdminRoutes.memberInvitations({ stackId: "stack/a" }), "createMemberInvitation"],
     ["POST", casAdminRoutes.acceptMemberInvitation({ token: "tok/1" }), "acceptMemberInvitation"],
@@ -54,6 +50,10 @@ describe("CAS admin routes", () => {
     expect(matchCasAdminRoute("GET", casAdminRoutes.managedCapability({ stackId: "s" }))).toBeNull();
     expect(matchCasAdminRoute("GET", casAdminRoutes.oauthIssuerInspections({ stackId: "s" }))).toBeNull();
     expect(matchCasAdminRoute("GET", "/admin/%ZZ/stacks")).toBeNull();
+    expect(matchCasAdminRoute("GET", "/admin/stacks/s/playground/file-roots")).toBeNull();
+    expect(matchCasAdminRoute("POST", "/admin/stacks/s/playground/file-roots")).toBeNull();
+    expect(matchCasAdminRoute("PATCH", "/admin/stacks/s/playground/file-roots/r")).toBeNull();
+    expect(matchCasAdminRoute("DELETE", "/admin/stacks/s/playground/file-roots/r")).toBeNull();
   });
 
   test("never emits tenant operation names", () => {
@@ -80,10 +80,6 @@ describe("App admin routes", () => {
     ["DELETE", appAdminRoutes.members({ appId: "app/a" }), "deleteMember"],
     ["POST", appAdminRoutes.memberInvitations({ appId: "app/a" }), "createMemberInvitation"],
     ["POST", appAdminRoutes.acceptMemberInvitation({ token: "tok/1" }), "acceptMemberInvitation"],
-    ["GET", appAdminRoutes.playgroundFileRoots({ appId: "app/a" }), "listPlaygroundFileRoots"],
-    ["POST", appAdminRoutes.playgroundFileRoots({ appId: "app/a" }), "createPlaygroundFileRoot"],
-    ["PATCH", appAdminRoutes.playgroundFileRoot({ appId: "app/a", rootId: "root/1" }), "patchPlaygroundFileRoot"],
-    ["DELETE", appAdminRoutes.playgroundFileRoot({ appId: "app/a", rootId: "root/1" }), "deletePlaygroundFileRoot"],
     ["GET", appAdminRoutes.oauthIssuer({ appId: "app/a" }), "getOAuthIssuer"],
     ["PUT", appAdminRoutes.oauthIssuer({ appId: "app/a" }), "activateOAuthIssuer"],
     ["POST", appAdminRoutes.oauthIssuerInspections({ appId: "app/a" }), "inspectOAuthIssuer"],
@@ -131,5 +127,9 @@ describe("App admin routes", () => {
     expect(matchAppAdminRoute("GET", "/admin/apps/%ZZ")).toBeNull();
     expect(matchAppAdminRoute("POST", appAdminRoutes.me())).toBeNull();
     expect(matchAppAdminRoute("GET", appAdminRoutes.managedCapability({ appId: "a" }))).toBeNull();
+    expect(matchAppAdminRoute("GET", "/admin/apps/a/playground/file-roots")).toBeNull();
+    expect(matchAppAdminRoute("POST", "/admin/apps/a/playground/file-roots")).toBeNull();
+    expect(matchAppAdminRoute("PATCH", "/admin/apps/a/playground/file-roots/r")).toBeNull();
+    expect(matchAppAdminRoute("DELETE", "/admin/apps/a/playground/file-roots/r")).toBeNull();
   });
 });

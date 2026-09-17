@@ -152,15 +152,6 @@ importers:
       '@unicas/admin-client':
         specifier: workspace:*
         version: link:../admin-client
-      '@unicas/tenant-browser-cache':
-        specifier: workspace:*
-        version: link:../tenant-browser-cache
-      '@unicas/tenant-client':
-        specifier: workspace:*
-        version: link:../tenant-client
-      '@unicas/tenant-file-client':
-        specifier: workspace:*
-        version: link:../tenant-file-client
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
