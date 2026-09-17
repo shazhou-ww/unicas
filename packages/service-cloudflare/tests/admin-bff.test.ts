@@ -2593,7 +2593,7 @@ describe("cas-admin-webui BFF", () => {
     const repo = new MemoryPlatformAccessRepository();
     const people: PeopleRepository = { readSnapshot: async () => 1, nextExpiry: async () => null, list: vi.fn(async () => []) };
     const control = fakeControlPlane();
-    control.listAppMemberInvitations = vi.fn(async () => ({ error: "STACK_MEMBERSHIP_REQUIRED" as const }));
+    control.listAppMemberInvitations = vi.fn(async () => { throw new Error("legacy membership probe called"); });
     const { bff, cookie } = await signInWithAdmin(provider, repo, "people-admin", people, control);
     expect((await bff(new Request(`${PUBLIC_ORIGIN}/admin/platform/people`))).status).toBe(401);
     const platform = await authRequest(bff, "/admin/platform/people", cookie);
@@ -2602,12 +2602,13 @@ describe("cas-admin-webui BFF", () => {
     const appDenied = await authRequest(bff, "/admin/apps/cas_one/people", cookie);
     expect(appDenied.status).toBe(403);
     expect(await appDenied.json()).toEqual({ error: "APP_MEMBERSHIP_REQUIRED" });
-    control.listAppMemberInvitations = vi.fn(async () => ({ items: [], nextCursor: null }));
+    repo.grantViaMembership(ISSUER, "people-admin");
     expect((await authRequest(bff, "/admin/apps/cas_one/people", cookie)).status).toBe(200);
     expect((await authRequest(bff, "/admin/apps/cas_one/people?authority=platform.admin", cookie)).status).toBe(400);
     repo.grant(ISSUER, "people-admin");
     expect((await authRequest(bff, "/admin/platform/people", cookie)).status).toBe(403);
     expect((await authRequest(bff, "/admin/apps/cas_one/people", cookie)).status).toBe(200);
+    expect(control.listAppMemberInvitations).not.toHaveBeenCalled();
   }, 10000);
 
   test("platform admin: access summary returns correct counts", async () => {

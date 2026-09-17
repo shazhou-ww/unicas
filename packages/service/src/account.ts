@@ -472,6 +472,14 @@ export class AccountService {
     return app;
   }
 
+  async requireAppMembership(actorAccountId: AccountId, appId: AppId): Promise<void> {
+    const actor = await this.#resolveCanonicalAccount(actorAccountId);
+    this.#requireUsableAccount(actor);
+    if (!await this.repository.hasAppMembership(actor.accountId, appId)) {
+      throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
+    }
+  }
+
   async patchApp(input: {
     readonly actorAccountId: AccountId;
     readonly actorExternalIdentityId: string;

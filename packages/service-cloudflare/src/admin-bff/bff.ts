@@ -1818,8 +1818,17 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     const actor = { issuer: auth.payload.identityIssuer, subject: auth.payload.subject };
     const service = new PeopleService(options.peopleRepository, async scope => {
       if ("appId" in scope) {
-        const result = await controlPlane.listAppMemberInvitations(serviceContext(auth.payload, request), scope.appId, { limit: 1 });
-        if ("error" in result) throw new PlatformAccessError(result.error === "STACK_MEMBERSHIP_REQUIRED" ? "APP_MEMBERSHIP_REQUIRED" : result.error, casAdminErrorHttpStatus[result.error]);
+        if (!accountService || !auth.payload.accountId) {
+          throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
+        }
+        try {
+          await accountService.requireAppMembership(auth.payload.accountId, scope.appId);
+        } catch (error) {
+          if (error instanceof AccountServiceError) {
+            throw new PlatformAccessError(error.code, error.code === "APP_MEMBERSHIP_REQUIRED" ? 403 : 503);
+          }
+          throw error;
+        }
       } else {
         if (!platformAccess) throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
         await platformAccess.requireAccess(actor, "platform.admin");

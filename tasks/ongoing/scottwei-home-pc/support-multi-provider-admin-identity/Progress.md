@@ -30,7 +30,7 @@ managed issuer instance into both the current Account path and remaining legacy
 operations. The App adapter no longer rewrites list or create requests.
 Remote reachability was verified after publication with `repoledger doctor`.
 
-The fifth no-legacy cleanup checkpoint is ready to publish. `GET/PATCH
+The fifth no-legacy cleanup checkpoint is published. `GET/PATCH
 /admin/apps/{appId}` now use `AccountService` and Account-keyed D1 operations
 directly. Reads require stable Account membership. Updates require an active
 authenticated ExternalIdentity, CSRF, a valid current ETag, strict patch input,
@@ -38,9 +38,15 @@ and atomically update the App, advance the control snapshot, and write exact
 Account/ExternalIdentity audit attribution. The adapter no longer rewrites App
 detail requests to `/admin/stacks`.
 
-Next: migrate the remaining App issuer, invitation, capability, Playground, and
-root-domain operations to AccountService and Account-keyed repository
-transactions. After their consumers move, delete legacy HTTP contracts,
+The sixth no-legacy cleanup checkpoint is ready to publish. App People reads
+now authorize through `AccountService` and the stable `(accountId, appId)`
+membership instead of calling the legacy invitation service as a Principal-keyed
+membership probe. Platform People authorization remains separately guarded by
+platform authority.
+
+Next: migrate Playground file-root CRUD to AccountService and Account-keyed
+repository transactions, then migrate the remaining App issuer, invitation,
+capability, and root-domain operations. After their consumers move, delete legacy HTTP contracts,
 identity-keyed columns/tables, dual writes, and startup identity migration
 rather than adding compatibility flags.
 
@@ -449,6 +455,10 @@ cutover markers. Then complete the current-model and real-provider/email tests.
 
 ## Validation
 
+- Account-keyed App People authorization passed its focused regression and the
+  full 59-test BFF suite. The regression makes the old invitation membership
+  probe throw if called and confirms it remains unused across denied and allowed
+  App People reads. The service and Cloudflare packages passed typecheck.
 - Account-keyed App detail/update passed the full cloud-neutral service suite
   (145 tests), the full BFF suite (59 tests), and the App adapter suite (10
   tests). Both affected packages passed typecheck and editor diagnostics found
