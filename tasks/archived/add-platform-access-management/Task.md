@@ -97,7 +97,7 @@ customized for UniCAS, and makes the App list the primary navigation.
 ## Out of scope
 
 - Further Playground visual/layout polish is explicitly deferred by the user
-  to [Refine Playground layout](/tasks/backlog/refine-playground-layout/Task.md)
+  to [Refine Playground layout](/tasks/backlog/replace-playground-with-reference-app/Task.md)
   and does not block acceptance of the current Console implementation.
 - A separate Platform Admin frontend deployment, hostname, or identity provider.
 - A separately published design-system package or generic component library for

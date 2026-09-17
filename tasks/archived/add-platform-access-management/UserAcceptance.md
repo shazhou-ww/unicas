@@ -82,7 +82,7 @@ Post-release real-provider login and the remaining operator tests are pending.
 Log in again because the old session was intentionally invalidated. The initial
 bootstrap blocker is resolved, but production CI is not evidence of successful
 human invitation, revocation, CLI/MCP, or final delivery acceptance. Playground
-layout polish remains [backlog](/tasks/backlog/refine-playground-layout/Task.md).
+layout polish remains [backlog](/tasks/backlog/replace-playground-with-reference-app/Task.md).
 
 Acceptance resumed on 2026-09-16: the production restricted-login page loaded
 and redirected to the real Google account identifier prompt. Authentication is

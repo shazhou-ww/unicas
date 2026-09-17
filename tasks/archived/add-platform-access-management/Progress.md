@@ -176,7 +176,7 @@ invalidate old sessions, and bootstrap the verified account before release.
 
 On 2026-09-16 the requesting user accepted the management Console ("剩下的都没问题")
 and explicitly requested a release, while deferring remaining Playground layout
-polish to [the backlog task](/tasks/backlog/refine-playground-layout/Task.md).
+polish to [the backlog task](/tasks/backlog/replace-playground-with-reference-app/Task.md).
 This is approval of the current delivered scope/interface/model/architecture
 and implementation at `8ef3391`, not retrospective permission for earlier work
 and not evidence that production cutover or real-provider tests passed.
