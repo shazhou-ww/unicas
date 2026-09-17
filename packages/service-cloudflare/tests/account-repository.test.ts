@@ -260,20 +260,6 @@ describe("D1 Account repository", () => {
     await db.prepare(
       "INSERT INTO cas_account_platform_authorities (account_id, authority, granted_at) VALUES (?, 'platform.admin', 1)",
     ).bind(actor.account.accountId).run();
-    for (const [ref, resolution] of [["actor-ref", actor], ["target-ref", target]] as const) {
-      await db.prepare(
-        `INSERT INTO cas_platform_principals
-          (principal_ref, identity_issuer, subject, status, platform_admin, apps_create,
-           revision, created_at, updated_at, account_id)
-         VALUES (?, ?, ?, 'active', ?, 0, 1, 1, 1, ?)`,
-      ).bind(
-        ref,
-        resolution.authenticatedIdentity.issuer,
-        resolution.authenticatedIdentity.subject,
-        Number(resolution === actor),
-        resolution.account.accountId,
-      ).run();
-    }
 
     await expect(service.listPlatformAccounts({ actorAccountId: actor.account.accountId }))
       .resolves.toMatchObject({
@@ -299,9 +285,8 @@ describe("D1 Account repository", () => {
       authority: "apps.create",
       grant: true,
     });
-    expect(await db.prepare(
-      "SELECT apps_create FROM cas_platform_principals WHERE account_id = ?",
-    ).bind(target.account.accountId).first()).toEqual({ apps_create: 1 });
+    await expect(service.getPlatformAccount(actor.account.accountId, target.account.accountId))
+      .resolves.toMatchObject({ platformAuthorities: ["apps.create"] });
     expect(await db.prepare(
       "SELECT COUNT(*) AS count FROM cas_platform_audit_events WHERE action = 'platform_access.authority_changed'",
     ).first()).toEqual({ count: 1 });
@@ -335,9 +320,8 @@ describe("D1 Account repository", () => {
     expect(await db.prepare(
       "SELECT blocked_at, credential_version FROM cas_accounts WHERE account_id = ?",
     ).bind(target.account.accountId).first()).toEqual({ blocked_at: 1000, credential_version: 2 });
-    expect(await db.prepare(
-      "SELECT status FROM cas_platform_principals WHERE account_id = ?",
-    ).bind(target.account.accountId).first()).toEqual({ status: "blocked" });
+    await expect(service.getPlatformAccount(actor.account.accountId, target.account.accountId))
+      .resolves.toMatchObject({ effectiveAccess: "blocked" });
     await service.setPlatformBlocked({
       actorAccountId: actor.account.accountId,
       actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,

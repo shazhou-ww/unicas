@@ -441,11 +441,6 @@ export class D1AccountRepository implements AccountRepository {
         `DELETE FROM cas_account_platform_authorities WHERE account_id = ? AND authority = ?
          AND EXISTS (SELECT 1 FROM cas_platform_audit_events WHERE event_id = ?)`,
       ).bind(input.targetAccountId, input.authority, input.eventId);
-    const legacyColumn = input.authority === "platform.admin" ? "platform_admin" : "apps_create";
-    const synchronizeLegacy = this.db.prepare(
-      `UPDATE cas_platform_principals SET ${legacyColumn} = ?, revision = revision + 1, updated_at = ?
-       WHERE account_id = ? AND EXISTS (SELECT 1 FROM cas_platform_audit_events WHERE event_id = ?)`,
-    ).bind(Number(input.grant), input.now, input.targetAccountId, input.eventId);
     try {
       await this.db.batch([
         requireActor,
@@ -453,7 +448,6 @@ export class D1AccountRepository implements AccountRepository {
         requireRemainingAdmin,
         audit,
         mutate,
-        synchronizeLegacy,
         ...this.#accountSnapshotStatements(input.eventId),
       ]);
       return "updated";
@@ -518,10 +512,6 @@ export class D1AccountRepository implements AccountRepository {
         `UPDATE cas_accounts SET blocked_at = NULL, updated_at = ?
          WHERE account_id = ? AND EXISTS (SELECT 1 FROM cas_platform_audit_events WHERE event_id = ?)`,
       ).bind(input.now, input.targetAccountId, input.eventId);
-    const synchronizeLegacy = this.db.prepare(
-      `UPDATE cas_platform_principals SET status = ?, revision = revision + 1, updated_at = ?
-       WHERE account_id = ? AND EXISTS (SELECT 1 FROM cas_platform_audit_events WHERE event_id = ?)`,
-    ).bind(input.blocked ? "blocked" : "active", input.now, input.targetAccountId, input.eventId);
     try {
       await this.db.batch([
         requireActor,
@@ -530,7 +520,6 @@ export class D1AccountRepository implements AccountRepository {
         requireRemainingAdmin,
         audit,
         mutate,
-        synchronizeLegacy,
         ...this.#accountSnapshotStatements(input.eventId),
       ]);
       return "updated";

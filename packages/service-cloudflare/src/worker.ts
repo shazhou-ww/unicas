@@ -36,7 +36,6 @@ import { D1PeopleRepository } from "./people-repository.js";
 import { D1AccountRepository } from "./account-repository.js";
 import { D1EmailChallengeRepository } from "./email-challenge-repository.js";
 import { CloudflareEmailChallengeSender } from "./email-challenge-sender.js";
-import { migrateLegacyAdminIdentities } from "./identity-migration.js";
 import { CloudflareOAuthDiscoveryPort } from "./oauth-discovery.js";
 import { CloudflareManagedIssuer } from "./managed-issuer.js";
 import {
@@ -366,10 +365,7 @@ function ensureControlSchema(env: Env): Promise<void> {
   const key = env as object;
   let initialization = controlSchemaInitializations.get(key);
   if (!initialization) {
-    initialization = (async () => {
-      await migrateControlSchema(env.CAS_CONTROL_DB);
-      await migrateLegacyAdminIdentities(env.CAS_CONTROL_DB);
-    })();
+    initialization = migrateControlSchema(env.CAS_CONTROL_DB);
     controlSchemaInitializations.set(key, initialization);
     void initialization.catch(() => controlSchemaInitializations.delete(key));
   }

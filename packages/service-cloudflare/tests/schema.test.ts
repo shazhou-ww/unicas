@@ -79,10 +79,12 @@ describe("control schema", () => {
       "cas_external_identities",
       "cas_account_platform_authorities",
       "cas_account_aliases",
-      "cas_identity_migration_map",
-      "cas_identity_migration_journal",
       "cas_email_challenges",
     ]) expect(names.has(expected), `missing table ${expected}`).toBe(true);
+    for (const retired of [
+      "cas_identity_migration_map",
+      "cas_identity_migration_journal",
+    ]) expect(names.has(retired), `unexpected table ${retired}`).toBe(false);
 
     const authorityColumns = await database.prepare(
       "PRAGMA table_info(cas_account_platform_authorities)",

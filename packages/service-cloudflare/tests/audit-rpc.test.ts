@@ -11,9 +11,6 @@ vi.mock("../src/control-authority.js", () => ({
 vi.mock("../src/control-schema.js", () => ({
   migrateControlSchema: async () => undefined,
 }));
-vi.mock("../src/identity-migration.js", () => ({
-  migrateLegacyAdminIdentities: async () => undefined,
-}));
 vi.mock("../src/control-sessions.js", () => ({
   ControlSessionStore: class { },
 }));

@@ -658,6 +658,23 @@ cutover markers. Then complete the current-model and real-provider/email tests.
   Tests cover one-winner D1 rotation, preserved expiry, migration counts,
   Account metadata, old-cookie invalidation before mutations, original CSRF
   validation, stale-generation denial, and client/CLI persistence.
+- The task-owned [production OAuth provisioning guide](./ProductionOAuthProvisioning.md)
+  records the credential-free Google, Microsoft, GitHub, Cloudflare Email, and
+  GitHub Environment setup needed for real acceptance. It identifies that
+  GitHub Console and MCP callbacks require separate OAuth Apps, while the
+  current Worker configuration still shares one credential pair.
+- Fresh control-schema initialization no longer creates identity migration map
+  or journal tables, and Worker startup no longer calls legacy identity
+  migration. Focused schema/Worker tests passed 20 checks. The obsolete module
+  and its test were removed. The full Cloudflare run passed 275 of 276 tests;
+  the only failure was the existing Miniflare BFF link/unlink test timing out at
+  30 seconds under concurrent suite load. Its isolated 60-second rerun passed
+  in 24 seconds.
+- Account authority and block mutations no longer shadow-write
+  `cas_platform_principals`; their Account authority/block/audit behavior passed
+  all 8 focused D1 repository tests. The remaining Principal-keyed tables and
+  App compatibility adapter still back the internal legacy control-plane
+  repository, so deleting them awaits its Account-native replacement.
 
 ## Blockers
 
