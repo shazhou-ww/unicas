@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Menu, Plus, ShieldCheck } from "lucide-react";
+import { Menu, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet.js";
 import type { App, AppAdminMeResponse } from "@unicas/admin-client";
@@ -112,23 +112,6 @@ export function AppSidebar({
             })}
           </div>
         </div>
-
-        {/* Administration Section */}
-        {hasPlatformAdmin && (
-          <div className="console-sidebar-section">
-            <div className="console-sidebar-section-header">
-              <span className="console-sidebar-section-title">Administration</span>
-            </div>
-            <a
-              href="#/platform/people"
-              onClick={() => setMobileOpen(false)}
-              className="console-sidebar-admin-item"
-            >
-              <ShieldCheck className="h-4 w-4" />
-              <span>Platform access</span>
-            </a>
-          </div>
-        )}
       </div>
 
       {/* Footer - Profile Menu */}
@@ -136,6 +119,7 @@ export function AppSidebar({
         <div className="console-sidebar-footer">
           <UserMenu
             me={me}
+            hasPlatformAdmin={hasPlatformAdmin}
             onOpenMcpConfiguration={() => { setMobileOpen(false); onOpenMcp(); }}
             onLogout={onLogout}
           />

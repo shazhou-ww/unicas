@@ -232,10 +232,10 @@ export function App() {
       detail = (
         <div>
           <WorkspaceDetailHeader
-            title="Platform Administration"
+            title="Administration"
             value={platformRoute.section}
             onValueChange={value => navigate(`/platform/${value}`)}
-            navigationLabel="Platform Administration sections"
+            navigationLabel="Administration sections"
             content={renderPlatformSection()}
           >
             <TabsTrigger value="people">Members</TabsTrigger>

@@ -1,4 +1,4 @@
-import { BookOpenText, Cable, CircleUserRound, LogOut } from "lucide-react";
+import { BookOpenText, Cable, CircleUserRound, LogOut, ShieldCheck } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar.js";
 import {
   DropdownMenu,
@@ -25,10 +25,12 @@ function getInitials(name: string): string {
  */
 export function UserMenu({
   me,
+  hasPlatformAdmin,
   onOpenMcpConfiguration,
   onLogout,
 }: {
   me: AppAdminMeResponse;
+  hasPlatformAdmin?: boolean;
   onOpenMcpConfiguration: () => void;
   onLogout: () => void;
 }) {
@@ -73,6 +75,14 @@ export function UserMenu({
             <span>Account</span>
           </a>
         </DropdownMenuItem>
+        {hasPlatformAdmin ? (
+          <DropdownMenuItem asChild>
+            <a href="#/platform/people" className="cursor-pointer">
+              <ShieldCheck className="mr-2 h-4 w-4" />
+              <span>Administration</span>
+            </a>
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuItem asChild>
           <a
             href="https://docs.unicas.work"
