@@ -41,8 +41,8 @@ from the distinct `copilot-unicas-standalone` identity to the device's
 `c8185760d18f26672f472b0a16f812835713f3ef` is published on `origin/main`, the
 worktree is explicitly bound to the registered identity as required by the
 repository policy, and `repoledger doctor` passes. The CLI-validated task
-transfer from `copilot-unicas-standalone` to `scottwei-office-pc` is applied
-locally and awaits publication.
+transfer from `copilot-unicas-standalone` to `scottwei-office-pc` is published
+on `origin/main` as `8a58b31971d3d6b4ea47eca8bc6dbf1c5eac2dc2`.
 
 Scope approval is published on `origin/main` as
 `aa94d2efef95c581dbc67a0493539ed2f42f4ab3`. The task-owned
@@ -97,7 +97,7 @@ protected by any pending checkpoint.
 | --- | --- | --- |
 | Claim | `origin/main` commit `1b33a29c6ebcc9e7ed66fe273b4ca7c020e43584`. | Published |
 | Ownership transfer | `origin/main` commit `1db432c0820218ff821f233b322165149eb1d5f5`, coordinated from `scottwei-home-pc` to `copilot-unicas-standalone`. | Published |
-| Ownership transfer to `scottwei-office-pc` | Pending. | Pending publication |
+| Ownership transfer to `scottwei-office-pc` | `origin/main` commit `8a58b31971d3d6b4ea47eca8bc6dbf1c5eac2dc2`, coordinated from `copilot-unicas-standalone` to `scottwei-office-pc`. | Published |
 | Implementation complete | Pending. | Pending |
 | Archive | Pending. | Pending |
 
@@ -154,7 +154,9 @@ protected by any pending checkpoint.
 - `pnpm exec repoledger check --task support-multi-provider-admin-identity`
   passed before and immediately after the previewed transfer was applied with
   `--take-from copilot-unicas-standalone --update-all-refs`; the preview and
-  apply results reported no blockers, warnings, or reference edits.
+  apply results reported no blockers, warnings, or reference edits. Transfer
+  commit `8a58b31971d3d6b4ea47eca8bc6dbf1c5eac2dc2` was pushed and verified
+  reachable from refreshed `origin/main`.
 
 ## Blockers
 
