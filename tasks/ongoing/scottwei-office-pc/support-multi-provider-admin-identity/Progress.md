@@ -32,6 +32,12 @@ focused BFF test fixture calls that directly use retired Google routes still
 need conversion before the BFF suite can be recorded as passing; production
 routes remain current-only and return `404` for the retired paths.
 
+All remaining BFF fixtures now use `/admin/auth/start/google` and
+`/admin/auth/callback/google`. Focused BFF and MCP suites passed 75 tests, and
+direct regression assertions prove `/admin/auth/oidc`, `/admin/auth/callback`,
+and `/oauth/google/callback` return `404`. The callback fixture completion was
+rebased over concurrent `main` work and published on 2026-09-17.
+
 Claim commit `1b33a29c6ebcc9e7ed66fe273b4ca7c020e43584` initially assigned the
 task to `scottwei-home-pc`. On 2026-09-17, the requesting user explicitly
 directed `copilot-unicas-standalone` to take over the task. The validated
