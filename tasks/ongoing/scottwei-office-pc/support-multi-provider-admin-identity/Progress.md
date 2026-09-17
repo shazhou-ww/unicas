@@ -109,8 +109,8 @@ backfills Account shadow keys, platform-authority child rows, App memberships,
 and uniquely derived Playground ownership. Existing audit attribution columns
 remain unchanged and resolve through the permanent map. Stage counts and
 failures are recorded in the migration journal; reconciliation blocks cutover
-for any count, authority, membership, or Playground mismatch. The slice awaits
-checkpoint publication.
+for any count, authority, membership, or Playground mismatch. The slice is
+published on `origin/main` as `e87c8841dac918ccc91fc179af66a32f8f0c2bcb`.
 
 Next: publish the legacy migration checkpoint, then add shadow Account
 resolution to sessions and current authorization composition.
@@ -324,6 +324,8 @@ resolution to sessions and current authorization composition.
   bare control-table test inserts to explicit columns. The full
   `@unicas/service-cloudflare` suite passed all 253 tests across 27 files and
   typecheck passed; editor diagnostics reported no migration errors.
+- Legacy identity migration commit `e87c8841dac918ccc91fc179af66a32f8f0c2bcb`
+  was pushed and verified reachable from refreshed `origin/main`.
 
 ## Blockers
 
