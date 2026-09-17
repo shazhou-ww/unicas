@@ -157,8 +157,8 @@ batch. Unlink requires a different freshly authenticated remaining identity,
 closes rather than deletes the target link, clears profile values sourced by it,
 and increments credential version atomically. The BFF adds CSRF-protected
 two-stage link and guarded unlink routes using encrypted one-time continuations,
-then rotates to a session bound to the new credential version. The slice awaits
-checkpoint publication.
+then rotates to a session bound to the new credential version. The slice is
+published on `origin/main` as `63fcd90c5a39e08baafafbd8198da534b3681e06`.
 
 Next: publish the link/unlink checkpoint, then implement Account self-service
 protocol/client/Console surfaces and Account-keyed relationship commands.
@@ -424,6 +424,8 @@ protocol/client/Console surfaces and Account-keyed relationship commands.
   identity reauthentication, GitHub unlink, and session rotations end to end.
   The full Cloudflare suite passed all 263 tests across 29 files and typecheck
   passed.
+- Fresh-auth link/unlink commit `63fcd90c5a39e08baafafbd8198da534b3681e06`
+  was pushed and verified reachable from refreshed `origin/main`.
 
 ## Blockers
 
