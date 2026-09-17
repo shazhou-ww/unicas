@@ -44,7 +44,7 @@ membership instead of calling the legacy invitation service as a Principal-keyed
 membership probe. Platform People authorization remains separately guarded by
 platform authority.
 
-The seventh no-legacy cleanup checkpoint is ready to publish. At the requesting
+The seventh no-legacy cleanup checkpoint is published as `4894800`. At the requesting
 user's direction, the pre-launch Playground is retired instead of migrated.
 Both v1 and v2 file-root HTTP paths are absent from route matchers and OpenAPI,
 the admin client exposes no file-root methods, stdio and remote MCP omit all four
