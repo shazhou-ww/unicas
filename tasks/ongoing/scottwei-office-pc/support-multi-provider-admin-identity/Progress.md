@@ -185,8 +185,20 @@ provide identity-safe replacements. Legacy v1 Stack member commands retain
 their identity locator during the compatibility period. The slice is published
 on `origin/main` as `e0a852a1eba092a1af23ee9bed441ed95b16c0f8`.
 
-Next: implement Account-keyed platform People, authority grant/revoke, and
-block/restore commands without whole-set replacement or client revisions.
+The tenth implementation slice is published. Platform People, list/detail,
+Console, CLI, stdio MCP, and remote MCP now use Account summaries and IDs.
+Final v2 contracts expose idempotent single-authority grant/revoke and Account
+block/restore commands without whole-set replacement, ETags, or Principal
+locators; legacy Principal routes remain outside the generated v2 contract.
+D1 transactions enforce actor authorization, self-block and last-active-admin
+guards, compatibility shadow writes, Account-attributed audit, and idempotent
+snapshot changes. Blocking advances `credentialVersion` exactly once. Ordinary
+Platform People rows and invitation rows no longer expose exact issuer/subject
+or creator identity. The slice is published on `origin/main` as
+`da175f65f604133f1511089cbebd99b45153b8d6`.
+
+Next: migrate App/platform audit projections and filters to Account IDs while
+retaining exact authenticated identity only in privileged event detail.
 
 ## Decisions
 
@@ -485,6 +497,19 @@ block/restore commands without whole-set replacement or client revisions.
 - `pnpm check:tasks` passed all 17 ledger tasks and all 6 policy tests before
   publication. Account-keyed App membership commit
   `e0a852a1eba092a1af23ee9bed441ed95b16c0f8` was pushed and verified reachable
+  from refreshed `origin/main`.
+- D1/Miniflare tests prove Account platform list/detail filtering, idempotent
+  authority commands, compatibility shadow writes, self-block and last-admin
+  denial, block credential-generation advancement, restore, Account-only
+  People search, and Account-bound BFF/remote MCP commands.
+- `@unicas/admin-protocol` passed all 109 tests, `@unicas/admin-client` all 19,
+  `@unicas/service` all 137, `@unicas/admin-cli` all 47,
+  `@unicas/admin-webui` all 91, and `@unicas/service-cloudflare` all 266. All
+  workspace package typechecks passed; the regenerated v2 OpenAPI passed all 4
+  drift checks and the production Console/Worker build passed.
+- `pnpm check:tasks` passed all 17 ledger tasks and all 6 policy tests before
+  publication. Account-keyed platform access commit
+  `da175f65f604133f1511089cbebd99b45153b8d6` was pushed and verified reachable
   from refreshed `origin/main`.
 
 ## Blockers
