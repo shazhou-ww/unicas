@@ -72,6 +72,11 @@ discarding it, run focused checks, publish, and verify the commit is reachable
 from the refreshed remote primary branch. Local commits, side branches, and
 unmerged pull requests are not published milestones.
 
+Record `Published` and concise human-readable evidence in the milestone commit
+itself, then verify publication from Git history. Never copy commit hashes into
+task artifacts; repository history is the source of truth for exact commit
+identity and reachability.
+
 Authentication, branch protection, required review, failed validation, push
 rejection, and conflicts remain real blockers. Never force-push around them.
 Record the blocker and exact next action in `Progress.md`, then ask only for the
@@ -109,8 +114,8 @@ After `task-new` intake and admission:
 5. Review and complete the generated current state and next action. If the CLI
    is unavailable, use `git mv`, the [progress template](./assets/Progress.md),
    and the manual checks in [Verify Every Move](#verify-every-move).
-6. Commit only the claim artifacts, publish them, and verify the claim before
-   substantive implementation.
+6. Mark the claim milestone `Published` with concise evidence in the claim
+   commit, publish it, and verify the claim before substantive implementation.
 
 ## Work And Coordinate
 
@@ -153,8 +158,9 @@ The checkpoints cover:
    model or data changes.
 4. **Architecture alignment:** affected modules, responsibilities, boundaries,
    dependencies, and any split or combination before structural implementation.
-5. **Delivery acceptance:** the integrated revision, validation evidence, and
-   any manual test result before marking the task completed and archiving it.
+5. **Delivery acceptance:** the published implementation, validation evidence,
+   and any manual test result before marking the task completed and archiving
+   it.
 
 Keep human review artifacts decision-first and concise: show material changes,
 governing reasons, risks, and the requested decision without repeating task
@@ -247,8 +253,9 @@ To complete:
 
 1. Finish all agent-verifiable criteria, run focused validation, and update
    `Task.md` and `Progress.md` with actual results.
-2. Publish implementation completion while the task remains ongoing and verify
-   it on the refreshed remote branch.
+2. Mark implementation completion `Published` with concise evidence in the
+   implementation-completion commit while the task remains ongoing, publish
+   it, and verify it on the refreshed remote branch.
 3. Complete any required manual user acceptance.
 4. Present the delivery checkpoint, obtain explicit human approval, record and
    publish it, and mark `Completed` only after every required criterion and
@@ -256,7 +263,7 @@ To complete:
 5. After recording the outcome and delivery approval, preview
    `repoledger task archive <task-name> --update-all-refs`, review its exact
    move and reference edits, then rerun it with `--apply`. In the archived
-   `Progress.md`, mark the archive action and milestone published by the
+   `Progress.md`, mark the archive action and milestone `Published` in the
    resulting final integration; commit, publish, and verify it separately.
    Without the CLI, move the whole task manually and apply the fallback checks
    above.
