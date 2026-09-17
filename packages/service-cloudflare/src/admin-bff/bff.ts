@@ -24,16 +24,20 @@ import type {
   AppAdminRoute,
   CasAdminErrorResponse,
   CasAdminRoute,
+  ProviderKind,
 } from "@unicas/admin-protocol";
 import type {
   ControlPlaneCallContext,
   ControlPlaneOperations,
   ControlSessionRepository,
+  AccountRepository,
   PlatformAccessRepository,
   PlatformAuditRepository,
   PlatformInvitationRepository,
 } from "@unicas/service";
-import { PlatformAccessError, PlatformAccessService, PlatformAuditService, PlatformInvitationService, sha256Hex, verifiedProviderEmailEvidence } from "@unicas/service";
+import { AccountService, AccountServiceError, PlatformAccessError, PlatformAccessService, PlatformAuditService, PlatformInvitationService, ProviderRegistry, sha256Hex } from "@unicas/service";
+import type { AccountResolution, AuthenticatedProviderResult, ProviderAdapter } from "@unicas/service";
+import { requireInvitationEmailEvidence } from "@unicas/service";
 import type { AdminBffConfig } from "./config.js";
 const ADMIN_ASSET_CACHE_BUSTER = "issuer-discovery-v1";
 
@@ -45,7 +49,6 @@ import {
   OidcError,
   s256Challenge,
 } from "./oidc.js";
-import type { VerifiedOidcIdentity } from "./oidc.js";
 import {
   clearSessionCookie,
   generateCsrfToken,
@@ -59,6 +62,12 @@ import { checkCsrfToken, checkSameOrigin } from "./csrf.js";
 import { transformAppAdminError } from "../app-admin-adapter.js";
 import { InvitationTokenCrypto } from "../invitation-token-crypto.js";
 import { PeopleService, type PeopleRepository } from "@unicas/service";
+import {
+  createGitHubProvider,
+  createMicrosoftPersonalProvider,
+  GoogleProviderAdapter,
+  ProviderAdapterError,
+} from "./providers.js";
 
 export interface CreateAdminBffOptions {
   readonly config: AdminBffConfig;
@@ -83,6 +92,8 @@ export interface CreateAdminBffOptions {
   readonly platformInvitationRepository?: PlatformInvitationRepository;
   readonly platformAuditRepository?: PlatformAuditRepository;
   readonly peopleRepository?: PeopleRepository;
+  readonly providerRegistry?: ProviderRegistry;
+  readonly accountRepository?: AccountRepository;
 }
 
 const NOT_AVAILABLE_MESSAGE = "Root Ref audit reads are not yet available from the admin plane";
@@ -118,6 +129,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
   const controlPlane = options.controlPlane;
   const sessionStore = options.sessionStore;
   const sessionCrypto = new SessionCrypto(config.sessionEncryptionKeys);
+  const accountService = options.accountRepository
+    ? new AccountService(options.accountRepository, now)
+    : null;
   const platformAccess = options.platformAccessRepository
     ? new PlatformAccessService(options.platformAccessRepository, now)
     : null;
@@ -140,6 +154,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       clientSecret: config.googleClientSecret,
       redirectUri: `${config.publicOrigin}/admin/auth/callback`,
     });
+  const providerRegistry = options.providerRegistry ?? new ProviderRegistry(configuredProviderAdapters());
   const assets = options.assets ?? (async () => null);
   const sessionTtlMs = config.sessionTtlMs ?? 8 * 60 * 60 * 1000;
   const cookieName = config.sessionCookieName ?? "cas_admin_session";
@@ -153,6 +168,30 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
   const emailAllowlist = config.emailAllowlist
     ? new Set(config.emailAllowlist.map((email) => email.toLowerCase()))
     : null;
+
+  function configuredProviderAdapters(): readonly ProviderAdapter[] {
+    const adapters: ProviderAdapter[] = [
+      new GoogleProviderAdapter(oidc, config.oidcIssuer ?? "https://accounts.google.com", now),
+    ];
+    if (config.microsoftClientId && config.microsoftClientSecret) {
+      adapters.push(createMicrosoftPersonalProvider({
+        clientId: config.microsoftClientId,
+        clientSecret: config.microsoftClientSecret,
+        discoveryUrl: config.microsoftDiscoveryUrl,
+        redirectUri: `${config.publicOrigin}/admin/auth/callback/microsoft`,
+        now,
+      }));
+    }
+    if (config.githubClientId && config.githubClientSecret) {
+      adapters.push(createGitHubProvider({
+        clientId: config.githubClientId,
+        clientSecret: config.githubClientSecret,
+        redirectUri: `${config.publicOrigin}/admin/auth/callback/github`,
+        now,
+      }));
+    }
+    return adapters;
+  }
 
   return async function adminFetch(request: Request): Promise<Response> {
     try {
@@ -175,8 +214,16 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     if (pathname === "/admin/auth/oidc" && method === "GET") {
       return handleOidcLogin(url);
     }
+    const providerStart = /^\/admin\/auth\/start\/(google|microsoft|github)$/.exec(pathname);
+    if (providerStart && method === "GET") {
+      return handleProviderLogin(providerStart[1] as ProviderKind, url);
+    }
     if (pathname === "/admin/auth/callback" && method === "GET") {
-      return handleCallback(request, url);
+      return handleCallback(request, url, "google");
+    }
+    const providerCallback = /^\/admin\/auth\/callback\/(google|microsoft|github)$/.exec(pathname);
+    if (providerCallback && method === "GET") {
+      return handleCallback(request, url, providerCallback[1] as ProviderKind);
     }
     if (pathname === "/admin/auth/logout" && method === "POST") {
       return handleLogout(request);
@@ -249,12 +296,25 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         headers: { Location: returnTo ?? "/admin/" },
       });
     }
-    const oidcUrl = new URL("/admin/auth/oidc", config.publicOrigin);
-    if (returnTo) oidcUrl.searchParams.set("returnTo", returnTo);
+    const configuredProviders = providerRegistry.list();
+    const googleOnly = configuredProviders.length === 1 && configuredProviders[0]?.kind === "google";
+    const providerButtons = configuredProviders.map(provider => {
+      const path = provider.kind === "google"
+        ? "/admin/auth/oidc"
+        : `/admin/auth/start/${provider.kind}`;
+      const providerUrl = new URL(path, config.publicOrigin);
+      if (returnTo) providerUrl.searchParams.set("returnTo", returnTo);
+      return `<a class="btn${configuredProviders.length === 1 ? " btn-primary" : ""}" href="${providerUrl.pathname}${providerUrl.search}">Continue with ${escapeHtml(provider.displayName)}</a>`;
+    }).join("\n          ");
+    const retryUrl = new URL(
+      googleOnly ? "/admin/auth/oidc" : "/admin/auth/login",
+      config.publicOrigin,
+    );
+    if (returnTo) retryUrl.searchParams.set("returnTo", returnTo);
     const error = url.searchParams.get("error");
     const accessRestricted = error === "not-allowed" || error === "access-denied";
     const errorMessage = error === "oidc-failed"
-      ? "Google sign-in could not be completed. Please try again."
+      ? `${googleOnly ? "Google" : "Provider"} sign-in could not be completed. Please try again.`
       : null;
     const testAccountLink = config.testAccount
       ? `<a class="btn" href="/admin/auth/login?test-account=1${returnTo ? `&amp;returnTo=${encodeURIComponent(returnTo)}` : ""}">Use test account</a>`
@@ -279,17 +339,17 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         </div>
         <p class="login-eyebrow">UniCAS Admin</p>
         <h1>No management access</h1>
-        <p class="login-copy" role="alert">This Google account does not have management access to UniCAS. Sign in with another account or contact the UniCAS team.</p>
+        <p class="login-copy" role="alert">This ${googleOnly ? "Google account" : "login"} does not have management access to UniCAS. Sign in with another ${googleOnly ? "Google account" : "method"} or contact the UniCAS team.</p>
         <div class="login-actions">
-          <a class="btn" href="${oidcUrl.pathname}${oidcUrl.search}">Sign in with another Google account</a>
+          <a class="btn" href="${retryUrl.pathname}${retryUrl.search}">Sign in with another ${googleOnly ? "Google account" : "method"}</a>
           ${testAccountLink}
         </div>` : `
         <p class="login-eyebrow">Restricted console</p>
         <h1>Sign in to UniCAS</h1>
-        <p class="login-copy">Use an approved Google account to continue.</p>
+        <p class="login-copy">${googleOnly ? "Use an approved Google account" : "Choose a configured login method"} to continue.</p>
         ${errorMessage ? `<div class="state error" role="alert">${errorMessage}</div>` : ""}
         <div class="login-actions">
-          <a class="btn btn-primary" href="${oidcUrl.pathname}${oidcUrl.search}">Continue with Google</a>
+          ${providerButtons}
           ${testAccountLink}
         </div>`}
     </section>
@@ -303,14 +363,34 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
   }
 
   async function handleOidcLogin(url: URL): Promise<Response> {
+    return handleProviderLogin("google", url);
+  }
+
+  async function handleProviderLogin(provider: ProviderKind, url: URL): Promise<Response> {
     const returnTo = sanitizeReturnTo(url.searchParams.get("returnTo")) ?? undefined;
-    return startOidcLogin(returnTo);
+    return startProviderLogin(provider, returnTo);
   }
 
   async function startOidcLogin(
     returnTo?: string,
     invitationContinuation?: AdminSessionPayload["invitationContinuation"],
   ): Promise<Response> {
+    return startProviderLogin("google", returnTo, invitationContinuation);
+  }
+
+  async function startProviderLogin(
+    providerKind: ProviderKind,
+    returnTo?: string,
+    invitationContinuation?: AdminSessionPayload["invitationContinuation"],
+    cli?: {
+      readonly clientId: string;
+      readonly state: string;
+      readonly codeChallenge: string;
+      readonly redirectUri: string;
+    },
+  ): Promise<Response> {
+    const provider = providerRegistry.get(providerKind);
+    if (!provider) return new Response("Not Found", { status: 404 });
     const oidcState = generateOidcState();
     const oidcNonce = generateOidcNonce();
     const codeVerifier = generatePkceVerifier();
@@ -324,14 +404,24 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       displayName: null,
       emailForDisplay: null,
       csrfToken: "",
+      authProvider: providerKind,
       oidcState,
       oidcNonce,
       codeVerifier,
       returnTo,
       invitationContinuation,
+      cliClientId: cli?.clientId,
+      cliState: cli?.state,
+      cliCodeChallenge: cli?.codeChallenge,
+      cliRedirectUri: cli?.redirectUri,
     };
     await sessionStore.create(sessionId, await sessionCrypto.encrypt(payload), sessionTtlMs);
-    const authorizationUrl = await oidc.authorizationUrl({ state: oidcState, nonce: oidcNonce, codeChallenge });
+    const authorizationUrl = await provider.begin({
+      purpose: cli ? "cli" : "login",
+      state: oidcState,
+      nonce: oidcNonce,
+      codeChallenge,
+    });
     return new Response(null, {
       status: 302,
       headers: {
@@ -382,14 +472,20 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     );
   }
 
-  async function handleCallback(request: Request, callbackUrl: URL): Promise<Response> {
+  async function handleCallback(
+    request: Request,
+    callbackUrl: URL,
+    callbackProvider: ProviderKind,
+  ): Promise<Response> {
     const error = callbackUrl.searchParams.get("error");
     const code = callbackUrl.searchParams.get("code");
     const state = callbackUrl.searchParams.get("state");
     const sessionId = readSessionId(request);
     const preLogin = sessionId ? await readSession(sessionId) : null;
 
-    if (error || !code || !state || !preLogin || preLogin.oidcState !== state) {
+    const expectedProvider = preLogin?.authProvider ?? "google";
+    if (error || !code || !state || !preLogin || preLogin.oidcState !== state
+      || expectedProvider !== callbackProvider || !providerRegistry.get(callbackProvider)) {
       if (sessionId && preLogin) await sessionStore.delete(sessionId);
       const reason = error
         ? "provider_error"
@@ -399,24 +495,29 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
             ? "missing_state"
             : !preLogin
               ? "missing_prelogin_session"
-              : "state_mismatch";
+              : preLogin.oidcState !== state
+                ? "state_mismatch"
+                : "provider_mismatch";
       console.error(JSON.stringify({ event: "admin_oidc_callback_failed", reason }));
       await auditLoginFailure(reason);
       return oidcCallbackFailure(preLogin, reason);
     }
-    let identity: VerifiedOidcIdentity;
+    let identity: AuthenticatedProviderResult;
     try {
-      const exchanged = await oidc.exchangeCode({
+      identity = await providerRegistry.get(callbackProvider)!.complete({
         code,
+        state,
         codeVerifier: preLogin.codeVerifier!,
-      });
-      identity = await oidc.verifyIdToken({
-        idToken: exchanged.idToken,
-        nonce: preLogin.oidcNonce!,
+        nonce: preLogin.oidcNonce ?? null,
+        authenticationEventId: generateRequestId(),
       });
     } catch (caught) {
       if (sessionId) await sessionStore.delete(sessionId);
-      const reason = caught instanceof OidcError ? caught.code : "unexpected_oidc_error";
+      const reason = caught instanceof ProviderAdapterError
+        ? caught.code
+        : caught instanceof OidcError
+          ? caught.code
+          : "unexpected_provider_error";
       console.error(JSON.stringify({
         event: "admin_oidc_callback_failed",
         reason,
@@ -429,7 +530,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     const invitationContinuation = preLogin.invitationContinuation;
     if (platformAccess === null
       && !invitationContinuation
-      && !isEmailAllowed(identity.email, identity.emailVerified)) {
+      && !isEvidenceAllowed(identity.verifiedEmailEvidence)) {
       if (sessionId) await sessionStore.delete(sessionId);
       await auditLoginFailure("email-not-allowed");
       return new Response(null, {
@@ -439,21 +540,20 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     }
 
     const loginPrincipal = {
-      issuer: config.oidcIssuer ?? "https://accounts.google.com",
-      subject: identity.sub,
+      issuer: identity.issuer,
+      subject: identity.subject,
     };
-    const authenticatedAt = now();
-    const verifiedEmailEvidence = identity.email && identity.emailVerified
-      ? [verifiedProviderEmailEvidence({
-        provider: "google",
-        email: identity.email,
-        verifiedAt: authenticatedAt,
-        authenticationEventId: generateRequestId(),
-      })]
-      : [];
+    const authenticatedAt = identity.authenticatedAt;
+    const verifiedEmailEvidence = identity.verifiedEmailEvidence;
+    const emailForDisplay = verifiedEmailEvidence[0]?.normalizedEmail ?? null;
     let invitationAccess: AdminSessionPayload["invitationAccess"];
-    if (platformAccess !== null) {
-      try {
+    let accountResolution: AccountResolution | null = null;
+    try {
+      if (accountService) {
+        const authorization = await authorizeAccountLogin(identity, invitationContinuation);
+        accountResolution = authorization.account;
+        invitationAccess = authorization.invitationAccess;
+      } else if (platformAccess !== null) {
         if (invitationContinuation?.kind === "app") {
           const authorization = await platformAccess.authorizeAppInvitationLogin(
             loginPrincipal,
@@ -483,33 +583,30 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         } else {
           await platformAccess.requireAccess(loginPrincipal);
         }
-      } catch (error) {
-        if (error instanceof PlatformAccessError && error.code === "PLATFORM_ACCESS_REQUIRED") {
-          if (sessionId) await sessionStore.delete(sessionId);
-          await auditLoginFailure("platform-access-denied");
-          if (preLogin.cliClientId !== undefined && preLogin.cliRedirectUri && preLogin.cliState) {
-            const redirect = new URL(preLogin.cliRedirectUri);
-            redirect.searchParams.set("error", "access_denied");
-            redirect.searchParams.set("error_description", "platform access denied");
-            redirect.searchParams.set("state", preLogin.cliState);
-            return new Response(null, {
-              status: 302,
-              headers: { Location: redirect.toString() },
-            });
-          }
+      } else if (invitationContinuation) {
+        throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
+      }
+    } catch (error) {
+      if (error instanceof AccountServiceError
+        || error instanceof PlatformAccessError && error.code === "PLATFORM_ACCESS_REQUIRED") {
+        if (sessionId) await sessionStore.delete(sessionId);
+        await auditLoginFailure("platform-access-denied");
+        if (preLogin.cliClientId !== undefined && preLogin.cliRedirectUri && preLogin.cliState) {
+          const redirect = new URL(preLogin.cliRedirectUri);
+          redirect.searchParams.set("error", "access_denied");
+          redirect.searchParams.set("error_description", "platform access denied");
+          redirect.searchParams.set("state", preLogin.cliState);
           return new Response(null, {
             status: 302,
-            headers: { Location: "/admin/auth/login?error=access-denied" },
+            headers: { Location: redirect.toString() },
           });
         }
-        throw error;
+        return new Response(null, {
+          status: 302,
+          headers: { Location: "/admin/auth/login?error=access-denied" },
+        });
       }
-    } else if (invitationContinuation) {
-      if (sessionId) await sessionStore.delete(sessionId);
-      return new Response(null, {
-        status: 302,
-        headers: { Location: "/admin/auth/login?error=access-denied" },
-      });
+      throw error;
     }
 
     if (preLogin.cliClientId !== undefined) {
@@ -520,13 +617,16 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       const cliPayload: CliOneTimeCodePayload = {
         v: 1,
         kind: "cli-code",
-        identityIssuer: config.oidcIssuer ?? "https://accounts.google.com",
-        subject: identity.sub,
-        displayName: identity.name,
-        emailForDisplay: identity.email,
-        authProvider: "google",
+        identityIssuer: identity.issuer,
+        subject: identity.subject,
+        displayName: identity.displayName,
+        emailForDisplay,
+        authProvider: identity.provider,
         authenticatedAt,
         verifiedEmailEvidence,
+        accountId: accountResolution?.account.accountId,
+        externalIdentityId: accountResolution?.authenticatedIdentity.externalIdentityId,
+        credentialVersion: accountResolution?.account.credentialVersion,
         codeChallenge: preLogin.cliCodeChallenge!,
         cliState: preLogin.cliState!,
         cliRedirectUri: preLogin.cliRedirectUri!,
@@ -546,14 +646,17 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     const authenticatedPayload: AdminSessionPayload = {
       v: 1,
       authenticated: true,
-      identityIssuer: config.oidcIssuer ?? "https://accounts.google.com",
-      subject: identity.sub,
-      displayName: identity.name,
-      emailForDisplay: identity.email,
+      identityIssuer: identity.issuer,
+      subject: identity.subject,
+      displayName: identity.displayName,
+      emailForDisplay,
       csrfToken: generateCsrfToken(),
-      authProvider: "google",
+      authProvider: identity.provider,
       authenticatedAt,
       verifiedEmailEvidence,
+      accountId: accountResolution?.account.accountId,
+      externalIdentityId: accountResolution?.authenticatedIdentity.externalIdentityId,
+      credentialVersion: accountResolution?.account.credentialVersion,
       invitationAccess,
       admittedViaInvitation: invitationContinuation ? true : undefined,
     };
@@ -567,6 +670,72 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         : preLogin.returnTo ?? "/admin/",
       sessionId,
     );
+  }
+
+  async function authorizeAccountLogin(
+    identity: AuthenticatedProviderResult,
+    invitation: AdminSessionPayload["invitationContinuation"],
+  ): Promise<{
+    readonly account: AccountResolution;
+    readonly invitationAccess?: AdminSessionPayload["invitationAccess"];
+  }> {
+    if (!accountService) throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
+    let account = await accountService.resolveExternalIdentity(identity.issuer, identity.subject);
+    const admitted = account !== null
+      && (account.platformAuthorities.length > 0 || account.hasAppMembership);
+    if (!invitation) {
+      if (!account || !admitted) throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
+      return { account };
+    }
+
+    let invitationAccess: AdminSessionPayload["invitationAccess"];
+    if (invitation.kind === "app") {
+      if (!platformAccess) throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
+      const resolved = await platformAccess.resolveAppInvitation(invitation.token);
+      if (resolved.invitationId !== invitation.invitationId || resolved.appId !== invitation.appId) {
+        throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
+      }
+      if (admitted && account) return { account };
+      if (resolved.emailConstraint !== null) {
+        try {
+          requireInvitationEmailEvidence(identity.verifiedEmailEvidence, resolved.emailConstraint, now());
+        } catch {
+          throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
+        }
+      }
+      invitationAccess = {
+        kind: "app",
+        invitationId: resolved.invitationId,
+        appId: resolved.appId,
+        tokenHash: resolved.tokenHash,
+      };
+    } else {
+      if (!platformInvitations) throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
+      const resolved = await platformInvitations.resolve(invitation.token);
+      if (resolved.invitationId !== invitation.invitationId) {
+        throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
+      }
+      if (admitted && account) return { account };
+      try {
+        requireInvitationEmailEvidence(identity.verifiedEmailEvidence, resolved.emailConstraint, now());
+      } catch {
+        throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
+      }
+      invitationAccess = {
+        kind: "platform",
+        invitationId: resolved.invitationId,
+        tokenHash: resolved.tokenHash,
+      };
+    }
+
+    account ??= await accountService.createForExternalIdentity({
+      provider: identity.provider,
+      issuer: identity.issuer,
+      subject: identity.subject,
+      displayName: identity.displayName,
+      avatarUrl: identity.avatarUrl,
+    });
+    return { account, invitationAccess };
   }
 
   function oidcCallbackFailure(
@@ -666,7 +835,12 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         if (sessionId) await sessionStore.delete(sessionId);
       }
     }
-    return startOidcLogin(undefined, {
+    const provider = invitationProvider(request);
+    if (provider instanceof Response) return provider;
+    if (provider === null) {
+      return providerSelectionPage(request, "Choose a login method to accept this App invitation.");
+    }
+    return startProviderLogin(provider, undefined, {
       kind: "app",
       invitationId: invitation.invitationId,
       appId: invitation.appId,
@@ -698,7 +872,12 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       });
     }
     if (sessionId) await sessionStore.delete(sessionId);
-    return startOidcLogin(undefined, {
+    const provider = invitationProvider(request);
+    if (provider instanceof Response) return provider;
+    if (provider === null) {
+      return providerSelectionPage(request, "Choose a login method to accept this platform invitation.");
+    }
+    return startProviderLogin(provider, undefined, {
       kind: "platform",
       invitationId: invitation.invitationId,
       tokenHash: invitation.tokenHash,
@@ -738,6 +917,49 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     });
   }
 
+  function invitationProvider(request: Request): ProviderKind | null | Response {
+    const configured = providerRegistry.list();
+    const requested = new URL(request.url).searchParams.get("provider");
+    if (requested !== null) {
+      const provider = parseProviderKind(requested);
+      return provider && providerRegistry.get(provider)
+        ? provider
+        : new Response("Not Found", { status: 404 });
+    }
+    return configured.length === 1 ? configured[0]!.kind : null;
+  }
+
+  function providerSelectionPage(request: Request, copy: string): Response {
+    const url = new URL(request.url);
+    const buttons = providerRegistry.list().map(provider => {
+      const target = new URL(url);
+      target.search = "";
+      target.searchParams.set("provider", provider.kind);
+      return `<a class="btn" href="${target.pathname}${target.search}">Continue with ${escapeHtml(provider.displayName)}</a>`;
+    }).join("\n          ");
+    return new Response(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Choose login - UniCAS</title>
+  <link rel="stylesheet" href="/admin/assets/index.css?v=${ADMIN_ASSET_CACHE_BUSTER}" />
+</head>
+<body>
+  <main class="login-shell">
+    <section class="login-panel">
+      <h1>Continue to UniCAS</h1>
+      <p class="login-copy">${escapeHtml(copy)}</p>
+      <div class="login-actions">${buttons}</div>
+    </section>
+  </main>
+</body>
+</html>`, {
+      status: 200,
+      headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+    });
+  }
+
   // ------------------------------------------------------------------
   // Frozen admin API
   // ------------------------------------------------------------------
@@ -754,39 +976,15 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     if (!state || !cliCodeChallenge || codeChallengeMethod !== "S256" || !isLoopbackRedirect(redirectUri)) {
       return new Response("Invalid CLI authorization request", { status: 400 });
     }
-    const oidcState = generateOidcState();
-    const oidcNonce = generateOidcNonce();
-    const codeVerifier = generatePkceVerifier();
-    const oidcCodeChallenge = await s256Challenge(codeVerifier);
-    const sessionId = generateSessionId();
-    const payload: AdminSessionPayload = {
-      v: 1,
-      authenticated: false,
-      identityIssuer: "",
-      subject: "",
-      displayName: null,
-      emailForDisplay: null,
-      csrfToken: "",
-      oidcState,
-      oidcNonce,
-      codeVerifier,
-      cliClientId: clientId,
-      cliState: state,
-      cliCodeChallenge,
-      cliRedirectUri: redirectUri,
-    };
-    await sessionStore.create(sessionId, await sessionCrypto.encrypt(payload), sessionTtlMs);
-    const authorizationUrl = await oidc.authorizationUrl({
-      state: oidcState,
-      nonce: oidcNonce,
-      codeChallenge: oidcCodeChallenge,
-    });
-    return new Response(null, {
-      status: 302,
-      headers: {
-        Location: authorizationUrl,
-        "Set-Cookie": sessionCookieHeader(cookieOptions, sessionId),
-      },
+    const provider = parseProviderKind(url.searchParams.get("provider") ?? "google");
+    if (!provider || !providerRegistry.get(provider)) {
+      return new Response("Unsupported or disabled login provider", { status: 400 });
+    }
+    return startProviderLogin(provider, undefined, undefined, {
+      clientId,
+      state,
+      codeChallenge: cliCodeChallenge,
+      redirectUri,
     });
   }
 
@@ -826,6 +1024,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       authProvider: payload.authProvider,
       authenticatedAt: payload.authenticatedAt,
       verifiedEmailEvidence: payload.verifiedEmailEvidence,
+      accountId: payload.accountId,
+      externalIdentityId: payload.externalIdentityId,
+      credentialVersion: payload.credentialVersion,
     };
     const sessionId = generateSessionId();
     await sessionStore.create(sessionId, await sessionCrypto.encrypt(authenticatedPayload), sessionTtlMs);
@@ -982,6 +1183,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       csrfToken: generateCsrfToken(),
       authProvider: payload.authProvider,
       authenticatedAt: payload.authenticatedAt,
+      accountId: payload.accountId,
+      externalIdentityId: payload.externalIdentityId,
+      credentialVersion: payload.credentialVersion,
       admittedViaInvitation: payload.admittedViaInvitation || payload.invitationAccess
         ? true
         : undefined,
@@ -1034,6 +1238,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       csrfToken: generateCsrfToken(),
       authProvider: payload.authProvider,
       authenticatedAt: payload.authenticatedAt,
+      accountId: payload.accountId,
+      externalIdentityId: payload.externalIdentityId,
+      credentialVersion: payload.credentialVersion,
       admittedViaInvitation: true,
     };
     const nextSessionId = generateSessionId();
@@ -1461,6 +1668,34 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     if (!stored) return null;
     try {
       const payload = await sessionCrypto.decrypt(stored.encryptedPayload);
+      if (accountService && payload.authenticated && payload.identityIssuer !== TEST_ACCOUNT_ISSUER) {
+        try {
+          if (payload.accountId && payload.externalIdentityId && payload.credentialVersion !== undefined) {
+            await accountService.authorizeCredential({
+              accountId: payload.accountId,
+              externalIdentityId: payload.externalIdentityId,
+              credentialVersion: payload.credentialVersion,
+            });
+          } else {
+            const resolution = await accountService.resolveExternalIdentity(
+              payload.identityIssuer,
+              payload.subject,
+            );
+            if (!resolution) throw new AccountServiceError("IDENTITY_NOT_FOUND");
+            return {
+              ...payload,
+              accountId: resolution.account.accountId,
+              externalIdentityId: resolution.authenticatedIdentity.externalIdentityId,
+              credentialVersion: resolution.account.credentialVersion,
+              authProvider: resolution.authenticatedIdentity.provider,
+            };
+          }
+        } catch (error) {
+          if (!(error instanceof AccountServiceError)) throw error;
+          await sessionStore.delete(sessionId);
+          return null;
+        }
+      }
       if (platformAccess === null
         && payload.authenticated
         && !payload.invitationAccess
@@ -1526,6 +1761,13 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
   ): ControlPlaneCallContext {
     return {
       identity: { identityIssuer: payload.identityIssuer, subject: payload.subject },
+      account: payload.accountId && payload.externalIdentityId && payload.credentialVersion !== undefined
+        ? {
+          accountId: payload.accountId,
+          externalIdentityId: payload.externalIdentityId,
+          credentialVersion: payload.credentialVersion,
+        }
+        : undefined,
       verifiedEmailEvidence: payload.verifiedEmailEvidence,
       profile: {
         displayName: payload.displayName,
@@ -1562,6 +1804,11 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     return emailVerified && email !== null && emailAllowlist.has(email.toLowerCase());
   }
 
+  function isEvidenceAllowed(evidence: AuthenticatedProviderResult["verifiedEmailEvidence"]): boolean {
+    if (!emailAllowlist) return true;
+    return evidence.some(item => item.expiresAt > now() && emailAllowlist.has(item.normalizedEmail));
+  }
+
   function sanitizeReturnTo(value: string | null): string | null {
     if (!value) return null;
     if (!value.startsWith("/admin")) return null;
@@ -1573,6 +1820,19 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
 // ----------------------------------------------------------------------
 // Response helpers
 // ----------------------------------------------------------------------
+
+function parseProviderKind(value: string): ProviderKind | null {
+  return value === "google" || value === "microsoft" || value === "github" ? value : null;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
 
 function json(body: unknown, status: number): Response {
   return Response.json(body, {

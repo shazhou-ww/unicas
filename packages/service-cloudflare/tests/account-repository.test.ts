@@ -35,6 +35,7 @@ describe("D1 Account repository", () => {
     });
     expect(created.account).toMatchObject({ blockedAt: null, credentialVersion: 1, primaryVerifiedEmail: null });
     expect(created.platformAuthorities).toEqual([]);
+    expect(created.hasAppMembership).toBe(false);
     expect(await service.resolveExternalIdentity("https://accounts.google.com", "alice"))
       .toMatchObject({ account: { accountId: created.account.accountId } });
     expect(await db.prepare("SELECT display_name_source FROM cas_account_profiles").first())

@@ -33,6 +33,7 @@ function fixture() {
     getActiveIdentity: vi.fn(async (issuer, subject) => issuer === identity.issuer && subject === identity.subject ? identity : null),
     getIdentity: vi.fn(async externalIdentityId => externalIdentityId === identity.externalIdentityId ? identity : null),
     listPlatformAuthorities: vi.fn(async () => ["apps.create"]),
+    hasAppMembership: vi.fn(async () => false),
     createAccountWithIdentity: vi.fn(async () => "created"),
   };
   return { repository, service: new AccountService(repository, () => 1000) };
@@ -45,6 +46,7 @@ describe("Account service", () => {
       account,
       authenticatedIdentity: identity,
       platformAuthorities: ["apps.create"],
+      hasAppMembership: false,
     });
     await expect(service.resolveExternalIdentity(identity.issuer, "unknown")).resolves.toBeNull();
     expect(repository.getActiveIdentity).toHaveBeenCalledWith(identity.issuer, identity.subject);

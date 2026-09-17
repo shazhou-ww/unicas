@@ -33,6 +33,8 @@ import { createControlPlaneOperations } from "./control-operations.js";
 import { ControlSessionStore } from "./control-sessions.js";
 import { D1PlatformAccessRepository } from "./platform-access-repository.js";
 import { D1PeopleRepository } from "./people-repository.js";
+import { D1AccountRepository } from "./account-repository.js";
+import { migrateLegacyAdminIdentities } from "./identity-migration.js";
 import { CloudflareOAuthDiscoveryPort } from "./oauth-discovery.js";
 import { CloudflareManagedIssuer } from "./managed-issuer.js";
 import {
@@ -353,7 +355,10 @@ function ensureControlSchema(env: Env): Promise<void> {
   const key = env as object;
   let initialization = controlSchemaInitializations.get(key);
   if (!initialization) {
-    initialization = migrateControlSchema(env.CAS_CONTROL_DB);
+    initialization = (async () => {
+      await migrateControlSchema(env.CAS_CONTROL_DB);
+      await migrateLegacyAdminIdentities(env.CAS_CONTROL_DB);
+    })();
     controlSchemaInitializations.set(key, initialization);
     void initialization.catch(() => controlSchemaInitializations.delete(key));
   }
@@ -369,6 +374,7 @@ function adminHandlerFor(env: Env): Promise<(request: Request) => Promise<Respon
       const config = configFromEnv(env);
       const now = config.now ?? (() => Date.now());
       const platformRepository = new D1PlatformAccessRepository(env.CAS_CONTROL_DB);
+      const accountRepository = new D1AccountRepository(env.CAS_CONTROL_DB);
       return createAdminBff({
         config,
         controlPlane: controlPlaneFor(env, now),
@@ -379,6 +385,7 @@ function adminHandlerFor(env: Env): Promise<(request: Request) => Promise<Respon
         platformInvitationRepository: platformRepository,
         platformAuditRepository: platformRepository,
         peopleRepository: new D1PeopleRepository(env.CAS_CONTROL_DB),
+        accountRepository,
       });
     })();
     adminHandlers.set(key, handler);

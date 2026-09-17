@@ -52,6 +52,11 @@ import type { VerifiedEmailEvidence } from "./authentication.js";
 /** Authenticated caller context supplied by an ingress after session checks. */
 export interface ControlPlaneCallContext {
   readonly identity: CasOperatorIdentityKey;
+  readonly account?: {
+    readonly accountId: string;
+    readonly externalIdentityId: string;
+    readonly credentialVersion: number;
+  };
   readonly verifiedEmailEvidence?: readonly VerifiedEmailEvidence[];
   /** Display metadata from the verified identity profile (email is display-only). */
   readonly profile?: {

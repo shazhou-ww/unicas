@@ -6,6 +6,7 @@ import {
   type PlatformInvitation,
   type PlatformInvitationPage,
   type Principal,
+  type PrimaryVerifiedEmail,
   type Profile,
 } from "@unicas/admin-protocol";
 import { generateEventId, generateInvitationId, generateInvitationToken, generatePrincipalRef } from "./control-ids.js";
@@ -68,6 +69,7 @@ export interface PlatformInvitationRepository {
     readonly principalRef: string;
     readonly principal: Principal;
     readonly profile: Profile;
+    readonly primaryVerifiedEmail: PrimaryVerifiedEmail;
     readonly now: number;
     readonly audit: PlatformAuditRecord;
   }): Promise<"accepted" | "not-pending" | "blocked">;
@@ -258,8 +260,14 @@ export class PlatformInvitationService {
     requestId: string | null = null,
   ): Promise<void> {
     const invitation = await this.resolve(token);
+    let primaryVerifiedEmail: PrimaryVerifiedEmail;
     try {
-      requireInvitationEmailEvidence(evidence, invitation.emailConstraint, this.#now());
+      const matched = requireInvitationEmailEvidence(evidence, invitation.emailConstraint, this.#now());
+      primaryVerifiedEmail = {
+        normalizedEmail: matched.normalizedEmail,
+        source: matched.source,
+        verifiedAt: matched.verifiedAt,
+      };
     } catch {
       throw new PlatformAccessError("NOT_FOUND", 404);
     }
@@ -269,6 +277,7 @@ export class PlatformInvitationService {
       principalRef: this.#generatePrincipalRef(),
       principal,
       profile,
+      primaryVerifiedEmail,
       now: this.#now(),
       audit: this.#audit(principal, "platform_invitation.accepted", invitation.invitationId, requestId, principal),
     });

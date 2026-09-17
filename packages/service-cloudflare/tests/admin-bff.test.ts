@@ -13,15 +13,19 @@ import type {
   ControlPlaneCallContext,
   ControlPlaneOperations,
   ControlSessionRepository,
+  AccountRecord,
+  AccountRepository,
+  ExternalIdentityRecord,
   PeopleRepository,
   PlatformAccessRepository,
   PlatformAuditRepository,
   PlatformInvitationIdempotencyRecord,
   PlatformInvitationRepository,
+  ProviderAdapter,
   StoredPlatformInvitation,
   StoredSession,
 } from "@unicas/service";
-import { sha256Hex } from "@unicas/service";
+import { ProviderRegistry, sha256Hex } from "@unicas/service";
 import { createAdminBff, OidcClient, SessionCrypto, uiAssets } from "../src/admin-bff/index.js";
 import type { AdminBffConfig } from "../src/admin-bff/config.js";
 
@@ -788,6 +792,227 @@ describe("cas-admin-webui BFF", () => {
     expect(html).toContain("/admin/auth/oidc?returnTo=%2Fadmin%2F");
     expect(html).toContain("Continue with Google");
     expect(html).toContain("/admin/assets/index.css?v=issuer-discovery-v1");
+  });
+
+  test("renders configured providers and binds browser and CLI callbacks to the selected provider", async () => {
+    const provider = (kind: "google" | "microsoft", email: string): ProviderAdapter => ({
+      kind,
+      displayName: kind === "google" ? "Google" : "Microsoft",
+      begin: vi.fn(async context => `https://${kind}.example/authorize?state=${encodeURIComponent(context.state)}`),
+      complete: vi.fn(async input => ({
+        provider: kind,
+        issuer: `https://${kind}.example`,
+        subject: `${kind}-subject`,
+        displayName: `${kind} user`,
+        avatarUrl: null,
+        accountHint: email,
+        verifiedEmailEvidence: kind === "google" ? [{
+          normalizedEmail: email,
+          source: "google-oidc",
+          verifiedAt: 1,
+          expiresAt: Number.MAX_SAFE_INTEGER,
+          authenticationEventId: input.authenticationEventId,
+        }] : [],
+        authenticatedAt: 1,
+        authenticationEventId: input.authenticationEventId,
+      })),
+    });
+    const registry = new ProviderRegistry([
+      provider("google", "google@example.com"),
+      provider("microsoft", "microsoft@example.com"),
+    ]);
+    const config: AdminBffConfig = {
+      googleClientId: CLIENT_ID,
+      googleClientSecret: CLIENT_SECRET,
+      sessionEncryptionKeys: { v1: randomKey() },
+      publicOrigin: PUBLIC_ORIGIN,
+      sessionCookieSecure: false,
+    };
+    const bff = createAdminBff({
+      config,
+      controlPlane: fakeControlPlane(),
+      sessionStore: new MemorySessionRepository(),
+      providerRegistry: registry,
+    });
+
+    const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/login`));
+    const html = await login.text();
+    expect(html).toContain("Continue with Google");
+    expect(html).toContain("Continue with Microsoft");
+    expect(html).not.toContain("Continue with GitHub");
+
+    const started = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/start/microsoft`));
+    const preLoginCookie = cookieFrom(started)!;
+    const state = new URL(started.headers.get("Location")!).searchParams.get("state")!;
+    const mismatch = await bff(new Request(
+      `${PUBLIC_ORIGIN}/admin/auth/callback/github?code=code&state=${encodeURIComponent(state)}`,
+      { headers: { Cookie: preLoginCookie } },
+    ));
+    expect(mismatch.headers.get("Location")).toBe("/admin/auth/login?error=oidc-failed");
+    expect((await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/start/github`))).status).toBe(404);
+
+    const restarted = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/start/microsoft`));
+    const restartedCookie = cookieFrom(restarted)!;
+    const restartedState = new URL(restarted.headers.get("Location")!).searchParams.get("state")!;
+    const callback = await bff(new Request(
+      `${PUBLIC_ORIGIN}/admin/auth/callback/microsoft?code=code&state=${encodeURIComponent(restartedState)}`,
+      { headers: { Cookie: restartedCookie } },
+    ));
+    expect(callback.status).toBe(302);
+    expect(callback.headers.get("Location")).toBe("/admin/");
+
+    const cli = await bff(new Request(
+      `${PUBLIC_ORIGIN}/admin/auth/cli/authorize?client_id=unicas-cli&provider=microsoft&redirect_uri=${encodeURIComponent("http://127.0.0.1:9999/callback")}&state=cli-state&code_challenge=${await s256Challenge("verifier")}&code_challenge_method=S256`,
+    ));
+    expect(new URL(cli.headers.get("Location")!).origin).toBe("https://microsoft.example");
+  });
+
+  test("shows provider choices for invitations and preserves the selected continuation", async () => {
+    const token = "t".repeat(32);
+    const repository = new MemoryPlatformAccessRepository();
+    await repository.addInvitation(token, "alice@example.com");
+    const provider = (kind: "google" | "microsoft"): ProviderAdapter => ({
+      kind,
+      displayName: kind === "google" ? "Google" : "Microsoft",
+      begin: vi.fn(async context => `https://${kind}.example/authorize?state=${encodeURIComponent(context.state)}`),
+      complete: vi.fn(async input => ({
+        provider: kind,
+        issuer: `https://${kind}.example`,
+        subject: "alice",
+        displayName: "Alice",
+        avatarUrl: null,
+        accountHint: "alice@example.com",
+        verifiedEmailEvidence: kind === "google" ? [{
+          normalizedEmail: "alice@example.com",
+          source: "google-oidc",
+          verifiedAt: 1,
+          expiresAt: Number.MAX_SAFE_INTEGER,
+          authenticationEventId: input.authenticationEventId,
+        }] : [],
+        authenticatedAt: 1,
+        authenticationEventId: input.authenticationEventId,
+      })),
+    });
+    const bff = createAdminBff({
+      config: {
+        googleClientId: CLIENT_ID,
+        googleClientSecret: CLIENT_SECRET,
+        sessionEncryptionKeys: { v1: randomKey() },
+        publicOrigin: PUBLIC_ORIGIN,
+        sessionCookieSecure: false,
+      },
+      controlPlane: fakeControlPlane(),
+      sessionStore: new MemorySessionRepository(),
+      platformAccessRepository: repository,
+      providerRegistry: new ProviderRegistry([provider("google"), provider("microsoft")]),
+    });
+
+    const selector = await bff(new Request(`${PUBLIC_ORIGIN}/admin/invitations/${token}`));
+    expect(selector.status).toBe(200);
+    const html = await selector.text();
+    expect(html).toContain(`/admin/invitations/${token}?provider=google`);
+    expect(html).toContain(`/admin/invitations/${token}?provider=microsoft`);
+    expect((await bff(new Request(`${PUBLIC_ORIGIN}/admin/invitations/${token}?provider=github`))).status).toBe(404);
+
+    const started = await bff(new Request(`${PUBLIC_ORIGIN}/admin/invitations/${token}?provider=google`));
+    const cookie = cookieFrom(started)!;
+    const state = new URL(started.headers.get("Location")!).searchParams.get("state")!;
+    const callback = await bff(new Request(
+      `${PUBLIC_ORIGIN}/admin/auth/callback/google?code=code&state=${encodeURIComponent(state)}`,
+      { headers: { Cookie: cookie } },
+    ));
+    expect(callback.status).toBe(302);
+    expect(callback.headers.get("Location")).toBe(`/admin/#/invitations/${token}`);
+  });
+
+  test("admits linked providers through one Account and rejects stale credential versions", async () => {
+    const accountId = `acct_${"a".repeat(22)}`;
+    let account: AccountRecord = {
+      accountId,
+      blockedAt: null,
+      credentialVersion: 1,
+      primaryVerifiedEmail: null,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const identities = new Map<string, ExternalIdentityRecord>([
+      ["https://google.example\0google-subject", {
+        externalIdentityId: "ext-google",
+        accountId,
+        provider: "google",
+        issuer: "https://google.example",
+        subject: "google-subject",
+        linkedAt: 1,
+        lastAuthenticatedAt: 1,
+        unlinkedAt: null,
+      }],
+      ["https://github.example\0github-subject", {
+        externalIdentityId: "ext-github",
+        accountId,
+        provider: "github",
+        issuer: "https://github.example",
+        subject: "github-subject",
+        linkedAt: 1,
+        lastAuthenticatedAt: 1,
+        unlinkedAt: null,
+      }],
+    ]);
+    const accountRepository: AccountRepository = {
+      getAccount: async requested => requested === accountId ? account : null,
+      getAliasTarget: async () => null,
+      getActiveIdentity: async (issuer, subject) => identities.get(`${issuer}\0${subject}`) ?? null,
+      getIdentity: async externalIdentityId => [...identities.values()].find(identity => identity.externalIdentityId === externalIdentityId) ?? null,
+      listPlatformAuthorities: async () => ["platform.admin"],
+      hasAppMembership: async () => false,
+      createAccountWithIdentity: async () => "identity-conflict",
+    };
+    const adapter = (kind: "google" | "github"): ProviderAdapter => ({
+      kind,
+      displayName: kind,
+      begin: async context => `https://${kind}.example/authorize?state=${context.state}`,
+      complete: async input => ({
+        provider: kind,
+        issuer: `https://${kind}.example`,
+        subject: `${kind}-subject`,
+        displayName: kind,
+        avatarUrl: null,
+        accountHint: null,
+        verifiedEmailEvidence: [],
+        authenticatedAt: 1,
+        authenticationEventId: input.authenticationEventId,
+      }),
+    });
+    const bff = createAdminBff({
+      config: {
+        googleClientId: CLIENT_ID,
+        googleClientSecret: CLIENT_SECRET,
+        sessionEncryptionKeys: { v1: randomKey() },
+        publicOrigin: PUBLIC_ORIGIN,
+        sessionCookieSecure: false,
+      },
+      controlPlane: fakeControlPlane(),
+      sessionStore: new MemorySessionRepository(),
+      providerRegistry: new ProviderRegistry([adapter("google"), adapter("github")]),
+      accountRepository,
+    });
+
+    async function login(kind: "google" | "github") {
+      const started = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/start/${kind}`));
+      const state = new URL(started.headers.get("Location")!).searchParams.get("state")!;
+      return bff(new Request(
+        `${PUBLIC_ORIGIN}/admin/auth/callback/${kind}?code=code&state=${encodeURIComponent(state)}`,
+        { headers: { Cookie: cookieFrom(started)! } },
+      ));
+    }
+
+    expect((await login("google")).status).toBe(302);
+    const githubLogin = await login("github");
+    expect(githubLogin.status).toBe(302);
+    const githubCookie = cookieFrom(githubLogin)!;
+    expect((await authRequest(bff, "/admin/me", githubCookie)).status).toBe(200);
+
+    account = { ...account, credentialVersion: 2, updatedAt: 2 };
+    expect((await authRequest(bff, "/admin/me", githubCookie)).status).toBe(401);
   });
 
   test("CLI login: authorize redirects to Google, callback hands a one-time code, exchange issues a session", async () => {

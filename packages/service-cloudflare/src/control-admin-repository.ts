@@ -371,31 +371,69 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
       "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('invalid', '$') END AS claimed",
     );
     const synchronizeIdentity = this.#db.prepare(
-      "INSERT INTO cas_operator_identities (identity_issuer, subject, display_name, email_for_display, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(identity_issuer, subject) DO UPDATE SET display_name = excluded.display_name, email_for_display = excluded.email_for_display",
+      `INSERT INTO cas_operator_identities
+        (identity_issuer, subject, display_name, email_for_display, created_at, account_id)
+       VALUES (?, ?, ?, ?, ?, (SELECT account_id FROM cas_external_identities
+         WHERE issuer = ? AND subject = ? AND unlinked_at IS NULL))
+       ON CONFLICT(identity_issuer, subject) DO UPDATE SET
+         display_name = excluded.display_name,
+         email_for_display = excluded.email_for_display,
+         account_id = COALESCE(cas_operator_identities.account_id, excluded.account_id)`,
     ).bind(
       plan.identity.identityIssuer,
       plan.identity.subject,
       plan.identity.displayName,
       plan.identity.emailForDisplay,
       plan.identity.createdAt,
+      plan.identity.identityIssuer,
+      plan.identity.subject,
     );
     const insertMember = this.#db.prepare(
-      "INSERT OR IGNORE INTO cas_app_members (app_id, identity_issuer, subject, joined_at) VALUES (?, ?, ?, ?)",
+      `INSERT OR IGNORE INTO cas_app_members
+        (app_id, identity_issuer, subject, joined_at, account_id)
+       VALUES (?, ?, ?, ?, (SELECT account_id FROM cas_external_identities
+         WHERE issuer = ? AND subject = ? AND unlinked_at IS NULL))`,
     ).bind(
       plan.membership.stackId,
       plan.membership.identityIssuer,
       plan.membership.subject,
       plan.membership.joinedAt,
+      plan.membership.identityIssuer,
+      plan.membership.subject,
     );
     const insertPlatformPrincipal = this.#db.prepare(
-      "INSERT INTO cas_platform_principals (principal_ref, identity_issuer, subject, status, platform_admin, apps_create, revision, created_at, updated_at) VALUES (?, ?, ?, 'active', 0, 0, 1, ?, ?) ON CONFLICT(identity_issuer, subject) DO NOTHING",
+      `INSERT INTO cas_platform_principals
+        (principal_ref, identity_issuer, subject, status, platform_admin, apps_create,
+         revision, created_at, updated_at, account_id)
+       VALUES (?, ?, ?, 'active', 0, 0, 1, ?, ?, (SELECT account_id
+         FROM cas_external_identities WHERE issuer = ? AND subject = ? AND unlinked_at IS NULL))
+       ON CONFLICT(identity_issuer, subject) DO UPDATE SET
+         account_id = COALESCE(cas_platform_principals.account_id, excluded.account_id)`,
     ).bind(
       plan.principalRef,
       plan.identity.identityIssuer,
       plan.identity.subject,
       plan.now,
       plan.now,
+      plan.identity.identityIssuer,
+      plan.identity.subject,
     );
+    const initializePrimaryContact = plan.primaryVerifiedEmail
+      ? [this.#db.prepare(
+        `UPDATE cas_accounts SET primary_verified_email = ?, email_verification_source = ?,
+             email_verified_at = ?, updated_at = MAX(updated_at, ?)
+           WHERE account_id = (SELECT account_id FROM cas_external_identities
+             WHERE issuer = ? AND subject = ? AND unlinked_at IS NULL)
+             AND primary_verified_email IS NULL`,
+      ).bind(
+        plan.primaryVerifiedEmail.normalizedEmail,
+        plan.primaryVerifiedEmail.source,
+        plan.primaryVerifiedEmail.verifiedAt,
+        plan.now,
+        plan.identity.identityIssuer,
+        plan.identity.subject,
+      )]
+      : [];
     try {
       await this.#db.batch([
         claim,
@@ -403,6 +441,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
         synchronizeIdentity,
         insertPlatformPrincipal,
         insertMember,
+        ...initializePrimaryContact,
         ...this.#mutationStatements(plan.audit),
       ]);
       return { kind: "accepted" };

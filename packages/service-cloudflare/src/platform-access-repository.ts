@@ -271,22 +271,84 @@ export class D1PlatformAccessRepository implements PlatformAccessRepository, Pla
       "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('invalid', '$') END AS claimed",
     );
     const synchronizeIdentity = this.db.prepare(
-      "INSERT INTO cas_operator_identities (identity_issuer, subject, display_name, email_for_display, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(identity_issuer, subject) DO UPDATE SET display_name = excluded.display_name, email_for_display = excluded.email_for_display",
-    ).bind(input.principal.issuer, input.principal.subject, input.profile.displayName, input.profile.emailForDisplay, input.now);
+      `INSERT INTO cas_operator_identities
+        (identity_issuer, subject, display_name, email_for_display, created_at, account_id)
+       VALUES (?, ?, ?, ?, ?, (SELECT account_id FROM cas_external_identities
+         WHERE issuer = ? AND subject = ? AND unlinked_at IS NULL))
+       ON CONFLICT(identity_issuer, subject) DO UPDATE SET
+         display_name = excluded.display_name,
+         email_for_display = excluded.email_for_display,
+         account_id = COALESCE(cas_operator_identities.account_id, excluded.account_id)`,
+    ).bind(
+      input.principal.issuer,
+      input.principal.subject,
+      input.profile.displayName,
+      input.profile.emailForDisplay,
+      input.now,
+      input.principal.issuer,
+      input.principal.subject,
+    );
     const platformAdmin = Number(input.invitation.authorities.includes("platform.admin"));
     const appsCreate = Number(input.invitation.authorities.includes("apps.create"));
     const upsertAccess = this.db.prepare(
-      `INSERT INTO cas_platform_principals (principal_ref, identity_issuer, subject, status, platform_admin, apps_create, revision, created_at, updated_at)
-       VALUES (?, ?, ?, 'active', ?, ?, 1, ?, ?)
+      `INSERT INTO cas_platform_principals (principal_ref, identity_issuer, subject, status, platform_admin, apps_create, revision, created_at, updated_at, account_id)
+       VALUES (?, ?, ?, 'active', ?, ?, 1, ?, ?, (SELECT account_id FROM cas_external_identities
+         WHERE issuer = ? AND subject = ? AND unlinked_at IS NULL))
        ON CONFLICT(identity_issuer, subject) DO UPDATE SET
          platform_admin = MAX(cas_platform_principals.platform_admin, excluded.platform_admin),
          apps_create = MAX(cas_platform_principals.apps_create, excluded.apps_create),
          revision = cas_platform_principals.revision + CASE WHEN cas_platform_principals.platform_admin < excluded.platform_admin OR cas_platform_principals.apps_create < excluded.apps_create THEN 1 ELSE 0 END,
-         updated_at = CASE WHEN cas_platform_principals.platform_admin < excluded.platform_admin OR cas_platform_principals.apps_create < excluded.apps_create THEN excluded.updated_at ELSE cas_platform_principals.updated_at END
+         updated_at = CASE WHEN cas_platform_principals.platform_admin < excluded.platform_admin OR cas_platform_principals.apps_create < excluded.apps_create THEN excluded.updated_at ELSE cas_platform_principals.updated_at END,
+         account_id = COALESCE(cas_platform_principals.account_id, excluded.account_id)
        WHERE cas_platform_principals.status = 'active'`,
-    ).bind(input.principalRef, input.principal.issuer, input.principal.subject, platformAdmin, appsCreate, input.now, input.now);
+    ).bind(
+      input.principalRef,
+      input.principal.issuer,
+      input.principal.subject,
+      platformAdmin,
+      appsCreate,
+      input.now,
+      input.now,
+      input.principal.issuer,
+      input.principal.subject,
+    );
+    const grantPlatformAdmin = this.db.prepare(
+      `INSERT OR IGNORE INTO cas_account_platform_authorities (account_id, authority, granted_at)
+       SELECT account_id, 'platform.admin', ? FROM cas_external_identities
+       WHERE issuer = ? AND subject = ? AND unlinked_at IS NULL AND ? = 1`,
+    ).bind(input.now, input.principal.issuer, input.principal.subject, platformAdmin);
+    const grantAppsCreate = this.db.prepare(
+      `INSERT OR IGNORE INTO cas_account_platform_authorities (account_id, authority, granted_at)
+       SELECT account_id, 'apps.create', ? FROM cas_external_identities
+       WHERE issuer = ? AND subject = ? AND unlinked_at IS NULL AND ? = 1`,
+    ).bind(input.now, input.principal.issuer, input.principal.subject, appsCreate);
+    const initializePrimaryContact = this.db.prepare(
+      `UPDATE cas_accounts SET primary_verified_email = ?, email_verification_source = ?,
+         email_verified_at = ?, updated_at = MAX(updated_at, ?)
+       WHERE account_id = (SELECT account_id FROM cas_external_identities
+         WHERE issuer = ? AND subject = ? AND unlinked_at IS NULL)
+         AND primary_verified_email IS NULL`,
+    ).bind(
+      input.primaryVerifiedEmail.normalizedEmail,
+      input.primaryVerifiedEmail.source,
+      input.primaryVerifiedEmail.verifiedAt,
+      input.now,
+      input.principal.issuer,
+      input.principal.subject,
+    );
     try {
-      await this.db.batch([requireNotBlocked, claim, requireClaimed, synchronizeIdentity, upsertAccess, ...this.#snapshotStatements(), this.#audit(input.audit)]);
+      await this.db.batch([
+        requireNotBlocked,
+        claim,
+        requireClaimed,
+        synchronizeIdentity,
+        upsertAccess,
+        grantPlatformAdmin,
+        grantAppsCreate,
+        initializePrimaryContact,
+        ...this.#snapshotStatements(),
+        this.#audit(input.audit),
+      ]);
       return "accepted";
     } catch (error) {
       if (!isJsonFailure(error)) throw error;

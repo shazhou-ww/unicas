@@ -57,6 +57,7 @@ import type {
   CasStackOAuthIssuer,
   CasManagedCapability,
   ManagedSpaceCapability,
+  PrimaryVerifiedEmail,
 } from "@unicas/admin-protocol";
 import { ControlAuditActions, type ControlAuditAction } from "./control-audit.js";
 import { requireInvitationEmailEvidence } from "./authentication.js";
@@ -224,6 +225,7 @@ export interface ControlAcceptMemberInvitationPlan {
   readonly now: number;
   readonly identity: ControlIdentityRecord;
   readonly membership: ControlMembershipRecord & { readonly joinedAt: number };
+  readonly primaryVerifiedEmail: PrimaryVerifiedEmail | null;
   readonly audit: ControlAuditRecord;
 }
 
@@ -819,9 +821,19 @@ export class ControlPlaneAdminService {
         throw new ControlPlaneError(CasAdminErrorCodes.NOT_FOUND, "invitation not found, expired, or already used");
       }
       const profile = ctx.profile ?? { displayName: null, emailForDisplay: null };
+      let primaryVerifiedEmail: PrimaryVerifiedEmail | null = null;
       if (invitation.emailConstraint !== null) {
         try {
-          requireInvitationEmailEvidence(ctx.verifiedEmailEvidence ?? [], invitation.emailConstraint, now);
+          const evidence = requireInvitationEmailEvidence(
+            ctx.verifiedEmailEvidence ?? [],
+            invitation.emailConstraint,
+            now,
+          );
+          primaryVerifiedEmail = {
+            normalizedEmail: evidence.normalizedEmail,
+            source: evidence.source,
+            verifiedAt: evidence.verifiedAt,
+          };
         } catch {
           throw new ControlPlaneError(CasAdminErrorCodes.NOT_FOUND, "invitation is bound to another email");
         }
@@ -842,6 +854,7 @@ export class ControlPlaneAdminService {
         now,
         identity,
         membership,
+        primaryVerifiedEmail,
         audit: this.#audit(ctx, ControlAuditActions.memberInvitationAccepted, invitation.invitationId, invitation.stackId),
       });
       if (result.kind === "unavailable") {

@@ -133,8 +133,22 @@ and successful invitation acceptance rotates the session without retaining the
 consumed evidence. The slice is published on `origin/main` as
 `c6d63fee969ee9c42734a4f36b0d1fda7ecdd849`.
 
-Next: publish the fresh-evidence checkpoint, then switch BFF login, CLI, and
-callback routes to the configured provider registry.
+The sixth implementation slice is complete locally. The BFF builds an immutable
+registry from Google plus complete optional Microsoft/GitHub credential pairs,
+renders only configured choices, and exposes closed start/callback routes while
+retaining the legacy Google URLs. Provider, route, state, and continuation are
+bound in encrypted pre-login state; CLI accepts only a closed `provider` value,
+and multi-provider invitations show a selector without moving the invitation
+token into query state. Worker startup runs the one-to-one migration before
+injecting `D1AccountRepository`. Provider callbacks now resolve or invitation-
+gate creation of a stable Account, store Account/identity/credential-version in
+browser and CLI sessions, and revalidate them on each request. Linked providers
+share Account admission; stale credentials fail immediately. Invitation
+acceptance dual-writes Account ownership/authorities and atomically initializes
+only an empty primary verified contact. The slice awaits checkpoint publication.
+
+Next: publish the provider runtime checkpoint, then implement fresh-auth
+identity linking/unlinking and Account self-service APIs.
 
 ## Decisions
 
@@ -371,6 +385,20 @@ callback routes to the configured provider registry.
   service suite passed all 129 tests across 18 files.
 - Fresh invitation-evidence commit `c6d63fee969ee9c42734a4f36b0d1fda7ecdd849`
   was pushed and verified reachable from refreshed `origin/main`.
+- Provider configuration tests prove optional credentials must be complete
+  pairs. BFF tests cover configured-only rendering, fixed start/callback routes,
+  route-provider mismatch rejection, CLI provider selection, invitation
+  provider selection, linked Google/GitHub Account admission, and immediate
+  stale credential-version rejection.
+- D1 acceptance tests prove App membership and platform authority rows receive
+  Account ownership, an empty primary contact initializes from consumed fresh
+  evidence in the same batch, and an existing primary contact is never
+  overwritten. Worker composition tests cover migration initialization and
+  retry behavior.
+- The full `@unicas/service` suite passed all 129 tests across 18 files and the
+  full `@unicas/service-cloudflare` suite passed all 261 tests across 28 files.
+  Both packages passed typecheck and editor diagnostics reported no errors in
+  the provider runtime slice.
 
 ## Blockers
 

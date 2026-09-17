@@ -73,6 +73,13 @@ describe("D1 platform invitations", () => {
       authorities: ["platform.admin"],
     }, "create-2");
     const invitee = { issuer: actor.issuer, subject: "invitee" };
+    const inviteeAccountId = `acct_${"i".repeat(22)}`;
+    await db.prepare(
+      "INSERT INTO cas_accounts (account_id, credential_version, created_at, updated_at) VALUES (?, 1, 1, 1)",
+    ).bind(inviteeAccountId).run();
+    await db.prepare(
+      "INSERT INTO cas_external_identities (external_identity_id, account_id, provider, issuer, subject, linked_at) VALUES ('ext-invitee', ?, 'google', ?, ?, 1)",
+    ).bind(inviteeAccountId, invitee.issuer, invitee.subject).run();
     await service.accept(
       invitee,
       { displayName: "Invitee", emailForDisplay: "invitee@example.com" },
@@ -84,6 +91,18 @@ describe("D1 platform invitations", () => {
       status: "active",
       authorities: ["platform.admin"],
       revision: 1,
+    });
+    expect(await db.prepare(
+      "SELECT account_id FROM cas_platform_principals WHERE identity_issuer = ? AND subject = ?",
+    ).bind(invitee.issuer, invitee.subject).first()).toEqual({ account_id: inviteeAccountId });
+    expect(await db.prepare(
+      "SELECT authority FROM cas_account_platform_authorities WHERE account_id = ?",
+    ).bind(inviteeAccountId).all()).toMatchObject({ results: [{ authority: "platform.admin" }] });
+    expect(await db.prepare(
+      "SELECT primary_verified_email, email_verification_source FROM cas_accounts WHERE account_id = ?",
+    ).bind(inviteeAccountId).first()).toEqual({
+      primary_verified_email: "invitee@example.com",
+      email_verification_source: "google-oidc",
     });
     await db.prepare("INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES ('app-1', 'App One', '', 'active', 1, 1)").run();
     await db.prepare("INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at) VALUES ('app-1', ?, ?, 1)").bind(invitee.issuer, invitee.subject).run();

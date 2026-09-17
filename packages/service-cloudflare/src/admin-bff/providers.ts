@@ -12,8 +12,9 @@ import {
 } from "@unicas/service";
 
 export const GOOGLE_ISSUER = "https://accounts.google.com";
-export const MICROSOFT_CONSUMERS_ISSUER = "https://login.microsoftonline.com/consumers/v2.0";
 export const MICROSOFT_CONSUMERS_TENANT_ID = "9188040d-6c67-4c5b-b112-36a304b66dad";
+export const MICROSOFT_CONSUMERS_AUTHORITY = "https://login.microsoftonline.com/consumers/v2.0";
+export const MICROSOFT_CONSUMERS_ISSUER = `https://login.microsoftonline.com/${MICROSOFT_CONSUMERS_TENANT_ID}/v2.0`;
 export const GITHUB_ISSUER = "https://github.com";
 
 interface OidcProviderClient {
@@ -218,7 +219,8 @@ export function createMicrosoftPersonalProvider(input: {
 }): MicrosoftPersonalProviderAdapter {
   return new MicrosoftPersonalProviderAdapter(new OidcClient({
     issuer: MICROSOFT_CONSUMERS_ISSUER,
-    discoveryUrl: input.discoveryUrl,
+    discoveryUrl: input.discoveryUrl
+      ?? `${MICROSOFT_CONSUMERS_AUTHORITY}/.well-known/openid-configuration`,
     clientId: input.clientId,
     clientSecret: input.clientSecret,
     redirectUri: input.redirectUri,

@@ -10,6 +10,7 @@ const handlers = vi.hoisted(() => ({
   mcp: vi.fn(async () => new Response("mcp")),
   migrate: vi.fn(async () => undefined),
   migrateControl: vi.fn(async () => undefined),
+  migrateIdentities: vi.fn(async () => undefined),
   tenantIdFromName: vi.fn((name: string) => `do:${name}`),
   tenantGet: vi.fn((_id: string) => ({ fetch: undefined as unknown })),
   verify: vi.fn(async (_request: Request, route: { stackId: string; tenantId: string }) => ({
@@ -35,6 +36,9 @@ vi.mock("../src/schema.js", () => ({
 }));
 vi.mock("../src/control-schema.js", () => ({
   migrateControlSchema: handlers.migrateControl,
+}));
+vi.mock("../src/identity-migration.js", () => ({
+  migrateLegacyAdminIdentities: handlers.migrateIdentities,
 }));
 vi.mock("../src/control-sessions.js", () => ({
   ControlSessionStore: class { },

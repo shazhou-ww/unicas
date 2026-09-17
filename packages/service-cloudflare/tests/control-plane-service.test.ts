@@ -190,8 +190,24 @@ describe("D1-backed control-plane service", () => {
     );
     if (!("invitation" in invitation)) throw new Error("invite failed");
     const token = invitation.acceptUrl.split("/").pop()!;
+    const bobAccountId = `acct_${"b".repeat(22)}`;
+    await db.prepare(
+      "INSERT INTO cas_accounts (account_id, credential_version, primary_verified_email, email_verification_source, email_verified_at, created_at, updated_at) VALUES (?, 1, 'existing@example.com', 'github-emails-api', 1, 1, 1)",
+    ).bind(bobAccountId).run();
+    await db.prepare(
+      "INSERT INTO cas_external_identities (external_identity_id, account_id, provider, issuer, subject, linked_at) VALUES ('ext-bob', ?, 'google', ?, ?, 1)",
+    ).bind(bobAccountId, bob.identityIssuer, bob.subject).run();
     expectError(await service.acceptMemberInvitation(ctx(bob, "wrong@example.com"), { path: { token } }), CasAdminErrorCodes.NOT_FOUND);
     expect(await service.acceptMemberInvitation(ctx(bob), { path: { token } })).toMatchObject({ stackId, subject: "bob-sub" });
+    expect(await db.prepare(
+      "SELECT account_id FROM cas_app_members WHERE app_id = ? AND identity_issuer = ? AND subject = ?",
+    ).bind(stackId, bob.identityIssuer, bob.subject).first()).toEqual({ account_id: bobAccountId });
+    expect(await db.prepare(
+      "SELECT primary_verified_email, email_verification_source FROM cas_accounts WHERE account_id = ?",
+    ).bind(bobAccountId).first()).toEqual({
+      primary_verified_email: "existing@example.com",
+      email_verification_source: "github-emails-api",
+    });
     expect(await db.prepare(
       "SELECT principal_ref, status, platform_admin, apps_create FROM cas_platform_principals WHERE identity_issuer = ? AND subject = ?",
     ).bind(bob.identityIssuer, bob.subject).first()).toEqual({

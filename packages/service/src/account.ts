@@ -49,6 +49,7 @@ export interface AccountRepository {
   getActiveIdentity(issuer: string, subject: string): Promise<ExternalIdentityRecord | null>;
   getIdentity(externalIdentityId: string): Promise<ExternalIdentityRecord | null>;
   listPlatformAuthorities(accountId: AccountId): Promise<readonly PlatformAuthority[]>;
+  hasAppMembership(accountId: AccountId): Promise<boolean>;
   createAccountWithIdentity(input: AccountWithIdentityCreate): Promise<"created" | "identity-conflict">;
 }
 
@@ -64,6 +65,7 @@ export interface AccountResolution {
   readonly account: AccountRecord;
   readonly authenticatedIdentity: ExternalIdentityRecord;
   readonly platformAuthorities: readonly PlatformAuthority[];
+  readonly hasAppMembership: boolean;
 }
 
 export type AccountServiceErrorCode =
@@ -136,6 +138,7 @@ export class AccountService {
       account,
       authenticatedIdentity: identity,
       platformAuthorities: await this.repository.listPlatformAuthorities(account.accountId),
+      hasAppMembership: await this.repository.hasAppMembership(account.accountId),
     };
   }
 
@@ -160,6 +163,7 @@ export class AccountService {
       account,
       authenticatedIdentity: identity,
       platformAuthorities: await this.repository.listPlatformAuthorities(account.accountId),
+      hasAppMembership: await this.repository.hasAppMembership(account.accountId),
     };
   }
 

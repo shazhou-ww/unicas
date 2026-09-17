@@ -67,6 +67,12 @@ export class D1AccountRepository implements AccountRepository {
     return (rows.results ?? []).map(row => row.authority);
   }
 
+  async hasAppMembership(accountId: AccountId): Promise<boolean> {
+    return await this.db.prepare(
+      "SELECT 1 AS member FROM cas_app_members WHERE account_id = ? LIMIT 1",
+    ).bind(accountId).first() !== null;
+  }
+
   async createAccountWithIdentity(input: AccountWithIdentityCreate): Promise<"created" | "identity-conflict"> {
     const primary = input.account.primaryVerifiedEmail;
     try {

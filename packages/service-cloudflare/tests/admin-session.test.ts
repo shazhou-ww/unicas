@@ -102,6 +102,29 @@ describe("configFromEnv", () => {
     expect(config.publicOrigin).toBe("https://console.example");
   });
 
+  test("registers optional providers only from complete credential pairs", () => {
+    const base = {
+      SESSION_ENCRYPTION_KEYS: JSON.stringify({ v1: randomKey() }),
+      PUBLIC_ORIGIN: "https://cas.example",
+    };
+    expect(() => configFromEnv({ ...base, MICROSOFT_OIDC_CLIENT_ID: "microsoft" }))
+      .toThrow(/configured together/);
+    expect(() => configFromEnv({ ...base, GITHUB_OAUTH_CLIENT_SECRET: "secret" }))
+      .toThrow(/configured together/);
+    expect(configFromEnv({
+      ...base,
+      MICROSOFT_OIDC_CLIENT_ID: "microsoft",
+      MICROSOFT_OIDC_CLIENT_SECRET: "microsoft-secret",
+      GITHUB_OAUTH_CLIENT_ID: "github",
+      GITHUB_OAUTH_CLIENT_SECRET: "github-secret",
+    })).toMatchObject({
+      microsoftClientId: "microsoft",
+      microsoftClientSecret: "microsoft-secret",
+      githubClientId: "github",
+      githubClientSecret: "github-secret",
+    });
+  });
+
   test("parses and cross-validates test account and email allowlist", () => {
     const baseEnv = {
       SESSION_ENCRYPTION_KEYS: JSON.stringify({ v1: randomKey() }),
