@@ -145,7 +145,8 @@ gate creation of a stable Account, store Account/identity/credential-version in
 browser and CLI sessions, and revalidate them on each request. Linked providers
 share Account admission; stale credentials fail immediately. Invitation
 acceptance dual-writes Account ownership/authorities and atomically initializes
-only an empty primary verified contact. The slice awaits checkpoint publication.
+only an empty primary verified contact. The slice is published on `origin/main`
+as `06393d3f43d7a813427d1d007280f593fc9bb59b`.
 
 Next: publish the provider runtime checkpoint, then implement fresh-auth
 identity linking/unlinking and Account self-service APIs.
@@ -399,6 +400,8 @@ identity linking/unlinking and Account self-service APIs.
   full `@unicas/service-cloudflare` suite passed all 261 tests across 28 files.
   Both packages passed typecheck and editor diagnostics reported no errors in
   the provider runtime slice.
+- Provider runtime commit `06393d3f43d7a813427d1d007280f593fc9bb59b` was
+  pushed and verified reachable from refreshed `origin/main`.
 
 ## Blockers
 
