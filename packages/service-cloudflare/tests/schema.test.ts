@@ -79,6 +79,7 @@ describe("control schema", () => {
       "cas_external_identities",
       "cas_account_platform_authorities",
       "cas_account_aliases",
+      "cas_account_app_idempotency",
       "cas_email_challenges",
     ]) expect(names.has(expected), `missing table ${expected}`).toBe(true);
     for (const retired of [
@@ -93,6 +94,15 @@ describe("control schema", () => {
       .filter(column => column.pk > 0)
       .sort((left, right) => left.pk - right.pk)
       .map(column => column.name)).toEqual(["account_id", "authority"]);
+    const idempotencyColumns = await database.prepare(
+      "PRAGMA table_info(cas_account_app_idempotency)",
+    ).all<{ name: string; pk: number }>();
+    expect(idempotencyColumns.results!
+      .filter(column => column.pk > 0)
+      .sort((left, right) => left.pk - right.pk)
+      .map(column => column.name)).toEqual([
+        "account_id", "method", "canonical_route", "idempotency_key",
+      ]);
 
     const firstAccountId = `acct_${"a".repeat(22)}`;
     const secondAccountId = `acct_${"b".repeat(22)}`;

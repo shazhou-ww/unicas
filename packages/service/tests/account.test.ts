@@ -49,6 +49,8 @@ function fixture() {
     listAccountMembershipAppIds: vi.fn(async () => []),
     readControlSnapshot: vi.fn(async () => 1),
     listAccountApps: vi.fn(async () => []),
+    getAccountAppIdempotency: vi.fn(async () => null),
+    commitCreateAccountApp: vi.fn(async () => "created"),
     listAppMemberships: vi.fn(async () => []),
     commitRemoveAppMembership: vi.fn(async () => "removed"),
     getPlatformAccount: vi.fn(async () => null),
@@ -193,6 +195,27 @@ describe("Account service", () => {
       afterAppId: "",
       limit: 51,
     });
+  });
+
+  test("creates an App with Account authority and Account-scoped idempotency", async () => {
+    const { repository, service } = fixture();
+    await expect(service.createApp({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      displayName: " App A ",
+      idempotencyKey: "create-a",
+    })).resolves.toMatchObject({ displayName: "App A", revision: 1 });
+    expect(repository.commitCreateAccountApp).toHaveBeenCalledWith(expect.objectContaining({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      idempotency: expect.objectContaining({ accountId, canonicalRoute: "/admin/apps", key: "create-a" }),
+    }));
+    vi.mocked(repository.listPlatformAuthorities).mockResolvedValue([]);
+    await expect(service.createApp({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      displayName: "Denied",
+    })).rejects.toMatchObject({ code: "APP_CREATION_AUTHORITY_REQUIRED" });
   });
 
   test("projects current memberships with one Account summary", async () => {

@@ -1347,7 +1347,7 @@ describe("cas-admin-webui BFF", () => {
       getIdentity: async externalIdentityId => [...identities.values()].find(identity => identity.externalIdentityId === externalIdentityId) ?? null,
       getProfile: async () => ({ accountId, displayName: "Account User", avatarUrl: null, displayNameSource: "user", avatarSource: "user", updatedAt: 1 }),
       listActiveIdentities: async () => [...identities.values()],
-      listPlatformAuthorities: async () => ["platform.admin"],
+      listPlatformAuthorities: async () => ["platform.admin", "apps.create"],
       hasAppMembership: async () => false,
       listAccountMembershipAppIds: async () => [],
       readControlSnapshot: async () => 1,
@@ -1359,6 +1359,8 @@ describe("cas-admin-webui BFF", () => {
         createdAt: 1,
         revision: 1,
       }] : []),
+      getAccountAppIdempotency: vi.fn(async () => null),
+      commitCreateAccountApp: vi.fn(async () => "created"),
       createAccountWithIdentity: async () => "identity-conflict",
     };
     const adapter = (kind: "google" | "github"): ProviderAdapter => ({
@@ -1384,6 +1386,7 @@ describe("cas-admin-webui BFF", () => {
         sessionEncryptionKeys: { v1: randomKey() },
         publicOrigin: PUBLIC_ORIGIN,
         sessionCookieSecure: false,
+        csrfEnforced: false,
       },
       controlPlane: fakeControlPlane(),
       sessionStore: new MemorySessionRepository(),
@@ -1422,6 +1425,18 @@ describe("cas-admin-webui BFF", () => {
       afterAppId: "",
       limit: 51,
     });
+    const createdApp = await authRequest(bff, "/admin/apps", githubCookie, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": "create-app" },
+      body: JSON.stringify({ displayName: "Created App" }),
+    });
+    expect(createdApp.status).toBe(201);
+    expect(createdApp.headers.get("ETag")).toBe('"1"');
+    expect(accountRepository.commitCreateAccountApp).toHaveBeenCalledWith(expect.objectContaining({
+      actorAccountId: accountId,
+      actorExternalIdentityId: "ext-github",
+      idempotency: expect.objectContaining({ accountId, key: "create-app" }),
+    }));
 
     account = { ...account, credentialVersion: 2, updatedAt: 2 };
     expect((await authRequest(bff, "/admin/me", githubCookie)).status).toBe(401);

@@ -382,9 +382,10 @@ function adminHandlerFor(env: Env): Promise<(request: Request) => Promise<Respon
       const now = config.now ?? (() => Date.now());
       const platformRepository = new D1PlatformAccessRepository(env.CAS_CONTROL_DB);
       const accountRepository = new D1AccountRepository(env.CAS_CONTROL_DB);
+      const managedOAuthIssuer = managedIssuerFor(env, now);
       return createAdminBff({
         config,
-        controlPlane: controlPlaneFor(env, now),
+        controlPlane: controlPlaneFor(env, now, managedOAuthIssuer),
         sessionStore: new ControlSessionStore(env.CAS_CONTROL_DB, now),
         auditReader: localAuditReader(env),
         assets: uiAssets,
@@ -393,6 +394,7 @@ function adminHandlerFor(env: Env): Promise<(request: Request) => Promise<Respon
         platformAuditRepository: platformRepository,
         peopleRepository: new D1PeopleRepository(env.CAS_CONTROL_DB),
         accountRepository,
+        managedOAuthIssuer,
         emailChallengeRepository: new D1EmailChallengeRepository(env.CAS_CONTROL_DB),
         emailChallengeSender: env.EMAIL && config.emailFrom
           ? new CloudflareEmailChallengeSender(env.EMAIL, config.emailFrom)
@@ -405,12 +407,16 @@ function adminHandlerFor(env: Env): Promise<(request: Request) => Promise<Respon
   return handler;
 }
 
-function controlPlaneFor(env: Env, now?: () => number): ControlPlaneOperations {
+function controlPlaneFor(
+  env: Env,
+  now?: () => number,
+  managedOAuthIssuer = managedIssuerFor(env, now),
+): ControlPlaneOperations {
   const allowedOrigins = parseOriginAllowlist(env.CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS);
   return createControlPlaneOperations(env.CAS_CONTROL_DB, {
     now,
     oauthResourcePublicOrigin: env.CAS_PUBLIC_ORIGIN ?? env.PUBLIC_ORIGIN,
-    managedOAuthIssuer: managedIssuerFor(env, now),
+    managedOAuthIssuer,
     oauthDiscovery: new CloudflareOAuthDiscoveryPort({ allowedOrigins }),
   });
 }

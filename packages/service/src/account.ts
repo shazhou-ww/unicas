@@ -16,9 +16,11 @@ import type {
   PrimaryVerifiedEmail,
   ProviderKind,
 } from "@unicas/admin-protocol";
-import { AppAccountAuditQuerySchema, PlatformAccountAuditQuerySchema, PlatformPrincipalQuerySchema } from "@unicas/admin-protocol";
-import { generateAccountId, generateExternalIdentityId } from "./control-ids.js";
+import { AppAccountAuditQuerySchema, CAS_ADMIN_IDEMPOTENCY_RETENTION_MS, PlatformAccountAuditQuerySchema, PlatformPrincipalQuerySchema } from "@unicas/admin-protocol";
+import { generateAccountId, generateEventId, generateExternalIdentityId, generateStackId } from "./control-ids.js";
 import { decodeControlListCursor, encodeControlListCursor } from "./control-cursor.js";
+import type { ControlOAuthIssuerRecord, ManagedOAuthIssuerProvisioner } from "./control-admin.js";
+import { canonicalJson, sha256Hex, validateDisplayName } from "./control-validation.js";
 import type { AuthenticatedProviderResult } from "./authentication.js";
 import { AUTHENTICATION_FLOW_TTL_MS } from "./authentication.js";
 
@@ -67,6 +69,17 @@ export interface AccountAppMembershipRecord {
   readonly account: AccountRecord;
   readonly profile: AccountProfileRecord;
   readonly joinedAt: number;
+}
+
+export interface AccountAppIdempotencyRecord {
+  readonly accountId: AccountId;
+  readonly method: "POST";
+  readonly canonicalRoute: "/admin/apps";
+  readonly key: string;
+  readonly payloadHash: string;
+  readonly response: App;
+  readonly createdAt: number;
+  readonly expiresAt: number;
 }
 
 export interface AccountPlatformViewRecord {
@@ -126,6 +139,22 @@ export interface AccountRepository {
     readonly afterAppId: string;
     readonly limit: number;
   }): Promise<readonly App[]>;
+  getAccountAppIdempotency(input: {
+    readonly accountId: AccountId;
+    readonly key: string;
+    readonly now: number;
+  }): Promise<AccountAppIdempotencyRecord | null>;
+  commitCreateAccountApp(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly app: App;
+    readonly managedIssuer: ControlOAuthIssuerRecord | null;
+    readonly idempotency: AccountAppIdempotencyRecord | null;
+    readonly eventId: string;
+    readonly requestId?: string;
+    readonly traceId?: string;
+    readonly callerChannel?: string;
+  }): Promise<"created" | "actor-forbidden" | { readonly idempotencyRace: AccountAppIdempotencyRecord }>;
   listAppMemberships(input: {
     readonly appId: AppId;
     readonly afterAccountId: string;
@@ -237,6 +266,8 @@ export type AccountServiceErrorCode =
   | "FINAL_IDENTITY_CANNOT_BE_UNLINKED"
   | "FRESH_AUTHENTICATION_REQUIRED"
   | "APP_MEMBERSHIP_REQUIRED"
+  | "APP_CREATION_AUTHORITY_REQUIRED"
+  | "IDEMPOTENCY_CONFLICT"
   | "INVALID_CURSOR"
   | "INVALID_REQUEST"
   | "LAST_MEMBER"
@@ -255,6 +286,7 @@ export class AccountService {
   constructor(
     readonly repository: AccountRepository,
     readonly now: () => number = Date.now,
+    readonly managedOAuthIssuer: ManagedOAuthIssuerProvisioner | null = null,
   ) { }
 
   async createForExternalIdentity(input: AccountCreateInput): Promise<AccountResolution> {
@@ -415,6 +447,57 @@ export class AccountService {
         ? encodeControlListCursor({ version: 1, snapshot, last: items.at(-1)!.appId })
         : null,
     };
+  }
+
+  async createApp(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly displayName: string;
+    readonly idempotencyKey?: string;
+    readonly requestId?: string;
+    readonly traceId?: string;
+    readonly callerChannel?: string;
+  }): Promise<App> {
+    if (validateDisplayName(input.displayName)) throw new AccountServiceError("INVALID_REQUEST");
+    if (input.idempotencyKey !== undefined
+      && (input.idempotencyKey.length === 0 || input.idempotencyKey.length > 128)) {
+      throw new AccountServiceError("INVALID_REQUEST");
+    }
+    const actor = await this.#resolveCanonicalAccount(input.actorAccountId);
+    this.#requireUsableAccount(actor);
+    await this.requireActiveIdentity(actor.accountId, input.actorExternalIdentityId);
+    if (!(await this.repository.listPlatformAuthorities(actor.accountId)).includes("apps.create")) {
+      throw new AccountServiceError("APP_CREATION_AUTHORITY_REQUIRED");
+    }
+    const now = this.now();
+    const payloadHash = await sha256Hex(canonicalJson({ displayName: input.displayName }));
+    if (input.idempotencyKey !== undefined) {
+      const existing = await this.repository.getAccountAppIdempotency({
+        accountId: actor.accountId, key: input.idempotencyKey, now,
+      });
+      if (existing) return this.#resolveAppIdempotency(existing, payloadHash);
+    }
+    const app: App = {
+      appId: generateStackId(), displayName: input.displayName.trim(), description: "",
+      status: "active", createdAt: now, revision: 1,
+    };
+    const idempotency: AccountAppIdempotencyRecord | null = input.idempotencyKey === undefined ? null : {
+      accountId: actor.accountId, method: "POST", canonicalRoute: "/admin/apps",
+      key: input.idempotencyKey, payloadHash, response: app, createdAt: now,
+      expiresAt: now + CAS_ADMIN_IDEMPOTENCY_RETENTION_MS,
+    };
+    const managedIssuer = this.managedOAuthIssuer
+      ? await this.managedOAuthIssuer.provision(app.appId, now)
+      : null;
+    const result = await this.repository.commitCreateAccountApp({
+      actorAccountId: actor.accountId,
+      actorExternalIdentityId: input.actorExternalIdentityId,
+      app, managedIssuer, idempotency, eventId: generateEventId(),
+      requestId: input.requestId, traceId: input.traceId, callerChannel: input.callerChannel,
+    });
+    if (result === "actor-forbidden") throw new AccountServiceError("APP_CREATION_AUTHORITY_REQUIRED");
+    if (typeof result === "object") return this.#resolveAppIdempotency(result.idempotencyRace, payloadHash);
+    return app;
   }
 
   async listAppMembers(input: {
@@ -735,6 +818,11 @@ export class AccountService {
       accountId = target;
     }
     throw new AccountServiceError("ACCOUNT_ALIAS_INVALID");
+  }
+
+  #resolveAppIdempotency(record: AccountAppIdempotencyRecord, payloadHash: string): App {
+    if (record.payloadHash !== payloadHash) throw new AccountServiceError("IDEMPOTENCY_CONFLICT");
+    return record.response;
   }
 
   async #requirePlatformAdmin(accountId: AccountId): Promise<AccountRecord> {

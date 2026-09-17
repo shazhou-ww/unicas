@@ -113,21 +113,19 @@ describe("App admin physical compatibility adapter", () => {
     await expect(response.json()).resolves.toEqual({ appId: "app-1" });
   });
 
-  test("maps App creation to a 201 identifier receipt without echoing the resource", async () => {
-    const { response } = await invoke(
+  test("forwards Account-keyed App creation without legacy rewriting", async () => {
+    const { response, legacyHandler } = await invoke(
       { operation: "createApp" },
       "/admin/apps",
       {
-        stackId: "app-1",
-        displayName: "App 1",
-        description: "",
-        status: "active",
-        createdAt: 1,
-        revision: 1,
+        appId: "app-1",
       },
     );
 
-    expect(response.status).toBe(201);
+    expect(legacyHandler).toHaveBeenCalledWith(expect.objectContaining({
+      url: "https://console.unicas.work/admin/apps",
+    }));
+    expect(response.status).toBe(200);
     expect(response.headers.get("ETag")).toBe('"3"');
     await expect(response.json()).resolves.toEqual({ appId: "app-1" });
   });

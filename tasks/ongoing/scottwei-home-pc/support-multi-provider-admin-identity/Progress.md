@@ -16,18 +16,23 @@ Updated: 2026-09-17
 
 ## Current state
 
-The third no-legacy cleanup checkpoint is complete locally. `GET /admin/apps`
-now runs directly through `AccountService` and `D1AccountRepository`, pages Apps
-by stable `accountId`, and no longer rewrites the request or response through
-Principal-keyed `/admin/stacks`. The BFF, adapter, cloud-neutral service, and D1
-tests cover the direct path. No schema or write-path compatibility was removed
-in this read-only checkpoint.
+The third no-legacy cleanup checkpoint is published. `GET /admin/apps` now runs
+directly through `AccountService` and `D1AccountRepository`, pages Apps by stable
+`accountId`, and no longer rewrites the request or response through
+Principal-keyed `/admin/stacks`.
 
-Next: migrate `POST /admin/apps` to an Account-keyed idempotency scope and
-atomic App/first-membership/audit transaction while preserving the existing
-managed issuer provisioning port at the service boundary. Then migrate the
-remaining App operations before deleting legacy HTTP contracts, identity-keyed
-columns/tables, dual writes, and startup identity migration.
+The fourth no-legacy cleanup checkpoint is complete locally. `POST /admin/apps`
+now uses `apps.create` on the stable Account, requires an active authenticated
+ExternalIdentity, scopes idempotency to `accountId`, and atomically writes the
+App, first Account membership, managed issuer, Account-attributed audit event,
+idempotency result, and control snapshot. Worker composition injects one cached
+managed issuer instance into both the current Account path and remaining legacy
+operations. The App adapter no longer rewrites list or create requests.
+
+Next: migrate App get/patch and the remaining App operations to AccountService
+and Account-keyed repository transactions. After their consumers move, delete
+legacy HTTP contracts, identity-keyed columns/tables, dual writes, and startup
+identity migration rather than adding compatibility flags.
 
 On 2026-09-17, the requesting user directed this worktree to claim and continue
 the task. `repoledger doctor` resolved the worktree identity as
@@ -445,6 +450,17 @@ cutover markers. Then complete the current-model and real-provider/email tests.
   loopback port collision, so Miniflare checks were rerun separately.
 - `@unicas/service` and `@unicas/service-cloudflare` typechecks passed, and
   editor diagnostics reported no errors in the changed implementation files.
+- Account-keyed App creation passed the 17-test focused Account service suite
+  and the isolated Miniflare transaction test, including authority denial,
+  stable first membership, Account/ExternalIdentity audit attribution,
+  Account-scoped replay, and changed-payload conflict. The full service suite
+  passed 144 tests, the D1 schema suite passed 6 tests, the Worker suite passed
+  14 tests, the App adapter passed 10 tests, and the full BFF suite passed all
+  59 tests. Both affected packages passed typecheck. A full Cloudflare package
+  run passed 242 tests and failed 35 while Miniflare instances collided on
+  loopback ports with `EADDRINUSE`; the affected task-focused suites were rerun
+  serially and passed. The Account schema test additionally verifies the new
+  idempotency table's `(accountId, method, route, key)` primary key.
 - `pnpm exec repoledger doctor` passed at the repository root after refreshing
   `origin/main`: 16 tasks, full history, and a valid worktree identity.
 - The pinned CLI rejected the skill's newer `status` and `check --task` commands;

@@ -33,6 +33,7 @@ import type {
   ControlPlaneOperations,
   ControlSessionRepository,
   AccountRepository,
+  ManagedOAuthIssuerProvisioner,
   EmailChallengeRepository,
   PlatformAccessRepository,
   PlatformAuditRepository,
@@ -101,6 +102,7 @@ export interface CreateAdminBffOptions {
   readonly peopleRepository?: PeopleRepository;
   readonly providerRegistry?: ProviderRegistry;
   readonly accountRepository?: AccountRepository;
+  readonly managedOAuthIssuer?: ManagedOAuthIssuerProvisioner;
   readonly emailChallengeRepository?: EmailChallengeRepository;
   readonly emailChallengeSender?: EmailChallengeSender;
 }
@@ -147,7 +149,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
   const sessionStore = options.sessionStore;
   const sessionCrypto = new SessionCrypto(config.sessionEncryptionKeys);
   const accountService = options.accountRepository
-    ? new AccountService(options.accountRepository, now)
+    ? new AccountService(options.accountRepository, now, options.managedOAuthIssuer ?? null)
     : null;
   const emailChallenges = options.emailChallengeRepository
     ? new EmailChallengeService(options.emailChallengeRepository, { now })
@@ -299,7 +301,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       || appRoute?.operation === "patchAccountProfile") {
       return handleAccountApi(request, appRoute.operation);
     }
-    if (appRoute?.operation === "listApps") return handleAccountApps(request, url);
+    if (appRoute?.operation === "listApps" || appRoute?.operation === "createApp") {
+      return handleAccountApps(request, url, appRoute.operation);
+    }
     if (appRoute?.operation === "listMembers" || appRoute?.operation === "deleteMember") {
       return handleAccountAppMembers(request, url, appRoute.appId, appRoute.operation);
     }
@@ -1705,22 +1709,42 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     }
   }
 
-  async function handleAccountApps(request: Request, url: URL): Promise<Response> {
+  async function handleAccountApps(request: Request, url: URL, operation: "listApps" | "createApp"): Promise<Response> {
     const auth = await requireAuthenticated(request);
     if (auth instanceof Response) return auth;
     if (!accountService || !auth.payload.accountId) {
       return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
     }
     try {
+      if (operation === "createApp") {
+        if (!auth.payload.externalIdentityId) return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED);
+        if (!(await passCsrf(request, auth.payload))) return csrfRejected();
+        const body = await readJsonBody<{ displayName?: unknown }>(request);
+        if (!body || typeof body.displayName !== "string") return invalidRequest("A valid displayName is required");
+        const app = await accountService.createApp({
+          actorAccountId: auth.payload.accountId,
+          actorExternalIdentityId: auth.payload.externalIdentityId,
+          displayName: body.displayName,
+          idempotencyKey: request.headers.get("Idempotency-Key") ?? undefined,
+          requestId: request.headers.get("X-Request-Id") ?? undefined,
+          traceId: request.headers.get("X-Trace-Id") ?? undefined,
+          callerChannel: "admin-webui",
+        });
+        return Response.json({ appId: app.appId }, {
+          status: 201,
+          headers: { ETag: formatCasAdminETag(app.revision), "Cache-Control": REVISION_CACHE_CONTROL },
+        });
+      }
       return json(await accountService.listApps({
         actorAccountId: auth.payload.accountId,
         ...pageQuery(queryFromUrl(url)),
       }), 200);
     } catch (error) {
       if (error instanceof AccountServiceError) {
-        const status = error.code === "ACCOUNT_BLOCKED" ? 403
+        const status = error.code === "ACCOUNT_BLOCKED" || error.code === "APP_CREATION_AUTHORITY_REQUIRED" ? 403
           : error.code === "INVALID_CURSOR" || error.code === "INVALID_REQUEST" ? 400
-            : 404;
+            : error.code === "IDEMPOTENCY_CONFLICT" ? 409
+              : 404;
         return json({ error: error.code }, status);
       }
       throw error;

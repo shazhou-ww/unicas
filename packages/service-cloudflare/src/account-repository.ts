@@ -2,6 +2,7 @@ import type { D1Database, D1PreparedStatement } from "@cloudflare/workers-types"
 import type { AccountId, App, AppId, PlatformAuthority, PrimaryVerifiedEmail } from "@unicas/admin-protocol";
 import type {
   AccountAppMembershipRecord,
+  AccountAppIdempotencyRecord,
   AppAccountAuditRecord,
   AccountProfileRecord,
   AccountPlatformViewRecord,
@@ -279,6 +280,99 @@ export class D1AccountRepository implements AccountRepository {
       createdAt: row.created_at,
       revision: row.revision,
     }));
+  }
+
+  async getAccountAppIdempotency(
+    input: Parameters<AccountRepository["getAccountAppIdempotency"]>[0],
+  ): Promise<AccountAppIdempotencyRecord | null> {
+    const row = await this.db.prepare(
+      `SELECT account_id, payload_hash, response_json, created_at, expires_at
+       FROM cas_account_app_idempotency
+       WHERE account_id = ? AND method = 'POST' AND canonical_route = '/admin/apps'
+         AND idempotency_key = ? AND expires_at > ?`,
+    ).bind(input.accountId, input.key, input.now).first<{
+      account_id: AccountId;
+      payload_hash: string;
+      response_json: string;
+      created_at: number;
+      expires_at: number;
+    }>();
+    return row ? {
+      accountId: row.account_id,
+      method: "POST",
+      canonicalRoute: "/admin/apps",
+      key: input.key,
+      payloadHash: row.payload_hash,
+      response: JSON.parse(row.response_json) as App,
+      createdAt: row.created_at,
+      expiresAt: row.expires_at,
+    } : null;
+  }
+
+  async commitCreateAccountApp(
+    input: Parameters<AccountRepository["commitCreateAccountApp"]>[0],
+  ): Promise<"created" | "actor-forbidden" | { readonly idempotencyRace: AccountAppIdempotencyRecord }> {
+    const identity = await this.getIdentity(input.actorExternalIdentityId);
+    if (!identity || identity.accountId !== input.actorAccountId || identity.unlinkedAt !== null) return "actor-forbidden";
+    const statements: D1PreparedStatement[] = [
+      this.db.prepare(
+        `SELECT CASE WHEN EXISTS (SELECT 1 FROM cas_accounts WHERE account_id = ? AND blocked_at IS NULL)
+          AND EXISTS (SELECT 1 FROM cas_external_identities WHERE external_identity_id = ? AND account_id = ? AND unlinked_at IS NULL)
+          AND EXISTS (SELECT 1 FROM cas_account_platform_authorities WHERE account_id = ? AND authority = 'apps.create')
+         THEN 1 ELSE json_extract('invalid', '$') END AS allowed`,
+      ).bind(input.actorAccountId, input.actorExternalIdentityId, input.actorAccountId, input.actorAccountId),
+      this.db.prepare(
+        "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES (?, ?, ?, ?, ?, ?)",
+      ).bind(input.app.appId, input.app.displayName, input.app.description, input.app.status, input.app.createdAt, input.app.revision),
+      this.db.prepare(
+        "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES (?, ?, ?, ?, ?)",
+      ).bind(input.app.appId, identity.issuer, identity.subject, input.app.createdAt, input.actorAccountId),
+      this.db.prepare(
+        `INSERT INTO cas_control_audit_events
+          (event_id, app_id, identity_issuer, subject, action, target, request_id,
+           trace_id, caller_channel, oauth_client_handle, tool_name, created_at,
+           original_account_id, external_identity_id, target_account_id)
+         VALUES (?, ?, ?, ?, 'app.created', ?, ?, ?, ?, NULL, NULL, ?, ?, ?, NULL)`,
+      ).bind(input.eventId, input.app.appId, identity.issuer, identity.subject, input.app.appId,
+        input.requestId ?? null, input.traceId ?? null, input.callerChannel ?? null,
+        input.app.createdAt, input.actorAccountId, input.actorExternalIdentityId),
+    ];
+    if (input.managedIssuer) {
+      const issuer = input.managedIssuer;
+      statements.push(this.db.prepare(
+        "INSERT INTO cas_app_managed_issuers (app_id, issuer, audience, metadata_url, authorization_endpoint, token_endpoint, jwks_uri, scopes_supported, code_challenge_methods_supported, status, verified_at, jwks_digest, capability_max_lifetime_seconds, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)",
+      ).bind(issuer.stackId, issuer.issuer, issuer.audience, issuer.metadataUrl,
+        issuer.authorizationEndpoint, issuer.tokenEndpoint, issuer.jwksUri,
+        JSON.stringify(issuer.scopesSupported), JSON.stringify(issuer.codeChallengeMethodsSupported),
+        issuer.verifiedAt, issuer.jwksDigest, issuer.capabilityMaxLifetimeSeconds, issuer.revision));
+    }
+    if (input.idempotency) {
+      statements.push(this.db.prepare(
+        `INSERT INTO cas_account_app_idempotency
+          (account_id, method, canonical_route, idempotency_key, payload_hash,
+           response_json, created_at, expires_at) VALUES (?, 'POST', '/admin/apps', ?, ?, ?, ?, ?)`,
+      ).bind(input.idempotency.accountId, input.idempotency.key, input.idempotency.payloadHash,
+        JSON.stringify(input.idempotency.response), input.idempotency.createdAt, input.idempotency.expiresAt));
+    }
+    statements.push(
+      this.db.prepare("INSERT OR IGNORE INTO cas_control_meta (key, value) VALUES ('snapshot', 0)"),
+      this.db.prepare("UPDATE cas_control_meta SET value = value + 1 WHERE key = 'snapshot'"),
+    );
+    try {
+      await this.db.batch(statements);
+      return "created";
+    } catch (error) {
+      if (input.idempotency && isUniqueFailure(error)) {
+        const existing = await this.getAccountAppIdempotency({
+          accountId: input.actorAccountId,
+          key: input.idempotency.key,
+          now: input.app.createdAt,
+        });
+        if (existing) return { idempotencyRace: existing };
+      }
+      if (isJsonFailure(error)) return "actor-forbidden";
+      throw error;
+    }
   }
 
   async listAppMemberships(

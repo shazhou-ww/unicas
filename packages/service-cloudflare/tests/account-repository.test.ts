@@ -248,6 +248,49 @@ describe("D1 Account repository", () => {
     })).rejects.toMatchObject({ code: "LAST_MEMBER" });
   });
 
+  test("atomically creates an App for an authorized Account and replays by Account idempotency", async () => {
+    const { db, service } = await fixture();
+    const actor = await service.createForExternalIdentity({
+      provider: "google",
+      issuer: "https://accounts.google.com",
+      subject: "app-creator",
+    });
+    await db.prepare(
+      "INSERT INTO cas_account_platform_authorities (account_id, authority, granted_at) VALUES (?, 'apps.create', 1)",
+    ).bind(actor.account.accountId).run();
+
+    const created = await service.createApp({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      displayName: "Created App",
+      idempotencyKey: "create-app",
+      requestId: "request-create",
+    });
+    const replayed = await service.createApp({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      displayName: "Created App",
+      idempotencyKey: "create-app",
+    });
+    expect(replayed.appId).toBe(created.appId);
+    expect(await db.prepare("SELECT COUNT(*) AS count FROM cas_apps").first()).toEqual({ count: 1 });
+    expect(await db.prepare("SELECT account_id FROM cas_app_members WHERE app_id = ?").bind(created.appId).first())
+      .toEqual({ account_id: actor.account.accountId });
+    expect(await db.prepare(
+      "SELECT action, original_account_id, external_identity_id FROM cas_control_audit_events WHERE app_id = ?",
+    ).bind(created.appId).first()).toEqual({
+      action: "app.created",
+      original_account_id: actor.account.accountId,
+      external_identity_id: actor.authenticatedIdentity.externalIdentityId,
+    });
+    await expect(service.createApp({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      displayName: "Changed",
+      idempotencyKey: "create-app",
+    })).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+  });
+
   test("manages platform authorities and block state by Account ID", async () => {
     const { db, service } = await fixture();
     const actor = await service.createForExternalIdentity({
