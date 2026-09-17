@@ -54,12 +54,12 @@ describe("AI tool connection", () => {
 
     render(<App />);
 
-    expect(await screen.findByText("Platform access")).toBeInTheDocument();
-    expect(screen.getByTitle("Create App")).toBeInTheDocument();
-
     // Open the user menu from sidebar footer
     const userMenuTrigger = await screen.findByRole("button", { name: "Open user menu" });
+    expect(screen.getByTitle("Create App")).toBeInTheDocument();
     await user.click(userMenuTrigger);
+
+    expect(await screen.findByRole("menuitem", { name: /^Administration$/i })).toBeInTheDocument();
 
     // Click "Connect AI tools" from dropdown
     const connectItem = await screen.findByRole("menuitem", { name: /connect ai tools/i });
@@ -119,10 +119,12 @@ describe("AI tool connection", () => {
       return new Response(null, { status: 404 });
     }));
 
+    const user = userEvent.setup();
     render(<App />);
 
-    await screen.findByRole("button", { name: "Open user menu" });
-    expect(screen.queryByText("Platform access")).not.toBeInTheDocument();
+    const userMenuTrigger = await screen.findByRole("button", { name: "Open user menu" });
+    await user.click(userMenuTrigger);
+    expect(screen.queryByRole("menuitem", { name: /^Administration$/i })).not.toBeInTheDocument();
     expect(screen.queryByTitle("Create App")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Create App" })).not.toBeInTheDocument();
   });
@@ -174,9 +176,9 @@ describe("AI tool connection", () => {
     expect(screen.getByRole("tab", { name: "Change Logs" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "People" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Audit" })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Platform Administration" })).toHaveClass("console-app-detail-title");
-    expect(screen.getByRole("tablist", { name: "Platform Administration sections" })).toHaveClass("console-app-tabs");
-    expect(peopleTab.closest(".console-app-detail-header")).toContainElement(screen.getByRole("heading", { name: "Platform Administration" }));
+    expect(screen.getByRole("heading", { name: "Administration" })).toHaveClass("console-app-detail-title");
+    expect(screen.getByRole("tablist", { name: "Administration sections" })).toHaveClass("console-app-tabs");
+    expect(peopleTab.closest(".console-app-detail-header")).toContainElement(screen.getByRole("heading", { name: "Administration" }));
     await waitFor(() => expect(window.location.hash).toBe("#/platform/people?filter=accounts"));
     peopleTab.focus();
     await userEvent.setup().keyboard("{ArrowRight}");
