@@ -30,6 +30,7 @@ const CONTROL_TABLE_MIGRATIONS = [
   "CREATE TABLE IF NOT EXISTS cas_control_audit_events (event_id TEXT NOT NULL, app_id TEXT, identity_issuer TEXT NOT NULL, subject TEXT NOT NULL, action TEXT NOT NULL, target TEXT NOT NULL, request_id TEXT, trace_id TEXT, caller_channel TEXT, oauth_client_handle TEXT, tool_name TEXT, created_at INTEGER NOT NULL, original_account_id TEXT, external_identity_id TEXT, target_account_id TEXT, PRIMARY KEY (event_id))",
   "CREATE TABLE IF NOT EXISTS cas_control_idempotency (identity_issuer TEXT NOT NULL, subject TEXT NOT NULL, method TEXT NOT NULL, canonical_route TEXT NOT NULL, idempotency_key TEXT NOT NULL, payload_hash TEXT NOT NULL, response_json TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, account_id TEXT, PRIMARY KEY (identity_issuer, subject, method, canonical_route, idempotency_key))",
   "CREATE TABLE IF NOT EXISTS cas_admin_sessions (session_id TEXT NOT NULL, encrypted_payload TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL, last_seen_at INTEGER NOT NULL, account_id TEXT, external_identity_id TEXT, credential_version INTEGER, PRIMARY KEY (session_id))",
+  "CREATE TABLE IF NOT EXISTS cas_email_challenges (challenge_id TEXT PRIMARY KEY, invitation_kind TEXT NOT NULL CHECK(invitation_kind IN ('app','platform')), invitation_id TEXT NOT NULL, invitation_token_hash TEXT NOT NULL, identity_issuer TEXT NOT NULL, subject TEXT NOT NULL, authentication_event_id TEXT NOT NULL, normalized_email TEXT NOT NULL, code_hash TEXT NOT NULL CHECK(length(code_hash) = 64), expires_at INTEGER NOT NULL, attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(attempt_count >= 0), max_attempts INTEGER NOT NULL CHECK(max_attempts > 0), send_count INTEGER NOT NULL DEFAULT 1 CHECK(send_count > 0), last_sent_at INTEGER NOT NULL, verified_at INTEGER, consumed_at INTEGER, invalidated_at INTEGER, created_at INTEGER NOT NULL, CHECK(verified_at IS NULL OR verified_at >= created_at), CHECK(consumed_at IS NULL OR (verified_at IS NOT NULL AND consumed_at >= verified_at)), CHECK(invalidated_at IS NULL OR invalidated_at >= created_at))",
   "CREATE TABLE IF NOT EXISTS cas_control_meta (key TEXT NOT NULL, value INTEGER NOT NULL, PRIMARY KEY (key))",
 ];
 
@@ -59,6 +60,8 @@ const CONTROL_INDEX_MIGRATIONS = [
   "CREATE INDEX IF NOT EXISTS cas_control_audit_by_app ON cas_control_audit_events(app_id, created_at, event_id)",
   "CREATE INDEX IF NOT EXISTS cas_control_idempotency_by_expiry ON cas_control_idempotency(expires_at)",
   "CREATE INDEX IF NOT EXISTS cas_admin_sessions_by_expiry ON cas_admin_sessions(expires_at)",
+  "CREATE INDEX IF NOT EXISTS cas_email_challenges_by_expiry ON cas_email_challenges(expires_at, challenge_id)",
+  "CREATE INDEX IF NOT EXISTS cas_email_challenges_by_invitation ON cas_email_challenges(invitation_kind, invitation_id, consumed_at)",
 ];
 
 export const CONTROL_SCHEMA_MIGRATIONS = [

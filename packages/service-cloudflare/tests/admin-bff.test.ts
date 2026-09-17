@@ -13,6 +13,9 @@ import type {
   ControlPlaneCallContext,
   ControlPlaneOperations,
   ControlSessionRepository,
+  EmailChallengeBinding,
+  EmailChallengeRecord,
+  EmailChallengeRepository,
   AccountRecord,
   AccountRepository,
   ExternalIdentityRecord,
@@ -593,6 +596,70 @@ class MemoryPlatformAccessRepository implements PlatformAccessRepository, Platfo
   async appendAudit(event: PlatformAuditRecord): Promise<void> { this.platformAudits.push(event); }
 }
 
+class MemoryEmailChallengeRepository implements EmailChallengeRepository {
+  readonly records = new Map<string, EmailChallengeRecord>();
+
+  async create(record: EmailChallengeRecord): Promise<"created" | "conflict" | "rate-limited"> {
+    if (this.records.has(record.challengeId)) return "conflict";
+    this.records.set(record.challengeId, record);
+    return "created";
+  }
+
+  async get(challengeId: string): Promise<EmailChallengeRecord | null> {
+    return this.records.get(challengeId) ?? null;
+  }
+
+  async invalidate(input: Parameters<EmailChallengeRepository["invalidate"]>[0]): Promise<void> {
+    const record = this.records.get(input.challengeId);
+    if (record && sameChallengeBinding(record, input.binding) && record.consumedAt === null) {
+      this.records.set(record.challengeId, { ...record, invalidatedAt: input.now });
+    }
+  }
+
+  async verify(input: Parameters<EmailChallengeRepository["verify"]>[0]): ReturnType<EmailChallengeRepository["verify"]> {
+    const record = this.records.get(input.challengeId);
+    if (!record || !sameChallengeBinding(record, input.binding) || record.verifiedAt !== null
+      || record.invalidatedAt !== null
+      || record.consumedAt !== null || record.expiresAt <= input.now
+      || record.attemptCount >= record.maxAttempts) return { kind: "failed" };
+    const verifiedAt = record.codeHash === input.codeHash ? input.now : null;
+    this.records.set(record.challengeId, {
+      ...record,
+      attemptCount: record.attemptCount + 1,
+      verifiedAt,
+    });
+    return verifiedAt === null
+      ? { kind: "failed" }
+      : { kind: "verified", verifiedAt, expiresAt: record.expiresAt };
+  }
+
+  async resend(input: Parameters<EmailChallengeRepository["resend"]>[0]): ReturnType<EmailChallengeRepository["resend"]> {
+    const record = this.records.get(input.challengeId);
+    if (!record || !sameChallengeBinding(record, input.binding) || record.verifiedAt !== null
+      || record.invalidatedAt !== null
+      || record.consumedAt !== null || record.expiresAt <= input.now
+      || record.attemptCount >= record.maxAttempts || record.sendCount >= input.maxSends
+      || record.lastSentAt + input.minimumIntervalMs > input.now) return { kind: "failed" };
+    this.records.set(record.challengeId, {
+      ...record,
+      codeHash: input.codeHash,
+      sendCount: record.sendCount + 1,
+      lastSentAt: input.now,
+    });
+    return { kind: "resent", expiresAt: record.expiresAt };
+  }
+}
+
+function sameChallengeBinding(left: EmailChallengeBinding, right: EmailChallengeBinding): boolean {
+  return left.invitationKind === right.invitationKind
+    && left.invitationId === right.invitationId
+    && left.invitationTokenHash === right.invitationTokenHash
+    && left.issuer === right.issuer
+    && left.subject === right.subject
+    && left.authenticationEventId === right.authenticationEventId
+    && left.normalizedEmail === right.normalizedEmail;
+}
+
 function testAccountId(subject: string): `acct_${string}` {
   const normalized = subject.replace(/[^A-Za-z0-9_-]/g, "_").padEnd(22, "_").slice(0, 22);
   return `acct_${normalized}`;
@@ -1019,6 +1086,186 @@ describe("cas-admin-webui BFF", () => {
     ));
     expect(callback.status).toBe(302);
     expect(callback.headers.get("Location")).toBe(`/admin/#/invitations/${token}`);
+  });
+
+  test("requires an invitation-bound email challenge for Microsoft and rejects replay", async () => {
+    let clock = Date.now();
+    const token = "m".repeat(32);
+    const platform = new MemoryPlatformAccessRepository();
+    await platform.addInvitation(token, "alice@example.com");
+    const challengeRepository = new MemoryEmailChallengeRepository();
+    const deliveries: { to: string; code: string }[] = [];
+    const microsoft: ProviderAdapter = {
+      kind: "microsoft",
+      displayName: "Microsoft",
+      begin: async context => `https://microsoft.example/authorize?state=${encodeURIComponent(context.state)}`,
+      complete: async input => ({
+        provider: "microsoft",
+        issuer: "https://login.microsoftonline.com/consumers/v2.0",
+        subject: "microsoft-subject",
+        displayName: "Alice",
+        avatarUrl: null,
+        accountHint: "alice@example.com",
+        verifiedEmailEvidence: [],
+        authenticatedAt: Date.now(),
+        authenticationEventId: input.authenticationEventId,
+      }),
+    };
+    const config: AdminBffConfig = {
+      googleClientId: CLIENT_ID,
+      googleClientSecret: CLIENT_SECRET,
+      sessionEncryptionKeys: { v1: randomKey() },
+      publicOrigin: PUBLIC_ORIGIN,
+      sessionCookieSecure: false,
+      now: () => clock,
+    };
+    const bff = createAdminBff({
+      config,
+      controlPlane: fakeControlPlane(),
+      sessionStore: new MemorySessionRepository(),
+      platformAccessRepository: platform,
+      accountRepository: memoryAccountRepository(platform, "seed-admin"),
+      providerRegistry: new ProviderRegistry([microsoft]),
+      emailChallengeRepository: challengeRepository,
+      emailChallengeSender: {
+        send: async delivery => { deliveries.push({ to: delivery.to, code: delivery.code }); },
+      },
+    });
+
+    const started = await bff(new Request(`${PUBLIC_ORIGIN}/admin/invitations/${token}`));
+    const preLoginCookie = cookieFrom(started)!;
+    const state = new URL(started.headers.get("Location")!).searchParams.get("state")!;
+    const callback = await bff(new Request(
+      `${PUBLIC_ORIGIN}/admin/auth/callback/microsoft?code=code&state=${encodeURIComponent(state)}`,
+      { headers: { Cookie: preLoginCookie } },
+    ));
+    expect(callback.status).toBe(302);
+    expect(callback.headers.get("Location")).toBe("/admin/auth/email-challenge");
+    const challengeCookie = cookieFrom(callback)!;
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0]!.to).toBe("alice@example.com");
+
+    const page = await authRequest(bff, "/admin/auth/email-challenge", challengeCookie);
+    const html = await page.text();
+    expect(page.status).toBe(200);
+    expect(html).toContain("al***@example.com");
+    expect(html).not.toContain("alice@example.com");
+    const csrf = /const csrf = "([^"]+)"/.exec(html)![1]!;
+
+    const missingOrigin = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/email-challenge/verify`, {
+      method: "POST",
+      headers: { Cookie: challengeCookie, "Content-Type": "application/json", "X-CSRF-Token": csrf },
+      body: JSON.stringify({ code: deliveries[0]!.code }),
+    }));
+    expect(missingOrigin.status).toBe(400);
+
+    const rateLimitedResend = await authRequest(bff, "/admin/auth/email-challenge/resend", challengeCookie, {
+      method: "POST",
+      headers: { "X-CSRF-Token": csrf },
+    });
+    expect(rateLimitedResend.status).toBe(204);
+    expect(deliveries).toHaveLength(1);
+    clock += 60_000;
+    const resent = await authRequest(bff, "/admin/auth/email-challenge/resend", challengeCookie, {
+      method: "POST",
+      headers: { "X-CSRF-Token": csrf },
+    });
+    expect(resent.status).toBe(204);
+    expect(deliveries).toHaveLength(2);
+    const resentCookie = cookieFrom(resent)!;
+    expect((await authRequest(bff, "/admin/auth/email-challenge", challengeCookie)).status).toBe(400);
+
+    const wrong = await authRequest(bff, "/admin/auth/email-challenge/verify", resentCookie, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+      body: JSON.stringify({ code: deliveries[0]!.code }),
+    });
+    expect(wrong.status).toBe(400);
+    expect(await wrong.json()).toEqual({ error: "EMAIL_CHALLENGE_FAILED", message: "email verification failed" });
+
+    const verified = await authRequest(bff, "/admin/auth/email-challenge/verify", resentCookie, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+      body: JSON.stringify({ code: deliveries[1]!.code }),
+    });
+    expect(verified.status).toBe(200);
+    expect(await verified.json()).toEqual({ next: `/admin/#/invitations/${token}` });
+    const invitationCookie = cookieFrom(verified)!;
+    expect(invitationCookie).not.toBe(resentCookie);
+    const limited = await authRequest(bff, "/admin/me", invitationCookie);
+    expect(limited.status).toBe(403);
+    expect(await limited.json()).toMatchObject({ error: "INVITATION_SESSION_REQUIRED" });
+
+    const replay = await authRequest(bff, "/admin/auth/email-challenge/verify", resentCookie, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+      body: JSON.stringify({ code: deliveries[0]!.code }),
+    });
+    expect(replay.status).toBe(400);
+  });
+
+  test("invalidates challenge state when email delivery fails without logging secrets", async () => {
+    const token = "d".repeat(32);
+    const platform = new MemoryPlatformAccessRepository();
+    await platform.addInvitation(token, "private@example.com");
+    const challengeRepository = new MemoryEmailChallengeRepository();
+    let attemptedCode = "";
+    const microsoft: ProviderAdapter = {
+      kind: "microsoft",
+      displayName: "Microsoft",
+      begin: async context => `https://microsoft.example/authorize?state=${encodeURIComponent(context.state)}`,
+      complete: async input => ({
+        provider: "microsoft",
+        issuer: "https://login.microsoftonline.com/consumers/v2.0",
+        subject: "delivery-failure-subject",
+        displayName: "Private Invitee",
+        avatarUrl: null,
+        accountHint: "untrusted@example.com",
+        verifiedEmailEvidence: [],
+        authenticatedAt: Date.now(),
+        authenticationEventId: input.authenticationEventId,
+      }),
+    };
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const bff = createAdminBff({
+      config: {
+        googleClientId: CLIENT_ID,
+        googleClientSecret: CLIENT_SECRET,
+        sessionEncryptionKeys: { v1: randomKey() },
+        publicOrigin: PUBLIC_ORIGIN,
+        sessionCookieSecure: false,
+      },
+      controlPlane: fakeControlPlane(),
+      sessionStore: new MemorySessionRepository(),
+      platformAccessRepository: platform,
+      accountRepository: memoryAccountRepository(platform, "seed-admin"),
+      providerRegistry: new ProviderRegistry([microsoft]),
+      emailChallengeRepository: challengeRepository,
+      emailChallengeSender: {
+        send: async delivery => {
+          attemptedCode = delivery.code;
+          throw new Error(`delivery failed for ${delivery.to} using ${delivery.code}`);
+        },
+      },
+    });
+
+    const started = await bff(new Request(`${PUBLIC_ORIGIN}/admin/invitations/${token}`));
+    const preLoginCookie = cookieFrom(started)!;
+    const state = new URL(started.headers.get("Location")!).searchParams.get("state")!;
+    const callback = await bff(new Request(
+      `${PUBLIC_ORIGIN}/admin/auth/callback/microsoft?code=code&state=${encodeURIComponent(state)}`,
+      { headers: { Cookie: preLoginCookie } },
+    ));
+    expect(callback.headers.get("Location")).toBe("/admin/auth/login?error=access-denied");
+    expect(callback.headers.get("Set-Cookie")).toBeNull();
+    expect([...challengeRepository.records.values()]).toEqual([
+      expect.objectContaining({ consumedAt: null, invalidatedAt: expect.any(Number) }),
+    ]);
+    const logs = JSON.stringify(consoleError.mock.calls);
+    expect(logs).not.toContain("private@example.com");
+    expect(logs).not.toContain(attemptedCode);
+    expect(logs).not.toContain(token);
+    consoleError.mockRestore();
   });
 
   test("admits linked providers through one Account and rejects stale credential versions", async () => {

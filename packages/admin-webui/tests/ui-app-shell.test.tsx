@@ -43,12 +43,14 @@ const me = {
   principal: { issuer: "https://accounts.example", subject: "admin" },
   profile: { displayName: "Admin", emailForDisplay: "admin@example.com" },
   platformAccess: { principalRef: "admin-ref", status: "active", authorities: ["apps.create"], revision: 1 },
-  memberships: [{ appId: currentApp.appId, account: {
-    accountId: account.accountId,
-    displayName: account.displayName,
-    primaryVerifiedEmail: account.primaryVerifiedEmail,
-    avatar: account.avatar,
-  } }],
+  memberships: [{
+    appId: currentApp.appId, account: {
+      accountId: account.accountId,
+      displayName: account.displayName,
+      primaryVerifiedEmail: account.primaryVerifiedEmail,
+      avatar: account.avatar,
+    }
+  }],
 };
 
 function managedIssuer(status: "active" | "disabled" = "active") {

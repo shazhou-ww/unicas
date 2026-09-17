@@ -205,10 +205,21 @@ dual-write Account and ExternalIdentity attribution, migration backfills and
 reconciles persisted attribution, and historical unlinked identities remain
 resolvable. Strict v2 and MCP schemas reject Principal-shaped audit filters.
 The slice is published on `origin/main` as
-`5aab332157005820157497485dd4506dd136e211`.
+`5aab332e372a537dd89aa99f927368a56c52519b`.
 
-Next: implement the short-lived, single-use UniCAS email challenge required for
-personal Microsoft accounts to accept email-constrained invitations.
+The twelfth implementation slice is in progress locally. Microsoft invitation
+callbacks now use an encrypted challenge continuation, six-digit codes,
+hash-only D1 persistence, bounded attempts and resends, delivery-failure
+invalidation, and atomic App/platform invitation evidence consumption. Worker
+composition adds the structured Email binding and hourly expiry cleanup.
+Production sender-domain onboarding and real email delivery are not verified.
+
+Next: coordinate correction of the other identity's missing Claim evidence
+listed under Blockers, then rerun `repoledger doctor` and `pnpm check:tasks`.
+Finish challenge browser checks and security regression coverage before
+publishing checkpoint twelve. Remote MCP still needs shared provider login
+and Account-bound credential-version enforcement; deployment-stage and rollback
+rehearsals also remain before implementation completion.
 
 ## Decisions
 
@@ -531,13 +542,36 @@ personal Microsoft accounts to accept email-constrained invitations.
   `@unicas/admin-webui` all 91, and `@unicas/service-cloudflare` all 267. All
   workspace package typechecks passed; the regenerated v2 OpenAPI passed all 4
   drift checks and the production Console/Worker build passed.
-- Account-keyed audit commit `5aab332157005820157497485dd4506dd136e211`
+- Account-keyed audit commit `5aab332e372a537dd89aa99f927368a56c52519b`
   was pushed and verified reachable from refreshed `origin/main` by
   `repoledger doctor` and `git merge-base`.
+- The previously recorded full audit hash was transcribed incorrectly; the
+  corrected value above was obtained from `git show -s --format=%H 5aab332`.
+- Challenge validation: service suite passed 142 tests; Cloudflare passed 275
+  tests across 31 files on rerun. An initial parallel run timed out the existing
+  30-second link/unlink test; its isolated rerun and subsequent full run passed.
+  Workspace typecheck, docs checks (3 tests), Console/Worker production build,
+  and actual `wrangler deploy --dry-run` passed. The deployment planner only
+  prints commands; it is not the Wrangler dry-run validation.
+- A focused D1 rerun passed 4 tests after binding verification's compare-and-set
+  to the code hash, including a deterministic resend-versus-verify race.
 
 ## Blockers
 
-None.
+Publication/readiness is blocked by a concurrent task-ledger error:
+`history.evidence.commit-missing` in
+`tasks/ongoing/xiaoju-neko-vm/simplify-console-administration-navigation/Progress.md`.
+Its Claim is marked Published with evidence `完成`, not an immutable shared-branch
+commit hash. Both `pnpm check:tasks` and a refreshed `pnpm exec repoledger doctor`
+report this error. The owning identity must record its actual Claim publication
+evidence; this task does not modify another owner's ledger.
+
+Checkpoint twelve remains uncommitted and unpublished. Challenge browser
+validation and the remaining security checks are not complete. Concurrent edits
+to CLI command tests and WebUI shell tests were observed and left untouched.
+The validation results above precede those concurrent edits and are not evidence
+for their current contents. No production deployment or real mail delivery was
+performed.
 
 ## Outcome
 

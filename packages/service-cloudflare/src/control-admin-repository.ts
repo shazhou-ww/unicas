@@ -374,6 +374,29 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
   async commitAcceptMemberInvitation(
     plan: ControlAcceptMemberInvitationPlan,
   ): Promise<ControlAcceptMemberInvitationCommitResult> {
+    const consumeChallenge = plan.emailChallenge
+      ? [
+        this.#db.prepare(
+          `UPDATE cas_email_challenges SET consumed_at = ?
+           WHERE challenge_id = ? AND invitation_kind = 'app' AND invitation_id = ?
+             AND invitation_token_hash = ? AND identity_issuer = ? AND subject = ?
+             AND authentication_event_id = ? AND normalized_email = ?
+             AND verified_at IS NOT NULL AND consumed_at IS NULL
+             AND invalidated_at IS NULL AND expires_at > ?`,
+        ).bind(
+          plan.now,
+          plan.emailChallenge.challengeId,
+          plan.invitationId,
+          plan.tokenHash,
+          plan.identity.identityIssuer,
+          plan.identity.subject,
+          plan.emailChallenge.authenticationEventId,
+          plan.primaryVerifiedEmail!.normalizedEmail,
+          plan.now,
+        ),
+        this.#db.prepare("SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('invalid', '$') END AS consumed"),
+      ]
+      : [];
     const claim = this.#db.prepare(
       "UPDATE cas_app_member_invitations SET status = 'accepted', revision = revision + 1 WHERE invitation_id = ? AND token_hash = ? AND status = 'pending' AND expires_at > ?",
     ).bind(plan.invitationId, plan.tokenHash, plan.now);
@@ -446,6 +469,7 @@ export class D1ControlPlaneAdminRepository implements ControlPlaneAdminRepositor
       : [];
     try {
       await this.#db.batch([
+        ...consumeChallenge,
         claim,
         requireClaimed,
         synchronizeIdentity,

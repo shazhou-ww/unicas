@@ -14,6 +14,8 @@ export interface AdminBffConfig {
   readonly microsoftDiscoveryUrl?: string;
   readonly githubClientId?: string;
   readonly githubClientSecret?: string;
+  /** Verified sender address for invitation email challenges. */
+  readonly emailFrom?: string;
   /**
    * Versioned session encryption keys: key id -> base64url 32-byte AES key.
    * New sessions use the newest key; older keys decrypt until retired.
@@ -62,6 +64,8 @@ export interface AdminBffEnv {
   MICROSOFT_OIDC_DISCOVERY_URL?: string;
   GITHUB_OAUTH_CLIENT_ID?: string;
   GITHUB_OAUTH_CLIENT_SECRET?: string;
+  EMAIL?: SendEmail;
+  ADMIN_EMAIL_FROM?: string;
   SESSION_ENCRYPTION_KEYS?: string;
   OIDC_ISSUER?: string;
   OIDC_DISCOVERY_URL?: string;
@@ -127,6 +131,11 @@ export function configFromEnv(env: AdminBffEnv): AdminBffConfig {
     throw new Error("ADMIN_TEST_ACCOUNT_EMAIL and ADMIN_TEST_ACCOUNT_PASSWORD must be configured together");
   }
   if (testAccountEmail.length > 0) validateEmail(testAccountEmail, "ADMIN_TEST_ACCOUNT_EMAIL");
+  const emailFrom = env.ADMIN_EMAIL_FROM?.trim().toLowerCase();
+  if (emailFrom) validateEmail(emailFrom, "ADMIN_EMAIL_FROM");
+  if (microsoftClientId && (!env.EMAIL || !emailFrom)) {
+    throw new Error("Microsoft OIDC requires EMAIL and ADMIN_EMAIL_FROM for invitation challenges");
+  }
 
   let emailAllowlist: readonly string[] | undefined;
   if (env.ADMIN_EMAIL_ALLOWLIST !== undefined) {
@@ -151,6 +160,7 @@ export function configFromEnv(env: AdminBffEnv): AdminBffConfig {
     microsoftDiscoveryUrl: env.MICROSOFT_OIDC_DISCOVERY_URL,
     githubClientId: githubClientId?.id,
     githubClientSecret: githubClientId?.secret,
+    emailFrom,
     sessionEncryptionKeys,
     oidcIssuer: env.OIDC_ISSUER ?? DEFAULT_OIDC_ISSUER,
     oidcDiscoveryUrl: env.OIDC_DISCOVERY_URL,

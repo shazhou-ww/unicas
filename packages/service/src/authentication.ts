@@ -16,6 +16,7 @@ export interface VerifiedEmailEvidence {
   readonly verifiedAt: number;
   readonly expiresAt: number;
   readonly authenticationEventId: string;
+  readonly challengeId?: string;
 }
 
 export interface AuthenticatedProviderResult {
@@ -107,7 +108,8 @@ export function requireInvitationEmailEvidence(
   now: number,
 ): VerifiedEmailEvidence {
   const normalizedEmail = normalizeEmail(invitationEmail);
-  const matching = evidence.filter(item => item.normalizedEmail === normalizedEmail);
+  const matching = evidence.filter(item => item.normalizedEmail === normalizedEmail
+    && (item.source !== "unicas-email-challenge" || item.challengeId !== undefined));
   if (matching.length === 0) {
     throw new EmailEvidenceError(evidence.length === 0
       ? "EMAIL_EVIDENCE_ABSENT"

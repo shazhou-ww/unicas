@@ -84,6 +84,7 @@ describe("verified email evidence", () => {
       verifiedAt: 1000,
       expiresAt: 1100,
       authenticationEventId: "microsoft-event",
+      challengeId: "challenge-1",
     };
     expect(requireInvitationEmailEvidence([challengeEvidence], "alice@example.com", 1050))
       .toBe(challengeEvidence);

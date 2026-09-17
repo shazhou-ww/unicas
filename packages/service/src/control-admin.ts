@@ -226,6 +226,10 @@ export interface ControlAcceptMemberInvitationPlan {
   readonly identity: ControlIdentityRecord;
   readonly membership: ControlMembershipRecord & { readonly joinedAt: number };
   readonly primaryVerifiedEmail: PrimaryVerifiedEmail | null;
+  readonly emailChallenge: {
+    readonly challengeId: string;
+    readonly authenticationEventId: string;
+  } | null;
   readonly audit: ControlAuditRecord;
 }
 
@@ -822,6 +826,7 @@ export class ControlPlaneAdminService {
       }
       const profile = ctx.profile ?? { displayName: null, emailForDisplay: null };
       let primaryVerifiedEmail: PrimaryVerifiedEmail | null = null;
+      let emailChallenge: ControlAcceptMemberInvitationPlan["emailChallenge"] = null;
       if (invitation.emailConstraint !== null) {
         try {
           const evidence = requireInvitationEmailEvidence(
@@ -834,6 +839,12 @@ export class ControlPlaneAdminService {
             source: evidence.source,
             verifiedAt: evidence.verifiedAt,
           };
+          if (evidence.source === "unicas-email-challenge") {
+            emailChallenge = {
+              challengeId: evidence.challengeId!,
+              authenticationEventId: evidence.authenticationEventId,
+            };
+          }
         } catch {
           throw new ControlPlaneError(CasAdminErrorCodes.NOT_FOUND, "invitation is bound to another email");
         }
@@ -855,6 +866,7 @@ export class ControlPlaneAdminService {
         identity,
         membership,
         primaryVerifiedEmail,
+        emailChallenge,
         audit: this.#audit(ctx, ControlAuditActions.memberInvitationAccepted, invitation.invitationId, invitation.stackId),
       });
       if (result.kind === "unavailable") {

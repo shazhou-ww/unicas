@@ -10,8 +10,9 @@ Runbooks, SLOs, and alerting for the independently deployed CAS middleware
 | Control D1 | `unicas-control` (`3a64d58d-…`) | Apps, issuers, members, and audit; physical tables still use Stack names |
 | Data D1 | `unicas-tenant` (`c3924c96-…`) | App/Space nodes, edges, and Root Refs; resource name is a physical compatibility identifier |
 | R2 | `unicas-content`, `unicas-content-preview` | node content |
+| Email | `EMAIL` send binding | Microsoft invitation challenges from the configured UniCAS sender |
 
-Secrets live only as Worker secrets (Google OIDC client secret,
+Secrets live only as Worker secrets (Google, Microsoft, and GitHub client secrets,
 `SESSION_ENCRYPTION_KEYS`, `OAUTH_STATE_ENCRYPTION_KEY`,
 `CAS_AUDIT_READER_KEY`, managed issuer private keys) — never
 in vars or source. Deployment credentials are supplied through
@@ -48,6 +49,8 @@ Cloudflare dashboard / logpush):
    `unknown_issuer` and `registry_unavailable` in their HTTP responses.
 - `admin_oidc_callback_failed` — administrator login callback failures with a
    bounded reason and no token material.
+- `admin_email_challenge_delivery_failed` — generic Email binding failure; the
+   event contains no address, code, invitation token, or provider payload.
 
 Roll-up per 5-min window (via CF Analytics API or a logpush consumer):
 service request count + 5xx rate, Space 401/403 rate by error code

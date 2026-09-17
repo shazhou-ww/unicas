@@ -272,6 +272,29 @@ export class D1PlatformAccessRepository implements PlatformAccessRepository, Pla
   async commitAcceptInvitation(
     input: Parameters<PlatformInvitationRepository["commitAcceptInvitation"]>[0],
   ): Promise<"accepted" | "not-pending" | "blocked"> {
+    const consumeChallenge = input.emailChallenge
+      ? [
+        this.db.prepare(
+          `UPDATE cas_email_challenges SET consumed_at = ?
+           WHERE challenge_id = ? AND invitation_kind = 'platform' AND invitation_id = ?
+             AND invitation_token_hash = ? AND identity_issuer = ? AND subject = ?
+             AND authentication_event_id = ? AND normalized_email = ?
+             AND verified_at IS NOT NULL AND consumed_at IS NULL
+             AND invalidated_at IS NULL AND expires_at > ?`,
+        ).bind(
+          input.now,
+          input.emailChallenge.challengeId,
+          input.invitation.invitationId,
+          input.tokenHash,
+          input.principal.issuer,
+          input.principal.subject,
+          input.emailChallenge.authenticationEventId,
+          input.primaryVerifiedEmail.normalizedEmail,
+          input.now,
+        ),
+        this.db.prepare("SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('invalid', '$') END AS consumed"),
+      ]
+      : [];
     const requireNotBlocked = this.db.prepare(
       "SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM cas_platform_principals WHERE identity_issuer = ? AND subject = ? AND status = 'blocked') THEN 1 ELSE json_extract('invalid', '$') END AS allowed",
     ).bind(input.principal.issuer, input.principal.subject);
@@ -350,6 +373,7 @@ export class D1PlatformAccessRepository implements PlatformAccessRepository, Pla
     try {
       await this.db.batch([
         requireNotBlocked,
+        ...consumeChallenge,
         claim,
         requireClaimed,
         synchronizeIdentity,

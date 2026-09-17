@@ -32,6 +32,12 @@ preview_bucket_name = "unicas-content-preview"
 binding = "OAUTH_KV"
 id = "105946859be94ca8b0563dd7b45099d0"
 
+[[send_email]]
+name = "EMAIL"
+
+[triggers]
+crons = ["17 * * * *"]
+
 [durable_objects]
 bindings = [
   { name = "CAS_DO", class_name = "CasDurableObject" },
@@ -59,3 +65,4 @@ CAS_R2_ACCOUNT_ID = "92c3c4fdcc84a1590555bccf4f111de2"
 CAS_R2_BUCKET_NAME = "unicas-content"
 CAS_UPLOAD_URL_EXPIRY_SECONDS = "300"
 MANAGED_ISSUER_KEY_ID = "managed-2026-09"
+ADMIN_EMAIL_FROM = "no-reply@unicas.work"

@@ -81,6 +81,7 @@ describe("control schema", () => {
       "cas_account_aliases",
       "cas_identity_migration_map",
       "cas_identity_migration_journal",
+      "cas_email_challenges",
     ]) expect(names.has(expected), `missing table ${expected}`).toBe(true);
 
     const authorityColumns = await database.prepare(

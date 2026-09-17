@@ -7,6 +7,7 @@ import type { CasAdminErrorResponse, CasOperatorIdentityKey } from "@unicas/admi
 import {
   AppSpaceCapabilityVerifier,
   ControlAuditActions,
+  sha256Hex,
   type ControlPlaneCallContext,
   type ControlPlaneOperations,
   type ManagedCapabilityIssuer,
@@ -236,6 +237,74 @@ describe("D1-backed control-plane service", () => {
     if (!("invitation" in expiring)) throw new Error("invite failed");
     clock += 25 * 60 * 60 * 1000;
     expectError(await service.acceptMemberInvitation(ctx(alice), { path: { token: expiring.acceptUrl.split("/").pop()! } }), CasAdminErrorCodes.NOT_FOUND);
+  }, 10_000);
+
+  test("atomically consumes Microsoft challenge evidence with an App invitation", async () => {
+    const { db, service } = await createService(() => 1_000);
+    const stackId = await createStack(service);
+    const created = await service.createMemberInvitation(
+      ctx(alice),
+      { path: { stackId }, body: { emailConstraint: "invitee@example.com" } },
+      { idempotencyKey: "challenge-invite" },
+    );
+    if (!("invitation" in created)) throw new Error("invite failed");
+    const token = created.acceptUrl.split("/").pop()!;
+    const accountId = `acct_${"m".repeat(22)}`;
+    const microsoft = {
+      identityIssuer: "https://login.microsoftonline.com/consumers/v2.0",
+      subject: "microsoft-subject",
+    };
+    await db.prepare(
+      "INSERT INTO cas_accounts (account_id, credential_version, created_at, updated_at) VALUES (?, 1, 1, 1)",
+    ).bind(accountId).run();
+    await db.prepare(
+      "INSERT INTO cas_external_identities (external_identity_id, account_id, provider, issuer, subject, linked_at) VALUES ('ext-microsoft', ?, 'microsoft', ?, ?, 1)",
+    ).bind(accountId, microsoft.identityIssuer, microsoft.subject).run();
+    await db.prepare(
+      `INSERT INTO cas_email_challenges
+        (challenge_id, invitation_kind, invitation_id, invitation_token_hash,
+         identity_issuer, subject, authentication_event_id, normalized_email,
+         code_hash, expires_at, max_attempts, last_sent_at, verified_at, created_at)
+       VALUES ('challenge-app', 'app', ?, ?, ?, ?, 'auth-microsoft',
+         'invitee@example.com', ?, 2000, 5, 900, 900, 900)`,
+    ).bind(
+      created.invitation.invitationId,
+      await sha256Hex(token),
+      microsoft.identityIssuer,
+      microsoft.subject,
+      "0".repeat(64),
+    ).run();
+    const challengeContext: ControlPlaneCallContext = {
+      identity: microsoft,
+      profile: { displayName: "Microsoft Invitee", emailForDisplay: null },
+      verifiedEmailEvidence: [{
+        normalizedEmail: "invitee@example.com",
+        source: "unicas-email-challenge",
+        verifiedAt: 900,
+        expiresAt: 2_000,
+        authenticationEventId: "auth-microsoft",
+        challengeId: "challenge-app",
+      }],
+    };
+    expect(await service.acceptMemberInvitation(challengeContext, { path: { token } }))
+      .toMatchObject({ stackId, subject: microsoft.subject });
+    expect(await db.prepare(
+      "SELECT consumed_at FROM cas_email_challenges WHERE challenge_id = 'challenge-app'",
+    ).first()).toEqual({ consumed_at: 1000 });
+
+    const replay = await service.createMemberInvitation(
+      ctx(alice),
+      { path: { stackId }, body: { emailConstraint: "invitee@example.com" } },
+      { idempotencyKey: "challenge-replay" },
+    );
+    if (!("invitation" in replay)) throw new Error("invite failed");
+    expectError(
+      await service.acceptMemberInvitation(challengeContext, { path: { token: replay.acceptUrl.split("/").pop()! } }),
+      CasAdminErrorCodes.NOT_FOUND,
+    );
+    expect(await db.prepare(
+      "SELECT status FROM cas_app_member_invitations WHERE invitation_id = ?",
+    ).bind(replay.invitation.invitationId).first()).toEqual({ status: "pending" });
   }, 10_000);
 
   test("lists non-secret App invitations and conditionally revokes without deleting history", async () => {

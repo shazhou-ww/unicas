@@ -8,12 +8,14 @@ Status: accepted terminology
 | --- | --- |
 | **App** | The top-level application, trust, administration, issuer, audit, and storage namespace |
 | **Space** | An App-scoped logical boundary for data ownership, isolation, authorization, and usage accounting |
-| **Principal** | An authenticated human or service identity, keyed by `(issuer, subject)` |
-| **Profile** | Non-authoritative display metadata such as display name and email |
-| **Member** | A Principal granted equal administrator authority over an App |
-| **Platform Access** | Persistent administrator-plane admission state for a Principal; active authority or App membership grants admission, while blocked denies it |
-| **Platform Admin** | A Principal with the independent `platform.admin` authority, permitted to manage Platform Access and platform invitations |
-| **App Creator** | A Principal with the independent `apps.create` authority, permitted to create Apps |
+| **Account** | The stable opaque UniCAS administrator subject that owns access, memberships, profile, sessions, and resource relationships |
+| **External Identity** | One immutable provider `(issuer, subject)` login bound to an Account; exact identity remains privileged audit evidence |
+| **Principal** | Deprecated administrator compatibility projection keyed by `(issuer, subject)`; new contracts use Account |
+| **Profile** | Mutable, non-authoritative Account display metadata such as display name and avatar |
+| **Member** | An Account granted equal administrator authority over an App |
+| **Platform Access** | Administrator-plane admission for an Account; active authority or App membership grants admission, while `blockedAt` denies every linked identity |
+| **Platform Admin** | An Account with the independent `platform.admin` authority, permitted to manage Platform Access and platform invitations |
+| **App Creator** | An Account with the independent `apps.create` authority, permitted to create Apps |
 
 App replaces the earlier public term Stack. Space replaces the earlier public
 term Tenant in the new API contract.
@@ -28,9 +30,9 @@ integrating App.
 Valid mappings include:
 
 ```text
-one Principal -> one personal Space
-one Principal -> multiple Spaces
-multiple Principals -> one shared Space
+one Account -> one personal Space
+one Account -> multiple Spaces
+multiple Accounts -> one shared Space
 service Principal -> one automation Space
 ```
 
@@ -40,12 +42,14 @@ use “space” to mean free disk capacity in product text.
 
 ## Identity boundary
 
-Principal answers “who was authenticated.” Space answers “which isolated data
-unit may be accessed.” They are deliberately independent.
+Account answers “which stable administrator owns access.” External Identity
+answers “which provider credential authenticated this request.” Space answers
+“which isolated data unit may be accessed.” They are deliberately independent.
 
-Only `(issuer, subject)` is authoritative Principal identity. Profile fields
-may change and never alter App membership, Space ownership, authorization, or
-audit identity.
+Only `(issuer, subject)` identifies an External Identity, and it binds to one
+opaque `accountId`. Email never links Accounts or moves authority. Profile and
+primary-contact fields may change and never alter App membership, Space
+ownership, authorization, or historical audit attribution.
 
 Platform authorities are independent. `platform.admin` does not imply
 `apps.create`, and App membership implies neither. An email may constrain an
@@ -66,7 +70,7 @@ caller claim.
 
 ```text
 App
-├── App administrators (Principal memberships)
+├── App administrators (Account memberships)
 ├── OAuth issuer configuration
 ├── control audit
 └── Spaces
@@ -77,7 +81,8 @@ App
     └── garbage collection
 
 Platform administration
-├── Principal access state and authorities
+├── Account access state and authorities
+├── linked External Identities
 ├── verified-email platform invitations
 └── platform authorization audit
 ```
@@ -97,8 +102,9 @@ AppMembership
 AppOAuthIssuer
 AppAuditEvent
 SpaceUsage
-Principal { issuer, subject }
-Profile { displayName, emailForDisplay }
+Account { accountId, blockedAt, credentialVersion }
+ExternalIdentity { provider, issuer, subject }
+Profile { displayName, avatarUrl }
 ```
 
 Do not use Identity, User, or Profile as a synonym for Space. Do not use

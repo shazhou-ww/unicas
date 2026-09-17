@@ -430,11 +430,13 @@ describe("command layer", () => {
     expect(JSON.parse(writes.join(""))).toMatchObject({ domains: [{ appId: "cas_app_a", refDomain: "doc" }] });
     writes.length = 0;
     await appAuditCommand(ctx, "control", ["cas_app_a", "--after", "event-0"]);
-    expect(JSON.parse(writes.join(""))).toMatchObject({ items: [{
-      appId: "cas_app_a",
-      actorAccount: { accountId: `acct_${"a".repeat(22)}` },
-      authenticatedIdentity: { subject: "sub-1" },
-    }] });
+    expect(JSON.parse(writes.join(""))).toMatchObject({
+      items: [{
+        appId: "cas_app_a",
+        actorAccount: { accountId: `acct_${"a".repeat(22)}` },
+        authenticatedIdentity: { subject: "sub-1" },
+      }]
+    });
     writes.length = 0;
     await appAuditCommand(ctx, "root-domain-refs", ["cas_app_a", "doc", "--space-id", "space-1"]);
     expect(JSON.parse(writes.join(""))).toMatchObject({ refs: [{ spaceId: "space-1" }] });

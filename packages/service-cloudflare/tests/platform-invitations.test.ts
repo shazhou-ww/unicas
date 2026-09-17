@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
-import { PlatformAccessService, PlatformAuditService, PlatformInvitationService } from "@unicas/service";
+import { PlatformAccessService, PlatformAuditService, PlatformInvitationService, sha256Hex } from "@unicas/service";
 import { migrateControlSchema } from "../src/control-schema.js";
 import { InvitationTokenCrypto } from "../src/invitation-token-crypto.js";
 import { D1PlatformAccessRepository } from "../src/platform-access-repository.js";
@@ -81,15 +81,34 @@ describe("D1 platform invitations", () => {
       "INSERT INTO cas_account_profiles (account_id, display_name, updated_at) VALUES (?, 'Invitee', 1)",
     ).bind(inviteeAccountId).run();
     await db.prepare(
-      "INSERT INTO cas_external_identities (external_identity_id, account_id, provider, issuer, subject, linked_at) VALUES ('ext-invitee', ?, 'google', ?, ?, 1)",
+      "INSERT INTO cas_external_identities (external_identity_id, account_id, provider, issuer, subject, linked_at) VALUES ('ext-invitee', ?, 'microsoft', ?, ?, 1)",
     ).bind(inviteeAccountId, invitee.issuer, invitee.subject).run();
+    const acceptedToken = acceptedInvitation.acceptUrl.split("/")[3]!;
+    const acceptedTokenHash = await sha256Hex(acceptedToken);
+    await db.prepare(
+      `INSERT INTO cas_email_challenges
+        (challenge_id, invitation_kind, invitation_id, invitation_token_hash,
+         identity_issuer, subject, authentication_event_id, normalized_email,
+         code_hash, expires_at, max_attempts, last_sent_at, verified_at, created_at)
+       VALUES ('challenge-platform', 'platform', ?, ?, ?, ?, 'auth-invitee',
+         'invitee@example.com', ?, 2000, 5, 900, 900, 900)`,
+    ).bind(
+      acceptedInvitation.invitationId,
+      acceptedTokenHash,
+      invitee.issuer,
+      invitee.subject,
+      "0".repeat(64),
+    ).run();
     await service.accept(
       invitee,
       { displayName: "Invitee", emailForDisplay: "invitee@example.com" },
-      [{ normalizedEmail: "invitee@example.com", source: "google-oidc", verifiedAt: 900, expiresAt: 2_000, authenticationEventId: "auth-invitee" }],
-      acceptedInvitation.acceptUrl.split("/")[3]!,
+      [{ normalizedEmail: "invitee@example.com", source: "unicas-email-challenge", verifiedAt: 900, expiresAt: 2_000, authenticationEventId: "auth-invitee", challengeId: "challenge-platform" }],
+      acceptedToken,
       "request-accept",
     );
+    expect(await db.prepare(
+      "SELECT consumed_at FROM cas_email_challenges WHERE challenge_id = 'challenge-platform'",
+    ).first()).toEqual({ consumed_at: 1000 });
     expect(await repository.getAccess(invitee)).toMatchObject({
       status: "active",
       authorities: ["platform.admin"],
@@ -105,7 +124,7 @@ describe("D1 platform invitations", () => {
       "SELECT primary_verified_email, email_verification_source FROM cas_accounts WHERE account_id = ?",
     ).bind(inviteeAccountId).first()).toEqual({
       primary_verified_email: "invitee@example.com",
-      email_verification_source: "google-oidc",
+      email_verification_source: "unicas-email-challenge",
     });
     await db.prepare("INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES ('app-1', 'App One', '', 'active', 1, 1)").run();
     await db.prepare("INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES ('app-1', ?, ?, 1, ?)").bind(invitee.issuer, invitee.subject, inviteeAccountId).run();

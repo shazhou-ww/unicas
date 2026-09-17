@@ -39,6 +39,13 @@ set both `GOOGLE_OIDC_CLIENT_ID` and `GOOGLE_OIDC_CLIENT_SECRET`. Optionally set
 `GOOGLE_OIDC_ISSUER`; register
 `http://localhost:4070/admin/auth/callback` as the redirect URI.
 
+Microsoft and GitHub are configuration-driven. Supply each complete client ID
+and secret pair to enable it. Register
+`/admin/auth/callback/microsoft` and `/admin/auth/callback/github` on the
+browser-facing administrator origin. The default local runtime has no outbound
+Email binding, so a Microsoft email-constrained invitation intentionally fails
+closed; repository and BFF tests provide a local fake sender.
+
 Other local settings:
 
 | Variable | Default | Purpose |
@@ -114,6 +121,8 @@ Provision secrets with Wrangler so values never appear in shell history:
 
 ```powershell
 pnpm --filter @unicas/service-cloudflare exec wrangler secret put GOOGLE_OIDC_CLIENT_SECRET
+pnpm --filter @unicas/service-cloudflare exec wrangler secret put MICROSOFT_OIDC_CLIENT_SECRET
+pnpm --filter @unicas/service-cloudflare exec wrangler secret put GITHUB_OAUTH_CLIENT_SECRET
 pnpm --filter @unicas/service-cloudflare exec wrangler secret put SESSION_ENCRYPTION_KEYS
 pnpm --filter @unicas/service-cloudflare exec wrangler secret put OAUTH_STATE_ENCRYPTION_KEY
 ```
@@ -136,6 +145,8 @@ Additional features require these secrets:
 | `CAS_R2_SECRET_ACCESS_KEY` | Presigned direct R2 uploads |
 | `MANAGED_ISSUER_PRIVATE_KEY_PKCS8` | UniCAS-managed App issuers |
 | `CAS_AUDIT_READER_KEY` | Protected physical audit-reader RPC |
+| `MICROSOFT_OIDC_CLIENT_SECRET` | Microsoft personal-account administrator login |
+| `GITHUB_OAUTH_CLIENT_SECRET` | GitHub administrator login and verified Emails API lookup |
 
 `MANAGED_ISSUER_KEY_ID` is the corresponding non-secret key ID in
 `wrangler.toml`. The current implementation exposes one managed signing key;
@@ -146,6 +157,15 @@ Optional OIDC/session variables include `OIDC_ISSUER`, `OIDC_DISCOVERY_URL`,
 `SESSION_COOKIE_SAME_SITE`. `ADMIN_TEST_ACCOUNT_EMAIL` and
 `ADMIN_TEST_ACCOUNT_PASSWORD` are test-only and must never be enabled in
 production.
+
+Set the corresponding non-secret `MICROSOFT_OIDC_CLIENT_ID` and
+`GITHUB_OAUTH_CLIENT_ID` variables before enabling those providers. Microsoft
+configuration additionally requires the `EMAIL` send binding and a validated
+`ADMIN_EMAIL_FROM` address on an onboarded UniCAS Email Service domain; Worker
+startup rejects an incomplete combination. The hourly scheduled handler deletes
+expired challenge rows. Challenge codes are never stored or logged, and resend
+limits apply across repeated callbacks for the same invitation, identity, and
+destination.
 
 `CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS` is optional. Unset or blank permits public
 HTTPS issuer discovery; a comma-separated value restricts discovery to those

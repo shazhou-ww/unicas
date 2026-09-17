@@ -10,7 +10,7 @@
 
 import { EncryptJWT, jwtDecrypt } from "jose";
 import type { AccountId, ProviderKind } from "@unicas/admin-protocol";
-import type { VerifiedEmailEvidence } from "@unicas/service";
+import type { EmailChallengeBinding, VerifiedEmailEvidence } from "@unicas/service";
 
 export interface AppInvitationContinuation {
   readonly kind: "app";
@@ -42,6 +42,13 @@ export interface PlatformInvitationSession {
 
 export type InvitationContinuation = AppInvitationContinuation | PlatformInvitationContinuation;
 export type InvitationSession = AppInvitationSession | PlatformInvitationSession;
+
+export interface EmailChallengeContinuation {
+  readonly challengeId: string;
+  readonly secret: string;
+  readonly binding: EmailChallengeBinding;
+  readonly avatarUrl: string | null;
+}
 
 interface IdentityMutationBase {
   readonly accountId: AccountId;
@@ -113,6 +120,8 @@ export interface AdminSessionPayload {
   readonly invitationAccess?: InvitationSession;
   /** Preserve the invitation login exception while full admission is rechecked. */
   readonly admittedViaInvitation?: true;
+  /** Pending invitation-bound Microsoft email verification. */
+  readonly emailChallenge?: EmailChallengeContinuation;
   /** CLI login transaction: set when this pre-login was started by the admin CLI. */
   readonly cliClientId?: string;
   readonly cliState?: string;

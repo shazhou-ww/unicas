@@ -33,11 +33,12 @@ import type {
   ControlPlaneOperations,
   ControlSessionRepository,
   AccountRepository,
+  EmailChallengeRepository,
   PlatformAccessRepository,
   PlatformAuditRepository,
   PlatformInvitationRepository,
 } from "@unicas/service";
-import { AccountService, AccountServiceError, PlatformAccessError, PlatformAccessService, PlatformAuditService, PlatformInvitationService, ProviderRegistry, sha256Hex } from "@unicas/service";
+import { AccountService, AccountServiceError, EMAIL_CHALLENGE_TTL_MS, EmailChallengeError, EmailChallengeService, PlatformAccessError, PlatformAccessService, PlatformAuditService, PlatformInvitationService, ProviderRegistry, sha256Hex } from "@unicas/service";
 import type { AccountResolution, AuthenticatedProviderResult, ProviderAdapter } from "@unicas/service";
 import { requireInvitationEmailEvidence } from "@unicas/service";
 import type { AdminBffConfig } from "./config.js";
@@ -100,6 +101,16 @@ export interface CreateAdminBffOptions {
   readonly peopleRepository?: PeopleRepository;
   readonly providerRegistry?: ProviderRegistry;
   readonly accountRepository?: AccountRepository;
+  readonly emailChallengeRepository?: EmailChallengeRepository;
+  readonly emailChallengeSender?: EmailChallengeSender;
+}
+
+export interface EmailChallengeSender {
+  send(input: {
+    readonly to: string;
+    readonly code: string;
+    readonly expiresAt: number;
+  }): Promise<void>;
 }
 
 const NOT_AVAILABLE_MESSAGE = "Root Ref audit reads are not yet available from the admin plane";
@@ -137,6 +148,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
   const sessionCrypto = new SessionCrypto(config.sessionEncryptionKeys);
   const accountService = options.accountRepository
     ? new AccountService(options.accountRepository, now)
+    : null;
+  const emailChallenges = options.emailChallengeRepository
+    ? new EmailChallengeService(options.emailChallengeRepository, { now })
     : null;
   const platformAccess = options.platformAccessRepository
     ? new PlatformAccessService(options.platformAccessRepository, now)
@@ -239,6 +253,15 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     }
     if (pathname === "/admin/auth/cli/exchange" && method === "POST") {
       return handleCliExchange(request);
+    }
+    if (pathname === "/admin/auth/email-challenge" && method === "GET") {
+      return handleEmailChallengePage(request);
+    }
+    if (pathname === "/admin/auth/email-challenge/verify" && method === "POST") {
+      return handleEmailChallengeVerification(request);
+    }
+    if (pathname === "/admin/auth/email-challenge/resend" && method === "POST") {
+      return handleEmailChallengeResend(request);
     }
     const linkStart = /^\/admin\/auth\/link\/(google|microsoft|github)$/.exec(pathname);
     if (linkStart && method === "POST") {
@@ -582,6 +605,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     try {
       if (accountService) {
         const authorization = await authorizeAccountLogin(identity, invitationContinuation);
+        if (authorization.mode === "email-challenge") {
+          return await beginEmailChallenge(request, sessionId!, preLogin, identity, authorization);
+        }
         accountResolution = authorization.account;
         invitationAccess = authorization.invitationAccess;
       } else if (platformAccess !== null) {
@@ -618,7 +644,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
       }
     } catch (error) {
-      if (error instanceof AccountServiceError
+      if (error instanceof AccountServiceError || error instanceof EmailChallengeError
         || error instanceof PlatformAccessError && error.code === "PLATFORM_ACCESS_REQUIRED") {
         if (sessionId) await sessionStore.delete(sessionId);
         await auditLoginFailure("platform-access-denied");
@@ -706,17 +732,27 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
   async function authorizeAccountLogin(
     identity: AuthenticatedProviderResult,
     invitation: AdminSessionPayload["invitationContinuation"],
-  ): Promise<{
-    readonly account: AccountResolution;
-    readonly invitationAccess?: AdminSessionPayload["invitationAccess"];
-  }> {
+  ): Promise<
+    | {
+      readonly mode: "authorized";
+      readonly account: AccountResolution;
+      readonly invitationAccess?: AdminSessionPayload["invitationAccess"];
+    }
+    | {
+      readonly mode: "email-challenge";
+      readonly invitationKind: "app" | "platform";
+      readonly invitationId: string;
+      readonly invitationTokenHash: string;
+      readonly email: string;
+    }
+  > {
     if (!accountService) throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
     let account = await accountService.resolveExternalIdentity(identity.issuer, identity.subject);
     const admitted = account !== null
       && (account.platformAuthorities.length > 0 || account.hasAppMembership);
     if (!invitation) {
       if (!account || !admitted) throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
-      return { account };
+      return { mode: "authorized", account };
     }
 
     let invitationAccess: AdminSessionPayload["invitationAccess"];
@@ -726,11 +762,19 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       if (resolved.invitationId !== invitation.invitationId || resolved.appId !== invitation.appId) {
         throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
       }
-      if (admitted && account) return { account };
       if (resolved.emailConstraint !== null) {
         try {
           requireInvitationEmailEvidence(identity.verifiedEmailEvidence, resolved.emailConstraint, now());
         } catch {
+          if (identity.provider === "microsoft") {
+            return {
+              mode: "email-challenge",
+              invitationKind: "app",
+              invitationId: resolved.invitationId,
+              invitationTokenHash: resolved.tokenHash,
+              email: resolved.emailConstraint,
+            };
+          }
           throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
         }
       }
@@ -746,10 +790,18 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       if (resolved.invitationId !== invitation.invitationId) {
         throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
       }
-      if (admitted && account) return { account };
       try {
         requireInvitationEmailEvidence(identity.verifiedEmailEvidence, resolved.emailConstraint, now());
       } catch {
+        if (identity.provider === "microsoft") {
+          return {
+            mode: "email-challenge",
+            invitationKind: "platform",
+            invitationId: resolved.invitationId,
+            invitationTokenHash: resolved.tokenHash,
+            email: resolved.emailConstraint,
+          };
+        }
         throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
       }
       invitationAccess = {
@@ -766,7 +818,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       displayName: identity.displayName,
       avatarUrl: identity.avatarUrl,
     });
-    return { account, invitationAccess };
+    return { mode: "authorized", account, invitationAccess };
   }
 
   function oidcCallbackFailure(
@@ -795,6 +847,21 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     target: string,
     previousSessionId: string | null,
   ): Promise<Response> {
+    const authenticatedId = await persistAuthenticatedSession(request, authenticatedPayload, previousSessionId);
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: target,
+        "Set-Cookie": sessionCookieHeader(cookieOptions, authenticatedId),
+      },
+    });
+  }
+
+  async function persistAuthenticatedSession(
+    request: Request,
+    authenticatedPayload: AdminSessionPayload,
+    previousSessionId: string | null,
+  ): Promise<string> {
     const authenticatedId = generateSessionId();
     await sessionStore.create(authenticatedId, await sessionCrypto.encrypt(authenticatedPayload), sessionTtlMs);
     if (previousSessionId) await sessionStore.delete(previousSessionId);
@@ -804,13 +871,293 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       `${authenticatedPayload.identityIssuer}:${authenticatedPayload.subject}`,
       null,
     );
+    return authenticatedId;
+  }
+
+  async function beginEmailChallenge(
+    request: Request,
+    previousSessionId: string,
+    preLogin: AdminSessionPayload,
+    identity: AuthenticatedProviderResult,
+    required: {
+      readonly invitationKind: "app" | "platform";
+      readonly invitationId: string;
+      readonly invitationTokenHash: string;
+      readonly email: string;
+    },
+  ): Promise<Response> {
+    if (!emailChallenges || !options.emailChallengeSender || !preLogin.invitationContinuation) {
+      throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
+    }
+    const challenge = await emailChallenges.create({
+      invitationKind: required.invitationKind,
+      invitationId: required.invitationId,
+      invitationTokenHash: required.invitationTokenHash,
+      issuer: identity.issuer,
+      subject: identity.subject,
+      authenticationEventId: identity.authenticationEventId,
+      email: required.email,
+    });
+    const challengePayload: AdminSessionPayload = {
+      v: 1,
+      authenticated: false,
+      identityIssuer: identity.issuer,
+      subject: identity.subject,
+      displayName: identity.displayName,
+      emailForDisplay: null,
+      csrfToken: generateCsrfToken(),
+      authProvider: "microsoft",
+      authenticatedAt: identity.authenticatedAt,
+      invitationContinuation: preLogin.invitationContinuation,
+      emailChallenge: {
+        challengeId: challenge.challengeId,
+        secret: challenge.secret,
+        binding: challenge.binding,
+        avatarUrl: identity.avatarUrl,
+      },
+    };
+    const challengeSessionId = generateSessionId();
+    try {
+      await sessionStore.create(
+        challengeSessionId,
+        await sessionCrypto.encrypt(challengePayload),
+        Math.min(sessionTtlMs, EMAIL_CHALLENGE_TTL_MS),
+      );
+      await sessionStore.delete(previousSessionId);
+      await options.emailChallengeSender.send({
+        to: challenge.binding.normalizedEmail,
+        code: challenge.code,
+        expiresAt: challenge.expiresAt,
+      });
+    } catch {
+      await emailChallenges.invalidate(challenge);
+      await Promise.allSettled([
+        sessionStore.delete(challengeSessionId),
+        sessionStore.delete(previousSessionId),
+      ]);
+      console.error(JSON.stringify({ event: "admin_email_challenge_delivery_failed" }));
+      throw new EmailChallengeError();
+    }
     return new Response(null, {
       status: 302,
       headers: {
-        Location: target,
-        "Set-Cookie": sessionCookieHeader(cookieOptions, authenticatedId),
+        Location: "/admin/auth/email-challenge",
+        "Cache-Control": "no-store",
+        "Set-Cookie": sessionCookieHeader(cookieOptions, challengeSessionId),
       },
     });
+  }
+
+  async function handleEmailChallengePage(request: Request): Promise<Response> {
+    const pending = await readEmailChallengeSession(request);
+    if (!pending) return emailChallengePageFailure();
+    try {
+      const description = await emailChallenges!.describe(
+        pending.payload.emailChallenge!.challengeId,
+        pending.payload.emailChallenge!.binding,
+      );
+      return new Response(emailChallengePage(description.maskedEmail, pending.payload.csrfToken), {
+        status: 200,
+        headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+      });
+    } catch {
+      await sessionStore.delete(pending.sessionId);
+      return emailChallengePageFailure();
+    }
+  }
+
+  async function handleEmailChallengeVerification(request: Request): Promise<Response> {
+    const pending = await readEmailChallengeSession(request);
+    if (!pending || !(await passCsrf(request, pending.payload))) return emailChallengeFailure();
+    const body = await readJsonBody<{ code?: unknown }>(request);
+    if (typeof body?.code !== "string") return emailChallengeFailure();
+    try {
+      const challenge = pending.payload.emailChallenge!;
+      const evidence = await emailChallenges!.verify({
+        challengeId: challenge.challengeId,
+        binding: challenge.binding,
+        secret: challenge.secret,
+        code: body.code,
+      });
+      const identity: AuthenticatedProviderResult = {
+        provider: "microsoft",
+        issuer: pending.payload.identityIssuer,
+        subject: pending.payload.subject,
+        displayName: pending.payload.displayName,
+        avatarUrl: challenge.avatarUrl,
+        accountHint: null,
+        verifiedEmailEvidence: [evidence],
+        authenticatedAt: pending.payload.authenticatedAt!,
+        authenticationEventId: challenge.binding.authenticationEventId,
+      };
+      const authorization = await authorizeAccountLogin(identity, pending.payload.invitationContinuation);
+      if (authorization.mode !== "authorized") throw new EmailChallengeError();
+      const next = invitationTarget(pending.payload.invitationContinuation!);
+      const authenticatedPayload: AdminSessionPayload = {
+        v: 1,
+        authenticated: true,
+        identityIssuer: identity.issuer,
+        subject: identity.subject,
+        displayName: identity.displayName,
+        emailForDisplay: evidence.normalizedEmail,
+        csrfToken: generateCsrfToken(),
+        authProvider: identity.provider,
+        authenticatedAt: identity.authenticatedAt,
+        verifiedEmailEvidence: [evidence],
+        accountId: authorization.account.account.accountId,
+        externalIdentityId: authorization.account.authenticatedIdentity.externalIdentityId,
+        credentialVersion: authorization.account.account.credentialVersion,
+        invitationAccess: authorization.invitationAccess,
+        admittedViaInvitation: true,
+      };
+      const authenticatedId = await persistAuthenticatedSession(request, authenticatedPayload, pending.sessionId);
+      const response = json({ next }, 200);
+      response.headers.set("Set-Cookie", sessionCookieHeader(cookieOptions, authenticatedId));
+      response.headers.set("X-CSRF-Token", authenticatedPayload.csrfToken);
+      return response;
+    } catch (error) {
+      if (error instanceof EmailChallengeError || error instanceof AccountServiceError
+        || error instanceof PlatformAccessError) {
+        return emailChallengeFailure();
+      }
+      throw error;
+    }
+  }
+
+  async function handleEmailChallengeResend(request: Request): Promise<Response> {
+    const pending = await readEmailChallengeSession(request);
+    if (!pending || !(await passCsrf(request, pending.payload))) return emailChallengeFailure();
+    try {
+      const current = pending.payload.emailChallenge!;
+      const resent = await emailChallenges!.resend({
+        challengeId: current.challengeId,
+        binding: current.binding,
+      });
+      const nextPayload: AdminSessionPayload = {
+        ...pending.payload,
+        emailChallenge: { ...current, secret: resent.secret },
+      };
+      const nextSessionId = generateSessionId();
+      try {
+        await sessionStore.create(
+          nextSessionId,
+          await sessionCrypto.encrypt(nextPayload),
+          Math.min(sessionTtlMs, Math.max(1, resent.expiresAt - now())),
+        );
+        await sessionStore.delete(pending.sessionId);
+        await options.emailChallengeSender!.send({
+          to: resent.binding.normalizedEmail,
+          code: resent.code,
+          expiresAt: resent.expiresAt,
+        });
+      } catch {
+        await emailChallenges!.invalidate(resent);
+        await Promise.allSettled([
+          sessionStore.delete(nextSessionId),
+          sessionStore.delete(pending.sessionId),
+        ]);
+        console.error(JSON.stringify({ event: "admin_email_challenge_delivery_failed" }));
+        const response = emailChallengeFailure();
+        response.headers.set("Set-Cookie", clearSessionCookie(cookieOptions));
+        return response;
+      }
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Cache-Control": "no-store",
+          "Set-Cookie": sessionCookieHeader(cookieOptions, nextSessionId),
+        },
+      });
+    } catch (error) {
+      if (error instanceof EmailChallengeError) {
+        return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+      }
+      throw error;
+    }
+  }
+
+  async function readEmailChallengeSession(request: Request): Promise<{
+    readonly sessionId: string;
+    readonly payload: AdminSessionPayload;
+  } | null> {
+    if (!emailChallenges || !options.emailChallengeSender) return null;
+    const sessionId = readSessionId(request);
+    if (!sessionId) return null;
+    const payload = await readSession(sessionId);
+    if (!payload || payload.authenticated || payload.authProvider !== "microsoft"
+      || !payload.emailChallenge || !payload.invitationContinuation) return null;
+    return { sessionId, payload };
+  }
+
+  function emailChallengePage(maskedEmail: string, csrfToken: string): string {
+    return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Verify email - UniCAS</title>
+  <link rel="stylesheet" href="/admin/assets/index.css?v=${ADMIN_ASSET_CACHE_BUSTER}" />
+</head>
+<body>
+  <main class="login-shell">
+    <section class="login-panel">
+      <p class="login-eyebrow">Invitation verification</p>
+      <h1>Check your email</h1>
+      <p class="login-copy">Enter the six-digit code sent to <strong>${escapeHtml(maskedEmail)}</strong>.</p>
+      <form id="email-challenge-form" class="login-actions">
+        <label for="email-challenge-code">Verification code</label>
+        <input id="email-challenge-code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required />
+        <button class="btn btn-primary" type="submit">Verify</button>
+        <button class="btn" id="email-challenge-resend" type="button">Send another code</button>
+      </form>
+      <p id="email-challenge-status" class="state" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+  <script>
+    const csrf = ${JSON.stringify(csrfToken)};
+    const status = document.getElementById("email-challenge-status");
+    document.getElementById("email-challenge-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const code = document.getElementById("email-challenge-code").value;
+      const response = await fetch("/admin/auth/email-challenge/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+        body: JSON.stringify({ code }),
+      });
+      if (response.ok) {
+        const result = await response.json();
+        window.location.assign(result.next);
+        return;
+      }
+      status.textContent = "The code could not be verified. Check it and try again.";
+    });
+    document.getElementById("email-challenge-resend").addEventListener("click", async () => {
+      await fetch("/admin/auth/email-challenge/resend", {
+        method: "POST",
+        headers: { "X-CSRF-Token": csrf },
+      });
+      status.textContent = "If delivery is available, a new code is on its way.";
+    });
+  </script>
+</body>
+</html>`;
+  }
+
+  function emailChallengePageFailure(): Response {
+    return new Response("Email verification could not be completed.", {
+      status: 400,
+      headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+    });
+  }
+
+  function emailChallengeFailure(): Response {
+    return json({ error: "EMAIL_CHALLENGE_FAILED", message: "email verification failed" }, 400);
+  }
+
+  function invitationTarget(invitation: NonNullable<AdminSessionPayload["invitationContinuation"]>): string {
+    return invitation.kind === "app"
+      ? `/admin/#/invitations/${encodeURIComponent(invitation.token)}`
+      : `/admin/#/platform-invitations/${encodeURIComponent(invitation.token)}`;
   }
 
   async function handleLogout(request: Request): Promise<Response> {

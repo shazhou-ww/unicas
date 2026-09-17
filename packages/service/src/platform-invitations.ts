@@ -70,6 +70,10 @@ export interface PlatformInvitationRepository {
     readonly principal: Principal;
     readonly profile: Profile;
     readonly primaryVerifiedEmail: PrimaryVerifiedEmail;
+    readonly emailChallenge: {
+      readonly challengeId: string;
+      readonly authenticationEventId: string;
+    } | null;
     readonly now: number;
     readonly audit: PlatformAuditRecord;
   }): Promise<"accepted" | "not-pending" | "blocked">;
@@ -261,6 +265,7 @@ export class PlatformInvitationService {
   ): Promise<void> {
     const invitation = await this.resolve(token);
     let primaryVerifiedEmail: PrimaryVerifiedEmail;
+    let emailChallenge: Parameters<PlatformInvitationRepository["commitAcceptInvitation"]>[0]["emailChallenge"] = null;
     try {
       const matched = requireInvitationEmailEvidence(evidence, invitation.emailConstraint, this.#now());
       primaryVerifiedEmail = {
@@ -268,6 +273,12 @@ export class PlatformInvitationService {
         source: matched.source,
         verifiedAt: matched.verifiedAt,
       };
+      if (matched.source === "unicas-email-challenge") {
+        emailChallenge = {
+          challengeId: matched.challengeId!,
+          authenticationEventId: matched.authenticationEventId,
+        };
+      }
     } catch {
       throw new PlatformAccessError("NOT_FOUND", 404);
     }
@@ -278,6 +289,7 @@ export class PlatformInvitationService {
       principal,
       profile,
       primaryVerifiedEmail,
+      emailChallenge,
       now: this.#now(),
       audit: this.#audit(principal, "platform_invitation.accepted", invitation.invitationId, requestId, principal),
     });

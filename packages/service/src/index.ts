@@ -17,6 +17,21 @@ export type {
   ProviderFlowPurpose,
   VerifiedEmailEvidence,
 } from "./authentication.js";
+export {
+  EMAIL_CHALLENGE_MAX_ATTEMPTS,
+  EMAIL_CHALLENGE_MAX_SENDS,
+  EMAIL_CHALLENGE_RESEND_INTERVAL_MS,
+  EMAIL_CHALLENGE_TTL_MS,
+  EmailChallengeError,
+  EmailChallengeService,
+} from "./email-challenge.js";
+export type {
+  EmailChallengeBinding,
+  EmailChallengeRecord,
+  EmailChallengeRepository,
+  EmailChallengeServiceOptions,
+  EmailChallengeStart,
+} from "./email-challenge.js";
 export { AccountService, AccountServiceError, projectAccountSummary } from "./account.js";
 export type {
   AccountAppMembershipRecord,

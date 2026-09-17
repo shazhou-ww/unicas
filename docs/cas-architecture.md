@@ -432,13 +432,16 @@ cannot be refreshed.
 Root Refs writers carry signed `refDomain`; callers cannot provide or override
 it through path, query, header, or body.
 
-Top-level `/admin` routes use a Google OIDC-backed BFF session plus current
-deny-by-default Platform Access. Active platform authority or App membership
-admits a Principal; `blocked` overrides both. MVP App members retain equal
-App-local administrator authority, but membership never grants `apps.create`
-or `platform.admin`. Browser and CLI requests recheck admission on every
-operation. Remote MCP checks admission on OAuth grant issuance and every
-request; delegated OAuth scopes never substitute for current authority.
+Top-level `/admin` routes use a provider-registry-backed BFF session plus
+deny-by-default Platform Access. Google OIDC, Microsoft personal-account OIDC,
+and GitHub OAuth adapters resolve an exact External Identity to one stable
+Account before credential issuance. Active platform authority or App
+membership admits the Account; `blockedAt` overrides both for every linked
+identity. App members retain equal App-local administrator authority, but
+membership never grants `apps.create` or `platform.admin`. Browser and CLI
+requests recheck Account admission on every operation. Remote MCP checks
+admission on OAuth grant issuance and every request; delegated OAuth scopes
+never substitute for current authority.
 Space JWTs are never accepted by admin routes even if they contain
 admin-looking scopes, and OIDC admin sessions are never accepted by Space routes. The
 `@unicas/service-cloudflare` worker owns the admin BFF (src/admin-bff): OIDC
@@ -447,13 +450,16 @@ callback, secure session, CSRF boundary, and admin BFF routes; the
 only short-lived managed Space capabilities for Playground; it never receives
 OIDC client secrets, or storage bindings.
 
-An email-bound pending App or platform invitation may start a special OIDC
-continuation for a Principal without full admission. Its encrypted pre-login
-state holds the bearer token; the resulting session retains only invitation ID
-and token hash and may call only the matching acceptance route plus logout.
-Successful acceptance rotates the session before authority or membership can
-be used. General login and subsequent sessions use immutable Principal state,
-not email allowlisting.
+An email-bound pending App or platform invitation may start a special provider
+continuation for an Account without full admission. Google and GitHub can
+produce short-lived verified-email evidence. Microsoft token email fields are
+never evidence; the BFF sends a six-digit challenge to the invitation's exact
+stored address through the Cloudflare Email binding. Challenge state binds the
+invitation hash, exact External Identity, and authentication event, and stores
+only a salted code hash. The resulting session may call only the matching
+acceptance route plus logout. Acceptance consumes challenge evidence and the
+invitation in one D1 transaction, then rotates the session. General login uses
+Account admission, not email allowlisting.
 
 HTTP upload is a lease that carries content. The same /lease route without a body extends a ready node (bodyless lease).
 

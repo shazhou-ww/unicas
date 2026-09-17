@@ -93,6 +93,17 @@ describe("configFromEnv", () => {
     expect(config.oidcIssuer).toBe("https://accounts.google.com");
   });
 
+  test("validates the email challenge sender address", () => {
+    const base = {
+      SESSION_ENCRYPTION_KEYS: JSON.stringify({ v1: randomKey() }),
+      PUBLIC_ORIGIN: "https://cas.example",
+    };
+    expect(() => configFromEnv({ ...base, ADMIN_EMAIL_FROM: "not-an-email" }))
+      .toThrow(/ADMIN_EMAIL_FROM/);
+    expect(configFromEnv({ ...base, ADMIN_EMAIL_FROM: " No-Reply@UniCAS.work " }).emailFrom)
+      .toBe("no-reply@unicas.work");
+  });
+
   test("prefers the administrator origin over the compatibility fallback", () => {
     const config = configFromEnv({
       SESSION_ENCRYPTION_KEYS: JSON.stringify({ v1: randomKey() }),
@@ -109,12 +120,19 @@ describe("configFromEnv", () => {
     };
     expect(() => configFromEnv({ ...base, MICROSOFT_OIDC_CLIENT_ID: "microsoft" }))
       .toThrow(/configured together/);
+    expect(() => configFromEnv({
+      ...base,
+      MICROSOFT_OIDC_CLIENT_ID: "microsoft",
+      MICROSOFT_OIDC_CLIENT_SECRET: "microsoft-secret",
+    })).toThrow(/EMAIL and ADMIN_EMAIL_FROM/);
     expect(() => configFromEnv({ ...base, GITHUB_OAUTH_CLIENT_SECRET: "secret" }))
       .toThrow(/configured together/);
     expect(configFromEnv({
       ...base,
       MICROSOFT_OIDC_CLIENT_ID: "microsoft",
       MICROSOFT_OIDC_CLIENT_SECRET: "microsoft-secret",
+      EMAIL: { send: async () => ({ messageId: "message-1" }) } as SendEmail,
+      ADMIN_EMAIL_FROM: "no-reply@unicas.work",
       GITHUB_OAUTH_CLIENT_ID: "github",
       GITHUB_OAUTH_CLIENT_SECRET: "github-secret",
     })).toMatchObject({

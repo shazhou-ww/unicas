@@ -34,6 +34,8 @@ import { ControlSessionStore } from "./control-sessions.js";
 import { D1PlatformAccessRepository } from "./platform-access-repository.js";
 import { D1PeopleRepository } from "./people-repository.js";
 import { D1AccountRepository } from "./account-repository.js";
+import { D1EmailChallengeRepository } from "./email-challenge-repository.js";
+import { CloudflareEmailChallengeSender } from "./email-challenge-sender.js";
 import { migrateLegacyAdminIdentities } from "./identity-migration.js";
 import { CloudflareOAuthDiscoveryPort } from "./oauth-discovery.js";
 import { CloudflareManagedIssuer } from "./managed-issuer.js";
@@ -204,6 +206,12 @@ export default {
       return fetchMcp(stripHeaders(request, MCP_STRIPPED_HEADERS), env, auditReader, ctx);
     }
     return new Response("Not Found", { status: 404 });
+  },
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil((async () => {
+      await ensureControlSchema(env);
+      await new D1EmailChallengeRepository(env.CAS_CONTROL_DB).pruneExpired(Date.now());
+    })());
   },
 } satisfies ExportedHandler<Env>;
 
@@ -386,6 +394,10 @@ function adminHandlerFor(env: Env): Promise<(request: Request) => Promise<Respon
         platformAuditRepository: platformRepository,
         peopleRepository: new D1PeopleRepository(env.CAS_CONTROL_DB),
         accountRepository,
+        emailChallengeRepository: new D1EmailChallengeRepository(env.CAS_CONTROL_DB),
+        emailChallengeSender: env.EMAIL && config.emailFrom
+          ? new CloudflareEmailChallengeSender(env.EMAIL, config.emailFrom)
+          : undefined,
       });
     })();
     adminHandlers.set(key, handler);
