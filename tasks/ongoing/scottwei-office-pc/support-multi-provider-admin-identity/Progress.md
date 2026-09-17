@@ -8,7 +8,7 @@ Updated: 2026-09-17
 - [x] Obtain scope approval before substantive implementation.
 - [x] Complete each applicable interface, business and data model, and
       architecture approval before the affected implementation.
-- [ ] Commit and publish substantive work at meaningful checkpoints.
+- [x] Commit and publish substantive work at meaningful checkpoints.
 - [ ] Publish implementation completion while the task is still ongoing.
 - [ ] Complete documented manual user acceptance, if required.
 - [ ] Obtain and publish delivery approval.
@@ -91,7 +91,8 @@ Account protocol types and schemas while retaining the existing Principal
 contracts, a 128-bit `acct_` ID generator, and additive D1 tables for Account,
 Profile, ExternalIdentity, AccountPlatformAuthority, AccountAlias, the permanent
 legacy identity map, and the migration journal. Existing Principal-keyed tables
-and runtime paths remain active. The slice awaits checkpoint publication.
+and runtime paths remain active. The slice is published on `origin/main` as
+`354894e0791e8bc76982920078d0997a20d89135`.
 
 Next: publish the Account foundation checkpoint, then implement the cloud-neutral
 Account service and D1 repository behind compatibility-safe ports.
@@ -281,6 +282,8 @@ Account service and D1 repository behind compatibility-safe ports.
   files after the shared control schema change. `@unicas/admin-protocol`,
   `@unicas/service`, and `@unicas/service-cloudflare` all passed typecheck, and
   editor diagnostics reported no errors in the changed implementation files.
+- Account foundation commit `354894e0791e8bc76982920078d0997a20d89135`
+  was pushed and verified reachable from refreshed `origin/main`.
 
 ## Blockers
 
