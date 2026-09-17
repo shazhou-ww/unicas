@@ -1,6 +1,6 @@
 # Progress
 
-Updated: 2026-09-16
+Updated: 2026-09-17
 
 ## Checklist
 
@@ -16,8 +16,10 @@ Updated: 2026-09-16
 
 ## Current state
 
-Claim commit `1b33a29c6ebcc9e7ed66fe273b4ca7c020e43584` assigns the task to
-`scottwei-home-pc`. The prerequisite
+Claim commit `1b33a29c6ebcc9e7ed66fe273b4ca7c020e43584` initially assigned the
+task to `scottwei-home-pc`. On 2026-09-17, the requesting user explicitly
+directed `copilot-unicas-standalone` to take over the task. The validated
+ledger transfer is applied locally and pending publication. The prerequisite
 `add-platform-access-management` task is archived with its implementation,
 production verification, delivery acceptance, and archive publication recorded.
 No backlog or ongoing task has overlapping multi-provider administrator identity
@@ -36,15 +38,16 @@ Scope approval is published on `origin/main` as
 `aa94d2efef95c581dbc67a0493539ed2f42f4ab3`. The task-owned
 [business/data-model](./BusinessDataModel.md),
 [architecture](./Architecture.md), and [interface](./InterfaceDesign.md) review
-artifacts are prepared and pending publication. They define the stable Account
-and evidence model, one-to-one migration and rollback boundary, provider and
-service composition, fresh-auth linking/unlinking, Account-keyed contracts,
+artifacts and their pending checkpoint state are published on `origin/main` as
+`d3ef9fd44b7c141993d4307a750c39c817cf225a`. They define the stable Account and
+evidence model, one-to-one migration and rollback boundary, provider and service
+composition, fresh-auth linking/unlinking, Account-keyed contracts,
 Console/CLI/MCP behavior, and privacy/error rules.
 
-Next: publish these three artifacts and this pending checkpoint state to
-`origin/main`, verify the commit is reachable there, then request explicit
-business/data-model, architecture, and interface decisions. Do not begin the
-implementation protected by any pending checkpoint.
+Next: publish the coordinated ownership transfer to `origin/main`, verify the
+commit is reachable there, then request explicit business/data-model,
+architecture, and interface decisions. Do not begin the implementation
+protected by any pending checkpoint.
 
 ## Decisions
 
@@ -58,6 +61,11 @@ implementation protected by any pending checkpoint.
 - Record the user's direct 2026-09-16 response that the scope has no issues as
   explicit approval of the requested Scope checkpoint only; it does not approve
   review artifacts that have not yet been prepared and presented.
+- Treat the user's direct 2026-09-17 takeover request as explicit coordination
+  authorization to transfer the task from `scottwei-home-pc` to
+  `copilot-unicas-standalone`; it does not approve any pending review checkpoint.
+- Reconcile the previously stale progress wording with review-artifact commit
+  `d3ef9fd44b7c141993d4307a750c39c817cf225a`; publication does not imply approval.
 
 ## Human approvals
 
@@ -74,6 +82,7 @@ implementation protected by any pending checkpoint.
 | Milestone | Evidence | Status |
 | --- | --- | --- |
 | Claim | `origin/main` commit `1b33a29c6ebcc9e7ed66fe273b4ca7c020e43584`. | Published |
+| Ownership transfer | Coordinated transfer from `scottwei-home-pc` to `copilot-unicas-standalone`; commit pending. | Pending |
 | Implementation complete | Pending. | Pending |
 | Archive | Pending. | Pending |
 
@@ -111,6 +120,12 @@ implementation protected by any pending checkpoint.
 - `pnpm check:tasks` passed after each new review artifact and after the focused
   credential-migration, identity-redaction, and retired-email retention review
   corrections: all 16 ledger tasks and all 6 policy tests passed.
+- `pnpm exec repoledger doctor` passed before takeover after refreshing
+  `origin/main`; `repoledger status` resolved the task under `scottwei-home-pc`
+  and the current worktree identity as `copilot-unicas-standalone`.
+- `pnpm exec repoledger check --task support-multi-provider-admin-identity`
+  passed before and immediately after the previewed transfer was applied with
+  `--take-from scottwei-home-pc --update-all-refs`.
 
 ## Blockers
 
