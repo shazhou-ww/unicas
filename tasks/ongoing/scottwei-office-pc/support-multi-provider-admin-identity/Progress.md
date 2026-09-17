@@ -102,8 +102,18 @@ D1 adapter implements the semantic repository against the additive tables; it
 is not yet wired into the existing Principal authorization path. The slice is
 published on `origin/main` as `aae52af5ba6c514650f2e7135640ac52d8c48f7b`.
 
-Next: publish the Account service/repository checkpoint, then implement the
-one-to-one legacy Principal migration and shadow reconciliation.
+The third implementation slice is complete locally. A restartable D1 migration
+inventories all legacy Principal-bearing tables without a compound SQL union,
+creates exactly one Account and ExternalIdentity per `(issuer, subject)`, and
+backfills Account shadow keys, platform-authority child rows, App memberships,
+and uniquely derived Playground ownership. Existing audit attribution columns
+remain unchanged and resolve through the permanent map. Stage counts and
+failures are recorded in the migration journal; reconciliation blocks cutover
+for any count, authority, membership, or Playground mismatch. The slice awaits
+checkpoint publication.
+
+Next: publish the legacy migration checkpoint, then add shadow Account
+resolution to sessions and current authorization composition.
 
 ## Decisions
 
@@ -305,6 +315,15 @@ one-to-one legacy Principal migration and shadow reconciliation.
   files.
 - Account service/repository commit `aae52af5ba6c514650f2e7135640ac52d8c48f7b`
   was pushed and verified reachable from refreshed `origin/main`.
+- The focused identity migration suite passed 2 Miniflare tests proving
+  duplicate display emails remain separate Accounts, reruns are idempotent,
+  blocked state and authorities are preserved, Playground owners map exactly,
+  old audit attribution fields remain byte-for-byte unchanged, and an unmapped
+  owner records a failure and blocks completion.
+- Legacy schema/People compatibility tests passed after converting the only
+  bare control-table test inserts to explicit columns. The full
+  `@unicas/service-cloudflare` suite passed all 253 tests across 27 files and
+  typecheck passed; editor diagnostics reported no migration errors.
 
 ## Blockers
 

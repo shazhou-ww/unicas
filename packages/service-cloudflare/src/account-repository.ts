@@ -121,10 +121,10 @@ function accountRecord(row: AccountRow): AccountRecord {
     && row.email_verification_source !== null
     && row.email_verified_at !== null
     ? {
-        normalizedEmail: row.primary_verified_email,
-        source: row.email_verification_source,
-        verifiedAt: row.email_verified_at,
-      }
+      normalizedEmail: row.primary_verified_email,
+      source: row.email_verification_source,
+      verifiedAt: row.email_verified_at,
+    }
     : null;
   return {
     accountId: row.account_id,
