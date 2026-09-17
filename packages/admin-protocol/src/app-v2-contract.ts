@@ -3,6 +3,7 @@ import { z } from "zod";
 import { AppIdSchema } from "@unicas/tenant-protocol";
 import { AppPeopleQuerySchema, PlatformPeopleQuerySchema } from "./people.js";
 import {
+  AccountSelfSchema,
   AppControlAuditEventSchema,
   AppMemberInvitationSchema,
   AppMembershipSchema,
@@ -17,6 +18,7 @@ import {
   ProfileSchema,
   SpaceRootRefBalanceSchema,
   SpaceRootRefEventSchema,
+  ExternalIdentitySummarySchema,
 } from "./schemas.js";
 import {
   CreatePlatformInvitationSchema,
@@ -81,6 +83,13 @@ export const PatchAppRequestSchema = z.object({
   message: "At least one change is required",
 }).readonly().meta({ id: "PatchAppRequest" });
 
+export const PatchAccountProfileSchema = z.object({
+  displayName: z.string().max(120).nullable().optional(),
+  avatarExternalIdentityId: z.string().min(1).nullable().optional(),
+}).strict().refine(body => Object.values(body).some(value => value !== undefined), {
+  message: "At least one profile field is required",
+}).readonly().meta({ id: "PatchAccountProfile" });
+
 function pageSchema(item: z.ZodType) {
   return z.object({
     items: z.array(item).readonly(),
@@ -110,6 +119,46 @@ export const appMeContract = appProcedure
     }).readonly(),
     memberships: z.array(AppMembershipSchema).readonly(),
   }).readonly().meta({ id: "AppAdminMeResponse" }));
+
+export const getAccountContract = appProcedure
+  .route({
+    method: "GET",
+    path: "/admin/account",
+    operationId: "getCurrentAccount",
+    summary: "Read the current Account",
+    description: "Returns stable Account profile, primary verified contact, platform authorities, linked login summaries, and link capabilities.",
+    inputStructure: "detailed",
+    tags: ["Identity"],
+  })
+  .input(z.object({}).readonly())
+  .output(AccountSelfSchema);
+
+export const patchAccountProfileContract = appProcedure
+  .route({
+    method: "PATCH",
+    path: "/admin/account/profile",
+    operationId: "patchCurrentAccountProfile",
+    summary: "Update the current Account profile",
+    description: "Updates display name and/or selects a sanitized linked-provider avatar. The primary verified contact is read-only.",
+    inputStructure: "detailed",
+    successStatus: 204,
+    tags: ["Identity"],
+  })
+  .input(z.object({ body: PatchAccountProfileSchema }).readonly())
+  .output(z.void());
+
+export const listAccountIdentitiesContract = appProcedure
+  .route({
+    method: "GET",
+    path: "/admin/account/identities",
+    operationId: "listCurrentAccountIdentities",
+    summary: "List current Account login methods",
+    description: "Returns masked active linked identity summaries; exact issuer and subject remain privileged details.",
+    inputStructure: "detailed",
+    tags: ["Identity"],
+  })
+  .input(z.object({}).readonly())
+  .output(z.object({ identities: z.array(ExternalIdentitySummarySchema).readonly() }).readonly());
 
 export const listAppsContract = appProcedure
   .route({
@@ -478,7 +527,12 @@ export const listPlatformAuditEventsContract = appProcedure
   .output(pageSchema(PlatformAuditEventSchema).meta({ id: "PlatformAuditPage" }));
 
 export const appAdminApiContract = {
-  identity: { me: appMeContract },
+  identity: {
+    me: appMeContract,
+    getAccount: getAccountContract,
+    patchAccountProfile: patchAccountProfileContract,
+    listAccountIdentities: listAccountIdentitiesContract,
+  },
   apps: {
     list: listAppsContract,
     create: createAppContract,

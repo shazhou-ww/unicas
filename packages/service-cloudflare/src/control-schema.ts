@@ -9,7 +9,7 @@ import type { D1Database } from "@cloudflare/workers-types";
 const CONTROL_TABLE_MIGRATIONS = [
   "CREATE TABLE IF NOT EXISTS cas_accounts (account_id TEXT PRIMARY KEY CHECK(length(account_id) = 27 AND substr(account_id, 1, 5) = 'acct_'), blocked_at INTEGER CHECK(blocked_at IS NULL OR blocked_at >= 0), credential_version INTEGER NOT NULL DEFAULT 1 CHECK(credential_version >= 1), primary_verified_email TEXT, email_verification_source TEXT CHECK(email_verification_source IS NULL OR email_verification_source IN ('google-oidc','github-emails-api','unicas-email-challenge')), email_verified_at INTEGER CHECK(email_verified_at IS NULL OR email_verified_at >= 0), created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, CHECK((primary_verified_email IS NULL AND email_verification_source IS NULL AND email_verified_at IS NULL) OR (primary_verified_email IS NOT NULL AND email_verification_source IS NOT NULL AND email_verified_at IS NOT NULL)))",
   "CREATE TABLE IF NOT EXISTS cas_account_profiles (account_id TEXT PRIMARY KEY, display_name TEXT, avatar_url TEXT, display_name_source TEXT, avatar_source TEXT, updated_at INTEGER NOT NULL, FOREIGN KEY(account_id) REFERENCES cas_accounts(account_id))",
-  "CREATE TABLE IF NOT EXISTS cas_external_identities (external_identity_id TEXT PRIMARY KEY, account_id TEXT NOT NULL, provider TEXT NOT NULL CHECK(provider IN ('google','microsoft','github')), issuer TEXT NOT NULL, subject TEXT NOT NULL, linked_at INTEGER NOT NULL, last_authenticated_at INTEGER, unlinked_at INTEGER, FOREIGN KEY(account_id) REFERENCES cas_accounts(account_id))",
+  "CREATE TABLE IF NOT EXISTS cas_external_identities (external_identity_id TEXT PRIMARY KEY, account_id TEXT NOT NULL, provider TEXT NOT NULL CHECK(provider IN ('google','microsoft','github')), issuer TEXT NOT NULL, subject TEXT NOT NULL, linked_at INTEGER NOT NULL, last_authenticated_at INTEGER, unlinked_at INTEGER, account_hint TEXT, display_name TEXT, avatar_url TEXT, FOREIGN KEY(account_id) REFERENCES cas_accounts(account_id))",
   "CREATE TABLE IF NOT EXISTS cas_account_platform_authorities (account_id TEXT NOT NULL, authority TEXT NOT NULL CHECK(authority IN ('platform.admin','apps.create')), granted_at INTEGER NOT NULL, PRIMARY KEY(account_id, authority), FOREIGN KEY(account_id) REFERENCES cas_accounts(account_id))",
   "CREATE TABLE IF NOT EXISTS cas_account_aliases (source_account_id TEXT PRIMARY KEY, canonical_account_id TEXT NOT NULL, created_at INTEGER NOT NULL, reason TEXT NOT NULL, CHECK(source_account_id <> canonical_account_id), FOREIGN KEY(source_account_id) REFERENCES cas_accounts(account_id), FOREIGN KEY(canonical_account_id) REFERENCES cas_accounts(account_id))",
   "CREATE TABLE IF NOT EXISTS cas_identity_migration_map (identity_issuer TEXT NOT NULL, subject TEXT NOT NULL, account_id TEXT NOT NULL UNIQUE, external_identity_id TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL, PRIMARY KEY(identity_issuer, subject), FOREIGN KEY(account_id) REFERENCES cas_accounts(account_id), FOREIGN KEY(external_identity_id) REFERENCES cas_external_identities(external_identity_id))",
@@ -77,6 +77,11 @@ export async function migrateControlSchema(db: D1Database): Promise<void> {
     details_json: "TEXT NOT NULL DEFAULT '{}'",
   });
   await ensureColumns(db, "cas_platform_principals", { account_id: "TEXT" });
+  await ensureColumns(db, "cas_external_identities", {
+    account_hint: "TEXT",
+    display_name: "TEXT",
+    avatar_url: "TEXT",
+  });
   await ensureColumns(db, "cas_platform_invitations", { created_by_account_id: "TEXT" });
   await ensureColumns(db, "cas_platform_invitation_idempotency", { actor_account_id: "TEXT" });
   await ensureColumns(db, "cas_operator_identities", { account_id: "TEXT" });

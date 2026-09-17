@@ -29,6 +29,29 @@ describe("Account protocol model", () => {
     }).success).toBe(false);
   });
 
+  test("carries a stable server-selected fallback with image avatars", () => {
+    expect(AccountSelfSchema.safeParse({
+      accountId,
+      displayName: "Alex Morgan",
+      primaryVerifiedEmail: null,
+      avatar: { kind: "image", url: "https://images.example/avatar", initials: "AM", colorIndex: 2 },
+      blockedAt: null,
+      platformAuthorities: [],
+      identities: [],
+      linkableProviders: [],
+    }).success).toBe(true);
+    expect(AccountSelfSchema.safeParse({
+      accountId,
+      displayName: "Alex Morgan",
+      primaryVerifiedEmail: null,
+      avatar: { kind: "image", url: "https://images.example/avatar" },
+      blockedAt: null,
+      platformAuthorities: [],
+      identities: [],
+      linkableProviders: [],
+    }).success).toBe(false);
+  });
+
   test("keeps exact external identity details separate from Account contact data", () => {
     expect(ExternalIdentityDetailSchema.safeParse({
       externalIdentityId: "ext_google_alex",
@@ -50,6 +73,7 @@ describe("Account protocol model", () => {
       avatar: { kind: "fallback" as const, initials: "AM", colorIndex: 2 },
       blockedAt: null,
       identities: [],
+      linkableProviders: ["google", "microsoft", "github"] as const,
     };
     expect(AccountSelfSchema.safeParse({
       ...base,

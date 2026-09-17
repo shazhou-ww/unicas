@@ -143,13 +143,39 @@ describe("BFF Account identity mutations", () => {
     const initialLogin = await callback(bff, initialStart, "google");
     const initialCookie = cookieFrom(initialLogin);
 
-    const linkStart = await bff(new Request("https://console.example/admin/auth/link/github", {
-      method: "POST",
+    const initialAccount = await bff(new Request("https://console.example/admin/account", {
       headers: { Cookie: initialCookie },
     }));
-    expect(new URL(linkStart.headers.get("Location")!).origin).toBe("https://google.example");
+    expect(await initialAccount.json()).toMatchObject({
+      accountId: created.account.accountId,
+      displayName: "Google User",
+      identities: [{ provider: "google", currentLogin: true }],
+      linkableProviders: ["github"],
+    });
+    expect((await bff(new Request("https://console.example/admin/account/profile", {
+      method: "PATCH",
+      headers: { Cookie: initialCookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ displayName: "User Choice", avatarExternalIdentityId: null }),
+    }))).status).toBe(204);
+    expect(await repository.getProfile(created.account.accountId)).toMatchObject({
+      displayName: "User Choice",
+      displayNameSource: "user",
+      avatarUrl: null,
+      avatarSource: "user",
+    });
+
+    const linkStart = await bff(new Request("https://console.example/admin/auth/link/github", {
+      method: "POST",
+      headers: { Cookie: initialCookie, Accept: "application/json" },
+    }));
+    const { redirectTo } = await linkStart.json() as { redirectTo: string };
+    expect(new URL(redirectTo).origin).toBe("https://google.example");
+    const linkRedirect = new Response(null, {
+      status: 302,
+      headers: { Location: redirectTo, "Set-Cookie": linkStart.headers.get("Set-Cookie")! },
+    });
     clock += 1;
-    const currentProof = await callback(bff, linkStart, "google");
+    const currentProof = await callback(bff, linkRedirect, "google");
     expect(new URL(currentProof.headers.get("Location")!).origin).toBe("https://github.example");
     clock += 1;
     const linked = await callback(bff, currentProof, "github");
@@ -158,6 +184,14 @@ describe("BFF Account identity mutations", () => {
     const github = await repository.getActiveIdentity("https://github.example", "github-subject");
     expect(github).toMatchObject({ accountId: created.account.accountId });
     expect(await repository.getAccount(created.account.accountId)).toMatchObject({ credentialVersion: 2 });
+    expect(await (await bff(new Request("https://console.example/admin/account/identities", {
+      headers: { Cookie: linkedCookie },
+    }))).json()).toMatchObject({
+      identities: [
+        { provider: "google", currentLogin: true },
+        { provider: "github", currentLogin: false },
+      ],
+    });
 
     const unlinkStart = await bff(new Request(
       `https://console.example/admin/auth/unlink/${encodeURIComponent(github!.externalIdentityId)}`,

@@ -27,6 +27,9 @@ interface ExternalIdentityRow {
   linked_at: number;
   last_authenticated_at: number | null;
   unlinked_at: number | null;
+  account_hint: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
 }
 
 export class D1AccountRepository implements AccountRepository {
@@ -58,6 +61,34 @@ export class D1AccountRepository implements AccountRepository {
       "SELECT * FROM cas_external_identities WHERE external_identity_id = ?",
     ).bind(externalIdentityId).first<ExternalIdentityRow>();
     return row ? externalIdentityRecord(row) : null;
+  }
+
+  async getProfile(accountId: AccountId) {
+    const row = await this.db.prepare(
+      "SELECT account_id, display_name, avatar_url, display_name_source, avatar_source, updated_at FROM cas_account_profiles WHERE account_id = ?",
+    ).bind(accountId).first<{
+      account_id: AccountId;
+      display_name: string | null;
+      avatar_url: string | null;
+      display_name_source: string | null;
+      avatar_source: string | null;
+      updated_at: number;
+    }>();
+    return row ? {
+      accountId: row.account_id,
+      displayName: row.display_name,
+      avatarUrl: row.avatar_url,
+      displayNameSource: row.display_name_source,
+      avatarSource: row.avatar_source,
+      updatedAt: row.updated_at,
+    } : null;
+  }
+
+  async listActiveIdentities(accountId: AccountId): Promise<readonly ExternalIdentityRecord[]> {
+    const rows = await this.db.prepare(
+      "SELECT * FROM cas_external_identities WHERE account_id = ? AND unlinked_at IS NULL ORDER BY linked_at, external_identity_id",
+    ).bind(accountId).all<ExternalIdentityRow>();
+    return (rows.results ?? []).map(externalIdentityRecord);
   }
 
   async listPlatformAuthorities(accountId: AccountId): Promise<readonly PlatformAuthority[]> {
@@ -100,7 +131,7 @@ export class D1AccountRepository implements AccountRepository {
           input.profile.updatedAt,
         ),
         this.db.prepare(
-          "INSERT INTO cas_external_identities (external_identity_id, account_id, provider, issuer, subject, linked_at, last_authenticated_at, unlinked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO cas_external_identities (external_identity_id, account_id, provider, issuer, subject, linked_at, last_authenticated_at, unlinked_at, account_hint, display_name, avatar_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         ).bind(
           input.identity.externalIdentityId,
           input.identity.accountId,
@@ -110,6 +141,9 @@ export class D1AccountRepository implements AccountRepository {
           input.identity.linkedAt,
           input.identity.lastAuthenticatedAt,
           input.identity.unlinkedAt,
+          input.identity.accountHint,
+          input.identity.displayName,
+          input.identity.avatarUrl,
         ),
       ]);
       return "created";
@@ -132,8 +166,8 @@ export class D1AccountRepository implements AccountRepository {
     const insertIdentity = this.db.prepare(
       `INSERT INTO cas_external_identities
         (external_identity_id, account_id, provider, issuer, subject, linked_at,
-         last_authenticated_at, unlinked_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+         last_authenticated_at, unlinked_at, account_hint, display_name, avatar_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
     ).bind(
       input.identity.externalIdentityId,
       input.identity.accountId,
@@ -142,6 +176,9 @@ export class D1AccountRepository implements AccountRepository {
       input.identity.subject,
       input.identity.linkedAt,
       input.identity.lastAuthenticatedAt,
+      input.identity.accountHint,
+      input.identity.displayName,
+      input.identity.avatarUrl,
     );
     const updateProfile = this.db.prepare(
       `UPDATE cas_account_profiles SET
@@ -269,6 +306,36 @@ export class D1AccountRepository implements AccountRepository {
         : "not-found";
     }
   }
+
+  async updateProfile(
+    input: Parameters<AccountRepository["updateProfile"]>[0],
+  ): Promise<"updated" | "identity-not-found"> {
+    const assignments: string[] = [];
+    const bindings: unknown[] = [];
+    if (input.displayName !== undefined) {
+      assignments.push("display_name = ?", "display_name_source = 'user'");
+      bindings.push(input.displayName);
+    }
+    if (input.avatarExternalIdentityId !== undefined) {
+      if (input.avatarExternalIdentityId === null) {
+        assignments.push("avatar_url = NULL", "avatar_source = 'user'");
+      } else {
+        const identity = await this.getIdentity(input.avatarExternalIdentityId);
+        if (!identity || identity.accountId !== input.accountId || identity.unlinkedAt !== null || !identity.avatarUrl) {
+          return "identity-not-found";
+        }
+        assignments.push("avatar_url = ?", "avatar_source = ?");
+        bindings.push(identity.avatarUrl, identity.externalIdentityId);
+      }
+    }
+    if (assignments.length === 0) return "updated";
+    assignments.push("updated_at = ?");
+    bindings.push(input.now, input.accountId);
+    await this.db.prepare(
+      `UPDATE cas_account_profiles SET ${assignments.join(", ")} WHERE account_id = ?`,
+    ).bind(...bindings).run();
+    return "updated";
+  }
 }
 
 function accountRecord(row: AccountRow): AccountRecord {
@@ -301,6 +368,9 @@ function externalIdentityRecord(row: ExternalIdentityRow): ExternalIdentityRecor
     linkedAt: row.linked_at,
     lastAuthenticatedAt: row.last_authenticated_at,
     unlinkedAt: row.unlinked_at,
+    accountHint: row.account_hint,
+    displayName: row.display_name,
+    avatarUrl: row.avatar_url,
   };
 }
 

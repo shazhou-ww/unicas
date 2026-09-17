@@ -16,6 +16,9 @@ const identity: ExternalIdentityRecord = {
   linkedAt: 1,
   lastAuthenticatedAt: 2,
   unlinkedAt: null,
+  accountHint: null,
+  displayName: null,
+  avatarUrl: null,
 };
 const account: AccountRecord = {
   accountId,
@@ -32,11 +35,21 @@ function fixture() {
     getAliasTarget: vi.fn(async () => null),
     getActiveIdentity: vi.fn(async (issuer, subject) => issuer === identity.issuer && subject === identity.subject ? identity : null),
     getIdentity: vi.fn(async externalIdentityId => externalIdentityId === identity.externalIdentityId ? identity : null),
+    getProfile: vi.fn(async () => ({
+      accountId,
+      displayName: "Alice Example",
+      avatarUrl: null,
+      displayNameSource: "user",
+      avatarSource: "user",
+      updatedAt: 2,
+    })),
+    listActiveIdentities: vi.fn(async () => [identity]),
     listPlatformAuthorities: vi.fn(async () => ["apps.create"]),
     hasAppMembership: vi.fn(async () => false),
     createAccountWithIdentity: vi.fn(async () => "created"),
     commitLinkIdentity: vi.fn(async () => "linked"),
     commitUnlinkIdentity: vi.fn(async () => "unlinked"),
+    updateProfile: vi.fn(async () => "updated"),
   };
   return { repository, service: new AccountService(repository, () => 1000) };
 }
@@ -88,6 +101,21 @@ describe("Account service", () => {
     vi.mocked(repository.getIdentity).mockResolvedValue({ ...identity, unlinkedAt: 5 });
     await expect(service.requireActiveIdentity(accountId, identity.externalIdentityId))
       .rejects.toMatchObject({ code: "IDENTITY_NOT_FOUND" });
+  });
+
+  test("projects self Account data and field-level profile updates", async () => {
+    const { repository, service } = fixture();
+    await expect(service.getSelf(accountId, identity.externalIdentityId, ["google", "github"]))
+      .resolves.toMatchObject({
+        accountId,
+        displayName: "Alice Example",
+        avatar: { kind: "fallback", initials: "AE" },
+        identities: [{ externalIdentityId: identity.externalIdentityId, currentLogin: true }],
+        platformAuthorities: ["apps.create"],
+        linkableProviders: ["github"],
+      });
+    await service.updateProfile({ accountId, displayName: "Updated" });
+    expect(repository.updateProfile).toHaveBeenCalledWith({ accountId, displayName: "Updated", now: 1000 });
   });
 
   test("fails closed on alias cycles and excessive depth", async () => {

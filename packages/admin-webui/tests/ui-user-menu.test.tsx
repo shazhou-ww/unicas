@@ -17,6 +17,14 @@ const mockMe = {
 };
 
 describe("UserMenu", () => {
+  test("links to the Account view", async () => {
+    const user = userEvent.setup();
+    render(<UserMenu me={mockMe as never} onOpenMcpConfiguration={vi.fn()} onLogout={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: "Open user menu" }));
+    expect(screen.getByRole("menuitem", { name: "Account" })).toHaveAttribute("href", "#/account");
+  });
+
   test("keeps sign out inside the username menu", async () => {
     const user = userEvent.setup();
     const onLogout = vi.fn();

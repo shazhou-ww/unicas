@@ -37,6 +37,9 @@ export type AppAdminRoute =
   | { operation: "listPeople"; appId: string }
   | { operation: "listPlatformPeople" }
   | { operation: "me" }
+  | { operation: "getAccount" }
+  | { operation: "patchAccountProfile" }
+  | { operation: "listAccountIdentities" }
   | { operation: "listApps" }
   | { operation: "createApp" }
   | { operation: "getApp"; appId: string }
@@ -133,6 +136,9 @@ export const appAdminRoutes = {
   people: ({ appId }: { appId: string }) => `/admin/apps/${segment(appId)}/people`,
   platformPeople: () => "/admin/platform/people",
   me: () => "/admin/me",
+  account: () => "/admin/account",
+  accountProfile: () => "/admin/account/profile",
+  accountIdentities: () => "/admin/account/identities",
   apps: () => "/admin/apps",
   app: ({ appId }: { appId: string }) =>
     `/admin/apps/${segment(appId)}`,
@@ -332,6 +338,16 @@ export function matchAppAdminRoute(
 
   if (parts.length === 2 && parts[1] === "me" && method === "GET") {
     return { operation: "me" };
+  }
+
+  if (parts.length === 2 && parts[1] === "account" && method === "GET") {
+    return { operation: "getAccount" };
+  }
+  if (parts.length === 3 && parts[1] === "account" && parts[2] === "profile" && method === "PATCH") {
+    return { operation: "patchAccountProfile" };
+  }
+  if (parts.length === 3 && parts[1] === "account" && parts[2] === "identities" && method === "GET") {
+    return { operation: "listAccountIdentities" };
   }
 
   if (parts.length === 2 && parts[1] === "apps") {

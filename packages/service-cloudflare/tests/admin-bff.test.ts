@@ -945,6 +945,9 @@ describe("cas-admin-webui BFF", () => {
         linkedAt: 1,
         lastAuthenticatedAt: 1,
         unlinkedAt: null,
+        accountHint: null,
+        displayName: "google user",
+        avatarUrl: null,
       }],
       ["https://github.example\0github-subject", {
         externalIdentityId: "ext-github",
@@ -955,6 +958,9 @@ describe("cas-admin-webui BFF", () => {
         linkedAt: 1,
         lastAuthenticatedAt: 1,
         unlinkedAt: null,
+        accountHint: null,
+        displayName: "github user",
+        avatarUrl: null,
       }],
     ]);
     const accountRepository: AccountRepository = {

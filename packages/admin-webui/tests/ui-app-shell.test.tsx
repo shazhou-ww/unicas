@@ -26,6 +26,24 @@ const me = {
   memberships: [{ appId: currentApp.appId, principal: { issuer: "https://accounts.example", subject: "admin" }, profile: { displayName: "Admin", emailForDisplay: "admin@example.com" } }],
 };
 
+const account = {
+  accountId: `acct_${"a".repeat(22)}`,
+  displayName: "Admin User",
+  primaryVerifiedEmail: { normalizedEmail: "admin@example.com", source: "google-oidc", verifiedAt: 1 },
+  avatar: { kind: "fallback", initials: "AU", colorIndex: 1 },
+  blockedAt: null,
+  platformAuthorities: ["apps.create"],
+  identities: [{
+    externalIdentityId: "ext-google",
+    provider: "google",
+    accountHint: "a***@example.com",
+    linkedAt: 1,
+    lastAuthenticatedAt: 2,
+    currentLogin: true,
+  }],
+  linkableProviders: ["microsoft", "github"],
+};
+
 function managedIssuer(status: "active" | "disabled" = "active") {
   return {
     appId: currentApp.appId,
@@ -56,6 +74,7 @@ beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input), "http://localhost");
     if (url.pathname === "/admin/me") return json(me);
+    if (url.pathname === "/admin/account") return json(account);
     if (url.pathname === "/admin/apps") return json({ items: [currentApp] });
     if (url.pathname === "/admin/apps/cas_one") return json(currentApp);
     if (url.pathname.endsWith("/managed-issuer")) return json(managedIssuer());
@@ -67,6 +86,15 @@ beforeEach(() => {
 });
 
 describe("current App shell", () => {
+  test("renders the Account route inside the Console shell", async () => {
+    window.location.hash = "#/account";
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Account" })).toBeVisible();
+    expect(screen.getByLabelText("Display name")).toHaveValue("Admin User");
+    expect(screen.getAllByText("Google")).toHaveLength(2);
+  });
+
   test("does not render stale App details or drafts while switching Apps", async () => {
     const other = { ...currentApp, appId: "cas_two", displayName: "Second App", description: "Second description", revision: 8 };
     let resolveOther!: (response: Response) => void;

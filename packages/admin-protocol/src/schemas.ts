@@ -103,7 +103,12 @@ export const PrimaryVerifiedEmailSchema: z.ZodType<PrimaryVerifiedEmail> = z.obj
 }).strict().readonly().meta({ id: "PrimaryVerifiedEmail" });
 
 export const AccountAvatarSchema: z.ZodType<AccountAvatar> = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("image"), url: z.url() }).strict().readonly(),
+  z.object({
+    kind: z.literal("image"),
+    url: z.url(),
+    initials: NonEmptyStringSchema,
+    colorIndex: z.number().int().nonnegative(),
+  }).strict().readonly(),
   z.object({
     kind: z.literal("fallback"),
     initials: NonEmptyStringSchema,
@@ -150,6 +155,9 @@ export const AccountSelfSchema: z.ZodType<AccountSelf> = z.object({
   blockedAt: TimestampSchema.nullable(),
   platformAuthorities: PlatformAuthoritiesSchema,
   identities: z.array(ExternalIdentitySummarySchema).readonly(),
+  linkableProviders: z.array(ProviderKindSchema)
+    .refine(values => new Set(values).size === values.length, "Expected unique linkable providers")
+    .readonly(),
 }).strict().readonly().meta({ id: "AccountSelf" });
 
 export const PlatformAccountSummarySchema: z.ZodType<PlatformAccountSummary> = z.object({

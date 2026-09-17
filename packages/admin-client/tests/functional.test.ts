@@ -69,6 +69,37 @@ class MockAdminService {
       return Response.json({ items: [], nextCursor: null });
     }
 
+    const account = {
+      accountId: `acct_${"a".repeat(22)}`,
+      displayName: "Alice",
+      primaryVerifiedEmail: {
+        normalizedEmail: "alice@example.com",
+        source: "google-oidc",
+        verifiedAt: 1,
+      },
+      avatar: { kind: "fallback", initials: "AL", colorIndex: 1 },
+      blockedAt: null,
+      platformAuthorities: ["platform.admin", "apps.create"],
+      identities: [{
+        externalIdentityId: "ext-google",
+        provider: "google",
+        accountHint: "a***@example.com",
+        linkedAt: 1,
+        lastAuthenticatedAt: 2,
+        currentLogin: true,
+      }],
+      linkableProviders: ["microsoft", "github"],
+    };
+    if (path === appAdminRoutes.account() && request.method === "GET") {
+      return Response.json(account);
+    }
+    if (path === appAdminRoutes.accountIdentities() && request.method === "GET") {
+      return Response.json({ identities: account.identities });
+    }
+    if (path === appAdminRoutes.accountProfile() && request.method === "PATCH") {
+      return new Response(null, { status: 204 });
+    }
+
     if (path === casAdminRoutes.me()) {
       if (this.appVocabulary) {
         return Response.json({
@@ -454,6 +485,24 @@ describe("functional admin client", () => {
           csrf: "csrf-1",
         }),
       ]));
+  });
+
+  it("reads the stable Account and updates only mutable profile fields", async () => {
+    const account = await client.getCurrentAccount();
+    expect(account).toMatchObject({
+      displayName: "Alice",
+      primaryVerifiedEmail: { normalizedEmail: "alice@example.com" },
+      linkableProviders: ["microsoft", "github"],
+    });
+    expect(await client.listCurrentAccountIdentities()).toEqual(account.identities);
+    await client.patchCurrentAccountProfile({ displayName: "Alice Updated", avatarExternalIdentityId: null });
+    expect(service.requests.at(-1)).toMatchObject({
+      path: appAdminRoutes.accountProfile(),
+      method: "PATCH",
+      origin: "https://admin.test",
+      csrf: "csrf-1",
+      body: JSON.stringify({ displayName: "Alice Updated", avatarExternalIdentityId: null }),
+    });
   });
 
   it("transports App CRUD, membership, and invitation operations", async () => {

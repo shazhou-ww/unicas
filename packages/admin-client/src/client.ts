@@ -29,6 +29,7 @@ import type {
   CasAdminPageQuery,
 } from "@unicas/admin-protocol";
 import type {
+  AccountSelf,
   App,
   AppAdminMeResponse,
   AppControlAuditEvent,
@@ -79,6 +80,12 @@ export interface AdminClient {
   listPlatformPeople(query?: PlatformPeopleQuery): Promise<PeoplePage<PlatformPerson>>;
   me(): Promise<{ readonly identity: CasOperatorIdentity; readonly memberships: readonly CasStackMember[] }>;
   getCurrentPrincipal(): Promise<AppAdminMeResponse>;
+  getCurrentAccount(): Promise<AccountSelf>;
+  listCurrentAccountIdentities(): Promise<AccountSelf["identities"]>;
+  patchCurrentAccountProfile(body: {
+    readonly displayName?: string | null;
+    readonly avatarExternalIdentityId?: string | null;
+  }): Promise<void>;
   listApps(query?: CasAdminPageQuery): Promise<CasAdminPage<App>>;
   createApp(
     body: { readonly displayName: string },
@@ -362,6 +369,31 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
         throw new AdminClientError(502, "ADMIN_CONTRACT_MISMATCH", "App administrator identity response was not returned");
       }
       return body as unknown as AppAdminMeResponse;
+    },
+
+    async getCurrentAccount() {
+      const response = await requireOk(
+        await request(appAdminRoutes.account()),
+        "getCurrentAccount",
+      );
+      return await response.json() as AccountSelf;
+    },
+
+    async listCurrentAccountIdentities() {
+      const response = await requireOk(
+        await request(appAdminRoutes.accountIdentities()),
+        "listCurrentAccountIdentities",
+      );
+      const body = await response.json() as { readonly identities: AccountSelf["identities"] };
+      return body.identities;
+    },
+
+    async patchCurrentAccountProfile(body) {
+      await requireOk(await request(appAdminRoutes.accountProfile(), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }), "patchCurrentAccountProfile");
     },
 
     async listApps(query) {

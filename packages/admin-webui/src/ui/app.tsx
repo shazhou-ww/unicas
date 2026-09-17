@@ -20,6 +20,7 @@ import { PlaygroundCacheContext, createPlaygroundCacheSession, type PlaygroundCa
 import { formatErrorSafe } from "./views/view-helpers.js";
 import { PlatformAuditView } from "./views/platform/audit.js";
 import { PlatformInvitationAcceptanceView } from "./views/platform-invitation-acceptance.js";
+import { AccountView } from "./views/account.js";
 import { TabsTrigger } from "@/components/ui/tabs.js";
 
 export function App() {
@@ -144,6 +145,8 @@ export function App() {
     detail = <LoginErrorView />;
   } else if (inviteMatch) {
     detail = <InvitationView token={inviteMatch.params.token!} />;
+  } else if (route === "/account") {
+    detail = <AccountView />;
   } else if (appRoute) {
     if (appError) {
       detail = (

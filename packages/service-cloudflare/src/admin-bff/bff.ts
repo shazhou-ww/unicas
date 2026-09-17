@@ -15,6 +15,7 @@ import {
   matchCasAdminRoute,
   matchPlatformAdminRoute,
   PatchAppRequestSchema,
+  PatchAccountProfileSchema,
   PatchPlatformAccessSchema,
   AppInvitationQuerySchema,
   InspectAppIssuerRequestSchema,
@@ -275,6 +276,11 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       return handleAdminApi(request, url, route);
     }
     const appRoute = matchAppAdminRoute(method, pathname);
+    if (appRoute?.operation === "getAccount"
+      || appRoute?.operation === "listAccountIdentities"
+      || appRoute?.operation === "patchAccountProfile") {
+      return handleAccountApi(request, appRoute.operation);
+    }
     if (appRoute?.operation === "listPeople") return handlePeople(request, appRoute.appId);
     if (appRoute?.operation === "mintManagedCapability") {
       return handleManagedSpaceCapability(request, appRoute.appId);
@@ -1034,7 +1040,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       },
     );
     await sessionStore.delete(auth.sessionId);
-    return response;
+    return identityMutationStartResponse(request, response);
   }
 
   async function handleUnlinkStart(request: Request, targetExternalIdentityId: string): Promise<Response> {
@@ -1080,7 +1086,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       },
     );
     await sessionStore.delete(auth.sessionId);
-    return response;
+    return identityMutationStartResponse(request, response);
   }
 
   async function completeIdentityMutation(
@@ -1273,6 +1279,43 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     });
     return "error" in result ? json(transformAppAdminError({ ...result }), casAdminErrorHttpStatus[result.error])
       : new Response(null, { status: 204, headers: { ETag: formatCasAdminETag(result.revision), "Cache-Control": REVISION_CACHE_CONTROL } });
+  }
+
+  async function handleAccountApi(
+    request: Request,
+    operation: "getAccount" | "listAccountIdentities" | "patchAccountProfile",
+  ): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!accountService || !auth.payload.accountId || !auth.payload.externalIdentityId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
+    }
+    try {
+      if (operation === "patchAccountProfile") {
+        if (!(await passCsrf(request, auth.payload))) return csrfRejected();
+        const parsed = PatchAccountProfileSchema.safeParse(await readJsonBody(request));
+        if (!parsed.success) return invalidRequest("A valid Account profile patch is required");
+        await accountService.updateProfile({
+          accountId: auth.payload.accountId,
+          ...parsed.data,
+        });
+        return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+      }
+      const account = await accountService.getSelf(
+        auth.payload.accountId,
+        auth.payload.externalIdentityId,
+        providerRegistry.list().map(provider => provider.kind),
+      );
+      return json(operation === "getAccount" ? account : { identities: account.identities }, 200);
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "ACCOUNT_BLOCKED" ? 403
+          : error.code === "IDENTITY_NOT_FOUND" ? 404
+            : 409;
+        return json({ error: error.code }, status);
+      }
+      throw error;
+    }
   }
 
   async function handlePeople(request: Request, appId?: string): Promise<Response> {
@@ -2036,6 +2079,16 @@ function json(body: unknown, status: number): Response {
     status,
     headers: { "Cache-Control": "no-store" },
   });
+}
+
+function identityMutationStartResponse(request: Request, response: Response): Response {
+  if (!request.headers.get("Accept")?.includes("application/json")) return response;
+  const redirectTo = response.headers.get("Location");
+  if (!redirectTo || response.status < 300 || response.status >= 400) return response;
+  const headers = new Headers({ "Cache-Control": "no-store" });
+  const setCookie = response.headers.get("Set-Cookie");
+  if (setCookie) headers.set("Set-Cookie", setCookie);
+  return Response.json({ redirectTo }, { status: 200, headers });
 }
 
 function isMutating(method: string): boolean {

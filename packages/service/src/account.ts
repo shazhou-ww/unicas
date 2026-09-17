@@ -1,4 +1,5 @@
 import type {
+  AccountSelf,
   AccountId,
   PlatformAuthority,
   PrimaryVerifiedEmail,
@@ -37,6 +38,9 @@ export interface ExternalIdentityRecord {
   readonly linkedAt: number;
   readonly lastAuthenticatedAt: number | null;
   readonly unlinkedAt: number | null;
+  readonly accountHint: string | null;
+  readonly displayName: string | null;
+  readonly avatarUrl: string | null;
 }
 
 export interface AccountWithIdentityCreate {
@@ -50,6 +54,8 @@ export interface AccountRepository {
   getAliasTarget(sourceAccountId: AccountId): Promise<AccountId | null>;
   getActiveIdentity(issuer: string, subject: string): Promise<ExternalIdentityRecord | null>;
   getIdentity(externalIdentityId: string): Promise<ExternalIdentityRecord | null>;
+  getProfile(accountId: AccountId): Promise<AccountProfileRecord | null>;
+  listActiveIdentities(accountId: AccountId): Promise<readonly ExternalIdentityRecord[]>;
   listPlatformAuthorities(accountId: AccountId): Promise<readonly PlatformAuthority[]>;
   hasAppMembership(accountId: AccountId): Promise<boolean>;
   createAccountWithIdentity(input: AccountWithIdentityCreate): Promise<"created" | "identity-conflict">;
@@ -68,6 +74,12 @@ export interface AccountRepository {
     readonly remainingExternalIdentityId: string;
     readonly now: number;
   }): Promise<"unlinked" | "not-found" | "final-identity" | "version-mismatch" | "blocked">;
+  updateProfile(input: {
+    readonly accountId: AccountId;
+    readonly displayName?: string | null;
+    readonly avatarExternalIdentityId?: string | null;
+    readonly now: number;
+  }): Promise<"updated" | "identity-not-found">;
 }
 
 export interface AccountCreateInput {
@@ -139,6 +151,9 @@ export class AccountService {
         linkedAt: timestamp,
         lastAuthenticatedAt: timestamp,
         unlinkedAt: null,
+        accountHint: null,
+        displayName: input.displayName ?? null,
+        avatarUrl: input.avatarUrl ?? null,
       },
     });
     if (result === "identity-conflict") throw new AccountServiceError("IDENTITY_LINK_CONFLICT");
@@ -193,6 +208,59 @@ export class AccountService {
     return identity;
   }
 
+  async getSelf(
+    accountId: AccountId,
+    currentExternalIdentityId: string,
+    configuredProviders: readonly ProviderKind[],
+  ): Promise<AccountSelf> {
+    const account = await this.#resolveCanonicalAccount(accountId);
+    this.#requireUsableAccount(account);
+    const [profile, identities, platformAuthorities] = await Promise.all([
+      this.repository.getProfile(account.accountId),
+      this.repository.listActiveIdentities(account.accountId),
+      this.repository.listPlatformAuthorities(account.accountId),
+    ]);
+    if (!profile) throw new AccountServiceError("ACCOUNT_NOT_FOUND");
+    const displayName = profile.displayName;
+    const fallbackAvatar = {
+      initials: initials(displayName),
+      colorIndex: stableColorIndex(account.accountId),
+    };
+    return {
+      accountId: account.accountId,
+      displayName,
+      primaryVerifiedEmail: account.primaryVerifiedEmail,
+      avatar: profile.avatarUrl
+        ? { kind: "image", url: profile.avatarUrl, ...fallbackAvatar }
+        : {
+          kind: "fallback",
+          ...fallbackAvatar,
+        },
+      blockedAt: account.blockedAt,
+      platformAuthorities,
+      identities: identities.map(identity => ({
+        externalIdentityId: identity.externalIdentityId,
+        provider: identity.provider,
+        accountHint: identity.accountHint,
+        linkedAt: identity.linkedAt,
+        lastAuthenticatedAt: identity.lastAuthenticatedAt,
+        currentLogin: identity.externalIdentityId === currentExternalIdentityId,
+      })),
+      linkableProviders: configuredProviders.filter(provider =>
+        !identities.some(identity => identity.provider === provider)),
+    };
+  }
+
+  async updateProfile(input: {
+    readonly accountId: AccountId;
+    readonly displayName?: string | null;
+    readonly avatarExternalIdentityId?: string | null;
+  }): Promise<void> {
+    await this.#resolveCanonicalAccount(input.accountId).then(account => this.#requireUsableAccount(account));
+    const result = await this.repository.updateProfile({ ...input, now: this.now() });
+    if (result === "identity-not-found") throw new AccountServiceError("IDENTITY_NOT_FOUND");
+  }
+
   async linkExternalIdentity(input: {
     readonly accountId: AccountId;
     readonly currentExternalIdentityId: string;
@@ -227,6 +295,9 @@ export class AccountService {
         linkedAt: this.now(),
         lastAuthenticatedAt: input.target.authenticatedAt,
         unlinkedAt: null,
+        accountHint: input.target.accountHint,
+        displayName: input.target.displayName,
+        avatarUrl: input.target.avatarUrl,
       },
       displayName: input.target.displayName,
       avatarUrl: input.target.avatarUrl,
@@ -292,4 +363,18 @@ export class AccountService {
       throw new AccountServiceError("FRESH_AUTHENTICATION_REQUIRED");
     }
   }
+}
+
+function initials(displayName: string | null): string {
+  if (!displayName) return "UC";
+  const parts = displayName.trim().split(/\s+/).filter(Boolean);
+  return (parts.length > 1
+    ? `${parts[0]![0]}${parts.at(-1)![0]}`
+    : parts[0]!.slice(0, 2)).toUpperCase();
+}
+
+function stableColorIndex(accountId: string): number {
+  let hash = 0;
+  for (const character of accountId) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  return hash % 12;
 }

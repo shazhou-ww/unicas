@@ -1,4 +1,4 @@
-import { BookOpenText, Cable, LogOut, Shield, Users } from "lucide-react";
+import { BookOpenText, Cable, CircleUserRound, LogOut } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar.js";
 import {
   DropdownMenu,
@@ -67,6 +67,12 @@ export function UserMenu({
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <a href="#/account" className="cursor-pointer">
+            <CircleUserRound className="mr-2 h-4 w-4" />
+            <span>Account</span>
+          </a>
+        </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <a
             href="https://docs.unicas.work"

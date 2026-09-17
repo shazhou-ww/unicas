@@ -49,7 +49,7 @@ export interface PrimaryVerifiedEmail {
 }
 
 export type AccountAvatar =
-  | { readonly kind: "image"; readonly url: string }
+  | { readonly kind: "image"; readonly url: string; readonly initials: string; readonly colorIndex: number }
   | { readonly kind: "fallback"; readonly initials: string; readonly colorIndex: number };
 
 export interface ExternalIdentitySummary {
@@ -77,6 +77,7 @@ export interface AccountSelf extends AccountSummary {
   readonly blockedAt: number | null;
   readonly platformAuthorities: readonly PlatformAuthority[];
   readonly identities: readonly ExternalIdentitySummary[];
+  readonly linkableProviders: readonly ProviderKind[];
 }
 
 export interface PlatformAccountSummary extends AccountSummary {

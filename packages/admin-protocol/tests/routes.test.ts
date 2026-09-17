@@ -69,6 +69,9 @@ describe("CAS admin routes", () => {
 describe("App admin routes", () => {
   test.each([
     ["GET", appAdminRoutes.me(), "me"],
+    ["GET", appAdminRoutes.account(), "getAccount"],
+    ["PATCH", appAdminRoutes.accountProfile(), "patchAccountProfile"],
+    ["GET", appAdminRoutes.accountIdentities(), "listAccountIdentities"],
     ["GET", appAdminRoutes.apps(), "listApps"],
     ["POST", appAdminRoutes.apps(), "createApp"],
     ["GET", appAdminRoutes.app({ appId: "app/a" }), "getApp"],

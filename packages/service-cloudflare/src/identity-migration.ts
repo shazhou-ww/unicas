@@ -85,8 +85,8 @@ export async function migrateLegacyAdminIdentities(
           "INSERT INTO cas_account_profiles (account_id, display_name, avatar_url, display_name_source, avatar_source, updated_at) VALUES (?, ?, NULL, ?, NULL, ?)",
         ).bind(accountId, profile?.display_name ?? null, profile?.display_name ? externalIdentityId : null, completedAt),
         db.prepare(
-          "INSERT INTO cas_external_identities (external_identity_id, account_id, provider, issuer, subject, linked_at, last_authenticated_at, unlinked_at) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)",
-        ).bind(externalIdentityId, accountId, provider, identity.issuer, identity.subject, identity.firstSeenAt),
+          "INSERT INTO cas_external_identities (external_identity_id, account_id, provider, issuer, subject, linked_at, last_authenticated_at, unlinked_at, display_name) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?)",
+        ).bind(externalIdentityId, accountId, provider, identity.issuer, identity.subject, identity.firstSeenAt, profile?.display_name ?? null),
         db.prepare(
           "INSERT INTO cas_identity_migration_map (identity_issuer, subject, account_id, external_identity_id, created_at) VALUES (?, ?, ?, ?, ?)",
         ).bind(identity.issuer, identity.subject, accountId, externalIdentityId, completedAt),

@@ -107,6 +107,7 @@ export {
 export {
   AppAdminApiBasePath,
   AppAdminApiErrorMap,
+  PatchAccountProfileSchema,
   PatchAppRequestSchema,
   AppInvitationQuerySchema,
   InspectAppIssuerRequestSchema,

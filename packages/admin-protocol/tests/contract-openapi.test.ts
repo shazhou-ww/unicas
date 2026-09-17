@@ -185,7 +185,7 @@ describe("CAS admin schemas", () => {
     expect(SpaceRootRefBalanceSchema.safeParse(balance).success).toBe(true);
     const operationCount = Object.values(appAdminApiContract)
       .reduce((count, group) => count + Object.keys(group).length, 0);
-    expect(operationCount).toBe(37);
+    expect(operationCount).toBe(40);
   });
 });
 
@@ -211,8 +211,11 @@ describe("CAS admin OpenAPI", () => {
     const document = await generateAppAdminOpenApiDocument();
     const allOperations = operations(document);
     const serialized = JSON.stringify(document);
-    expect(Object.keys(document.paths ?? {})).toHaveLength(27);
-    expect(allOperations).toHaveLength(37);
+    expect(Object.keys(document.paths ?? {})).toHaveLength(30);
+    expect(allOperations).toHaveLength(40);
+    expect(document.paths?.["/admin/account"]?.get?.operationId).toBe("getCurrentAccount");
+    expect(document.paths?.["/admin/account/profile"]?.patch?.operationId).toBe("patchCurrentAccountProfile");
+    expect(document.paths?.["/admin/account/identities"]?.get?.operationId).toBe("listCurrentAccountIdentities");
     expect(document.paths?.["/admin/apps/{appId}/people"]?.get).toBeDefined();
     expect(document.paths?.["/admin/platform/people"]?.get).toBeDefined();
     expect(document.paths?.["/admin/platform/access-summary"]?.get).toBeDefined();

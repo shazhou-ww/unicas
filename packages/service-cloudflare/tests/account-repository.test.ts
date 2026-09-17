@@ -132,4 +132,43 @@ describe("D1 Account repository", () => {
       remainingAuthenticatedAt: 995,
     })).rejects.toMatchObject({ code: "FINAL_IDENTITY_CANNOT_BE_UNLINKED" });
   });
+
+  test("projects self profile and applies last-write-wins field updates", async () => {
+    const { repository, service } = await fixture();
+    const created = await service.createForExternalIdentity({
+      provider: "google",
+      issuer: "https://accounts.google.com",
+      subject: "profile-user",
+      displayName: "Initial Name",
+      avatarUrl: "https://lh3.googleusercontent.com/avatar",
+    });
+    await expect(service.getSelf(
+      created.account.accountId,
+      created.authenticatedIdentity.externalIdentityId,
+      ["google", "github"],
+    )).resolves.toMatchObject({
+      displayName: "Initial Name",
+      avatar: { kind: "image", url: "https://lh3.googleusercontent.com/avatar", initials: "IN", colorIndex: expect.any(Number) },
+      linkableProviders: ["github"],
+    });
+    await service.updateProfile({
+      accountId: created.account.accountId,
+      displayName: "User Choice",
+      avatarExternalIdentityId: null,
+    });
+    await expect(service.getSelf(
+      created.account.accountId,
+      created.authenticatedIdentity.externalIdentityId,
+      ["google", "github"],
+    )).resolves.toMatchObject({
+      displayName: "User Choice",
+      avatar: { kind: "fallback", initials: "UC" },
+    });
+    await expect(service.updateProfile({
+      accountId: created.account.accountId,
+      avatarExternalIdentityId: "missing",
+    })).rejects.toMatchObject({ code: "IDENTITY_NOT_FOUND" });
+    expect(await repository.getIdentity(created.authenticatedIdentity.externalIdentityId))
+      .toMatchObject({ displayName: "Initial Name", avatarUrl: "https://lh3.googleusercontent.com/avatar" });
+  });
 });

@@ -36,6 +36,7 @@ export type {
   ManagedSpaceCapability,
   Principal,
   Profile,
+  AccountSelf,
   SpaceRootRefBalance,
   SpaceRootRefEvent,
   CasControlAuditEvent,
@@ -64,4 +65,6 @@ export type {
   PlatformAuditAction,
   PlatformAuditEvent,
   PlatformAuditPage,
+  ExternalIdentitySummary,
+  ProviderKind,
 } from "@unicas/admin-protocol";
