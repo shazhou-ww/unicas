@@ -554,4 +554,4 @@ function membershipVerifiedEmail(row: MembershipAccountRow): PrimaryVerifiedEmai
       verifiedAt: row.email_verified_at,
     }
     : null;
-  }
+}

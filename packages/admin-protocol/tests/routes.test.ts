@@ -100,6 +100,12 @@ describe("App admin routes", () => {
     ["POST", appAdminRoutes.acceptPlatformInvitation({ token: "tok/1" }), "acceptPlatformInvitation"],
     ["GET", appAdminRoutes.platformAuditEvents(), "listPlatformAuditEvents"],
     ["GET", appAdminRoutes.platformPrincipalAccess({ principalRef: "principal/1" }), "getPlatformAccess"],
+    ["GET", appAdminRoutes.platformAccounts(), "listPlatformAccounts"],
+    ["GET", appAdminRoutes.platformAccount({ accountId: "acct/a" }), "getPlatformAccount"],
+    ["PUT", appAdminRoutes.platformAccountAuthority({ accountId: "acct/a", authority: "platform.admin" }), "grantPlatformAccountAuthority"],
+    ["DELETE", appAdminRoutes.platformAccountAuthority({ accountId: "acct/a", authority: "apps.create" }), "revokePlatformAccountAuthority"],
+    ["PUT", appAdminRoutes.platformAccountBlock({ accountId: "acct/a" }), "blockPlatformAccount"],
+    ["DELETE", appAdminRoutes.platformAccountBlock({ accountId: "acct/a" }), "restorePlatformAccount"],
   ] as const)("matches %s %s -> %s", (method, pathname, operation) => {
     expect(matchAppAdminRoute(method, pathname)).toMatchObject({ operation });
   });

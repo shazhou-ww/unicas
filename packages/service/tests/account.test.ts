@@ -50,6 +50,10 @@ function fixture() {
     readControlSnapshot: vi.fn(async () => 1),
     listAppMemberships: vi.fn(async () => []),
     commitRemoveAppMembership: vi.fn(async () => "removed"),
+    getPlatformAccount: vi.fn(async () => null),
+    listPlatformAccounts: vi.fn(async () => []),
+    commitPlatformAuthority: vi.fn(async () => "updated"),
+    commitPlatformBlock: vi.fn(async () => "updated"),
     createAccountWithIdentity: vi.fn(async () => "created"),
     commitLinkIdentity: vi.fn(async () => "linked"),
     commitUnlinkIdentity: vi.fn(async () => "unlinked"),
@@ -172,6 +176,60 @@ describe("Account service", () => {
       expect.objectContaining({ appId: "cas_app_a", account: expect.objectContaining({ accountId }) }),
       expect.objectContaining({ appId: "cas_app_b", account: expect.objectContaining({ accountId }) }),
     ]);
+  });
+
+  test("projects platform Accounts and guards authority and block commands", async () => {
+    const { repository, service } = fixture();
+    const platformRecord = {
+      account,
+      profile: {
+        accountId,
+        displayName: "Alice Example",
+        avatarUrl: null,
+        displayNameSource: "user",
+        avatarSource: "user",
+        updatedAt: 2,
+      },
+      platformAuthorities: ["platform.admin" as const],
+      appMembershipCount: 1,
+      lastActiveAt: 10,
+    };
+    vi.mocked(repository.listPlatformAuthorities).mockResolvedValue(["platform.admin"]);
+    vi.mocked(repository.listPlatformAccounts).mockResolvedValue([platformRecord]);
+    vi.mocked(repository.getPlatformAccount).mockResolvedValue(platformRecord);
+
+    await expect(service.listPlatformAccounts({ actorAccountId: accountId }))
+      .resolves.toMatchObject({ items: [{ accountId, effectiveAccess: "active" }] });
+    await expect(service.getPlatformAccount(accountId, accountId))
+      .resolves.toMatchObject({ accountId, memberships: [] });
+    await service.setPlatformAuthority({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      targetAccountId: accountId,
+      authority: "apps.create",
+      grant: true,
+    });
+    await service.setPlatformBlocked({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      targetAccountId: `acct_${"b".repeat(22)}`,
+      blocked: true,
+    });
+    vi.mocked(repository.commitPlatformAuthority).mockResolvedValue("last-admin");
+    await expect(service.setPlatformAuthority({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      targetAccountId: accountId,
+      authority: "platform.admin",
+      grant: false,
+    })).rejects.toMatchObject({ code: "LAST_PLATFORM_ADMIN" });
+    vi.mocked(repository.commitPlatformBlock).mockResolvedValue("self-block");
+    await expect(service.setPlatformBlocked({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      targetAccountId: accountId,
+      blocked: true,
+    })).rejects.toMatchObject({ code: "SELF_BLOCK_FORBIDDEN" });
   });
 
   test("fails closed on alias cycles and excessive depth", async () => {

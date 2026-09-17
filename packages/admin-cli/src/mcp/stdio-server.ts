@@ -145,36 +145,42 @@ async function resolveEtag(
 
 /** Maps the remote tool contract to admin-client operations. */
 const TOOL_HANDLERS = {
-  async list_platform_principals(admin, args) {
+  async list_platform_accounts(admin, args) {
     const effectiveAccess = args.effectiveAccess;
     const authority = args.authority;
-    return admin.listPlatformPrincipals({
+    return admin.listPlatformAccounts({
       ...pick(args, ["query", "limit", "cursor"]),
       ...(effectiveAccess === undefined ? {} : { effectiveAccess: str(effectiveAccess) as "active" | "blocked" | "no_access" }),
       ...(authority === undefined ? {} : { authority: str(authority) as PlatformAuthority | "none" }),
     });
   },
 
-  async get_platform_principal(admin, args) {
-    return admin.getPlatformPrincipal({ principalRef: str(args.principalRef) });
+  async get_platform_account(admin, args) {
+    return admin.getPlatformAccount({ accountId: str(args.accountId) });
   },
 
-  async update_platform_access(admin, args) {
-    const principalRef = str(args.principalRef);
-    requireMatch(args.confirmPrincipalRef, principalRef, "confirmPrincipalRef must exactly match principalRef");
-    if (args.status === undefined && args.authorities === undefined) throw new Error("at least one access change is required");
-    const requested = args.authorities;
-    if (requested !== undefined && (!Array.isArray(requested) || requested.some(authority => authority !== "platform.admin" && authority !== "apps.create"))) {
-      throw new Error("invalid platform authorities");
-    }
-    return admin.patchPlatformAccess(
-      { principalRef },
-      {
-        ...(args.status === undefined ? {} : { status: str(args.status) as "active" | "blocked" }),
-        ...(requested === undefined ? {} : { authorities: requested as PlatformAuthority[] }),
-      },
-      str(args.etag),
-    );
+  async grant_platform_authority(admin, args) {
+    const accountId = confirmedAccountId(args);
+    await admin.grantPlatformAccountAuthority({ accountId, authority: str(args.authority) as PlatformAuthority });
+    return { ok: true };
+  },
+
+  async revoke_platform_authority(admin, args) {
+    const accountId = confirmedAccountId(args);
+    await admin.revokePlatformAccountAuthority({ accountId, authority: str(args.authority) as PlatformAuthority });
+    return { ok: true };
+  },
+
+  async block_platform_account(admin, args) {
+    const accountId = confirmedAccountId(args);
+    await admin.blockPlatformAccount({ accountId });
+    return { ok: true };
+  },
+
+  async restore_platform_account(admin, args) {
+    const accountId = confirmedAccountId(args);
+    await admin.restorePlatformAccount({ accountId });
+    return { ok: true };
   },
 
   async list_platform_audit_events(admin, args) {
@@ -528,6 +534,12 @@ function str(value: unknown): string {
 
 function requireMatch(actual: unknown, expected: unknown, message: string): void {
   if (actual !== expected) throw new Error(message);
+}
+
+function confirmedAccountId(args: Record<string, unknown>): string {
+  const accountId = str(args.accountId);
+  requireMatch(args.confirmAccountId, accountId, "confirmAccountId must exactly match accountId");
+  return accountId;
 }
 
 function pick(args: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {

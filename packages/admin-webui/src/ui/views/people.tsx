@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { RefreshCw, Search, UserMinus, UserPlus, X } from "lucide-react";
-import type { AppPerson, PlatformPerson, PlatformPrincipalDetail, PeoplePage } from "@unicas/admin-client";
+import type { AppPerson, PlatformAccountDetail, PlatformPerson, PeoplePage } from "@unicas/admin-client";
 import { api, ifMatch } from "../api.js";
 import { formatErrorSafe } from "./view-helpers.js";
 import { CopyBubble } from "../components/copy-bubble.js";
-import { PrincipalDetailEditor } from "./platform/principal-editor.js";
+import { PlatformAccountEditor } from "./platform/principal-editor.js";
 import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";
 import { Label } from "@/components/ui/label.js";
@@ -21,7 +21,7 @@ type Props = { scope: Scope; initialFilter?: string };
 
 function personKey(person: Person): string {
   if (person.kind === "member") return `${person.kind}:${person.membership.account.accountId}`;
-  if (person.kind === "principal") return `principal:${person.principal.principalRef}`;
+  if (person.kind === "account") return `account:${person.account.accountId}`;
   return `invitation:${person.invitation.invitationId}`;
 }
 
@@ -52,8 +52,8 @@ function PeoplePanel({ scope, initialFilter = "current" }: Props) {
   const [mutationBusy, setMutationBusy] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<Person | null>(null);
-  const [principalRef, setPrincipalRef] = useState<string | null>(null);
-  const [principal, setPrincipal] = useState<PlatformPrincipalDetail | null>(null);
+  const [accountId, setAccountId] = useState<string | null>(null);
+  const [detailAccount, setDetailAccount] = useState<PlatformAccountDetail | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -70,15 +70,15 @@ function PeoplePanel({ scope, initialFilter = "current" }: Props) {
   }, [base, filters, version]);
 
   useEffect(() => {
-    if (!principalRef) return;
+    if (!accountId) return;
     let active = true;
-    setPrincipal(null);
+    setDetailAccount(null);
     setDetailError(null);
-    api<PlatformPrincipalDetail>(`/admin/platform/principals/${encodeURIComponent(principalRef)}`)
-      .then(result => { if (active) setPrincipal(result); })
+    api<PlatformAccountDetail>(`/admin/platform/accounts/${encodeURIComponent(accountId)}`)
+      .then(result => { if (active) setDetailAccount(result); })
       .catch(caught => { if (active) setDetailError(formatErrorSafe(caught)); });
     return () => { active = false; };
-  }, [principalRef]);
+  }, [accountId]);
 
   async function load(next?: string, request = ++requestVersion.current) {
     setBusy(true);
@@ -145,7 +145,7 @@ function PeoplePanel({ scope, initialFilter = "current" }: Props) {
       <Input className="min-w-0 flex-[1_1_14rem]" aria-label="Search people" placeholder={`Search name, email or ${platform ? "Principal" : "Account"}`} value={draft.query} onChange={event => setDraft({ ...draft, query: event.target.value })} />
       <Select value={draft.filter} onValueChange={filter => setDraft({ ...draft, filter })}>
         <SelectTrigger className="w-44" aria-label="People filter"><SelectValue /></SelectTrigger>
-        <SelectContent><SelectItem value="current">Current</SelectItem><SelectItem value={platform ? "principals" : "members"}>{platform ? "Principals" : "Members"}</SelectItem><SelectItem value="pending">Pending invitations</SelectItem><SelectItem value="history">Invitation history</SelectItem></SelectContent>
+        <SelectContent><SelectItem value="current">Current</SelectItem><SelectItem value={platform ? "accounts" : "members"}>{platform ? "Accounts" : "Members"}</SelectItem><SelectItem value="pending">Pending invitations</SelectItem><SelectItem value="history">Invitation history</SelectItem></SelectContent>
       </Select>
       {platform ? <>
         <Select value={draft.authority} onValueChange={authority => setDraft({ ...draft, authority })}><SelectTrigger className="w-44" aria-label="Authority"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All authorities</SelectItem><SelectItem value="platform.admin">Platform Admin</SelectItem><SelectItem value="apps.create">App creation</SelectItem><SelectItem value="none">No authority</SelectItem></SelectContent></Select>
@@ -160,28 +160,24 @@ function PeoplePanel({ scope, initialFilter = "current" }: Props) {
     {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
     {busy ? <p role="status" className="text-sm text-muted-foreground">Loading people...</p> : null}
     <Table>
-      <TableHeader><TableRow><TableHead>Person / Email</TableHead><TableHead>Status</TableHead>{platform ? <><TableHead>Authorities</TableHead><TableHead>Apps</TableHead></> : null}<TableHead>{platform ? "Created / Invited" : "Joined / Invited"}</TableHead><TableHead>Expires</TableHead><TableHead><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader>
+      <TableHeader><TableRow><TableHead>Account / Email</TableHead><TableHead>Status</TableHead>{platform ? <><TableHead>Authorities</TableHead><TableHead>Apps</TableHead></> : null}<TableHead>{platform ? "Created / Invited" : "Joined / Invited"}</TableHead><TableHead>Expires</TableHead><TableHead><span className="sr-only">Actions</span></TableHead></TableRow></TableHeader>
       <TableBody>
         {!busy && !error && items.length === 0 ? <TableRow><TableCell colSpan={platform ? 7 : 5}>No people found.</TableCell></TableRow> : null}
         {items.map(person => {
-          const account = person.kind === "member" ? person.membership.account : null;
-          const principal = person.kind === "principal" ? person.principal : null;
+          const account = person.kind === "member" ? person.membership.account : person.kind === "account" ? person.account : null;
           const name = account
             ? account.displayName || account.primaryVerifiedEmail?.normalizedEmail || account.accountId
-            : principal
-              ? principal.profile.displayName || principal.profile.emailForDisplay || principal.principal.subject
-              : person.kind === "invitation" ? person.invitation.emailConstraint ?? "Unconstrained invitation" : "";
-          const state = person.kind === "member" ? "Member" : person.kind === "principal" ? person.principal.effectiveAccess : person.invitation.status;
-          const time = person.kind === "member" ? person.joinedAt : person.kind === "principal" ? person.principal.createdAt : person.invitation.createdAt;
-          const grants = person.kind === "principal" ? person.principal.authorities : person.kind === "invitation" && "authorities" in person.invitation ? person.invitation.authorities : [];
+            : person.kind === "invitation" ? person.invitation.emailConstraint ?? "Unconstrained invitation" : "";
+          const state = person.kind === "member" ? "Member" : person.kind === "account" ? person.account.effectiveAccess : person.invitation.status;
+          const time = person.kind === "member" ? person.joinedAt : person.kind === "account" ? person.account.createdAt : person.invitation.createdAt;
+          const grants = person.kind === "account" ? person.account.platformAuthorities : person.kind === "invitation" && "authorities" in person.invitation ? person.invitation.authorities : [];
           return <TableRow key={personKey(person)}>
             <TableCell className="min-w-48 max-w-sm break-words">
-              {person.kind === "principal" ? <Button variant="link" className="h-auto max-w-full whitespace-normal p-0 text-left" aria-label={`Open Principal details for ${name}`} onClick={event => { detailTrigger.current = event.currentTarget; setPrincipalRef(person.principal.principalRef); }}>{name}</Button> : <span className="font-medium">{name}</span>}
+              {person.kind === "account" ? <Button variant="link" className="h-auto max-w-full whitespace-normal p-0 text-left" aria-label={`Open Account details for ${name}`} onClick={event => { detailTrigger.current = event.currentTarget; setAccountId(person.account.accountId); }}>{name}</Button> : <span className="font-medium">{name}</span>}
               {account ? <><div className="text-xs text-muted-foreground">{account.primaryVerifiedEmail?.normalizedEmail}</div><div className="break-all font-mono text-xs text-muted-foreground">{account.accountId}</div></> : null}
-              {principal ? <><div className="text-xs text-muted-foreground">{principal.profile.emailForDisplay}</div><div className="break-all font-mono text-xs text-muted-foreground">{principal.principal.issuer} / {principal.principal.subject}</div></> : null}
             </TableCell>
-            <TableCell><Badge variant={state === "blocked" ? "destructive" : "secondary"}>{state}</Badge>{person.kind === "principal" ? <div className="text-xs text-muted-foreground">Principal</div> : person.kind === "invitation" ? <div className="text-xs text-muted-foreground">Invitation</div> : null}</TableCell>
-            {platform ? <><TableCell><div className="flex flex-wrap gap-1">{grants.map(grant => <Badge key={grant} variant="outline">{grant}</Badge>)}{grants.length === 0 ? "-" : null}</div></TableCell><TableCell>{person.kind === "principal" ? person.principal.appMembershipCount : "-"}</TableCell></> : null}
+            <TableCell><Badge variant={state === "blocked" ? "destructive" : "secondary"}>{state}</Badge>{person.kind === "account" ? <div className="text-xs text-muted-foreground">Account</div> : person.kind === "invitation" ? <div className="text-xs text-muted-foreground">Invitation</div> : null}</TableCell>
+            {platform ? <><TableCell><div className="flex flex-wrap gap-1">{grants.map(grant => <Badge key={grant} variant="outline">{grant}</Badge>)}{grants.length === 0 ? "-" : null}</div></TableCell><TableCell>{person.kind === "account" ? person.account.appMembershipCount : "-"}</TableCell></> : null}
             <TableCell>{new Date(time).toLocaleString()}</TableCell>
             <TableCell>{person.kind === "invitation" ? new Date(person.invitation.expiresAt).toLocaleString() : "-"}</TableCell>
             <TableCell>{person.kind === "member" || (person.kind === "invitation" && person.invitation.status === "pending" && person.invitation.expiresAt > Date.now()) ? <Button variant="ghost" size="icon" title={person.kind === "member" ? "Remove member" : "Revoke invitation"} onClick={event => { actionTrigger.current = event.currentTarget; setConfirming(person); setMutationError(null); }}>{person.kind === "member" ? <UserMinus /> : <X />}</Button> : null}</TableCell>
@@ -207,8 +203,8 @@ function PeoplePanel({ scope, initialFilter = "current" }: Props) {
         <DialogFooter><Button variant="outline" disabled={mutationBusy} onClick={() => setConfirming(null)}>Cancel</Button><Button variant="destructive" disabled={mutationBusy} onClick={() => void remove()}>Confirm {confirming?.kind === "member" ? "removal" : "revoke"}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
-    <Sheet open={principalRef !== null} onOpenChange={open => { if (!open) setPrincipalRef(null); }}><SheetContent className="w-full max-w-full overflow-y-auto sm:max-w-[540px]" aria-describedby={undefined} onCloseAutoFocus={event => restoreFocus(event, detailTrigger.current)}><SheetTitle>Principal Details</SheetTitle>
-      {detailError ? <p role="alert">{detailError}</p> : principal ? <PrincipalDetailEditor key={principal.principalRef} principal={principal} onSaved={() => { setPrincipalRef(null); refresh(); }} /> : <p role="status">Loading Principal...</p>}
+    <Sheet open={accountId !== null} onOpenChange={open => { if (!open) setAccountId(null); }}><SheetContent className="w-full max-w-full overflow-y-auto sm:max-w-[540px]" aria-describedby={undefined} onCloseAutoFocus={event => restoreFocus(event, detailTrigger.current)}><SheetTitle>Account Details</SheetTitle>
+      {detailError ? <p role="alert">{detailError}</p> : detailAccount ? <PlatformAccountEditor key={detailAccount.accountId} account={detailAccount} onChanged={refresh} /> : <p role="status">Loading Account...</p>}
     </SheetContent></Sheet>
   </section>;
 }

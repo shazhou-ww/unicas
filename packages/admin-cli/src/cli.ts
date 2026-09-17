@@ -63,8 +63,9 @@ Usage:
   unicas platform-invitations revoke <invitationId> --etag E [--confirm-invitation-id ID]
   unicas platform-audit [--action A] [--actor-principal-ref R] [--target-principal-ref R] [--created-after MS] [--limit N] [--cursor C]
   unicas platform-access list [--query Q] [--effective-access active|blocked|no_access] [--authority platform.admin|apps.create|none] [--limit N] [--cursor C]
-  unicas platform-access get <principalRef>
-  unicas platform-access update <principalRef> [--status active|blocked] [--authority platform.admin|apps.create ... | --clear-authorities] [--etag E]
+  unicas platform-access get <accountId>
+  unicas platform-access grant|revoke <accountId> <platform.admin|apps.create> [--confirm-account-id ID]
+  unicas platform-access block|restore <accountId> [--confirm-account-id ID]
 
 Legacy v1 compatibility:
   unicas principal                                          Deprecated Principal/Profile alias

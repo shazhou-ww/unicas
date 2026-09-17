@@ -231,24 +231,27 @@ describe("command layer", () => {
     });
   });
 
-  test("platform access lists filters, gets detail, and updates with the current ETag", async () => {
+  test("platform access lists Accounts and sends explicit revision-free commands", async () => {
     await seedLoggedIn(ctx.store);
     const server = new FakeAdminApi({ adminVocabulary: "app" });
     ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
     const { writes } = captureStdout();
+    const accountId = `acct_${"a".repeat(22)}`;
 
     await platformAccessCommand(ctx, "list", ["--authority", "apps.create", "--effective-access", "active", "--limit", "10"]);
-    expect(JSON.parse(writes.join(""))).toMatchObject({ items: [{ principalRef: "principal-1" }] });
+    expect(JSON.parse(writes.join(""))).toMatchObject({ items: [{ accountId }] });
     expect(server.requests.at(-1)?.search).toBe("?effectiveAccess=active&authority=apps.create&limit=10");
     writes.length = 0;
-    await platformAccessCommand(ctx, "get", ["principal-1"]);
-    expect(JSON.parse(writes.join(""))).toMatchObject({ principalRef: "principal-1", memberships: [] });
+    await platformAccessCommand(ctx, "get", [accountId]);
+    expect(JSON.parse(writes.join(""))).toMatchObject({ accountId, memberships: [] });
     writes.length = 0;
-    await platformAccessCommand(ctx, "update", ["principal-1", "--clear-authorities"]);
-    expect(JSON.parse(writes.join(""))).toEqual({ etag: '"2"' });
+    await platformAccessCommand(ctx, "revoke", [accountId, "apps.create", "--confirm-account-id", accountId]);
+    writes.length = 0;
+    await platformAccessCommand(ctx, "block", [accountId, "--confirm-account-id", accountId]);
+    expect(JSON.parse(writes.join(""))).toEqual({ ok: true });
     expect(server.requests.slice(-2)).toEqual([
-      expect.objectContaining({ pathname: "/admin/platform/principals/principal-1/access", method: "GET" }),
-      expect.objectContaining({ pathname: "/admin/platform/principals/principal-1/access", method: "PATCH", ifMatch: '"1"', body: { authorities: [] } }),
+      expect.objectContaining({ pathname: `/admin/platform/accounts/${accountId}/authorities/apps.create`, method: "DELETE", ifMatch: null }),
+      expect.objectContaining({ pathname: `/admin/platform/accounts/${accountId}/block`, method: "PUT", ifMatch: null }),
     ]);
   });
 

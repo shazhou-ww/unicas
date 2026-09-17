@@ -13,6 +13,7 @@ import {
 import { createAdminBff } from "../src/admin-bff/bff.js";
 import type { AdminBffConfig } from "../src/admin-bff/config.js";
 import { D1AccountRepository } from "../src/account-repository.js";
+import { D1PlatformAccessRepository } from "../src/platform-access-repository.js";
 import { migrateControlSchema } from "../src/control-schema.js";
 
 let runtime: Miniflare | undefined;
@@ -110,6 +111,16 @@ describe("BFF Account identity mutations", () => {
     await db.prepare(
       "INSERT INTO cas_account_platform_authorities (account_id, authority, granted_at) VALUES (?, 'platform.admin', 1)",
     ).bind(created.account.accountId).run();
+    await db.prepare(
+      `INSERT INTO cas_platform_principals
+        (principal_ref, identity_issuer, subject, status, platform_admin, apps_create,
+         revision, created_at, updated_at, account_id)
+       VALUES ('actor-ref', ?, ?, 'active', 1, 0, 1, 1, 1, ?)`,
+    ).bind(
+      created.authenticatedIdentity.issuer,
+      created.authenticatedIdentity.subject,
+      created.account.accountId,
+    ).run();
     const sessions = new MemorySessions();
     const controlPlane = {
       recordSessionAudit: async () => undefined,
@@ -136,6 +147,7 @@ describe("BFF Account identity mutations", () => {
       controlPlane,
       sessionStore: sessions,
       accountRepository: repository,
+      platformAccessRepository: new D1PlatformAccessRepository(db),
       providerRegistry: new ProviderRegistry([adapter("google", now), adapter("github", now)]),
     });
 
@@ -182,6 +194,39 @@ describe("BFF Account identity mutations", () => {
         member.account.accountId,
       ).run();
     }
+    expect(await (await bff(new Request("https://console.example/admin/platform/accounts", {
+      headers: { Cookie: initialCookie },
+    }))).json()).toMatchObject({
+      items: expect.arrayContaining([
+        expect.objectContaining({ accountId: created.account.accountId }),
+        expect.objectContaining({ accountId: targetMember.account.accountId }),
+      ])
+    });
+    expect((await bff(new Request(
+      `https://console.example/admin/platform/accounts/${targetMember.account.accountId}/authorities/apps.create`,
+      { method: "PUT", headers: { Cookie: initialCookie } },
+    ))).status).toBe(204);
+    expect((await bff(new Request(
+      `https://console.example/admin/platform/accounts/${targetMember.account.accountId}/authorities/apps.create`,
+      { method: "DELETE", headers: { Cookie: initialCookie } },
+    ))).status).toBe(204);
+    expect((await bff(new Request(
+      `https://console.example/admin/platform/accounts/${created.account.accountId}/authorities/platform.admin`,
+      { method: "DELETE", headers: { Cookie: initialCookie } },
+    ))).status).toBe(409);
+    expect((await bff(new Request(
+      `https://console.example/admin/platform/accounts/${created.account.accountId}/block`,
+      { method: "PUT", headers: { Cookie: initialCookie } },
+    ))).status).toBe(409);
+    expect((await bff(new Request(
+      `https://console.example/admin/platform/accounts/${targetMember.account.accountId}/block`,
+      { method: "PUT", headers: { Cookie: initialCookie } },
+    ))).status).toBe(204);
+    expect(await repository.getAccount(targetMember.account.accountId)).toMatchObject({ credentialVersion: 2, blockedAt: clock });
+    expect((await bff(new Request(
+      `https://console.example/admin/platform/accounts/${targetMember.account.accountId}/block`,
+      { method: "DELETE", headers: { Cookie: initialCookie } },
+    ))).status).toBe(204);
     expect(await (await bff(new Request("https://console.example/admin/me", {
       headers: { Cookie: initialCookie },
     }))).json()).toMatchObject({

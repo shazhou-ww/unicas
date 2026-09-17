@@ -278,56 +278,70 @@ export function createControlPlaneMcpServer(
   );
 
   server.registerTool(
-    APP_ADMIN_MCP_TOOLS.list_platform_principals.name,
-    APP_ADMIN_MCP_TOOLS.list_platform_principals.registration,
+    APP_ADMIN_MCP_TOOLS.list_platform_accounts.name,
+    APP_ADMIN_MCP_TOOLS.list_platform_accounts.registration,
     async ({ query, effectiveAccess, authority, limit, cursor }) => {
       const grant = requireGrantScope("control:security");
       const authorizationError = await options.authorizePlatformOperation?.(grant, "platform.admin");
       if (authorizationError) return toolResult(authorizationError);
-      if (!options.platformAccess) return toolResult({ error: "SERVICE_UNAVAILABLE" });
-      return platformToolResult(() => options.platformAccess!.listPrincipals(grantPrincipal(grant), {
-        query,
-        effectiveAccess,
-        authority,
-        limit,
-        cursor,
-      }));
-    },
-  );
-
-  server.registerTool(
-    APP_ADMIN_MCP_TOOLS.get_platform_principal.name,
-    APP_ADMIN_MCP_TOOLS.get_platform_principal.registration,
-    async ({ principalRef }) => {
-      const grant = requireGrantScope("control:security");
-      const authorizationError = await options.authorizePlatformOperation?.(grant, "platform.admin");
-      if (authorizationError) return toolResult(authorizationError);
-      if (!options.platformAccess) return toolResult({ error: "SERVICE_UNAVAILABLE" });
-      return platformToolResult(() => options.platformAccess!.getPrincipal(grantPrincipal(grant), principalRef));
-    },
-  );
-
-  server.registerTool(
-    APP_ADMIN_MCP_TOOLS.update_platform_access.name,
-    APP_ADMIN_MCP_TOOLS.update_platform_access.registration,
-    async ({ principalRef, confirmPrincipalRef, status, authorities, etag }) => {
-      const grant = requireMutation("control:security", options);
-      if (principalRef !== confirmPrincipalRef) return confirmationError("confirmPrincipalRef must exactly match principalRef");
-      if (status === undefined && authorities === undefined) return toolResult({ error: "INVALID_REQUEST" });
-      const authorizationError = await options.authorizePlatformOperation?.(grant, "platform.admin");
-      if (authorizationError) return toolResult(authorizationError);
-      if (!options.platformAccess) return toolResult({ error: "SERVICE_UNAVAILABLE" });
-      return platformToolResult(async () => {
-        const updated = await options.platformAccess!.patchAccess(
-          grantPrincipal(grant),
-          principalRef,
-          { status, authorities },
-          etag,
-        );
-        return { etag: formatCasAdminETag(updated.revision) };
+      return accountToolResult(async () => {
+        const actor = await requireGrantAccount(grant, options);
+        return options.accountService!.listPlatformAccounts({
+          actorAccountId: actor.account.accountId,
+          query: { query, effectiveAccess, authority, limit, cursor },
+        });
       });
     },
   );
+
+  server.registerTool(
+    APP_ADMIN_MCP_TOOLS.get_platform_account.name,
+    APP_ADMIN_MCP_TOOLS.get_platform_account.registration,
+    async ({ accountId }) => {
+      const grant = requireGrantScope("control:security");
+      const authorizationError = await options.authorizePlatformOperation?.(grant, "platform.admin");
+      if (authorizationError) return toolResult(authorizationError);
+      return accountToolResult(async () => {
+        const actor = await requireGrantAccount(grant, options);
+        return options.accountService!.getPlatformAccount(actor.account.accountId, accountId);
+      });
+    },
+  );
+
+  for (const command of [
+    { definition: APP_ADMIN_MCP_TOOLS.grant_platform_authority, kind: "authority" as const, grant: true },
+    { definition: APP_ADMIN_MCP_TOOLS.revoke_platform_authority, kind: "authority" as const, grant: false },
+    { definition: APP_ADMIN_MCP_TOOLS.block_platform_account, kind: "block" as const, blocked: true },
+    { definition: APP_ADMIN_MCP_TOOLS.restore_platform_account, kind: "block" as const, blocked: false },
+  ]) {
+    server.registerTool(command.definition.name, command.definition.registration, async (args) => {
+      const grant = requireMutation("control:security", options);
+      if (args.accountId !== args.confirmAccountId) return confirmationError("confirmAccountId must exactly match accountId");
+      const authorizationError = await options.authorizePlatformOperation?.(grant, "platform.admin");
+      if (authorizationError) return toolResult(authorizationError);
+      return accountToolResult(async () => {
+        const actor = await requireGrantAccount(grant, options);
+        if (command.kind === "authority") {
+          if (!("authority" in args)) throw new Error("Authority argument unavailable");
+          await options.accountService!.setPlatformAuthority({
+            actorAccountId: actor.account.accountId,
+            actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+            targetAccountId: args.accountId,
+            authority: args.authority as PlatformAuthority,
+            grant: command.grant,
+          });
+        } else {
+          await options.accountService!.setPlatformBlocked({
+            actorAccountId: actor.account.accountId,
+            actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+            targetAccountId: args.accountId,
+            blocked: command.blocked,
+          });
+        }
+        return { ok: true };
+      });
+    });
+  }
 
   server.registerTool(
     APP_ADMIN_MCP_TOOLS.list_platform_invitations.name,
@@ -1088,4 +1102,14 @@ async function accountToolResult(operation: () => Promise<object>) {
     if (error instanceof AccountServiceError) return toolResult({ error: error.code });
     return toolResult({ error: "SERVICE_UNAVAILABLE" });
   }
+}
+
+async function requireGrantAccount(
+  grant: ControlPlaneMcpGrantProps,
+  options: ControlPlaneMcpServerOptions,
+) {
+  if (!options.accountService) throw new Error("Account service unavailable");
+  const actor = await options.accountService.resolveExternalIdentity(grant.identityIssuer, grant.subject);
+  if (!actor) throw new AccountServiceError("IDENTITY_NOT_FOUND");
+  return actor;
 }

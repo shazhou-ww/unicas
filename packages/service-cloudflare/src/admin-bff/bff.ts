@@ -1841,6 +1841,46 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
 
     try {
       switch (route.operation) {
+        case "listPlatformAccounts": {
+          if (!accountService || !auth.payload.accountId) throw new Error("Account service unavailable");
+          return json(await accountService.listPlatformAccounts({
+            actorAccountId: auth.payload.accountId,
+            query: queryFromUrl(url),
+          }), 200);
+        }
+        case "getPlatformAccount": {
+          if (!accountService || !auth.payload.accountId) throw new Error("Account service unavailable");
+          return json(await accountService.getPlatformAccount(auth.payload.accountId, route.accountId), 200);
+        }
+        case "grantPlatformAccountAuthority":
+        case "revokePlatformAccountAuthority": {
+          if (!accountService || !auth.payload.accountId || !auth.payload.externalIdentityId) {
+            throw new Error("Account service unavailable");
+          }
+          await accountService.setPlatformAuthority({
+            actorAccountId: auth.payload.accountId,
+            actorExternalIdentityId: auth.payload.externalIdentityId,
+            targetAccountId: route.accountId,
+            authority: route.authority,
+            grant: route.operation === "grantPlatformAccountAuthority",
+            requestId: request.headers.get("X-Request-Id") ?? undefined,
+          });
+          return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+        }
+        case "blockPlatformAccount":
+        case "restorePlatformAccount": {
+          if (!accountService || !auth.payload.accountId || !auth.payload.externalIdentityId) {
+            throw new Error("Account service unavailable");
+          }
+          await accountService.setPlatformBlocked({
+            actorAccountId: auth.payload.accountId,
+            actorExternalIdentityId: auth.payload.externalIdentityId,
+            targetAccountId: route.accountId,
+            blocked: route.operation === "blockPlatformAccount",
+            requestId: request.headers.get("X-Request-Id") ?? undefined,
+          });
+          return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+        }
         case "accessSummary": {
           const summary = await platformAccess.getAccessSummary(actor);
           return json(summary, 200);
@@ -1914,6 +1954,14 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
           return json({ error: "Not Found" }, 404);
       }
     } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "PLATFORM_ADMIN_REQUIRED" || error.code === "ACCOUNT_BLOCKED" ? 403
+          : error.code === "ACCOUNT_NOT_FOUND" ? 404
+            : error.code === "INVALID_CURSOR" || error.code === "INVALID_REQUEST" ? 400
+              : error.code === "LAST_PLATFORM_ADMIN" || error.code === "SELF_BLOCK_FORBIDDEN" ? 409
+                : 409;
+        return json({ error: error.code }, status);
+      }
       if (error instanceof PlatformAccessError) {
         const body: CasAdminErrorResponse = { error: error.code as CasAdminErrorResponse["error"] };
         return json(body, error.status);

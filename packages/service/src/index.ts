@@ -20,6 +20,7 @@ export type {
 export { AccountService, AccountServiceError, projectAccountSummary } from "./account.js";
 export type {
   AccountAppMembershipRecord,
+  AccountPlatformViewRecord,
   AccountCreateInput,
   AccountProfileRecord,
   AccountRecord,

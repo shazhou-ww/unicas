@@ -177,7 +177,7 @@ describe("AI tool connection", () => {
     expect(screen.getByRole("heading", { name: "Platform Administration" })).toHaveClass("console-app-detail-title");
     expect(screen.getByRole("tablist", { name: "Platform Administration sections" })).toHaveClass("console-app-tabs");
     expect(peopleTab.closest(".console-app-detail-header")).toContainElement(screen.getByRole("heading", { name: "Platform Administration" }));
-    await waitFor(() => expect(window.location.hash).toBe("#/platform/people?filter=principals"));
+    await waitFor(() => expect(window.location.hash).toBe("#/platform/people?filter=accounts"));
     peopleTab.focus();
     await userEvent.setup().keyboard("{ArrowRight}");
     await waitFor(() => expect(window.location.hash).toBe("#/platform/audit"));

@@ -4,7 +4,6 @@ import { AccountService, PeopleService } from "@unicas/service";
 import { D1PeopleRepository } from "../src/people-repository.js";
 import { D1AccountRepository } from "../src/account-repository.js";
 import { migrateControlSchema } from "../src/control-schema.js";
-import { D1ControlPlaneAdminRepository } from "../src/control-admin-repository.js";
 
 let runtime: Miniflare | undefined;
 afterEach(async () => { await runtime?.dispose(); });
@@ -37,20 +36,20 @@ test("D1 combines people before filtering and paging without merging shared emai
     expect([first.items[0], second.items[0], third.items[0]]).toEqual(all.items);
     expect(third.nextCursor).toBeNull();
     expect((await service.list(scope, { filter: "history" })).items).toHaveLength(2);
-    expect((await service.list(scope, { query: "issuer-b" })).items).toHaveLength("appId" in scope ? 0 : 1);
+    expect((await service.list(scope, { query: "issuer-b" })).items).toHaveLength(0);
   }
   const appMembers = await service.list({ appId: "cas_one" }, { filter: "members" });
   expect(JSON.stringify(appMembers)).not.toMatch(/issuer-[ab]|"subject"/);
+  const platformAccounts = await service.list({ platform: true }, { filter: "accounts" });
+  expect(JSON.stringify(platformAccounts)).not.toMatch(/issuer-[ab]|"subject"|principalRef/);
+  const platformCurrent = await service.list({ platform: true }, { filter: "current" });
+  expect(JSON.stringify(platformCurrent)).not.toMatch(/issuer-[ab]|"subject"|principalRef|createdBy/);
   expect((await service.list({ platform: true }, { authority: "platform.admin" })).items).toHaveLength(1);
   expect((await service.list({ platform: true }, { effectiveAccess: "active" })).items).toHaveLength(2);
   expect((await service.list({ appId: "cas_other" }, {})).items).toHaveLength(0);
   const beforeProfileChange = await service.list({ platform: true }, { limit: 1 });
-  const profiles = new D1ControlPlaneAdminRepository(db);
-  await profiles.commitIdentity({
-    kind: "update",
-    identity: { identityIssuer: "issuer-a", subject: "same", displayName: "Updated", emailForDisplay: "new@example.test", createdAt: 1 },
-    audit: { eventId: "profile-change", stackId: null, identityIssuer: "issuer-a", subject: "same", action: "operator.login", target: "same", requestId: null, traceId: null, callerChannel: null, oauthClientHandle: null, toolName: null, createdAt: 1000 },
-  });
+  const updatedIdentity = await new D1AccountRepository(db).getActiveIdentity("issuer-a", "same");
+  await accounts.updateProfile({ accountId: updatedIdentity!.accountId, displayName: "Updated" });
   await expect(service.list({ platform: true }, { cursor: beforeProfileChange.nextCursor })).rejects.toMatchObject({ code: "INVALID_CURSOR" });
-  expect((await service.list({ platform: true }, { query: "new@example.test" })).items).toHaveLength(1);
+  expect((await service.list({ platform: true }, { query: "updated" })).items).toHaveLength(1);
 }, 15000);

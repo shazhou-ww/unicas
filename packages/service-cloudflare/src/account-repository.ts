@@ -1,7 +1,8 @@
-import type { D1Database } from "@cloudflare/workers-types";
+import type { D1Database, D1PreparedStatement } from "@cloudflare/workers-types";
 import type { AccountId, AppId, PlatformAuthority, PrimaryVerifiedEmail } from "@unicas/admin-protocol";
 import type {
   AccountAppMembershipRecord,
+  AccountPlatformViewRecord,
   AccountRecord,
   AccountRepository,
   AccountWithIdentityCreate,
@@ -42,6 +43,38 @@ interface AccountMembershipRow extends AccountRow {
   avatar_source: string | null;
   profile_updated_at: number;
 }
+
+interface AccountPlatformRow extends AccountRow {
+  display_name: string | null;
+  avatar_url: string | null;
+  display_name_source: string | null;
+  avatar_source: string | null;
+  profile_updated_at: number;
+  platform_admin: number;
+  apps_create: number;
+  app_membership_count: number;
+  last_active_at: number | null;
+}
+
+const platformAccountProjection = `SELECT account.account_id, account.blocked_at,
+  account.credential_version, account.primary_verified_email,
+  account.email_verification_source, account.email_verified_at,
+  account.created_at, account.updated_at, profile.display_name, profile.avatar_url,
+  profile.display_name_source, profile.avatar_source, profile.updated_at AS profile_updated_at,
+  EXISTS (SELECT 1 FROM cas_account_platform_authorities authority
+    WHERE authority.account_id = account.account_id AND authority.authority = 'platform.admin') AS platform_admin,
+  EXISTS (SELECT 1 FROM cas_account_platform_authorities authority
+    WHERE authority.account_id = account.account_id AND authority.authority = 'apps.create') AS apps_create,
+  (SELECT COUNT(*) FROM cas_app_members member
+    WHERE member.account_id = account.account_id) AS app_membership_count,
+  NULLIF(MAX(
+    COALESCE((SELECT MAX(event.created_at) FROM cas_control_audit_events event
+      WHERE event.original_account_id = account.account_id), 0),
+    COALESCE((SELECT MAX(event.created_at) FROM cas_platform_audit_events event
+      WHERE event.actor_account_id = account.account_id), 0)
+  ), 0) AS last_active_at
+  FROM cas_accounts account
+  JOIN cas_account_profiles profile ON profile.account_id = account.account_id`;
 
 export class D1AccountRepository implements AccountRepository {
   constructor(readonly db: D1Database) { }
@@ -218,6 +251,202 @@ export class D1AccountRepository implements AccountRepository {
         "SELECT COUNT(*) AS count FROM cas_app_members WHERE app_id = ?",
       ).bind(input.appId).first<{ count: number }>();
       return (count?.count ?? 0) <= 1 ? "last-member" : "removed";
+    }
+  }
+
+  async getPlatformAccount(accountId: AccountId): Promise<AccountPlatformViewRecord | null> {
+    const row = await this.db.prepare(
+      `${platformAccountProjection} WHERE account.account_id = ?`,
+    ).bind(accountId).first<AccountPlatformRow>();
+    return row ? accountPlatformRecord(row) : null;
+  }
+
+  async listPlatformAccounts(
+    input: Parameters<AccountRepository["listPlatformAccounts"]>[0],
+  ): Promise<readonly AccountPlatformViewRecord[]> {
+    const conditions = ["account.account_id > ?"];
+    const bindings: unknown[] = [input.afterAccountId];
+    if (input.query !== undefined) {
+      conditions.push(`(instr(lower(COALESCE(profile.display_name, '')), ?) > 0
+        OR instr(lower(COALESCE(account.primary_verified_email, '')), ?) > 0
+        OR instr(lower(account.account_id), ?) > 0)`);
+      bindings.push(input.query, input.query, input.query);
+    }
+    if (input.authority === "none") {
+      conditions.push("NOT EXISTS (SELECT 1 FROM cas_account_platform_authorities authority WHERE authority.account_id = account.account_id)");
+    } else if (input.authority !== undefined) {
+      conditions.push("EXISTS (SELECT 1 FROM cas_account_platform_authorities authority WHERE authority.account_id = account.account_id AND authority.authority = ?)");
+      bindings.push(input.authority);
+    }
+    if (input.effectiveAccess === "blocked") conditions.push("account.blocked_at IS NOT NULL");
+    if (input.effectiveAccess === "active") {
+      conditions.push(`account.blocked_at IS NULL AND (
+        EXISTS (SELECT 1 FROM cas_account_platform_authorities authority WHERE authority.account_id = account.account_id)
+        OR EXISTS (SELECT 1 FROM cas_app_members member WHERE member.account_id = account.account_id))`);
+    }
+    if (input.effectiveAccess === "no_access") {
+      conditions.push(`account.blocked_at IS NULL
+        AND NOT EXISTS (SELECT 1 FROM cas_account_platform_authorities authority WHERE authority.account_id = account.account_id)
+        AND NOT EXISTS (SELECT 1 FROM cas_app_members member WHERE member.account_id = account.account_id)`);
+    }
+    bindings.push(input.limit);
+    const rows = await this.db.prepare(
+      `${platformAccountProjection} WHERE ${conditions.join(" AND ")}
+       ORDER BY account.account_id LIMIT ?`,
+    ).bind(...bindings).all<AccountPlatformRow>();
+    return (rows.results ?? []).map(accountPlatformRecord);
+  }
+
+  async commitPlatformAuthority(
+    input: Parameters<AccountRepository["commitPlatformAuthority"]>[0],
+  ): Promise<"updated" | "actor-forbidden" | "target-not-found" | "last-admin"> {
+    const requireActor = this.#requirePlatformActor(input);
+    const requireTarget = this.db.prepare(
+      "SELECT CASE WHEN EXISTS (SELECT 1 FROM cas_accounts WHERE account_id = ?) THEN 1 ELSE json_extract('invalid', '$') END AS allowed",
+    ).bind(input.targetAccountId);
+    const requireRemainingAdmin = this.db.prepare(
+      `SELECT CASE WHEN ? = 1 OR ? <> 'platform.admin'
+        OR NOT EXISTS (SELECT 1 FROM cas_account_platform_authorities
+          WHERE account_id = ? AND authority = 'platform.admin')
+        OR EXISTS (SELECT 1 FROM cas_accounts WHERE account_id = ? AND blocked_at IS NOT NULL)
+        OR (SELECT COUNT(*) FROM cas_account_platform_authorities authority
+          JOIN cas_accounts account ON account.account_id = authority.account_id
+          WHERE authority.authority = 'platform.admin' AND account.blocked_at IS NULL) > 1
+       THEN 1 ELSE json_extract('invalid', '$') END AS allowed`,
+    ).bind(Number(input.grant), input.authority, input.targetAccountId, input.targetAccountId);
+    const changeCondition = input.grant ? "NOT EXISTS" : "EXISTS";
+    const audit = this.db.prepare(
+      `INSERT INTO cas_platform_audit_events
+        (event_id, actor_issuer, actor_subject, target_issuer, target_subject,
+         target_invitation_id, action, result, request_id, created_at, details_json,
+         actor_account_id, actor_external_identity_id, target_account_id)
+       SELECT ?, actor.issuer, actor.subject, NULL, NULL, NULL,
+         'platform_access.authority_changed', 'succeeded', ?, ?, ?, ?, ?, ?
+       FROM cas_external_identities actor
+       WHERE actor.external_identity_id = ? AND actor.account_id = ? AND actor.unlinked_at IS NULL
+         AND ${changeCondition} (SELECT 1 FROM cas_account_platform_authorities authority
+           WHERE authority.account_id = ? AND authority.authority = ?)`,
+    ).bind(
+      input.eventId,
+      input.requestId ?? null,
+      input.now,
+      JSON.stringify({ authority: input.authority, granted: input.grant }),
+      input.actorAccountId,
+      input.actorExternalIdentityId,
+      input.targetAccountId,
+      input.actorExternalIdentityId,
+      input.actorAccountId,
+      input.targetAccountId,
+      input.authority,
+    );
+    const mutate = input.grant
+      ? this.db.prepare(
+        `INSERT OR IGNORE INTO cas_account_platform_authorities (account_id, authority, granted_at)
+         SELECT ?, ?, ? WHERE EXISTS (SELECT 1 FROM cas_platform_audit_events WHERE event_id = ?)`,
+      ).bind(input.targetAccountId, input.authority, input.now, input.eventId)
+      : this.db.prepare(
+        `DELETE FROM cas_account_platform_authorities WHERE account_id = ? AND authority = ?
+         AND EXISTS (SELECT 1 FROM cas_platform_audit_events WHERE event_id = ?)`,
+      ).bind(input.targetAccountId, input.authority, input.eventId);
+    const legacyColumn = input.authority === "platform.admin" ? "platform_admin" : "apps_create";
+    const synchronizeLegacy = this.db.prepare(
+      `UPDATE cas_platform_principals SET ${legacyColumn} = ?, revision = revision + 1, updated_at = ?
+       WHERE account_id = ? AND EXISTS (SELECT 1 FROM cas_platform_audit_events WHERE event_id = ?)`,
+    ).bind(Number(input.grant), input.now, input.targetAccountId, input.eventId);
+    try {
+      await this.db.batch([
+        requireActor,
+        requireTarget,
+        requireRemainingAdmin,
+        audit,
+        mutate,
+        synchronizeLegacy,
+        ...this.#accountSnapshotStatements(input.eventId),
+      ]);
+      return "updated";
+    } catch (error) {
+      if (!isJsonFailure(error)) throw error;
+      const failure = await this.#platformMutationFailure(input, input.authority === "platform.admin" && !input.grant);
+      if (failure === "unclassified") throw error;
+      return failure;
+    }
+  }
+
+  async commitPlatformBlock(
+    input: Parameters<AccountRepository["commitPlatformBlock"]>[0],
+  ): Promise<"updated" | "actor-forbidden" | "target-not-found" | "self-block" | "last-admin"> {
+    const requireActor = this.#requirePlatformActor(input);
+    const requireTarget = this.db.prepare(
+      "SELECT CASE WHEN EXISTS (SELECT 1 FROM cas_accounts WHERE account_id = ?) THEN 1 ELSE json_extract('invalid', '$') END AS allowed",
+    ).bind(input.targetAccountId);
+    const requireNotSelf = this.db.prepare(
+      "SELECT CASE WHEN ? = 0 OR ? <> ? THEN 1 ELSE json_extract('invalid', '$') END AS allowed",
+    ).bind(Number(input.blocked), input.actorAccountId, input.targetAccountId);
+    const requireRemainingAdmin = this.db.prepare(
+      `SELECT CASE WHEN ? = 0
+        OR EXISTS (SELECT 1 FROM cas_accounts WHERE account_id = ? AND blocked_at IS NOT NULL)
+        OR NOT EXISTS (SELECT 1 FROM cas_account_platform_authorities
+          WHERE account_id = ? AND authority = 'platform.admin')
+        OR (SELECT COUNT(*) FROM cas_account_platform_authorities authority
+          JOIN cas_accounts account ON account.account_id = authority.account_id
+          WHERE authority.authority = 'platform.admin' AND account.blocked_at IS NULL) > 1
+       THEN 1 ELSE json_extract('invalid', '$') END AS allowed`,
+    ).bind(Number(input.blocked), input.targetAccountId, input.targetAccountId);
+    const audit = this.db.prepare(
+      `INSERT INTO cas_platform_audit_events
+        (event_id, actor_issuer, actor_subject, target_issuer, target_subject,
+         target_invitation_id, action, result, request_id, created_at, details_json,
+         actor_account_id, actor_external_identity_id, target_account_id)
+       SELECT ?, actor.issuer, actor.subject, NULL, NULL, NULL, ?, 'succeeded', ?, ?, '{}', ?, ?, ?
+       FROM cas_external_identities actor
+       WHERE actor.external_identity_id = ? AND actor.account_id = ? AND actor.unlinked_at IS NULL
+         AND EXISTS (SELECT 1 FROM cas_accounts target WHERE target.account_id = ?
+           AND ((? = 1 AND target.blocked_at IS NULL) OR (? = 0 AND target.blocked_at IS NOT NULL)))`,
+    ).bind(
+      input.eventId,
+      input.blocked ? "platform_access.blocked" : "platform_access.restored",
+      input.requestId ?? null,
+      input.now,
+      input.actorAccountId,
+      input.actorExternalIdentityId,
+      input.targetAccountId,
+      input.actorExternalIdentityId,
+      input.actorAccountId,
+      input.targetAccountId,
+      Number(input.blocked),
+      Number(input.blocked),
+    );
+    const mutate = input.blocked
+      ? this.db.prepare(
+        `UPDATE cas_accounts SET blocked_at = ?, credential_version = credential_version + 1, updated_at = ?
+         WHERE account_id = ? AND EXISTS (SELECT 1 FROM cas_platform_audit_events WHERE event_id = ?)`,
+      ).bind(input.now, input.now, input.targetAccountId, input.eventId)
+      : this.db.prepare(
+        `UPDATE cas_accounts SET blocked_at = NULL, updated_at = ?
+         WHERE account_id = ? AND EXISTS (SELECT 1 FROM cas_platform_audit_events WHERE event_id = ?)`,
+      ).bind(input.now, input.targetAccountId, input.eventId);
+    const synchronizeLegacy = this.db.prepare(
+      `UPDATE cas_platform_principals SET status = ?, revision = revision + 1, updated_at = ?
+       WHERE account_id = ? AND EXISTS (SELECT 1 FROM cas_platform_audit_events WHERE event_id = ?)`,
+    ).bind(input.blocked ? "blocked" : "active", input.now, input.targetAccountId, input.eventId);
+    try {
+      await this.db.batch([
+        requireActor,
+        requireTarget,
+        requireNotSelf,
+        requireRemainingAdmin,
+        audit,
+        mutate,
+        synchronizeLegacy,
+        ...this.#accountSnapshotStatements(input.eventId),
+      ]);
+      return "updated";
+    } catch (error) {
+      if (!isJsonFailure(error)) throw error;
+      if (input.blocked && input.actorAccountId === input.targetAccountId) return "self-block";
+      const failure = await this.#platformMutationFailure(input, input.blocked);
+      if (failure === "unclassified") throw error;
+      return failure;
     }
   }
 
@@ -448,10 +677,80 @@ export class D1AccountRepository implements AccountRepository {
     if (assignments.length === 0) return "updated";
     assignments.push("updated_at = ?");
     bindings.push(input.now, input.accountId);
-    await this.db.prepare(
-      `UPDATE cas_account_profiles SET ${assignments.join(", ")} WHERE account_id = ?`,
-    ).bind(...bindings).run();
+    await this.db.batch([
+      this.db.prepare(
+        `UPDATE cas_account_profiles SET ${assignments.join(", ")} WHERE account_id = ?`,
+      ).bind(...bindings),
+      this.db.prepare(
+        `INSERT INTO cas_control_meta (key, value) VALUES ('snapshot', 1)
+         ON CONFLICT(key) DO UPDATE SET value = value + 1`,
+      ),
+    ]);
     return "updated";
+  }
+
+  #requirePlatformActor(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+  }): D1PreparedStatement {
+    return this.db.prepare(
+      `SELECT CASE WHEN EXISTS (SELECT 1 FROM cas_accounts
+          WHERE account_id = ? AND blocked_at IS NULL)
+        AND EXISTS (SELECT 1 FROM cas_account_platform_authorities
+          WHERE account_id = ? AND authority = 'platform.admin')
+        AND EXISTS (SELECT 1 FROM cas_external_identities
+          WHERE external_identity_id = ? AND account_id = ? AND unlinked_at IS NULL)
+       THEN 1 ELSE json_extract('invalid', '$') END AS allowed`,
+    ).bind(
+      input.actorAccountId,
+      input.actorAccountId,
+      input.actorExternalIdentityId,
+      input.actorAccountId,
+    );
+  }
+
+  #accountSnapshotStatements(eventId: string): readonly D1PreparedStatement[] {
+    return [
+      this.db.prepare(
+        `INSERT OR IGNORE INTO cas_control_meta (key, value)
+         SELECT 'snapshot', 0 WHERE EXISTS (SELECT 1 FROM cas_platform_audit_events WHERE event_id = ?)`,
+      ).bind(eventId),
+      this.db.prepare(
+        `UPDATE cas_control_meta SET value = value + 1 WHERE key = 'snapshot'
+         AND EXISTS (SELECT 1 FROM cas_platform_audit_events WHERE event_id = ?)`,
+      ).bind(eventId),
+    ];
+  }
+
+  async #platformMutationFailure(
+    input: {
+      readonly actorAccountId: AccountId;
+      readonly actorExternalIdentityId: string;
+      readonly targetAccountId: AccountId;
+    },
+    checkLastAdmin: boolean,
+  ): Promise<"actor-forbidden" | "target-not-found" | "last-admin" | "unclassified"> {
+    const [actor, actorIdentity, actorAuthorities, target] = await Promise.all([
+      this.getAccount(input.actorAccountId),
+      this.getIdentity(input.actorExternalIdentityId),
+      this.listPlatformAuthorities(input.actorAccountId),
+      this.getAccount(input.targetAccountId),
+    ]);
+    if (!actor || actor.blockedAt !== null || !actorAuthorities.includes("platform.admin")
+      || !actorIdentity || actorIdentity.accountId !== input.actorAccountId || actorIdentity.unlinkedAt !== null) {
+      return "actor-forbidden";
+    }
+    if (!target) return "target-not-found";
+    if (checkLastAdmin && target.blockedAt === null
+      && (await this.listPlatformAuthorities(target.accountId)).includes("platform.admin")) {
+      const active = await this.db.prepare(
+        `SELECT COUNT(*) AS count FROM cas_account_platform_authorities authority
+         JOIN cas_accounts account ON account.account_id = authority.account_id
+         WHERE authority.authority = 'platform.admin' AND account.blocked_at IS NULL`,
+      ).first<{ count: number }>();
+      if ((active?.count ?? 0) <= 1) return "last-admin";
+    }
+    return "unclassified";
   }
 }
 
@@ -497,4 +796,24 @@ function isJsonFailure(error: unknown): boolean {
 
 function isUniqueFailure(error: unknown): boolean {
   return error instanceof Error && /UNIQUE constraint failed/i.test(error.message);
+}
+
+function accountPlatformRecord(row: AccountPlatformRow): AccountPlatformViewRecord {
+  const platformAuthorities: PlatformAuthority[] = [];
+  if (row.platform_admin === 1) platformAuthorities.push("platform.admin");
+  if (row.apps_create === 1) platformAuthorities.push("apps.create");
+  return {
+    account: accountRecord(row),
+    profile: {
+      accountId: row.account_id,
+      displayName: row.display_name,
+      avatarUrl: row.avatar_url,
+      displayNameSource: row.display_name_source,
+      avatarSource: row.avatar_source,
+      updatedAt: row.profile_updated_at,
+    },
+    platformAuthorities,
+    appMembershipCount: row.app_membership_count,
+    lastActiveAt: row.last_active_at,
+  };
 }

@@ -20,6 +20,8 @@ import {
   SpaceRootRefBalanceSchema,
   SpaceRootRefEventSchema,
   ExternalIdentitySummarySchema,
+  PlatformAccountDetailSchema,
+  PlatformAccountListItemSchema,
 } from "./schemas.js";
 import {
   CreatePlatformInvitationSchema,
@@ -397,6 +399,7 @@ const PlatformInvitationSchema = z.object({
   createdBy: PrincipalSchema,
   revision: RevisionSchema,
 }).readonly();
+const PlatformPeopleInvitationSchema = PlatformInvitationSchema.unwrap().omit({ createdBy: true }).readonly();
 
 const platformAccessStateShape = {
   principalRef: z.string().min(1),
@@ -427,11 +430,11 @@ export const listAppPeopleContract = appProcedure
   ])).meta({ id: "AppPeoplePage" }));
 
 export const listPlatformPeopleContract = appProcedure
-  .route({ method: "GET", path: "/admin/platform/people", operationId: "listPlatformPeople", summary: "Search platform Principals and invitations", inputStructure: "detailed", tags: ["Platform Access"] })
+  .route({ method: "GET", path: "/admin/platform/people", operationId: "listPlatformPeople", summary: "Search platform Accounts and invitations", inputStructure: "detailed", tags: ["Platform Access"] })
   .input(z.object({ query: PlatformPeopleQuerySchema.optional() }).readonly())
   .output(pageSchema(z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("principal"), principal: PlatformPrincipalListItemSchema }).strict(),
-    z.object({ kind: z.literal("invitation"), invitation: PlatformInvitationSchema }).strict(),
+    z.object({ kind: z.literal("account"), account: PlatformAccountListItemSchema }).strict(),
+    z.object({ kind: z.literal("invitation"), invitation: PlatformPeopleInvitationSchema }).strict(),
   ])).meta({ id: "PlatformPeoplePage" }));
 
 const PlatformPrincipalDetailSchema = z.object({
@@ -476,6 +479,42 @@ export const patchPlatformPrincipalAccessContract = appProcedure
     body: PatchPlatformAccessSchema,
   }).readonly())
   .output(z.object({ headers: z.object({ ETag: z.string().regex(/^"(0|[1-9][0-9]*)"$/) }).readonly() }).readonly());
+
+const platformAccountParams = z.object({ accountId: AccountIdSchema }).readonly();
+const platformAccountAuthorityParams = z.object({
+  accountId: AccountIdSchema,
+  authority: PlatformAuthoritySchema,
+}).readonly();
+
+export const listPlatformAccountsContract = appProcedure
+  .route({ method: "GET", path: "/admin/platform/accounts", operationId: "listPlatformAccounts", summary: "List platform Accounts", inputStructure: "detailed", tags: ["Platform Access"] })
+  .input(z.object({ query: PlatformPrincipalQuerySchema.optional() }).readonly())
+  .output(pageSchema(PlatformAccountListItemSchema).meta({ id: "PlatformAccountPage" }));
+
+export const getPlatformAccountContract = appProcedure
+  .route({ method: "GET", path: "/admin/platform/accounts/{accountId}", operationId: "getPlatformAccount", summary: "Read one platform Account", inputStructure: "detailed", tags: ["Platform Access"] })
+  .input(z.object({ params: platformAccountParams }).readonly())
+  .output(PlatformAccountDetailSchema);
+
+export const grantPlatformAccountAuthorityContract = appProcedure
+  .route({ method: "PUT", path: "/admin/platform/accounts/{accountId}/authorities/{authority}", operationId: "grantPlatformAccountAuthority", summary: "Grant one platform authority", inputStructure: "detailed", successStatus: 204, tags: ["Platform Access"] })
+  .input(z.object({ params: platformAccountAuthorityParams }).readonly())
+  .output(z.void());
+
+export const revokePlatformAccountAuthorityContract = appProcedure
+  .route({ method: "DELETE", path: "/admin/platform/accounts/{accountId}/authorities/{authority}", operationId: "revokePlatformAccountAuthority", summary: "Revoke one platform authority", inputStructure: "detailed", successStatus: 204, tags: ["Platform Access"] })
+  .input(z.object({ params: platformAccountAuthorityParams }).readonly())
+  .output(z.void());
+
+export const blockPlatformAccountContract = appProcedure
+  .route({ method: "PUT", path: "/admin/platform/accounts/{accountId}/block", operationId: "blockPlatformAccount", summary: "Block one platform Account", inputStructure: "detailed", successStatus: 204, tags: ["Platform Access"] })
+  .input(z.object({ params: platformAccountParams }).readonly())
+  .output(z.void());
+
+export const restorePlatformAccountContract = appProcedure
+  .route({ method: "DELETE", path: "/admin/platform/accounts/{accountId}/block", operationId: "restorePlatformAccount", summary: "Restore one platform Account", inputStructure: "detailed", successStatus: 204, tags: ["Platform Access"] })
+  .input(z.object({ params: platformAccountParams }).readonly())
+  .output(z.void());
 
 export const listPlatformInvitationsContract = appProcedure
   .route({ method: "GET", path: "/admin/platform/invitations", operationId: "listPlatformInvitations", summary: "List platform invitations", inputStructure: "detailed", tags: ["Platform Invitations"] })
@@ -574,10 +613,12 @@ export const appAdminApiContract = {
   platform: {
     accessSummary: getPlatformAccessSummaryContract,
     listPeople: listPlatformPeopleContract,
-    listPrincipals: listPlatformPrincipalsContract,
-    getPrincipal: getPlatformPrincipalContract,
-    getPrincipalAccess: getPlatformPrincipalAccessContract,
-    patchPrincipalAccess: patchPlatformPrincipalAccessContract,
+    listAccounts: listPlatformAccountsContract,
+    getAccount: getPlatformAccountContract,
+    grantAccountAuthority: grantPlatformAccountAuthorityContract,
+    revokeAccountAuthority: revokePlatformAccountAuthorityContract,
+    blockAccount: blockPlatformAccountContract,
+    restoreAccount: restorePlatformAccountContract,
     listInvitations: listPlatformInvitationsContract,
     createInvitation: createPlatformInvitationContract,
     revokeInvitation: revokePlatformInvitationContract,

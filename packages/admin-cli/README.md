@@ -62,14 +62,15 @@ pnpm --filter @unicas/admin-cli unicas login
 
 | Command | MCP tool |
 | --- | --- |
-| `unicas principal` | `get_current_principal` |
+| `unicas account` | `get_current_account` |
+| `unicas principal` (deprecated compatibility alias) | `get_current_principal` |
 | `unicas apps list [--limit N] [--cursor C]` | `list_apps` |
 | `unicas apps get <appId>` | `get_app` |
 | `unicas apps create <displayName> [--idempotency-key K]` | `create_app` |
 | `unicas apps update <appId> [displayName] [--description D] [--etag E]` | `update_app` |
 | `unicas app-members list <appId> [--limit N] [--cursor C]` | `list_app_members` |
 | `unicas app-members invite <appId> <email> [--idempotency-key K]` | `invite_app_member` |
-| `unicas app-members remove <appId> --issuer <url> --subject <sub> [--etag E] [--confirm-subject S]` | `remove_app_member` |
+| `unicas app-members remove <appId> <accountId> --confirm-account-id <accountId>` | `remove_app_member` |
 | `unicas app-oauth-issuer get <appId>` | `get_app_oauth_issuer` |
 | `unicas app-oauth-issuer inspect <appId> <issuer>` | `inspect_app_oauth_issuer` |
 | `unicas app-oauth-issuer activate <appId> <inspectionId> --activation-proof <jws> [--etag E]` | `activate_app_oauth_issuer` |
@@ -77,9 +78,10 @@ pnpm --filter @unicas/admin-cli unicas login
 | `unicas app-audit control <appId> [--limit N] [--cursor C] [--after ID]` | `list_app_control_audit_events` |
 | `unicas app-audit root-domain-refs <appId> <refDomain> [--space-id S] [--limit N] [--cursor C]` | `list_space_root_domain_refs` |
 | `unicas app-audit root-domain-events <appId> <refDomain> [--space-id S] [--after N] [--limit N]` | `list_space_root_domain_events` |
-| `unicas platform-access list [--query Q] [--effective-access active\|blocked\|no_access] [--authority platform.admin\|apps.create\|none] [--limit N] [--cursor C]` | `list_platform_principals` |
-| `unicas platform-access get <principalRef>` | `get_platform_principal` |
-| `unicas platform-access update <principalRef> ... [--etag E]` | `update_platform_access` |
+| `unicas platform-access list [--query Q] [--effective-access active\|blocked\|no_access] [--authority platform.admin\|apps.create\|none] [--limit N] [--cursor C]` | `list_platform_accounts` |
+| `unicas platform-access get <accountId>` | `get_platform_account` |
+| `unicas platform-access grant\|revoke <accountId> <authority> --confirm-account-id <accountId>` | `grant_platform_authority` / `revoke_platform_authority` |
+| `unicas platform-access block\|restore <accountId> --confirm-account-id <accountId>` | `block_platform_account` / `restore_platform_account` |
 | `unicas platform-invitations list [--query Q] [--status S] [--limit N] [--cursor C]` | `list_platform_invitations` |
 | `unicas platform-invitations create <email> --authority A [--authority A] [--idempotency-key K]` | `create_platform_invitation` |
 | `unicas platform-invitations revoke <invitationId> --etag E --confirm-invitation-id <invitationId>` | `revoke_platform_invitation` |

@@ -4,10 +4,14 @@ import type {
   AccountSummary,
   AppId,
   AppMembership,
+  PlatformAccountDetail,
+  PlatformAccountListItem,
+  PlatformAccountPage,
   PlatformAuthority,
   PrimaryVerifiedEmail,
   ProviderKind,
 } from "@unicas/admin-protocol";
+import { PlatformPrincipalQuerySchema } from "@unicas/admin-protocol";
 import { generateAccountId, generateExternalIdentityId } from "./control-ids.js";
 import { decodeControlListCursor, encodeControlListCursor } from "./control-cursor.js";
 import type { AuthenticatedProviderResult } from "./authentication.js";
@@ -60,6 +64,14 @@ export interface AccountAppMembershipRecord {
   readonly joinedAt: number;
 }
 
+export interface AccountPlatformViewRecord {
+  readonly account: AccountRecord;
+  readonly profile: AccountProfileRecord;
+  readonly platformAuthorities: readonly PlatformAuthority[];
+  readonly appMembershipCount: number;
+  readonly lastActiveAt: number | null;
+}
+
 export interface AccountRepository {
   getAccount(accountId: AccountId): Promise<AccountRecord | null>;
   getAliasTarget(sourceAccountId: AccountId): Promise<AccountId | null>;
@@ -87,6 +99,33 @@ export interface AccountRepository {
     readonly callerChannel?: string;
     readonly now: number;
   }): Promise<"removed" | "actor-not-member" | "last-member">;
+  getPlatformAccount(accountId: AccountId): Promise<AccountPlatformViewRecord | null>;
+  listPlatformAccounts(input: {
+    readonly afterAccountId: string;
+    readonly limit: number;
+    readonly query?: string;
+    readonly effectiveAccess?: "active" | "blocked" | "no_access";
+    readonly authority?: PlatformAuthority | "none";
+  }): Promise<readonly AccountPlatformViewRecord[]>;
+  commitPlatformAuthority(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly targetAccountId: AccountId;
+    readonly authority: PlatformAuthority;
+    readonly grant: boolean;
+    readonly eventId: string;
+    readonly requestId?: string;
+    readonly now: number;
+  }): Promise<"updated" | "actor-forbidden" | "target-not-found" | "last-admin">;
+  commitPlatformBlock(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly targetAccountId: AccountId;
+    readonly blocked: boolean;
+    readonly eventId: string;
+    readonly requestId?: string;
+    readonly now: number;
+  }): Promise<"updated" | "actor-forbidden" | "target-not-found" | "self-block" | "last-admin">;
   createAccountWithIdentity(input: AccountWithIdentityCreate): Promise<"created" | "identity-conflict">;
   commitLinkIdentity(input: {
     readonly accountId: AccountId;
@@ -139,7 +178,10 @@ export type AccountServiceErrorCode =
   | "APP_MEMBERSHIP_REQUIRED"
   | "INVALID_CURSOR"
   | "INVALID_REQUEST"
-  | "LAST_MEMBER";
+  | "LAST_MEMBER"
+  | "PLATFORM_ADMIN_REQUIRED"
+  | "LAST_PLATFORM_ADMIN"
+  | "SELF_BLOCK_FORBIDDEN";
 
 export class AccountServiceError extends Error {
   constructor(readonly code: AccountServiceErrorCode) {
@@ -331,6 +373,90 @@ export class AccountService {
       .map(appId => ({ appId, account: summary }));
   }
 
+  async listPlatformAccounts(input: {
+    readonly actorAccountId: AccountId;
+    readonly query?: unknown;
+  }): Promise<PlatformAccountPage> {
+    await this.#requirePlatformAdmin(input.actorAccountId);
+    const parsed = PlatformPrincipalQuerySchema.safeParse(input.query ?? {});
+    if (!parsed.success) throw new AccountServiceError("INVALID_REQUEST");
+    const { limit = 50, cursor: encodedCursor, ...filters } = parsed.data;
+    const snapshot = await this.repository.readControlSnapshot();
+    let afterAccountId = "";
+    if (encodedCursor) {
+      const cursor = decodeControlListCursor(encodedCursor);
+      if (!cursor || cursor.snapshot !== snapshot) throw new AccountServiceError("INVALID_CURSOR");
+      try {
+        const [cursorFilters, cursorAccountId] = JSON.parse(cursor.last) as [unknown, unknown];
+        if (JSON.stringify(cursorFilters) !== JSON.stringify(filters) || typeof cursorAccountId !== "string") {
+          throw new Error("invalid cursor");
+        }
+        afterAccountId = cursorAccountId;
+      } catch {
+        throw new AccountServiceError("INVALID_CURSOR");
+      }
+    }
+    const rows = await this.repository.listPlatformAccounts({
+      afterAccountId,
+      limit: limit + 1,
+      query: filters.query?.trim().toLowerCase() || undefined,
+      effectiveAccess: filters.effectiveAccess,
+      authority: filters.authority,
+    });
+    if (await this.repository.readControlSnapshot() !== snapshot) throw new AccountServiceError("INVALID_CURSOR");
+    const page = rows.slice(0, limit);
+    return {
+      items: page.map(projectPlatformAccount),
+      nextCursor: rows.length > limit
+        ? encodeControlListCursor({ version: 1, snapshot, last: JSON.stringify([filters, page.at(-1)!.account.accountId]) })
+        : null,
+    };
+  }
+
+  async getPlatformAccount(actorAccountId: AccountId, targetAccountId: AccountId): Promise<PlatformAccountDetail> {
+    await this.#requirePlatformAdmin(actorAccountId);
+    const target = await this.repository.getPlatformAccount(targetAccountId);
+    if (!target) throw new AccountServiceError("ACCOUNT_NOT_FOUND");
+    return {
+      ...projectPlatformAccount(target),
+      memberships: (await this.repository.listAccountMembershipAppIds(target.account.accountId))
+        .map(appId => ({ appId, account: projectAccountSummary(target.account, target.profile) })),
+    };
+  }
+
+  async setPlatformAuthority(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly targetAccountId: AccountId;
+    readonly authority: PlatformAuthority;
+    readonly grant: boolean;
+    readonly requestId?: string;
+  }): Promise<void> {
+    const actor = await this.#requirePlatformAdmin(input.actorAccountId);
+    this.#mapPlatformMutationResult(await this.repository.commitPlatformAuthority({
+      ...input,
+      actorAccountId: actor.accountId,
+      eventId: crypto.randomUUID(),
+      now: this.now(),
+    }));
+  }
+
+  async setPlatformBlocked(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly targetAccountId: AccountId;
+    readonly blocked: boolean;
+    readonly requestId?: string;
+  }): Promise<void> {
+    const actor = await this.#requirePlatformAdmin(input.actorAccountId);
+    this.#mapPlatformMutationResult(await this.repository.commitPlatformBlock({
+      ...input,
+      actorAccountId: actor.accountId,
+      eventId: crypto.randomUUID(),
+      now: this.now(),
+    }));
+  }
+
   async removeAppMember(input: {
     readonly actorAccountId: AccountId;
     readonly actorExternalIdentityId: string;
@@ -444,6 +570,24 @@ export class AccountService {
     throw new AccountServiceError("ACCOUNT_ALIAS_INVALID");
   }
 
+  async #requirePlatformAdmin(accountId: AccountId): Promise<AccountRecord> {
+    const account = await this.#resolveCanonicalAccount(accountId);
+    this.#requireUsableAccount(account);
+    if (!(await this.repository.listPlatformAuthorities(account.accountId)).includes("platform.admin")) {
+      throw new AccountServiceError("PLATFORM_ADMIN_REQUIRED");
+    }
+    return account;
+  }
+
+  #mapPlatformMutationResult(
+    result: "updated" | "actor-forbidden" | "target-not-found" | "last-admin" | "self-block",
+  ): void {
+    if (result === "actor-forbidden") throw new AccountServiceError("PLATFORM_ADMIN_REQUIRED");
+    if (result === "target-not-found") throw new AccountServiceError("ACCOUNT_NOT_FOUND");
+    if (result === "last-admin") throw new AccountServiceError("LAST_PLATFORM_ADMIN");
+    if (result === "self-block") throw new AccountServiceError("SELF_BLOCK_FORBIDDEN");
+  }
+
   #requireUsableAccount(account: AccountRecord): void {
     if (account.blockedAt !== null) throw new AccountServiceError("ACCOUNT_BLOCKED");
   }
@@ -485,5 +629,20 @@ export function projectAccountSummary(
     avatar: profile.avatarUrl
       ? { kind: "image" as const, url: profile.avatarUrl, ...fallbackAvatar }
       : { kind: "fallback" as const, ...fallbackAvatar },
+  };
+}
+
+function projectPlatformAccount(record: AccountPlatformViewRecord): PlatformAccountListItem {
+  return {
+    ...projectAccountSummary(record.account, record.profile),
+    blockedAt: record.account.blockedAt,
+    platformAuthorities: record.platformAuthorities,
+    createdAt: record.account.createdAt,
+    updatedAt: record.account.updatedAt,
+    effectiveAccess: record.account.blockedAt !== null
+      ? "blocked"
+      : record.platformAuthorities.length > 0 || record.appMembershipCount > 0 ? "active" : "no_access",
+    appMembershipCount: record.appMembershipCount,
+    lastActiveAt: record.lastActiveAt,
   };
 }

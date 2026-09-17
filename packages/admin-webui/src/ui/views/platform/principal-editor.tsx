@@ -1,52 +1,65 @@
 import { useState } from "react";
-import type { PlatformPrincipalDetail, PlatformAccessStatus, PlatformAuthority } from "@unicas/admin-client";
-import { api, ApiError, ifMatch } from "../../api.js";
+import type { PlatformAccountDetail, PlatformAuthority } from "@unicas/admin-client";
+import { api, ApiError } from "../../api.js";
 import { formatErrorSafe } from "../view-helpers.js";
+import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { Label } from "@/components/ui/label.js";
 import { Checkbox } from "@/components/ui/checkbox.js";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.js";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
 
-export function PrincipalDetailEditor({ principal, onSaved }: { principal: PlatformPrincipalDetail; onSaved: () => void }) {
-  const [status, setStatus] = useState<PlatformAccessStatus>(principal.status);
-  const [authorities, setAuthorities] = useState<PlatformAuthority[]>([...principal.authorities]);
+type PendingCommand =
+  | { readonly kind: "authority"; readonly authority: PlatformAuthority; readonly grant: boolean }
+  | { readonly kind: "block"; readonly blocked: boolean };
+
+export function PlatformAccountEditor({ account, onChanged }: { account: PlatformAccountDetail; onChanged: () => void }) {
+  const [current, setCurrent] = useState(account);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState(false);
+  const [pending, setPending] = useState<PendingCommand | null>(null);
 
-  async function save() {
-    setConfirming(false);
+  async function applyCommand() {
+    if (!pending) return;
+    setPending(null);
     setSaving(true);
     setError(null);
     try {
-      await api(`/admin/platform/principals/${encodeURIComponent(principal.principalRef)}/access`, {
-        method: "PATCH", headers: { "Content-Type": "application/json", ...ifMatch(principal.revision) },
-        body: JSON.stringify({ status, authorities }),
-      });
-      onSaved();
+      if (pending.kind === "authority") {
+        await api(`/admin/platform/accounts/${encodeURIComponent(current.accountId)}/authorities/${pending.authority}`, {
+          method: pending.grant ? "PUT" : "DELETE",
+        });
+        setCurrent(value => ({
+          ...value,
+          platformAuthorities: pending.grant
+            ? [...value.platformAuthorities, pending.authority]
+            : value.platformAuthorities.filter(authority => authority !== pending.authority),
+        }));
+      } else {
+        await api(`/admin/platform/accounts/${encodeURIComponent(current.accountId)}/block`, {
+          method: pending.blocked ? "PUT" : "DELETE",
+        });
+        setCurrent(value => ({ ...value, blockedAt: pending.blocked ? Date.now() : null }));
+      }
+      onChanged();
     } catch (caught) {
       setError(caught instanceof ApiError && caught.code === "SELF_BLOCK_FORBIDDEN"
-        ? "You cannot block your own Principal."
+        ? "You cannot block your own Account."
         : caught instanceof ApiError && caught.code === "LAST_PLATFORM_ADMIN"
           ? "Assign another Platform Admin before removing the final administrator."
-          : caught instanceof ApiError && caught.status === 412
-            ? "This principal was modified by another user. Please reload and try again."
-            : formatErrorSafe(caught));
+          : formatErrorSafe(caught));
     } finally { setSaving(false); }
   }
 
   return <div className="mt-6 space-y-6">
     <dl className="space-y-4 text-sm">
-      <div><dt className="font-medium">Principal Identity</dt><dd className="mt-2 break-all font-mono text-xs">Issuer: {principal.principal.issuer}<br />Subject: {principal.principal.subject}</dd></div>
-      <div><dt className="font-medium">Profile</dt><dd className="mt-2 break-all">Email: {principal.profile.emailForDisplay ?? "-"}</dd></div>
+      <div><dt className="font-medium">Account ID</dt><dd className="mt-2 break-all font-mono text-xs">{current.accountId}</dd></div>
+      <div><dt className="font-medium">Verified contact</dt><dd className="mt-2 break-all">{current.primaryVerifiedEmail?.normalizedEmail ?? "-"}</dd></div>
+      <div><dt className="font-medium">Status</dt><dd className="mt-2"><Badge variant={current.blockedAt === null ? "secondary" : "destructive"}>{current.blockedAt === null ? "Active" : "Blocked"}</Badge></dd></div>
     </dl>
-    <div className="space-y-2"><Label htmlFor="principal-status">Status</Label><Select value={status} onValueChange={value => setStatus(value as PlatformAccessStatus)}><SelectTrigger id="principal-status"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="blocked">Blocked</SelectItem></SelectContent></Select></div>
-    <fieldset className="space-y-2"><legend className="text-sm font-medium">Authorities</legend>{(["platform.admin", "apps.create"] as const).map(authority => <div className="flex items-center gap-2" key={authority}><Checkbox id={`auth-${authority}`} checked={authorities.includes(authority)} onCheckedChange={checked => setAuthorities(current => checked ? [...current, authority] : current.filter(value => value !== authority))} /><Label htmlFor={`auth-${authority}`}>{authority}</Label></div>)}</fieldset>
-    <p className="text-xs text-muted-foreground">Revision: {principal.revision}</p>
-    <div className="space-y-2"><h3 className="text-sm font-medium">App Memberships ({principal.memberships.length})</h3>{principal.memberships.map(membership => <div className="break-all border-b py-2 font-mono text-xs" key={membership.appId}><div>{membership.appId}</div><div>{membership.account.accountId}</div></div>)}</div>
+    <fieldset className="space-y-3" disabled={saving}><legend className="text-sm font-medium">Authorities</legend>{(["platform.admin", "apps.create"] as const).map(authority => <div className="flex items-center gap-2" key={authority}><Checkbox id={`auth-${authority}`} checked={current.platformAuthorities.includes(authority)} onCheckedChange={checked => setPending({ kind: "authority", authority, grant: checked === true })} /><Label htmlFor={`auth-${authority}`}>{authority}</Label></div>)}</fieldset>
+    <div className="space-y-2"><h3 className="text-sm font-medium">App Memberships ({current.memberships.length})</h3>{current.memberships.map(membership => <div className="break-all border-b py-2 font-mono text-xs" key={membership.appId}>{membership.appId}</div>)}</div>
     {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
-    <div className="flex justify-end"><Button disabled={saving} onClick={() => setConfirming(true)}>{saving ? "Saving..." : "Save Changes"}</Button></div>
-    <Dialog open={confirming} onOpenChange={setConfirming}><DialogContent><DialogHeader><DialogTitle>Confirm Platform Access changes</DialogTitle><DialogDescription>{status === "blocked" ? "Blocking immediately denies this Principal's Console, CLI, and MCP access." : authorities.includes("platform.admin") && !principal.authorities.includes("platform.admin") ? "This grants authority to manage Platform Access and platform invitations." : "Apply the selected status and authorities to this Principal."}</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => setConfirming(false)}>Cancel</Button><Button variant={status === "blocked" ? "destructive" : "default"} onClick={() => void save()}>Confirm changes</Button></DialogFooter></DialogContent></Dialog>
+    <div className="flex justify-end"><Button variant={current.blockedAt === null ? "destructive" : "outline"} disabled={saving} onClick={() => setPending({ kind: "block", blocked: current.blockedAt === null })}>{saving ? "Applying..." : current.blockedAt === null ? "Block Account" : "Restore Account"}</Button></div>
+    <Dialog open={pending !== null} onOpenChange={open => { if (!open) setPending(null); }}><DialogContent><DialogHeader><DialogTitle>Confirm Platform Access change</DialogTitle><DialogDescription>{pending?.kind === "block" ? pending.blocked ? "Blocking immediately denies every linked login and rotates the Account credential generation." : "Restore this Account's current platform and App admission." : pending?.grant ? `Grant ${pending.authority} to this Account?` : `Revoke ${pending?.authority} from this Account?`}</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => setPending(null)}>Cancel</Button><Button variant={pending?.kind === "block" && pending.blocked ? "destructive" : "default"} onClick={() => void applyCommand()}>Confirm change</Button></DialogFooter></DialogContent></Dialog>
   </div>;
 }

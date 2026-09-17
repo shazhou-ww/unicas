@@ -185,10 +185,15 @@ describe("adapter-hosted control-plane MCP server", () => {
   });
 
   test("creates, lists, and revokes platform invitations with current platform authority", async () => {
-    await db.prepare("INSERT INTO cas_platform_principals (principal_ref, identity_issuer, subject, status, platform_admin, apps_create, revision, created_at, updated_at) VALUES ('alice-ref', ?, ?, 'active', 1, 0, 1, 1, 1)")
-      .bind("https://accounts.google.com", "alice-sub").run();
-    await db.prepare("INSERT INTO cas_platform_principals (principal_ref, identity_issuer, subject, status, platform_admin, apps_create, revision, created_at, updated_at) VALUES ('target-ref', ?, 'target-sub', 'active', 0, 0, 1, 1, 1)")
-      .bind("https://accounts.google.com").run();
+    const accountService = new AccountService(new D1AccountRepository(db), () => 1000);
+    const alice = await accountService.createForExternalIdentity({ provider: "google", issuer: "https://accounts.google.com", subject: "alice-sub", displayName: "Alice" });
+    const target = await accountService.createForExternalIdentity({ provider: "google", issuer: "https://accounts.google.com", subject: "target-sub", displayName: "Target" });
+    await db.prepare("INSERT INTO cas_account_platform_authorities (account_id, authority, granted_at) VALUES (?, 'platform.admin', 1)")
+      .bind(alice.account.accountId).run();
+    await db.prepare("INSERT INTO cas_platform_principals (principal_ref, identity_issuer, subject, status, platform_admin, apps_create, revision, created_at, updated_at, account_id) VALUES ('alice-ref', ?, ?, 'active', 1, 0, 1, 1, 1, ?)")
+      .bind("https://accounts.google.com", "alice-sub", alice.account.accountId).run();
+    await db.prepare("INSERT INTO cas_platform_principals (principal_ref, identity_issuer, subject, status, platform_admin, apps_create, revision, created_at, updated_at, account_id) VALUES ('target-ref', ?, 'target-sub', 'active', 0, 0, 1, 1, 1, ?)")
+      .bind("https://accounts.google.com", target.account.accountId).run();
     const repository = new D1PlatformAccessRepository(db);
     const platformAccess = new PlatformAccessService(repository);
     const platformInvitations = new PlatformInvitationService(
@@ -202,6 +207,7 @@ describe("adapter-hosted control-plane MCP server", () => {
       platformInvitations,
       platformAudit: new PlatformAuditService(repository, platformAccess),
       platformAccess,
+      accountService,
     });
 
     expect((await callTool(handler, "create_platform_invitation", {
@@ -222,22 +228,28 @@ describe("adapter-hosted control-plane MCP server", () => {
       etag: '"1"',
     });
     const invitationId = String(created.structuredContent.invitationId);
-    expect((await callTool(handler, "list_platform_principals", { authority: "platform.admin" })).structuredContent)
-      .toMatchObject({ items: [{ principalRef: "alice-ref" }] });
-    expect((await callTool(handler, "get_platform_principal", { principalRef: "target-ref" })).structuredContent)
-      .toMatchObject({ principalRef: "target-ref", authorities: [] });
-    expect((await callTool(handler, "update_platform_access", {
-      principalRef: "target-ref",
-      confirmPrincipalRef: "wrong",
-      authorities: ["apps.create"],
-      etag: '"1"',
+    expect((await callTool(handler, "list_platform_accounts", { authority: "platform.admin" })).structuredContent)
+      .toMatchObject({ items: [{ accountId: alice.account.accountId }] });
+    expect((await callTool(handler, "get_platform_account", { accountId: target.account.accountId })).structuredContent)
+      .toMatchObject({ accountId: target.account.accountId, platformAuthorities: [] });
+    expect((await callTool(handler, "grant_platform_authority", {
+      accountId: target.account.accountId,
+      confirmAccountId: "wrong",
+      authority: "apps.create",
     })).isError).toBe(true);
-    expect((await callTool(handler, "update_platform_access", {
-      principalRef: "target-ref",
-      confirmPrincipalRef: "target-ref",
-      authorities: ["apps.create"],
-      etag: '"1"',
-    })).structuredContent).toEqual({ etag: '"2"' });
+    expect((await callTool(handler, "grant_platform_authority", {
+      accountId: target.account.accountId,
+      confirmAccountId: target.account.accountId,
+      authority: "apps.create",
+    })).structuredContent).toEqual({ ok: true });
+    expect((await callTool(handler, "block_platform_account", {
+      accountId: target.account.accountId,
+      confirmAccountId: target.account.accountId,
+    })).structuredContent).toEqual({ ok: true });
+    expect((await callTool(handler, "restore_platform_account", {
+      accountId: target.account.accountId,
+      confirmAccountId: target.account.accountId,
+    })).structuredContent).toEqual({ ok: true });
     const listed = await callTool(handler, "list_platform_invitations", { status: "pending" });
     expect(listed.structuredContent).toMatchObject({
       items: [{ invitationId, emailConstraint: "developer@example.com", authorities: ["apps.create"] }],

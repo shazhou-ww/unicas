@@ -27,6 +27,12 @@ export type CasAdminRoute =
   | { operation: "getPlatformPrincipal"; principalRef: string }
   | { operation: "getPlatformAccess"; principalRef: string }
   | { operation: "patchPlatformAccess"; principalRef: string }
+  | { operation: "listPlatformAccounts" }
+  | { operation: "getPlatformAccount"; accountId: string }
+  | { operation: "grantPlatformAccountAuthority"; accountId: string; authority: "platform.admin" | "apps.create" }
+  | { operation: "revokePlatformAccountAuthority"; accountId: string; authority: "platform.admin" | "apps.create" }
+  | { operation: "blockPlatformAccount"; accountId: string }
+  | { operation: "restorePlatformAccount"; accountId: string }
   | { operation: "listPlatformInvitations" }
   | { operation: "createPlatformInvitation" }
   | { operation: "revokePlatformInvitation"; invitationId: string }
@@ -69,6 +75,12 @@ export type AppAdminRoute =
   | { operation: "getPlatformPrincipal"; principalRef: string }
   | { operation: "getPlatformAccess"; principalRef: string }
   | { operation: "patchPlatformAccess"; principalRef: string }
+  | { operation: "listPlatformAccounts" }
+  | { operation: "getPlatformAccount"; accountId: string }
+  | { operation: "grantPlatformAccountAuthority"; accountId: string; authority: "platform.admin" | "apps.create" }
+  | { operation: "revokePlatformAccountAuthority"; accountId: string; authority: "platform.admin" | "apps.create" }
+  | { operation: "blockPlatformAccount"; accountId: string }
+  | { operation: "restorePlatformAccount"; accountId: string }
   | { operation: "listPlatformInvitations" }
   | { operation: "createPlatformInvitation" }
   | { operation: "revokePlatformInvitation"; invitationId: string }
@@ -124,6 +136,13 @@ export const casAdminRoutes = {
     `/admin/platform/principals/${segment(principalRef)}`,
   platformPrincipalAccess: ({ principalRef }: { principalRef: string }) =>
     `/admin/platform/principals/${segment(principalRef)}/access`,
+  platformAccounts: () => "/admin/platform/accounts",
+  platformAccount: ({ accountId }: { accountId: string }) =>
+    `/admin/platform/accounts/${segment(accountId)}`,
+  platformAccountAuthority: ({ accountId, authority }: { accountId: string; authority: string }) =>
+    `/admin/platform/accounts/${segment(accountId)}/authorities/${segment(authority)}`,
+  platformAccountBlock: ({ accountId }: { accountId: string }) =>
+    `/admin/platform/accounts/${segment(accountId)}/block`,
   platformInvitations: () => "/admin/platform/invitations",
   platformInvitation: ({ invitationId }: { invitationId: string }) =>
     `/admin/platform/invitations/${segment(invitationId)}`,
@@ -176,6 +195,13 @@ export const appAdminRoutes = {
     `/admin/platform/principals/${segment(principalRef)}`,
   platformPrincipalAccess: ({ principalRef }: { principalRef: string }) =>
     `/admin/platform/principals/${segment(principalRef)}/access`,
+  platformAccounts: () => "/admin/platform/accounts",
+  platformAccount: ({ accountId }: { accountId: string }) =>
+    `/admin/platform/accounts/${segment(accountId)}`,
+  platformAccountAuthority: ({ accountId, authority }: { accountId: string; authority: string }) =>
+    `/admin/platform/accounts/${segment(accountId)}/authorities/${segment(authority)}`,
+  platformAccountBlock: ({ accountId }: { accountId: string }) =>
+    `/admin/platform/accounts/${segment(accountId)}/block`,
   platformInvitations: () => "/admin/platform/invitations",
   platformInvitation: ({ invitationId }: { invitationId: string }) =>
     `/admin/platform/invitations/${segment(invitationId)}`,
@@ -469,6 +495,32 @@ export function matchPlatformAdminRoute(
 
   if (parts.length === 3 && parts[2] === "access-summary" && method === "GET") {
     return { operation: "accessSummary" };
+  }
+
+  if (parts.length === 3 && parts[2] === "accounts" && method === "GET") {
+    return { operation: "listPlatformAccounts" };
+  }
+
+  if (parts.length === 4 && parts[2] === "accounts" && parts[3] && method === "GET") {
+    const accountId = decodeSegment(parts[3]!);
+    return accountId === null ? null : { operation: "getPlatformAccount", accountId };
+  }
+
+  if (parts.length === 5 && parts[2] === "accounts" && parts[3] && parts[4] === "block") {
+    const accountId = decodeSegment(parts[3]!);
+    if (accountId === null) return null;
+    if (method === "PUT") return { operation: "blockPlatformAccount", accountId };
+    if (method === "DELETE") return { operation: "restorePlatformAccount", accountId };
+    return null;
+  }
+
+  if (parts.length === 6 && parts[2] === "accounts" && parts[3] && parts[4] === "authorities" && parts[5]) {
+    const accountId = decodeSegment(parts[3]!);
+    const authority = decodeSegment(parts[5]!);
+    if (accountId === null || (authority !== "platform.admin" && authority !== "apps.create")) return null;
+    if (method === "PUT") return { operation: "grantPlatformAccountAuthority", accountId, authority };
+    if (method === "DELETE") return { operation: "revokePlatformAccountAuthority", accountId, authority };
+    return null;
   }
 
   if (parts.length === 3 && parts[2] === "principals") {

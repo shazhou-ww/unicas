@@ -6,6 +6,7 @@ import type { AdminHttpFetcher, AdminClientSession } from "../src/index.js";
 
 const STACK = "cas_stack_a";
 const APP = "cas_app_a";
+const ACCOUNT = `acct_${"a".repeat(22)}`;
 
 /** Minimal in-memory fake of the /admin BFF API. */
 class MockAdminService {
@@ -129,6 +130,29 @@ class MockAdminService {
     }
     if (path === appAdminRoutes.accessSummary()) {
       return Response.json({ activePrincipalCount: 1, platformAdminCount: 1, appCreatorCount: 1, blockedPrincipalCount: 0, generatedAt: 1 });
+    }
+    const platformAccount = {
+      accountId: ACCOUNT,
+      displayName: "Alice",
+      primaryVerifiedEmail: null,
+      avatar: { kind: "fallback", initials: "AL", colorIndex: 1 },
+      blockedAt: null,
+      platformAuthorities: ["platform.admin", "apps.create"],
+      createdAt: 1,
+      updatedAt: 2,
+      effectiveAccess: "active",
+      appMembershipCount: 1,
+      lastActiveAt: 2,
+    };
+    if (path === appAdminRoutes.platformAccounts() && request.method === "GET") {
+      return Response.json({ items: [platformAccount], nextCursor: null });
+    }
+    if (path === appAdminRoutes.platformAccount({ accountId: ACCOUNT }) && request.method === "GET") {
+      return Response.json({ ...platformAccount, memberships: [] });
+    }
+    if ((path === appAdminRoutes.platformAccountAuthority({ accountId: ACCOUNT, authority: "platform.admin" })
+      || path === appAdminRoutes.platformAccountBlock({ accountId: ACCOUNT })) && request.method !== "GET") {
+      return new Response(null, { status: 204 });
     }
     if (path === appAdminRoutes.platformPrincipals() && request.method === "GET") {
       return Response.json({
@@ -572,11 +596,6 @@ describe("functional admin client", () => {
 
   it("transports platform access and invitation operations with minimal receipts", async () => {
     expect(await client.getPlatformAccessSummary()).toMatchObject({ platformAdminCount: 1 });
-    expect(await client.listPlatformPrincipals({ limit: 10 })).toMatchObject({ items: [{ principalRef: "principal-1" }] });
-    expect(await client.getPlatformPrincipal({ principalRef: "principal-1" })).toMatchObject({ memberships: [] });
-    expect(await client.getPlatformAccess({ principalRef: "principal-1" })).toMatchObject({ value: { principalRef: "principal-1" }, etag: '"1"' });
-    expect(await client.patchPlatformAccess({ principalRef: "principal-1" }, { authorities: ["apps.create"] }, '"1"'))
-      .toEqual({ etag: '"2"' });
     expect(await client.listPlatformInvitations({ status: "pending", limit: 10 })).toMatchObject({
       items: [{ invitationId: "platform-invite-1" }],
     });
@@ -596,13 +615,24 @@ describe("functional admin client", () => {
       .toMatchObject({ items: [{ eventId: "platform-event-1" }] });
 
     expect(service.requests).toEqual(expect.arrayContaining([
-      expect.objectContaining({ path: "/admin/platform/principals", search: "?limit=10" }),
-      expect.objectContaining({ path: "/admin/platform/principals/principal-1/access", method: "PATCH", ifMatch: '"1"' }),
       expect.objectContaining({ path: "/admin/platform/invitations", search: "?status=pending&limit=10" }),
       expect.objectContaining({ path: "/admin/platform/invitations", method: "POST", idempotencyKey: "platform-create-1" }),
       expect.objectContaining({ path: "/admin/platform/invitations/platform-invite-1", method: "DELETE", ifMatch: '"1"' }),
       expect.objectContaining({ path: "/admin/platform-invitations/platform-token/accept", method: "POST" }),
       expect.objectContaining({ path: "/admin/platform/audit-events", search: "?action=platform_invitation.created&createdAfter=0&limit=10" }),
+    ]));
+  });
+
+  it("transports Account-keyed platform commands without resource revisions", async () => {
+    expect(await client.listPlatformAccounts({ authority: "platform.admin" })).toMatchObject({ items: [{ accountId: ACCOUNT }] });
+    expect(await client.getPlatformAccount({ accountId: ACCOUNT })).toMatchObject({ accountId: ACCOUNT, memberships: [] });
+    await client.grantPlatformAccountAuthority({ accountId: ACCOUNT, authority: "platform.admin" });
+    await client.revokePlatformAccountAuthority({ accountId: ACCOUNT, authority: "platform.admin" });
+    await client.blockPlatformAccount({ accountId: ACCOUNT });
+    await client.restorePlatformAccount({ accountId: ACCOUNT });
+    expect(service.requests.slice(-4)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ method: "PUT", csrf: "csrf-1", ifMatch: null }),
+      expect.objectContaining({ method: "DELETE", csrf: "csrf-1", ifMatch: null }),
     ]));
   });
 

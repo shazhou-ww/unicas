@@ -94,7 +94,7 @@ export function App() {
     if (appRoute?.section === "invitations") {
       window.location.replace(`#/apps/${encodeURIComponent(appRoute.appId)}/members?filter=pending`);
     } else if (platformRoute?.section === "principals" || platformRoute?.section === "invitations") {
-      window.location.replace(`#/platform/people?filter=${platformRoute.section === "principals" ? "principals" : "pending"}`);
+      window.location.replace(`#/platform/people?filter=${platformRoute.section === "principals" ? "accounts" : "pending"}`);
     }
   }, [route]);
 

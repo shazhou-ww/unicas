@@ -85,6 +85,23 @@ export interface PlatformAccountSummary extends AccountSummary {
   readonly platformAuthorities: readonly PlatformAuthority[];
 }
 
+export interface PlatformAccountListItem extends PlatformAccountSummary {
+  readonly createdAt: number;
+  readonly updatedAt: number;
+  readonly effectiveAccess: "active" | "blocked" | "no_access";
+  readonly appMembershipCount: number;
+  readonly lastActiveAt: number | null;
+}
+
+export interface PlatformAccountDetail extends PlatformAccountListItem {
+  readonly memberships: readonly AppMembership[];
+}
+
+export interface PlatformAccountPage {
+  readonly items: readonly PlatformAccountListItem[];
+  readonly nextCursor: string | null;
+}
+
 export interface AccountPlatformAuthority {
   readonly accountId: AccountId;
   readonly authority: PlatformAuthority;

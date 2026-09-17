@@ -56,15 +56,13 @@ import type {
   CasManagedCapability,
   ManagedSpaceCapability,
   PlatformAccessSummary,
-  PlatformAccessState,
+  PlatformAccountDetail,
+  PlatformAccountPage,
   PlatformAuditAction,
   PlatformAuditPage,
   PlatformAuthority,
   PlatformInvitation,
   PlatformInvitationPage,
-  PlatformPrincipalDetail,
-  PlatformPrincipalPage,
-  Principal,
   SpaceRootRefBalance,
   SpaceRootRefEvent,
 } from "@unicas/admin-protocol";
@@ -120,20 +118,18 @@ export interface AdminClient {
     ifMatch: string,
   ): Promise<{ readonly etag: string }>;
   getPlatformAccessSummary(): Promise<PlatformAccessSummary>;
-  listPlatformPrincipals(query?: {
+  listPlatformAccounts(query?: {
     readonly query?: string;
     readonly effectiveAccess?: "active" | "blocked" | "no_access";
     readonly authority?: PlatformAuthority | "none";
     readonly limit?: number;
     readonly cursor?: string;
-  }): Promise<PlatformPrincipalPage>;
-  getPlatformPrincipal(path: { readonly principalRef: string }): Promise<PlatformPrincipalDetail>;
-  getPlatformAccess(path: { readonly principalRef: string }): Promise<AdminClientRead<PlatformAccessState>>;
-  patchPlatformAccess(
-    path: { readonly principalRef: string },
-    body: { readonly status?: "active" | "blocked"; readonly authorities?: readonly PlatformAuthority[] },
-    ifMatch: string,
-  ): Promise<{ readonly etag: string }>;
+  }): Promise<PlatformAccountPage>;
+  getPlatformAccount(path: { readonly accountId: AccountId }): Promise<PlatformAccountDetail>;
+  grantPlatformAccountAuthority(path: { readonly accountId: AccountId; readonly authority: PlatformAuthority }): Promise<void>;
+  revokePlatformAccountAuthority(path: { readonly accountId: AccountId; readonly authority: PlatformAuthority }): Promise<void>;
+  blockPlatformAccount(path: { readonly accountId: AccountId }): Promise<void>;
+  restorePlatformAccount(path: { readonly accountId: AccountId }): Promise<void>;
   listPlatformInvitations(query?: {
     readonly query?: string;
     readonly status?: PlatformInvitation["status"];
@@ -504,40 +500,33 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
       return response.json();
     },
 
-    async listPlatformPrincipals(query) {
+    async listPlatformAccounts(query) {
       const response = await requireOk(
-        await request(`${appAdminRoutes.platformPrincipals()}${queryString(query)}`),
-        "listPlatformPrincipals",
+        await request(`${appAdminRoutes.platformAccounts()}${queryString(query)}`),
+        "listPlatformAccounts",
       );
       return response.json();
     },
 
-    async getPlatformPrincipal(path) {
-      const response = await requireOk(
-        await request(appAdminRoutes.platformPrincipal(path)),
-        "getPlatformPrincipal",
-      );
+    async getPlatformAccount(path) {
+      const response = await requireOk(await request(appAdminRoutes.platformAccount(path)), "getPlatformAccount");
       return response.json();
     },
 
-    async getPlatformAccess(path) {
-      const response = await requireOk(
-        await request(appAdminRoutes.platformPrincipalAccess(path)),
-        "getPlatformAccess",
-      );
-      return { value: await response.json(), etag: readEtag(response) };
+    async grantPlatformAccountAuthority(path) {
+      await requireOk(await request(appAdminRoutes.platformAccountAuthority(path), { method: "PUT" }), "grantPlatformAccountAuthority");
     },
 
-    async patchPlatformAccess(path, body, ifMatch) {
-      const response = await requireOk(
-        await request(appAdminRoutes.platformPrincipalAccess(path), {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", ...ifMatchHeader(ifMatch) },
-          body: JSON.stringify(body),
-        }),
-        "patchPlatformAccess",
-      );
-      return { etag: readEtag(response) };
+    async revokePlatformAccountAuthority(path) {
+      await requireOk(await request(appAdminRoutes.platformAccountAuthority(path), { method: "DELETE" }), "revokePlatformAccountAuthority");
+    },
+
+    async blockPlatformAccount(path) {
+      await requireOk(await request(appAdminRoutes.platformAccountBlock(path), { method: "PUT" }), "blockPlatformAccount");
+    },
+
+    async restorePlatformAccount(path) {
+      await requireOk(await request(appAdminRoutes.platformAccountBlock(path), { method: "DELETE" }), "restorePlatformAccount");
     },
 
     async listPlatformInvitations(query) {

@@ -113,14 +113,11 @@ describe("PlatformInvitationsView", () => {
 });
 
 describe("PlatformPrincipalsView", () => {
-  test("uses cursor pagination and renders App memberships in Principal detail", async () => {
-    const principal = {
-      principalRef: "principal-1",
-      principal: { issuer: "https://accounts.example", subject: "developer" },
-      profile: { displayName: "Developer", emailForDisplay: "developer@example.com" },
-      status: "active",
-      authorities: ["apps.create"],
-      revision: 1,
+  test("uses cursor pagination and renders App memberships in Account detail", async () => {
+    const account = {
+      ...accountSummary("Developer", "developer@example.com"),
+      blockedAt: null,
+      platformAuthorities: ["apps.create"],
       createdAt: 1,
       updatedAt: 1,
       effectiveAccess: "active",
@@ -136,22 +133,22 @@ describe("PlatformPrincipalsView", () => {
       if (path.startsWith("/admin/platform/people?")) {
         page += 1;
         return page === 1
-          ? json({ items: [{ kind: "principal", principal }], nextCursor: "next-page" })
+          ? json({ items: [{ kind: "account", account }], nextCursor: "next-page" })
           : json({ items: [], nextCursor: null });
       }
-      if (path === "/admin/platform/principals/principal-1") {
-        return json({ ...principal, memberships: [{ appId: "app-1", account: accountSummary("Developer", "developer@example.com") }] });
+      if (path === `/admin/platform/accounts/${ACCOUNT_ID}`) {
+        return json({ ...account, memberships: [{ appId: "app-1", account: accountSummary("Developer", "developer@example.com") }] });
       }
       return new Response(null, { status: 404 });
     });
     const user = userEvent.setup();
     render(<PlatformPrincipalsView />);
 
-    const openPrincipal = await screen.findByRole("button", { name: "Open Principal details for Developer" });
-    openPrincipal.focus();
+    const openAccount = await screen.findByRole("button", { name: "Open Account details for Developer" });
+    openAccount.focus();
     await user.keyboard("{Enter}");
     expect(await screen.findByText("app-1")).toBeInTheDocument();
-    await user.click(within(screen.getByRole("dialog", { name: "Principal Details" })).getByRole("button", { name: "Close" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Account Details" })).getByRole("button", { name: "Close" }));
     await user.click(screen.getByRole("button", { name: "Load more" }));
     await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => String(path).includes("cursor=next-page"))).toBe(true));
     expect(fetchMock.mock.calls.some(([path]) => String(path).includes("after=next-page"))).toBe(false);
@@ -160,14 +157,11 @@ describe("PlatformPrincipalsView", () => {
     await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => String(path).includes("query=developer"))).toBe(true));
   });
 
-  test("confirms authority changes before issuing the conditional PATCH", async () => {
-    const principal = {
-      principalRef: "principal-1",
-      principal: { issuer: "https://accounts.example", subject: "developer" },
-      profile: { displayName: "Developer", emailForDisplay: "developer@example.com" },
-      status: "active",
-      authorities: ["apps.create"],
-      revision: 3,
+  test("confirms one authority command without a revision precondition", async () => {
+    const account = {
+      ...accountSummary("Developer", "developer@example.com"),
+      blockedAt: null,
+      platformAuthorities: ["apps.create"],
       createdAt: 1,
       updatedAt: 1,
       effectiveAccess: "active",
@@ -178,27 +172,27 @@ describe("PlatformPrincipalsView", () => {
     fetchMock.mockImplementation(async (input, init) => {
       const path = String(input);
       if (path === "/admin/platform/access-summary") return json({ activePrincipalCount: 1, platformAdminCount: 1, appCreatorCount: 1, blockedPrincipalCount: 0, generatedAt: 1 });
-      if (path.startsWith("/admin/platform/people?")) return json({ items: [{ kind: "principal", principal }], nextCursor: null });
-      if (path === "/admin/platform/principals/principal-1" && init?.method !== "PATCH") return json(principal);
-      if (path === "/admin/platform/principals/principal-1/access" && init?.method === "PATCH") return new Response(null, { status: 204 });
+      if (path.startsWith("/admin/platform/people?")) return json({ items: [{ kind: "account", account }], nextCursor: null });
+      if (path === `/admin/platform/accounts/${ACCOUNT_ID}` && !init?.method) return json(account);
+      if (path === `/admin/platform/accounts/${ACCOUNT_ID}/authorities/apps.create` && init?.method === "DELETE") return new Response(null, { status: 204 });
       return new Response(null, { status: 404 });
     });
     const user = userEvent.setup();
     render(<PlatformPrincipalsView />);
 
-    await user.click(await screen.findByRole("button", { name: "Open Principal details for Developer" }));
+    await user.click(await screen.findByRole("button", { name: "Open Account details for Developer" }));
     await user.click(await screen.findByLabelText("apps.create"));
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
-    expect(await screen.findByRole("dialog", { name: "Confirm Platform Access changes" })).toBeInTheDocument();
-    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "PATCH")).toBe(false);
+    expect(await screen.findByRole("dialog", { name: "Confirm Platform Access change" })).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
     await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "PATCH")).toBe(false);
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
 
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
-    await user.click(screen.getByRole("button", { name: "Confirm changes" }));
-    await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => init?.method === "PATCH")).toBe(true));
-    const patch = fetchMock.mock.calls.find(([, init]) => init?.method === "PATCH");
-    expect((patch?.[1]?.headers as Headers).get("If-Match")).toBe('"3"');
+    await user.click(screen.getByLabelText("apps.create"));
+    await user.click(screen.getByRole("button", { name: "Confirm change" }));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(true));
+    const command = fetchMock.mock.calls.find(([, init]) => init?.method === "DELETE");
+    expect(command?.[0]).toBe(`/admin/platform/accounts/${ACCOUNT_ID}/authorities/apps.create`);
+    expect((command?.[1]?.headers as Headers).get("If-Match")).toBeNull();
   });
 });
 

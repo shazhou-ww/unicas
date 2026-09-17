@@ -291,14 +291,15 @@ describe("unicas mcp (stdio server)", () => {
       structuredContent: { items: [{ eventId: "platform-event-1" }] },
     });
 
-    stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "list_platform_principals", arguments: { authority: "platform.admin" } } })}\n`);
-    expect((await reader.next()).result).toMatchObject({ isError: false, structuredContent: { items: [{ principalRef: "principal-1" }] } });
+    const platformAccountId = `acct_${"a".repeat(22)}`;
+    stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "list_platform_accounts", arguments: { authority: "platform.admin" } } })}\n`);
+    expect((await reader.next()).result).toMatchObject({ isError: false, structuredContent: { items: [{ accountId: platformAccountId }] } });
 
-    stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 11, method: "tools/call", params: { name: "get_platform_principal", arguments: { principalRef: "principal-1" } } })}\n`);
-    expect((await reader.next()).result).toMatchObject({ isError: false, structuredContent: { principalRef: "principal-1" } });
+    stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 11, method: "tools/call", params: { name: "get_platform_account", arguments: { accountId: platformAccountId } } })}\n`);
+    expect((await reader.next()).result).toMatchObject({ isError: false, structuredContent: { accountId: platformAccountId } });
 
-    stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 12, method: "tools/call", params: { name: "update_platform_access", arguments: { principalRef: "principal-1", confirmPrincipalRef: "principal-1", authorities: ["apps.create"], etag: '"1"' } } })}\n`);
-    expect((await reader.next()).result).toMatchObject({ isError: false, structuredContent: { etag: '"2"' } });
+    stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 12, method: "tools/call", params: { name: "revoke_platform_authority", arguments: { accountId: platformAccountId, confirmAccountId: platformAccountId, authority: "apps.create" } } })}\n`);
+    expect((await reader.next()).result).toMatchObject({ isError: false, structuredContent: { ok: true } });
 
     stdin.end();
     await done;

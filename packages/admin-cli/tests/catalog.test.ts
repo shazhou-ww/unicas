@@ -53,6 +53,9 @@ describe("tool catalog", () => {
     expect(getToolDefinition("invite_app_member")?.annotations.idempotentHint).toBe(true);
     expect(getToolDefinition("remove_app_member")?.annotations.destructiveHint).toBe(true);
     expect(getToolDefinition("delete_app_playground_file_root")?.annotations.destructiveHint).toBe(true);
+    expect(getToolDefinition("revoke_platform_authority")?.annotations.idempotentHint).toBe(true);
+    expect(getToolDefinition("block_platform_account")?.annotations.destructiveHint).toBe(true);
+    expect(getToolDefinition("update_platform_access")).toBeUndefined();
   });
 
   test("input schemas validate and reject bad arguments", () => {
@@ -91,5 +94,17 @@ describe("tool catalog", () => {
       accountId: `acct_${"a".repeat(22)}`,
       confirmAccountId: `acct_${"a".repeat(22)}`,
     }).success).toBe(true);
+
+    const grantAuthority = getToolDefinition("grant_platform_authority");
+    expect(grantAuthority?.inputSchema.safeParse({
+      accountId: `acct_${"a".repeat(22)}`,
+      confirmAccountId: `acct_${"a".repeat(22)}`,
+      authority: "apps.create",
+    }).success).toBe(true);
+    expect(grantAuthority?.inputSchema.safeParse({
+      principalRef: "principal-1",
+      authorities: ["apps.create"],
+      etag: '"1"',
+    }).success).toBe(false);
   });
 });

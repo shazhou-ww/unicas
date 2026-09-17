@@ -239,6 +239,29 @@ export class FakeAdminApi {
         }], nextCursor: null
       });
     }
+    const platformAccount = {
+      accountId: `acct_${"a".repeat(22)}`,
+      displayName: "Alice",
+      primaryVerifiedEmail: null,
+      avatar: { kind: "fallback", initials: "AL", colorIndex: 1 },
+      blockedAt: null,
+      platformAuthorities: ["platform.admin", "apps.create"],
+      createdAt: 1,
+      updatedAt: 1,
+      effectiveAccess: "active",
+      appMembershipCount: 1,
+      lastActiveAt: 1,
+    };
+    if (url.pathname === appAdminRoutes.platformAccounts() && method === "GET") {
+      return json({ items: [platformAccount], nextCursor: null });
+    }
+    if (url.pathname === appAdminRoutes.platformAccount({ accountId: platformAccount.accountId }) && method === "GET") {
+      return json({ ...platformAccount, memberships: [] });
+    }
+    if ((url.pathname === appAdminRoutes.platformAccountAuthority({ accountId: platformAccount.accountId, authority: "apps.create" })
+      || url.pathname === appAdminRoutes.platformAccountBlock({ accountId: platformAccount.accountId })) && method !== "GET") {
+      return new Response(null, { status: 204 });
+    }
     if (url.pathname === appAdminRoutes.platformPrincipals() && method === "GET") {
       return json({
         items: [{

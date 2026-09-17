@@ -5,6 +5,7 @@ import {
   AccountSelfSchema,
   ExternalIdentityDetailSchema,
   PrimaryVerifiedEmailSchema,
+  PlatformAccountDetailSchema,
 } from "../src/index.js";
 
 const accountId = `acct_${"a".repeat(22)}`;
@@ -95,5 +96,28 @@ describe("Account protocol model", () => {
       authority: "platform.admin",
       grantedAt: 1,
     }).success).toBe(true);
+  });
+
+  test("projects platform Accounts without Principal identity fields", () => {
+    const detail = {
+      accountId,
+      displayName: "Alex Morgan",
+      primaryVerifiedEmail: null,
+      avatar: { kind: "fallback", initials: "AM", colorIndex: 2 },
+      blockedAt: null,
+      platformAuthorities: ["platform.admin"],
+      createdAt: 1,
+      updatedAt: 2,
+      effectiveAccess: "active",
+      appMembershipCount: 0,
+      lastActiveAt: 2,
+      memberships: [],
+    };
+    expect(PlatformAccountDetailSchema.safeParse(detail).success).toBe(true);
+    expect(PlatformAccountDetailSchema.safeParse({
+      ...detail,
+      principalRef: "principal-1",
+      principal: { issuer: "https://issuer.example", subject: "subject-1" },
+    }).success).toBe(false);
   });
 });

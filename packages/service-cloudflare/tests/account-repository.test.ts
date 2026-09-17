@@ -242,4 +242,110 @@ describe("D1 Account repository", () => {
       targetAccountId: actor.account.accountId,
     })).rejects.toMatchObject({ code: "LAST_MEMBER" });
   });
+
+  test("manages platform authorities and block state by Account ID", async () => {
+    const { db, service } = await fixture();
+    const actor = await service.createForExternalIdentity({
+      provider: "google",
+      issuer: "https://accounts.google.com",
+      subject: "platform-admin",
+      displayName: "Platform Admin",
+    });
+    const target = await service.createForExternalIdentity({
+      provider: "github",
+      issuer: "https://github.com",
+      subject: "101",
+      displayName: "Target Account",
+    });
+    await db.prepare(
+      "INSERT INTO cas_account_platform_authorities (account_id, authority, granted_at) VALUES (?, 'platform.admin', 1)",
+    ).bind(actor.account.accountId).run();
+    for (const [ref, resolution] of [["actor-ref", actor], ["target-ref", target]] as const) {
+      await db.prepare(
+        `INSERT INTO cas_platform_principals
+          (principal_ref, identity_issuer, subject, status, platform_admin, apps_create,
+           revision, created_at, updated_at, account_id)
+         VALUES (?, ?, ?, 'active', ?, 0, 1, 1, 1, ?)`,
+      ).bind(
+        ref,
+        resolution.authenticatedIdentity.issuer,
+        resolution.authenticatedIdentity.subject,
+        Number(resolution === actor),
+        resolution.account.accountId,
+      ).run();
+    }
+
+    await expect(service.listPlatformAccounts({ actorAccountId: actor.account.accountId }))
+      .resolves.toMatchObject({
+        items: expect.arrayContaining([
+          expect.objectContaining({ accountId: actor.account.accountId, platformAuthorities: ["platform.admin"] }),
+          expect.objectContaining({ accountId: target.account.accountId, effectiveAccess: "no_access" }),
+        ])
+      });
+    await expect(service.getPlatformAccount(actor.account.accountId, target.account.accountId))
+      .resolves.toMatchObject({ accountId: target.account.accountId, memberships: [] });
+
+    await service.setPlatformAuthority({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      targetAccountId: target.account.accountId,
+      authority: "apps.create",
+      grant: true,
+    });
+    await service.setPlatformAuthority({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      targetAccountId: target.account.accountId,
+      authority: "apps.create",
+      grant: true,
+    });
+    expect(await db.prepare(
+      "SELECT apps_create FROM cas_platform_principals WHERE account_id = ?",
+    ).bind(target.account.accountId).first()).toEqual({ apps_create: 1 });
+    expect(await db.prepare(
+      "SELECT COUNT(*) AS count FROM cas_platform_audit_events WHERE action = 'platform_access.authority_changed'",
+    ).first()).toEqual({ count: 1 });
+
+    await expect(service.setPlatformAuthority({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      targetAccountId: actor.account.accountId,
+      authority: "platform.admin",
+      grant: false,
+    })).rejects.toMatchObject({ code: "LAST_PLATFORM_ADMIN" });
+    await expect(service.setPlatformBlocked({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      targetAccountId: actor.account.accountId,
+      blocked: true,
+    })).rejects.toMatchObject({ code: "SELF_BLOCK_FORBIDDEN" });
+
+    await service.setPlatformBlocked({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      targetAccountId: target.account.accountId,
+      blocked: true,
+    });
+    await service.setPlatformBlocked({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      targetAccountId: target.account.accountId,
+      blocked: true,
+    });
+    expect(await db.prepare(
+      "SELECT blocked_at, credential_version FROM cas_accounts WHERE account_id = ?",
+    ).bind(target.account.accountId).first()).toEqual({ blocked_at: 1000, credential_version: 2 });
+    expect(await db.prepare(
+      "SELECT status FROM cas_platform_principals WHERE account_id = ?",
+    ).bind(target.account.accountId).first()).toEqual({ status: "blocked" });
+    await service.setPlatformBlocked({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      targetAccountId: target.account.accountId,
+      blocked: false,
+    });
+    expect(await db.prepare(
+      "SELECT blocked_at, credential_version FROM cas_accounts WHERE account_id = ?",
+    ).bind(target.account.accountId).first()).toEqual({ blocked_at: null, credential_version: 2 });
+  });
 });

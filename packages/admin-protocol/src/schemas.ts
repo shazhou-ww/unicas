@@ -36,6 +36,8 @@ import type {
   ExternalIdentitySummary,
   ManagedSpaceCapability,
   PlatformAccountSummary,
+  PlatformAccountDetail,
+  PlatformAccountListItem,
   PrimaryVerifiedEmail,
   Principal,
   Profile,
@@ -186,6 +188,26 @@ export const AppMembershipSchema: z.ZodType<AppMembership> = z.object({
   appId: AppIdSchema.describe("App whose equal administrator authority this membership grants."),
   account: AccountSummarySchema.describe("Stable Account granted membership."),
 }).strict().readonly().meta({ id: "AppMembership" });
+
+const PlatformAccountListItemShape = {
+  ...AccountSummaryShape,
+  blockedAt: TimestampSchema.nullable(),
+  platformAuthorities: PlatformAuthoritiesSchema,
+  createdAt: TimestampSchema,
+  updatedAt: TimestampSchema,
+  effectiveAccess: z.enum(["active", "blocked", "no_access"]),
+  appMembershipCount: z.number().int().nonnegative(),
+  lastActiveAt: TimestampSchema.nullable(),
+};
+
+export const PlatformAccountListItemSchema: z.ZodType<PlatformAccountListItem> = z.object({
+  ...PlatformAccountListItemShape,
+}).strict().readonly().meta({ id: "PlatformAccountListItem" });
+
+export const PlatformAccountDetailSchema: z.ZodType<PlatformAccountDetail> = z.object({
+  ...PlatformAccountListItemShape,
+  memberships: z.array(AppMembershipSchema).readonly(),
+}).strict().readonly().meta({ id: "PlatformAccountDetail" });
 
 export const AppMemberInvitationSchema: z.ZodType<AppMemberInvitation> = z.object({
   invitationId: NonEmptyStringSchema.describe("Opaque persistent invitation identity."),

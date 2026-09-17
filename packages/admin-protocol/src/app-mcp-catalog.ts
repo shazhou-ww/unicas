@@ -174,11 +174,11 @@ export const APP_ADMIN_MCP_TOOLS = {
       annotations: { destructiveHint: false, idempotentHint: true },
     },
   }),
-  list_platform_principals: tool({
-    name: "list_platform_principals",
+  list_platform_accounts: tool({
+    name: "list_platform_accounts",
     requiredScope: "control:security",
     registration: {
-      description: "List platform Principals with effective-access and authority filters.",
+      description: "List platform Accounts with effective-access and authority filters.",
       inputSchema: z.object({
         query: z.string().max(254).optional(),
         effectiveAccess: z.enum(["active", "blocked", "no_access"]).optional(),
@@ -189,28 +189,53 @@ export const APP_ADMIN_MCP_TOOLS = {
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
   }),
-  get_platform_principal: tool({
-    name: "get_platform_principal",
+  get_platform_account: tool({
+    name: "get_platform_account",
     requiredScope: "control:security",
     registration: {
-      description: "Read one platform Principal, current authorities, status, and App memberships.",
-      inputSchema: z.object({ principalRef: z.string().min(1) }),
+      description: "Read one platform Account, current authorities, block state, and App memberships.",
+      inputSchema: z.object({ accountId }),
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
   }),
-  update_platform_access: tool({
-    name: "update_platform_access",
+  grant_platform_authority: tool({
+    name: "grant_platform_authority",
     requiredScope: "control:security",
     registration: {
-      description: "Conditionally replace Platform Access fields using the current ETag and exact Principal ref confirmation.",
+      description: "Idempotently grant one platform authority to an Account after exact Account ID confirmation.",
       inputSchema: z.object({
-        principalRef: z.string().min(1),
-        confirmPrincipalRef: z.string().min(1),
-        status: z.enum(["active", "blocked"]).optional(),
-        authorities: z.array(z.enum(["platform.admin", "apps.create"])).optional(),
-        etag,
+        accountId,
+        confirmAccountId: accountId,
+        authority: z.enum(["platform.admin", "apps.create"]),
       }),
+      annotations: { destructiveHint: false, idempotentHint: true },
+    },
+  }),
+  revoke_platform_authority: tool({
+    name: "revoke_platform_authority",
+    requiredScope: "control:security",
+    registration: {
+      description: "Idempotently revoke one platform authority from an Account after exact Account ID confirmation.",
+      inputSchema: z.object({ accountId, confirmAccountId: accountId, authority: z.enum(["platform.admin", "apps.create"]) }),
       annotations: { destructiveHint: true, idempotentHint: true },
+    },
+  }),
+  block_platform_account: tool({
+    name: "block_platform_account",
+    requiredScope: "control:security",
+    registration: {
+      description: "Block an Account and invalidate its credential generation after exact Account ID confirmation.",
+      inputSchema: z.object({ accountId, confirmAccountId: accountId }),
+      annotations: { destructiveHint: true, idempotentHint: true },
+    },
+  }),
+  restore_platform_account: tool({
+    name: "restore_platform_account",
+    requiredScope: "control:security",
+    registration: {
+      description: "Idempotently restore a blocked Account after exact Account ID confirmation.",
+      inputSchema: z.object({ accountId, confirmAccountId: accountId }),
+      annotations: { destructiveHint: false, idempotentHint: true },
     },
   }),
   list_platform_invitations: tool({
