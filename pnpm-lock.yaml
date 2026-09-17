@@ -27,8 +27,8 @@ importers:
         specifier: 5.20260811.1-alpha
         version: 5.20260811.1-alpha
       repoledger:
-        specifier: 0.4.0
-        version: 0.4.0(supports-color@10.2.2)
+        specifier: 0.4.1
+        version: 0.4.1(supports-color@10.2.2)
       rimraf:
         specifier: ^6.1.3
         version: 6.1.3
@@ -3276,8 +3276,8 @@ packages:
     resolution: {integrity: sha512-6tDA8g98We0zd0GvVeMT9arEOnTw9qM03L9cJXaCjrip1OO764RDBLBfrB4cwzNGDj5OA5ioymC9GkizgWJDUg==}
     engines: {node: '>=8'}
 
-  repoledger@0.4.0:
-    resolution: {integrity: sha512-C/Sis+OUKePznRmT7koQimvlvQEQr+1y8eDFhxSmPgor/JkPR21VhrIm79IJ9snRUPanA0QMV5arUnpZJGsCew==}
+  repoledger@0.4.1:
+    resolution: {integrity: sha512-zKeIF8U6f39W08w7kCvDtvlRyU9neBp17RgeMD7jGb6GjMeC5/ipmu0oJspAWM70E/i4mlu5ISlwbxGClAlmzw==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -6441,7 +6441,7 @@ snapshots:
       indent-string: 4.0.0
       strip-indent: 3.0.0
 
-  repoledger@0.4.0(supports-color@10.2.2):
+  repoledger@0.4.1(supports-color@10.2.2):
     dependencies:
       commander: 14.0.3
       marked: 18.0.13

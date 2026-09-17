@@ -36,14 +36,15 @@ Git authorization are not approval.
 | Interface | `<Pending or Not applicable>` | Match the applicability and plan in `Task.md`. |
 | Business and data model | `<Pending or Not applicable>` | Match the applicability and plan in `Task.md`. |
 | Architecture | `<Pending or Not applicable>` | Match the applicability and plan in `Task.md`. |
-| Delivery acceptance | Pending | Integrated revision and acceptance evidence after implementation publication. |
+| Delivery acceptance | Pending | Published implementation and acceptance evidence. |
 
 ## Publication milestones
 
-Replace pending entries with the shared primary branch and an immutable commit,
-merge, or pull-request reference after publication. For the archive row, name
-the target remote branch and archive commit in the final task update; the
-resulting remote Git history supplies its immutable commit ID.
+In each milestone commit, replace its pending entry with `Published` and
+concise, human-readable evidence of what is being published and where. After
+publication, verify it from Git history. Do not copy commit hashes into this
+document; Git history is the source of truth for exact commit identity and
+reachability.
 
 | Milestone | Evidence | Status |
 | --- | --- | --- |
