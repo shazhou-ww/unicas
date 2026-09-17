@@ -37,6 +37,12 @@ The target ER model is shown in two views so relationship cardinalities remain
 legible. `ACCOUNT` and `EXTERNAL_IDENTITY` refer to the same entities wherever
 they are repeated.
 
+- `<<AO>>` means append only: normal application paths insert but do not update
+  the record.
+- `<<EI>>` means ephemeral immutable: the credential binding is fixed at issue;
+  rotation creates a replacement, while revocation, expiry, or pruning ends it.
+- Unmarked entities are mutable.
+
 ### Account and authorization relationships
 
 ```mermaid
@@ -139,7 +145,7 @@ erDiagram
     datetime unlinked_at
   }
 
-  SESSION {
+  SESSION["SESSION &lt;&lt;EI&gt;&gt;"] {
     string session_id PK
     string account_id FK
     string external_identity_id FK
@@ -147,7 +153,7 @@ erDiagram
     datetime expires_at
   }
 
-  MCP_GRANT {
+  MCP_GRANT["MCP_GRANT &lt;&lt;EI&gt;&gt;"] {
     string grant_id PK
     string account_id FK
     string external_identity_id FK
@@ -155,7 +161,7 @@ erDiagram
     datetime expires_at
   }
 
-  AUDIT_EVENT {
+  AUDIT_EVENT["AUDIT_EVENT &lt;&lt;AO&gt;&gt;"] {
     string audit_event_id PK
     string original_account_id FK
     string external_identity_id FK
@@ -167,14 +173,14 @@ erDiagram
     datetime occurred_at
   }
 
-  ACCOUNT_ALIAS {
+  ACCOUNT_ALIAS["ACCOUNT_ALIAS &lt;&lt;AO&gt;&gt;"] {
     string source_account_id PK, FK
     string canonical_account_id FK
     datetime created_at
     string reason
   }
 
-  LEGACY_IDENTITY_MAP {
+  LEGACY_IDENTITY_MAP["LEGACY_IDENTITY_MAP &lt;&lt;AO&gt;&gt;"] {
     string issuer PK
     string subject PK
     string account_id FK

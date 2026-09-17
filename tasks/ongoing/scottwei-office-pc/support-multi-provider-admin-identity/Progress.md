@@ -62,6 +62,12 @@ and People surfaces. These presentation refinements do not change the reviewed
 contracts or imply approval; they are published on `origin/main` as
 `24eeb2b04add73bed1ca00b37d988c490e78d0e2` with the checkpoints still pending.
 
+The requesting user subsequently asked for entity lifecycle stereotypes. The
+business/data-model ER view now marks Session and MCPGrant as ephemeral
+immutable (`<<EI>>`) and AuditEvent, AccountAlias, and LegacyIdentityMap as
+append only (`<<AO>>`); all unmarked entities remain mutable. This annotation
+refinement awaits publication and does not imply checkpoint approval.
+
 Next: obtain explicit business/data-model, architecture, and interface
 decisions on the published review artifacts. Do not begin the implementation
 protected by any pending checkpoint.
@@ -94,6 +100,11 @@ protected by any pending checkpoint.
   is a responsive review aid that compares only the current interaction shape
   with planned information hierarchy and workflows; it is not a final visual
   specification or production Console implementation.
+- Render lifecycle stereotypes through Mermaid entity display aliases so the
+  model keeps stable identifiers for relationships while showing literal
+  `<<AO>>` and `<<EI>>` labels. For `<<EI>>` credentials, rotation creates a new
+  record and expiry, revocation, or pruning ends the old record rather than
+  changing its Account/identity/revision binding.
 - Reconcile the previously stale progress wording with review-artifact commit
   `d3ef9fd44b7c141993d4307a750c39c817cf225a`; publication does not imply approval.
 
@@ -189,6 +200,9 @@ protected by any pending checkpoint.
   changes. Review-artifact commit
   `24eeb2b04add73bed1ca00b37d988c490e78d0e2` was pushed and verified reachable
   from refreshed `origin/main`.
+- Mermaid CLI 11.12.0 rendered both ER views after adding entity display aliases
+  for `<<AO>>` and `<<EI>>`; visual inspection confirmed all five labels were
+  preserved literally without obscuring entity fields or relationships.
 
 ## Blockers
 
