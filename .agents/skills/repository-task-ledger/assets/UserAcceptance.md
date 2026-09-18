@@ -12,7 +12,8 @@ State the user-visible behavior or decision this guide validates.
 
 ## Test target
 
-- Integrated revision: `<remote>/<primary-branch>` at `<commit-or-release>`.
+- Published implementation: `<remote>/<primary-branch>` and release, build, or
+	deployment identifier when applicable.
 - Environment or entry point: Exact location the user should open or operate.
 
 Use a file-relative link for any target stored in this task directory.

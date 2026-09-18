@@ -71,19 +71,19 @@ describe("configFromEnv", () => {
   test("requires secrets, keys, and origin", () => {
     expect(() => configFromEnv({})).toThrow();
     expect(() => configFromEnv({
-      GOOGLE_OIDC_CLIENT_ID: "id",
-      GOOGLE_OIDC_CLIENT_SECRET: "secret",
+      OAUTH_GOOGLE_CLIENT_ID: "id",
+      OAUTH_GOOGLE_CLIENT_SECRET: "secret",
       SESSION_ENCRYPTION_KEYS: JSON.stringify({ v1: randomKey() }),
     })).toThrow(/PUBLIC_ORIGIN/);
     expect(() => configFromEnv({
-      GOOGLE_OIDC_CLIENT_ID: "id",
-      GOOGLE_OIDC_CLIENT_SECRET: "secret",
+      OAUTH_GOOGLE_CLIENT_ID: "id",
+      OAUTH_GOOGLE_CLIENT_SECRET: "secret",
       SESSION_ENCRYPTION_KEYS: "not-json",
       PUBLIC_ORIGIN: "https://cas.example",
     })).toThrow(/SESSION_ENCRYPTION_KEYS/);
     const config = configFromEnv({
-      GOOGLE_OIDC_CLIENT_ID: "id",
-      GOOGLE_OIDC_CLIENT_SECRET: "secret",
+      OAUTH_GOOGLE_CLIENT_ID: "id",
+      OAUTH_GOOGLE_CLIENT_SECRET: "secret",
       SESSION_ENCRYPTION_KEYS: JSON.stringify({ v1: randomKey() }),
       PUBLIC_ORIGIN: "https://cas.example",
       SESSION_COOKIE_SECURE: "false",
@@ -91,6 +91,17 @@ describe("configFromEnv", () => {
     expect(config.googleClientId).toBe("id");
     expect(config.sessionCookieSecure).toBe(false);
     expect(config.oidcIssuer).toBe("https://accounts.google.com");
+  });
+
+  test("validates the email challenge sender address", () => {
+    const base = {
+      SESSION_ENCRYPTION_KEYS: JSON.stringify({ v1: randomKey() }),
+      PUBLIC_ORIGIN: "https://cas.example",
+    };
+    expect(() => configFromEnv({ ...base, ADMIN_EMAIL_FROM: "not-an-email" }))
+      .toThrow(/ADMIN_EMAIL_FROM/);
+    expect(configFromEnv({ ...base, ADMIN_EMAIL_FROM: " No-Reply@UniCAS.work " }).emailFrom)
+      .toBe("no-reply@unicas.work");
   });
 
   test("prefers the administrator origin over the compatibility fallback", () => {
@@ -102,33 +113,44 @@ describe("configFromEnv", () => {
     expect(config.publicOrigin).toBe("https://console.example");
   });
 
-  test("parses and cross-validates test account and email allowlist", () => {
+  test("registers optional providers only from complete credential pairs", () => {
+    const base = {
+      SESSION_ENCRYPTION_KEYS: JSON.stringify({ v1: randomKey() }),
+      PUBLIC_ORIGIN: "https://cas.example",
+    };
+    expect(() => configFromEnv({ ...base, OAUTH_MICROSOFT_CLIENT_ID: "microsoft" }))
+      .toThrow(/configured together/);
+    expect(() => configFromEnv({
+      ...base,
+      OAUTH_MICROSOFT_CLIENT_ID: "microsoft",
+      OAUTH_MICROSOFT_CLIENT_SECRET: "microsoft-secret",
+    })).toThrow(/EMAIL and ADMIN_EMAIL_FROM/);
+    expect(() => configFromEnv({ ...base, OAUTH_GITHUB_CLIENT_SECRET: "secret" }))
+      .toThrow(/configured together/);
+    expect(configFromEnv({
+      ...base,
+      OAUTH_MICROSOFT_CLIENT_ID: "microsoft",
+      OAUTH_MICROSOFT_CLIENT_SECRET: "microsoft-secret",
+      EMAIL: { send: async () => ({ messageId: "message-1" }) } as SendEmail,
+      ADMIN_EMAIL_FROM: "no-reply@unicas.work",
+      OAUTH_GITHUB_CLIENT_ID: "github",
+      OAUTH_GITHUB_CLIENT_SECRET: "github-secret",
+    })).toMatchObject({
+      microsoftClientId: "microsoft",
+      microsoftClientSecret: "microsoft-secret",
+      githubClientId: "github",
+      githubClientSecret: "github-secret",
+    });
+  });
+
+  test("parses and normalizes the email allowlist", () => {
     const baseEnv = {
       SESSION_ENCRYPTION_KEYS: JSON.stringify({ v1: randomKey() }),
       PUBLIC_ORIGIN: "https://cas.example",
     };
-    expect(() => configFromEnv({
-      ...baseEnv,
-      ADMIN_TEST_ACCOUNT_EMAIL: "tester@example.com",
-    })).toThrow(/configured together/);
-    expect(() => configFromEnv({
-      ...baseEnv,
-      ADMIN_TEST_ACCOUNT_EMAIL: "tester@example.com",
-      ADMIN_TEST_ACCOUNT_PASSWORD: "password",
-      ADMIN_EMAIL_ALLOWLIST: "alice@example.com",
-    })).toThrow(/must be included/);
-
     const config = configFromEnv({
       ...baseEnv,
-      ADMIN_TEST_ACCOUNT_EMAIL: " Tester@Example.com ",
-      ADMIN_TEST_ACCOUNT_PASSWORD: "password",
-      ADMIN_EMAIL_ALLOWLIST: "alice@example.com, TESTER@example.com,alice@example.com",
     });
-    expect(config.testAccount).toEqual({
-      email: "tester@example.com",
-      password: "password",
-    });
-    expect(config.emailAllowlist).toEqual(["alice@example.com", "tester@example.com"]);
   });
 });
 

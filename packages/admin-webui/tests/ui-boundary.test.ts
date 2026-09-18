@@ -6,8 +6,7 @@ import { describe, expect, test } from "vitest";
 /**
  * Browser-boundary proof: `src/ui` is the only code delivered to the browser.
  * It must never reference Google secrets, session signing material, storage
- * bindings, or control-plane/server modules. Only the explicit Playground
- * view may hold a short-lived tenant capability, and it may not persist it.
+ * bindings, control-plane/server modules, or tenant-plane credentials.
  */
 
 const UI_DIR = join(dirname(fileURLToPath(import.meta.url)), "../src/ui");
@@ -26,8 +25,8 @@ function listFiles(dir: string): string[] {
 }
 
 const FORBIDDEN_TOKENS = [
-  "GOOGLE_OIDC_CLIENT_SECRET",
-  "GOOGLE_OIDC_CLIENT_ID",
+  "OAUTH_GOOGLE_CLIENT_SECRET",
+  "OAUTH_GOOGLE_CLIENT_ID",
   "SESSION_ENCRYPTION_KEYS",
   "CAS_CONTROL_DB",
   "D1Database",
@@ -49,31 +48,16 @@ describe("cas-admin-webui browser boundary", () => {
       for (const token of FORBIDDEN_TOKENS) {
         expect(source, `${file} must not contain ${token}`).not.toContain(token);
       }
-      if (!file.endsWith("playground.tsx")) {
-        for (const token of TENANT_CREDENTIAL_TOKENS) {
-          expect(source, `${file} must not contain ${token}`).not.toContain(token);
-        }
+      for (const token of TENANT_CREDENTIAL_TOKENS) {
+        expect(source, `${file} must not contain ${token}`).not.toContain(token);
       }
     }
   });
 
-  test("the Playground credential exception remains memory-only", () => {
-    const source = readFileSync(join(UI_DIR, "views", "file-playground.tsx"), "utf8");
-    expect(source).toContain("current.accessToken");
-    for (const persistenceApi of ["localStorage", "sessionStorage", "indexedDB", "document.cookie"]) {
-      expect(source, `playground.tsx must not use ${persistenceApi}`).not.toContain(persistenceApi);
-    }
-  });
-
-  test("only the Playground imports tenant client facades; its lifecycle module imports only the cache", () => {
+  test("browser code does not import tenant client facades", () => {
     for (const file of listFiles(UI_DIR)) {
       const source = readFileSync(file, "utf8");
-      if (file.endsWith("playground-cache.ts")) {
-        expect(source.replaceAll("@unicas/tenant-browser-cache", "")).not.toContain("@unicas/tenant-");
-        expect(source).not.toContain("accessToken");
-      } else if (!file.endsWith("playground.tsx")) {
-        expect(source, `${file} must not import the tenant plane`).not.toContain("@unicas/tenant-");
-      }
+      expect(source, `${file} must not import the tenant plane`).not.toContain("@unicas/tenant-");
       expect(source).not.toContain("@unicas/tenant-protocol");
       expect(source).not.toContain("@unicas/codec");
     }

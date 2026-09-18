@@ -12,7 +12,7 @@ const platform = {
 } as unknown as ServicePlatform;
 
 describe("createUniCasService", () => {
-  test("dispatches tenant and admin protocol requests through one actor", async () => {
+  test("dispatches tenant protocol requests and rejects legacy administrator routes", async () => {
     const authorizeTenantRequest = vi.fn(async () => ({
       stackId: "s1",
       tenantId: "t1",
@@ -21,11 +21,9 @@ describe("createUniCasService", () => {
       kid: "key-1",
       permissions: ["cas:manage:t1"],
     }));
-    const handleAdminRequest = vi.fn(async () => new Response("admin"));
     const actor = createUniCasService({
       platform,
       authorizeTenantRequest,
-      handleAdminRequest,
     });
 
     expect(await (await actor.fetch(new Request(
@@ -40,20 +38,13 @@ describe("createUniCasService", () => {
       expect.objectContaining({ url: "https://tenant.internal/usage" }),
     );
 
-    expect(await (await actor.fetch(new Request(
-      "https://cas.example/admin/stacks/s1",
-    ))).text()).toBe("admin");
-    expect(handleAdminRequest).toHaveBeenCalledWith(expect.objectContaining({
-      platform,
-      route: { operation: "getStack", stackId: "s1" },
-    }));
+    expect((await actor.fetch(new Request("https://cas.example/admin/stacks/s1"))).status).toBe(404);
   });
 
   test("does not claim BFF, MCP, static asset, or unknown routes", async () => {
     const context = {
       platform,
       authorizeTenantRequest: vi.fn(),
-      handleAdminRequest: vi.fn(),
     } as unknown as ServiceContext;
     const actor = createUniCasService(context);
 
@@ -69,7 +60,6 @@ describe("createUniCasService", () => {
       expect((await actor.fetch(request)).status, path).toBe(404);
     }
     expect(context.authorizeTenantRequest).not.toHaveBeenCalled();
-    expect(context.handleAdminRequest).not.toHaveBeenCalled();
   });
 
   test("builds trusted Root Ref actor requests from the authorized call", async () => {
@@ -84,7 +74,6 @@ describe("createUniCasService", () => {
         permissions: ["cas:write:tenant/b"],
         refDomain: "doc",
       }),
-      handleAdminRequest: vi.fn(),
     });
     const response = await actor.fetch(new Request(
       "https://cas.example/stacks/stack%2Fa/tenants/tenant%2Fb/root-refs",
@@ -147,17 +136,13 @@ describe("createUniCasService", () => {
     });
     expect(matchUniCasServiceRoute(new Request(
       "https://console.unicas.work/admin/stacks/cas-1",
-    ))).toEqual({
-      plane: "admin",
-      route: { operation: "getStack", stackId: "cas-1" },
-    });
+    ))).toBeNull();
   });
 
   test("returns not implemented until v2 platform handlers are configured", async () => {
     const actor = createUniCasService({
       platform,
       authorizeTenantRequest: vi.fn(),
-      handleAdminRequest: vi.fn(),
     });
     expect((await actor.fetch(new Request(
       "https://api.unicas.work/v2/apps/app-1/spaces/space-1/cas/usage",
@@ -179,7 +164,6 @@ describe("createUniCasService", () => {
     const actor = createUniCasService({
       platform,
       authorizeTenantRequest: vi.fn(),
-      handleAdminRequest: vi.fn(),
       authorizeSpaceRequest,
       handleAppAdminRequest: vi.fn(),
     });
@@ -204,7 +188,6 @@ describe("createUniCasService", () => {
     const actor = createUniCasService({
       platform,
       authorizeTenantRequest: vi.fn(),
-      handleAdminRequest: vi.fn(),
       authorizeSpaceRequest: vi.fn(),
       handleAppAdminRequest,
     });

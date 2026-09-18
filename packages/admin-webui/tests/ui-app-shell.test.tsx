@@ -19,11 +19,38 @@ const currentApp = {
   revision: 3,
 };
 
+const account = {
+  accountId: `acct_${"a".repeat(22)}`,
+  displayName: "Admin User",
+  primaryVerifiedEmail: { normalizedEmail: "admin@example.com", source: "google-oidc", verifiedAt: 1 },
+  avatar: { kind: "fallback", initials: "AU", colorIndex: 1 },
+  blockedAt: null,
+  platformAuthorities: ["apps.create"],
+  identities: [{
+    externalIdentityId: "ext-google",
+    provider: "google",
+    accountHint: "a***@example.com",
+    linkedAt: 1,
+    lastAuthenticatedAt: 2,
+    currentLogin: true,
+  }],
+  linkableProviders: ["microsoft", "github"],
+};
+
 const me = {
+  account,
+  authenticatedIdentity: account.identities[0],
   principal: { issuer: "https://accounts.example", subject: "admin" },
   profile: { displayName: "Admin", emailForDisplay: "admin@example.com" },
   platformAccess: { principalRef: "admin-ref", status: "active", authorities: ["apps.create"], revision: 1 },
-  memberships: [{ appId: currentApp.appId, principal: { issuer: "https://accounts.example", subject: "admin" }, profile: { displayName: "Admin", emailForDisplay: "admin@example.com" } }],
+  memberships: [{
+    appId: currentApp.appId, account: {
+      accountId: account.accountId,
+      displayName: account.displayName,
+      primaryVerifiedEmail: account.primaryVerifiedEmail,
+      avatar: account.avatar,
+    }
+  }],
 };
 
 function managedIssuer(status: "active" | "disabled" = "active") {
@@ -56,6 +83,7 @@ beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input), "http://localhost");
     if (url.pathname === "/admin/me") return json(me);
+    if (url.pathname === "/admin/account") return json(account);
     if (url.pathname === "/admin/apps") return json({ items: [currentApp] });
     if (url.pathname === "/admin/apps/cas_one") return json(currentApp);
     if (url.pathname.endsWith("/managed-issuer")) return json(managedIssuer());
@@ -67,6 +95,15 @@ beforeEach(() => {
 });
 
 describe("current App shell", () => {
+  test("renders the Account route inside the Console shell", async () => {
+    window.location.hash = "#/account";
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Account" })).toBeVisible();
+    expect(screen.getByLabelText("Display name")).toHaveValue("Admin User");
+    expect(screen.getAllByText("Google")).toHaveLength(2);
+  });
+
   test("does not render stale App details or drafts while switching Apps", async () => {
     const other = { ...currentApp, appId: "cas_two", displayName: "Second App", description: "Second description", revision: 8 };
     let resolveOther!: (response: Response) => void;
@@ -155,13 +192,11 @@ describe("current App shell", () => {
 
     await screen.findByRole("heading", { name: "Primary App" });
     expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual([
-      "Overview", "Members", "Change Logs", "Playground",
+      "Overview", "Members", "Change Logs",
     ]);
     expect(screen.getByRole("heading", { name: "Managed issuer" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Custom OAuth authorization server" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Usage" })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("tab", { name: "Playground" })).toBeEnabled());
-
     await user.click(screen.getByRole("tab", { name: "Members" }));
     expect(window.location.hash).toBe("#/apps/cas_one/members");
   });
@@ -228,47 +263,4 @@ describe("current App shell", () => {
     expect((patch?.[1]?.headers as Headers).get("If-Match")).toBe('"3"');
   });
 
-  test("disables Playground until the managed issuer is enabled and updates after toggling", async () => {
-    let issuer = managedIssuer("disabled");
-    const base = vi.mocked(fetch).getMockImplementation()!;
-    vi.mocked(fetch).mockImplementation(async (input, init) => {
-      const url = new URL(String(input), "http://localhost");
-      if (url.pathname.endsWith("/managed-issuer")) {
-        if (init?.method === "PATCH") {
-          issuer = managedIssuer(JSON.parse(String(init.body)).enabled ? "active" : "disabled");
-        }
-        return json(issuer);
-      }
-      return base(input, init);
-    });
-    const user = userEvent.setup();
-    render(<App />);
-
-    const playground = await screen.findByRole("tab", { name: "Playground" });
-    expect(playground).toBeDisabled();
-    await user.click(playground);
-    expect(window.location.hash).toBe("#/apps/cas_one/overview");
-    await user.click(await screen.findByRole("button", { name: "Enable managed issuer" }));
-    await waitFor(() => expect(playground).toBeEnabled());
-    await user.click(screen.getByRole("button", { name: "Disable managed issuer" }));
-    await waitFor(() => expect(playground).toBeDisabled());
-  });
-
-  test("routes a disabled Playground to focused managed issuer settings", async () => {
-    window.location.hash = "#/apps/cas_one/playground";
-    const base = vi.mocked(fetch).getMockImplementation()!;
-    vi.mocked(fetch).mockImplementation(async (input, init) => {
-      const url = new URL(String(input), "http://localhost");
-      if (url.pathname.endsWith("/managed-issuer")) return json(managedIssuer("disabled"));
-      return base(input, init);
-    });
-    const user = userEvent.setup();
-    render(<App />);
-
-    await user.click(await screen.findByRole("button", { name: "Go to managed issuer settings" }));
-    await waitFor(() => expect(window.location.hash).toBe("#/apps/cas_one/overview"));
-    const settings = await screen.findByRole("region", { name: "Managed issuer settings" });
-    expect(settings).toHaveFocus();
-    await within(settings).findByRole("button", { name: "Enable managed issuer" });
-  });
 });

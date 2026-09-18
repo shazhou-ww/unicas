@@ -3,9 +3,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import {
-  casAdminRoutes,
+  appAdminRoutes,
   casAuthPlanePolicy,
-  matchCasAdminRoute,
+  matchAppAdminRoute,
 } from "../src/index.js";
 
 const packagesDir = join(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -33,13 +33,13 @@ const TENANT_ONLY_PACKAGES = [
 describe("cross-plane separation", () => {
   test("admin routes live only under the /admin plane", () => {
     const adminPaths = [
-      casAdminRoutes.me(),
-      casAdminRoutes.stacks(),
-      casAdminRoutes.stack({ stackId: "s" }),
-      casAdminRoutes.members({ stackId: "s" }),
-      casAdminRoutes.rootDomainRefs({ stackId: "s", refDomain: "doc" }),
-      casAdminRoutes.rootDomainEvents({ stackId: "s", refDomain: "doc" }),
-      casAdminRoutes.controlAuditEvents({ stackId: "s" }),
+      appAdminRoutes.me(),
+      appAdminRoutes.apps(),
+      appAdminRoutes.app({ appId: "a" }),
+      appAdminRoutes.members({ appId: "a" }),
+      appAdminRoutes.rootDomainRefs({ appId: "a", refDomain: "doc" }),
+      appAdminRoutes.rootDomainEvents({ appId: "a", refDomain: "doc" }),
+      appAdminRoutes.controlAuditEvents({ appId: "a" }),
     ];
     for (const path of adminPaths) {
       expect(path.startsWith("/admin/")).toBe(true);
@@ -55,15 +55,15 @@ describe("cross-plane separation", () => {
       "/tenants/t/_internal/root-refs",
     ];
     for (const path of tenantPaths) {
-      expect(matchCasAdminRoute("GET", path)).toBeNull();
-      expect(matchCasAdminRoute("POST", path)).toBeNull();
+      expect(matchAppAdminRoute("GET", path)).toBeNull();
+      expect(matchAppAdminRoute("POST", path)).toBeNull();
     }
   });
 
   test("authorization matrix: credential classes stay on their plane", () => {
-    expect(casAuthPlanePolicy.stackAdminPlane.pathPrefix).toBe("/admin");
-    expect(casAuthPlanePolicy.stackAdminPlane.credential).toBe("google_oidc_bff_session");
-    expect(casAuthPlanePolicy.stackAdminPlane.rejects).toEqual([
+    expect(casAuthPlanePolicy.appAdminPlane.pathPrefix).toBe("/admin");
+    expect(casAuthPlanePolicy.appAdminPlane.credential).toBe("google_oidc_bff_session");
+    expect(casAuthPlanePolicy.appAdminPlane.rejects).toEqual([
       "stack_issuer_jwt_capability",
     ]);
     expect(casAuthPlanePolicy.tenantDataPlane.pathPrefix).toBe("/stacks");
@@ -91,11 +91,10 @@ describe("package dependency boundaries", () => {
     expect(webui.private).toBe(true);
     expect(cloudflareService.private).toBe(true);
 
-    // The WebUI reaches the tenant plane only through public client facades
-    // for its managed-capability Playground.
     expect(webui.dependencies?.["@unicas/admin-client"]).toBe("workspace:*");
-    expect(webui.dependencies?.["@unicas/tenant-client"]).toBe("workspace:*");
-    expect(webui.dependencies?.["@unicas/tenant-file-client"]).toBe("workspace:*");
+    expect(webui.dependencies?.["@unicas/tenant-client"]).toBeUndefined();
+    expect(webui.dependencies?.["@unicas/tenant-file-client"]).toBeUndefined();
+    expect(webui.dependencies?.["@unicas/tenant-browser-cache"]).toBeUndefined();
     expect(webui.dependencies?.["@unicas/admin-protocol"]).toBeUndefined();
     expect(webui.dependencies?.["@unicas/service"]).toBeUndefined();
     expect(webui.dependencies?.["@unicas/control-plane"]).toBeUndefined();

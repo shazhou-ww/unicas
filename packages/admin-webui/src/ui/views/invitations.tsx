@@ -62,7 +62,7 @@ export function InvitationView({ token }: { token: string }) {
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
               Someone invited you to administer a UniCAS App. Accepting binds your
-              Principal to the App with equal administrator authority.
+              Account to the App with administrator authority.
             </p>
             {error ? (
               <div className="flex items-center gap-2 text-sm text-destructive">

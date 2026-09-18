@@ -1,11 +1,37 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { appAdminRoutes, casAdminRoutes } from "@unicas/admin-protocol";
+import { appAdminRoutes } from "@unicas/admin-protocol";
 import type { CasAdminPage } from "@unicas/admin-protocol";
 import { createAdminClient } from "../src/index.js";
 import type { AdminHttpFetcher, AdminClientSession } from "../src/index.js";
 
 const STACK = "cas_stack_a";
 const APP = "cas_app_a";
+const ACCOUNT = `acct_${"a".repeat(22)}`;
+
+it("persists rotated cookies and CSRF before the next request", async () => {
+  let saved: AdminClientSession | null = null;
+  const requests: Headers[] = [];
+  const service = new MockAdminService();
+  service.appVocabulary = true;
+  const client = createAdminClient({
+    baseUrl: "https://admin.test",
+    getSession: async () => ({ cookie: "cas_admin_session=old", csrfToken: "old-csrf" }),
+    onSessionChanged: async next => { saved = next; },
+    fetcher: async (input, init) => {
+      requests.push(new Headers(init?.headers));
+      const response = await service.fetch(input, init);
+      if (requests.length === 1) {
+        response.headers.set("Set-Cookie", "cas_admin_session=new; HttpOnly; Path=/admin");
+        response.headers.set("X-CSRF-Token", "new-csrf");
+      }
+      return response;
+    },
+  });
+  await client.getCurrentAdministrator();
+  expect(saved).toEqual({ cookie: "cas_admin_session=new", csrfToken: "new-csrf" });
+  await client.getCurrentAdministrator();
+  expect(requests[1]!.get("Cookie")).toBe("cas_admin_session=new");
+});
 
 /** Minimal in-memory fake of the /admin BFF API. */
 class MockAdminService {
@@ -69,16 +95,50 @@ class MockAdminService {
       return Response.json({ items: [], nextCursor: null });
     }
 
-    if (path === casAdminRoutes.me()) {
+    const account = {
+      accountId: `acct_${"a".repeat(22)}`,
+      displayName: "Alice",
+      primaryVerifiedEmail: {
+        normalizedEmail: "alice@example.com",
+        source: "google-oidc",
+        verifiedAt: 1,
+      },
+      avatar: { kind: "fallback", initials: "AL", colorIndex: 1 },
+      blockedAt: null,
+      platformAuthorities: ["platform.admin", "apps.create"],
+      identities: [{
+        externalIdentityId: "ext-google",
+        provider: "google",
+        accountHint: "a***@example.com",
+        linkedAt: 1,
+        lastAuthenticatedAt: 2,
+        currentLogin: true,
+      }],
+      linkableProviders: ["microsoft", "github"],
+    };
+    if (path === appAdminRoutes.account() && request.method === "GET") {
+      return Response.json(account);
+    }
+    if (path === appAdminRoutes.accountIdentities() && request.method === "GET") {
+      return Response.json({ identities: account.identities });
+    }
+    if (path === appAdminRoutes.accountProfile() && request.method === "PATCH") {
+      return new Response(null, { status: 204 });
+    }
+
+    if (path === appAdminRoutes.me()) {
       if (this.appVocabulary) {
         return Response.json({
-          principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-          profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
-          platformAccess: { principalRef: "principal-1", status: "active", authorities: ["platform.admin", "apps.create"], revision: 1 },
+          account,
+          authenticatedIdentity: account.identities[0],
           memberships: [{
             appId: APP,
-            principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-            profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+            account: {
+              accountId: account.accountId,
+              displayName: account.displayName,
+              primaryVerifiedEmail: account.primaryVerifiedEmail,
+              avatar: account.avatar,
+            },
           }],
         });
       }
@@ -90,55 +150,28 @@ class MockAdminService {
     if (path === appAdminRoutes.acceptMemberInvitation({ token: "invite-1" }) && request.method === "POST") {
       return Response.json({ appId: APP });
     }
-    if (path === appAdminRoutes.accessSummary()) {
-      return Response.json({ activePrincipalCount: 1, platformAdminCount: 1, appCreatorCount: 1, blockedPrincipalCount: 0, generatedAt: 1 });
+    const platformAccount = {
+      accountId: ACCOUNT,
+      displayName: "Alice",
+      primaryVerifiedEmail: null,
+      avatar: { kind: "fallback", initials: "AL", colorIndex: 1 },
+      blockedAt: null,
+      platformAuthorities: ["platform.admin", "apps.create"],
+      createdAt: 1,
+      updatedAt: 2,
+      effectiveAccess: "active",
+      appMembershipCount: 1,
+      lastActiveAt: 2,
+    };
+    if (path === appAdminRoutes.platformAccounts() && request.method === "GET") {
+      return Response.json({ items: [platformAccount], nextCursor: null });
     }
-    if (path === appAdminRoutes.platformPrincipals() && request.method === "GET") {
-      return Response.json({
-        items: [{
-          principalRef: "principal-1",
-          principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-          profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
-          status: "active",
-          authorities: ["platform.admin", "apps.create"],
-          revision: 1,
-          createdAt: 1,
-          updatedAt: 1,
-          effectiveAccess: "active",
-          appMembershipCount: 1,
-          lastActiveAt: 1,
-        }], nextCursor: null
-      });
+    if (path === appAdminRoutes.platformAccount({ accountId: ACCOUNT }) && request.method === "GET") {
+      return Response.json({ ...platformAccount, memberships: [] });
     }
-    if (path === appAdminRoutes.platformPrincipal({ principalRef: "principal-1" })) {
-      return Response.json({
-        principalRef: "principal-1",
-        principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-        profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
-        status: "active",
-        authorities: ["platform.admin", "apps.create"],
-        revision: 1,
-        createdAt: 1,
-        updatedAt: 1,
-        effectiveAccess: "active",
-        appMembershipCount: 1,
-        lastActiveAt: 1,
-        memberships: [],
-      });
-    }
-    if (path === appAdminRoutes.platformPrincipalAccess({ principalRef: "principal-1" }) && request.method === "PATCH") {
-      return new Response(null, { status: 204, headers: { ETag: '"2"' } });
-    }
-    if (path === appAdminRoutes.platformPrincipalAccess({ principalRef: "principal-1" }) && request.method === "GET") {
-      return Response.json({
-        principalRef: "principal-1",
-        principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-        status: "active",
-        authorities: ["platform.admin", "apps.create"],
-        revision: 1,
-        createdAt: 1,
-        updatedAt: 1,
-      }, { headers: { ETag: '"1"' } });
+    if ((path === appAdminRoutes.platformAccountAuthority({ accountId: ACCOUNT, authority: "platform.admin" })
+      || path === appAdminRoutes.platformAccountBlock({ accountId: ACCOUNT })) && request.method !== "GET") {
+      return new Response(null, { status: 204 });
     }
     if (path === appAdminRoutes.platformInvitations() && request.method === "GET") {
       return Response.json({
@@ -149,7 +182,7 @@ class MockAdminService {
           status: "pending",
           expiresAt: 1000,
           createdAt: 1,
-          createdBy: { issuer: "https://accounts.google.com", subject: "sub-1" },
+          createdByAccountId: ACCOUNT,
           revision: 1,
         }], nextCursor: null
       });
@@ -168,10 +201,18 @@ class MockAdminService {
         items: [{
           eventId: "platform-event-1",
           action: "platform_invitation.created",
-          actorPrincipalRef: "principal-1",
-          actorPrincipal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-          targetPrincipalRef: null,
-          targetPrincipal: null,
+          actorAccount: {
+            accountId: account.accountId,
+            displayName: account.displayName,
+            primaryVerifiedEmail: account.primaryVerifiedEmail,
+            avatar: account.avatar,
+          },
+          authenticatedIdentity: {
+            ...account.identities[0],
+            issuer: "https://accounts.google.com",
+            subject: "sub-1",
+          },
+          targetAccount: null,
           targetInvitationId: "platform-invite-1",
           result: "succeeded",
           requestId: "request-1",
@@ -197,8 +238,12 @@ class MockAdminService {
       return Response.json({
         items: [{
           appId: APP,
-          principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-          profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+          account: {
+            accountId: `acct_${"a".repeat(22)}`,
+            displayName: "Alice",
+            primaryVerifiedEmail: null,
+            avatar: { kind: "fallback", initials: "AL", colorIndex: 1 },
+          },
         }],
         nextCursor: null,
       });
@@ -218,19 +263,6 @@ class MockAdminService {
     }
     if (path === appAdminRoutes.memberInvitation({ appId: APP, invitationId: "invite-1" }) && request.method === "DELETE") {
       return new Response(null, { status: 204, headers: { ETag: '"2"' } });
-    }
-    if (path === appAdminRoutes.playgroundFileRoots({ appId: APP }) && request.method === "GET") {
-      return Response.json({ items: [this.fileRoot] });
-    }
-    if (path === appAdminRoutes.playgroundFileRoots({ appId: APP }) && request.method === "POST") {
-      return Response.json(this.fileRoot, { status: 201, headers: { ETag: '"1"' } });
-    }
-    if (path === appAdminRoutes.playgroundFileRoot({ appId: APP, rootId: "root-1" }) && request.method === "PATCH") {
-      this.fileRoot = { ...this.fileRoot, ...(await request.json()), revision: 2, updatedAt: 2 };
-      return Response.json(this.fileRoot, { headers: { ETag: '"2"' } });
-    }
-    if (path === appAdminRoutes.playgroundFileRoot({ appId: APP, rootId: "root-1" }) && request.method === "DELETE") {
-      return Response.json({ ok: true });
     }
     const appIssuer = {
       appId: APP,
@@ -295,7 +327,18 @@ class MockAdminService {
         items: [{
           eventId: "event-1",
           appId: APP,
-          actor: { issuer: "https://accounts.google.com", subject: "sub-1" },
+          actorAccount: {
+            accountId: account.accountId,
+            displayName: account.displayName,
+            primaryVerifiedEmail: account.primaryVerifiedEmail,
+            avatar: account.avatar,
+          },
+          authenticatedIdentity: {
+            ...account.identities[0],
+            issuer: "https://accounts.google.com",
+            subject: "sub-1",
+          },
+          targetAccount: null,
           action: "app.updated",
           target: APP,
           requestId: null,
@@ -319,79 +362,6 @@ class MockAdminService {
         latestRevision: 2,
         nextAfter: 2,
       });
-    }
-    if (path === casAdminRoutes.stacks() && request.method === "GET") {
-      const page: CasAdminPage<typeof this.stack> = { items: [this.stack], nextCursor: null };
-      return Response.json(page);
-    }
-    if (path === casAdminRoutes.stack({ stackId: STACK }) && request.method === "GET") {
-      return Response.json(this.stack, { headers: { ETag: `"rev-${this.stack.revision}"` } });
-    }
-    if (path === casAdminRoutes.stack({ stackId: STACK }) && request.method === "PATCH") {
-      this.stack.revision += 1;
-      return Response.json(this.stack, { headers: { ETag: `"rev-${this.stack.revision}"` } });
-    }
-    if (path === casAdminRoutes.playgroundFileRoots({ stackId: STACK }) && request.method === "GET") {
-      return Response.json({ items: [this.fileRoot] });
-    }
-    if (path === casAdminRoutes.playgroundFileRoots({ stackId: STACK }) && request.method === "POST") {
-      return Response.json(this.fileRoot, { headers: { ETag: '"1"' } });
-    }
-    if (path === casAdminRoutes.playgroundFileRoot({ stackId: STACK, rootId: "root-1" }) && request.method === "PATCH") {
-      this.fileRoot = { ...this.fileRoot, ...(await request.json()), revision: 2, updatedAt: 2 };
-      return Response.json(this.fileRoot, { headers: { ETag: '"2"' } });
-    }
-    if (path === casAdminRoutes.playgroundFileRoot({ stackId: STACK, rootId: "root-1" }) && request.method === "DELETE") {
-      return Response.json({ ok: true });
-    }
-    if (path === casAdminRoutes.oauthIssuer({ stackId: STACK }) && request.method === "GET") {
-      return Response.json({
-        stackId: STACK,
-        issuer: "https://issuer.example/oauth",
-        audience: "https://cas.example/stacks/cas_stack_a",
-        metadataUrl: "https://issuer.example/.well-known/oauth-authorization-server/oauth",
-        metadataType: "oauth",
-        authorizationEndpoint: "https://issuer.example/oauth/authorize",
-        tokenEndpoint: "https://issuer.example/oauth/token",
-        jwksUri: "https://issuer.example/oauth/jwks",
-        registrationEndpoint: "https://issuer.example/oauth/register",
-        scopesSupported: ["cas:read"],
-        codeChallengeMethodsSupported: ["S256"],
-        status: "active",
-        verifiedAt: 10,
-        lastRefreshAt: 11,
-        lastRefreshError: null,
-        jwksDigest: "sha256:test",
-        capabilityMaxLifetimeSeconds: 1800,
-        revision: 4,
-      }, { headers: { ETag: `"rev-4"` } });
-    }
-    if (path === casAdminRoutes.oauthIssuer({ stackId: STACK }) && request.method === "PUT") {
-      return Response.json({ stackId: STACK, status: "active", revision: 2 }, { headers: { ETag: `"rev-2"` } });
-    }
-    if (path === casAdminRoutes.oauthIssuerInspections({ stackId: STACK }) && request.method === "POST") {
-      const body = await request.json() as { issuer: string };
-      return Response.json({
-        inspectionId: "oinsp_test",
-        stackId: STACK,
-        ...body,
-        audience: `https://cas.example/stacks/${STACK}`,
-        metadataUrl: "https://issuer.example/.well-known/oauth-authorization-server/oauth",
-        metadataType: "oauth",
-        authorizationEndpoint: "https://issuer.example/oauth/authorize",
-        tokenEndpoint: "https://issuer.example/oauth/token",
-        jwksUri: "https://issuer.example/oauth/jwks",
-        registrationEndpoint: null,
-        scopesSupported: ["cas:read"],
-        codeChallengeMethodsSupported: ["S256"],
-        metadataDigest: "metadata",
-        jwksDigest: "jwks",
-        capabilityMaxLifetimeSeconds: 1800,
-        challenge: "challenge",
-        expiresAt: 1000,
-        keys: [],
-        revision: 1,
-      }, { headers: { ETag: `"rev-1"` } });
     }
     return Response.json({ error: "NOT_FOUND" }, { status: 404 });
   };
@@ -419,21 +389,23 @@ describe("functional admin client", () => {
     client = createAdminClient({ baseUrl: "https://admin.test", getSession: sessionOf, fetcher: service.fetch.bind(service) });
   });
 
-  it("reads identity and typed pages", async () => {
-    const me = await client.me();
-    expect(me.identity.subject).toBe("sub-1");
-    expect(me.memberships[0]!.stackId).toBe(STACK);
-
-    const stacks = await client.listStacks();
-    expect(stacks.items[0]!.displayName).toBe("Ops");
-    expect(stacks.nextCursor).toBeNull();
+  it("reads Account identity and typed App pages", async () => {
+    service.appVocabulary = true;
+    const me = await client.getCurrentAdministrator();
+    expect(me.account.accountId).toBe(ACCOUNT);
+    expect(me.memberships[0]!.appId).toBe(APP);
+    const apps = await client.listApps();
+    expect(apps.items[0]!.displayName).toBe("App Ops");
+    expect(apps.nextCursor).toBeNull();
   });
 
   it("uses explicit App operations for shared routes and managed Space issuance", async () => {
     service.appVocabulary = true;
-    const current = await client.getCurrentPrincipal();
-    expect(current.principal.subject).toBe("sub-1");
-    expect(current.memberships[0]!.appId).toBe(APP);
+    const current = await client.getCurrentAdministrator();
+    expect(current.account.displayName).toBe("Alice");
+    expect(current.authenticatedIdentity.provider).toBe("google");
+    expect(current).not.toHaveProperty("principal");
+    expect(current.memberships[0]).toMatchObject({ appId: APP, account: { accountId: current.account.accountId } });
 
     const membership = await client.acceptAppMemberInvitation({ token: "invite-1" });
     expect(membership).toEqual({ appId: APP });
@@ -456,6 +428,24 @@ describe("functional admin client", () => {
       ]));
   });
 
+  it("reads the stable Account and updates only mutable profile fields", async () => {
+    const account = await client.getCurrentAccount();
+    expect(account).toMatchObject({
+      displayName: "Alice",
+      primaryVerifiedEmail: { normalizedEmail: "alice@example.com" },
+      linkableProviders: ["microsoft", "github"],
+    });
+    expect(await client.listCurrentAccountIdentities()).toEqual(account.identities);
+    await client.patchCurrentAccountProfile({ displayName: "Alice Updated", avatarExternalIdentityId: null });
+    expect(service.requests.at(-1)).toMatchObject({
+      path: appAdminRoutes.accountProfile(),
+      method: "PATCH",
+      origin: "https://admin.test",
+      csrf: "csrf-1",
+      body: JSON.stringify({ displayName: "Alice Updated", avatarExternalIdentityId: null }),
+    });
+  });
+
   it("transports App CRUD, membership, and invitation operations", async () => {
     expect(await client.listApps({ limit: 5, cursor: "next" })).toMatchObject({
       items: [{ appId: APP, displayName: "App Ops" }],
@@ -468,13 +458,12 @@ describe("functional admin client", () => {
     expect(await client.patchApp({ appId: APP }, { description: "Production", status: "suspended" }, '"3"'))
       .toEqual({ etag: '"4"' });
     expect(await client.listAppMembers({ appId: APP }, { limit: 10 })).toMatchObject({
-      items: [{ appId: APP, principal: { subject: "sub-1" } }],
+      items: [{ appId: APP, account: { accountId: `acct_${"a".repeat(22)}` } }],
     });
     expect(await client.deleteAppMember(
-      { appId: APP },
-      { issuer: "https://accounts.google.com", subject: "sub-1" },
-      '"4"',
+      { appId: APP, accountId: `acct_${"a".repeat(22)}` },
     )).toEqual({ ok: true });
+    expect(service.requests.at(-1)).toMatchObject({ ifMatch: null, search: `?accountId=acct_${"a".repeat(22)}` });
     expect(await client.createAppMemberInvitation(
       { appId: APP },
       { emailConstraint: "alice@example.com" },
@@ -494,9 +483,9 @@ describe("functional admin client", () => {
       }),
       expect.objectContaining({
         path: `/admin/apps/${APP}/members`,
-        search: "?issuer=https%3A%2F%2Faccounts.google.com&subject=sub-1",
+        search: `?accountId=acct_${"a".repeat(22)}`,
         method: "DELETE",
-        ifMatch: '"4"',
+        ifMatch: null,
       }),
     ]));
   });
@@ -511,12 +500,6 @@ describe("functional admin client", () => {
   });
 
   it("transports platform access and invitation operations with minimal receipts", async () => {
-    expect(await client.getPlatformAccessSummary()).toMatchObject({ platformAdminCount: 1 });
-    expect(await client.listPlatformPrincipals({ limit: 10 })).toMatchObject({ items: [{ principalRef: "principal-1" }] });
-    expect(await client.getPlatformPrincipal({ principalRef: "principal-1" })).toMatchObject({ memberships: [] });
-    expect(await client.getPlatformAccess({ principalRef: "principal-1" })).toMatchObject({ value: { principalRef: "principal-1" }, etag: '"1"' });
-    expect(await client.patchPlatformAccess({ principalRef: "principal-1" }, { authorities: ["apps.create"] }, '"1"'))
-      .toEqual({ etag: '"2"' });
     expect(await client.listPlatformInvitations({ status: "pending", limit: 10 })).toMatchObject({
       items: [{ invitationId: "platform-invite-1" }],
     });
@@ -532,35 +515,29 @@ describe("functional admin client", () => {
     expect(await client.revokePlatformInvitation({ invitationId: "platform-invite-1" }, '"1"'))
       .toEqual({ etag: '"2"' });
     await expect(client.acceptPlatformInvitation({ token: "platform-token" })).resolves.toBeUndefined();
-    expect(await client.listPlatformAuditEvents({ action: "platform_invitation.created", createdAfter: 0, limit: 10 }))
-      .toMatchObject({ items: [{ eventId: "platform-event-1" }] });
+    expect(await client.listPlatformAuditEvents({ action: "platform_invitation.created", actorAccountId: ACCOUNT, createdAfter: 0, limit: 10 }))
+      .toMatchObject({ items: [{ eventId: "platform-event-1", actorAccount: { accountId: ACCOUNT } }] });
 
     expect(service.requests).toEqual(expect.arrayContaining([
-      expect.objectContaining({ path: "/admin/platform/principals", search: "?limit=10" }),
-      expect.objectContaining({ path: "/admin/platform/principals/principal-1/access", method: "PATCH", ifMatch: '"1"' }),
       expect.objectContaining({ path: "/admin/platform/invitations", search: "?status=pending&limit=10" }),
       expect.objectContaining({ path: "/admin/platform/invitations", method: "POST", idempotencyKey: "platform-create-1" }),
       expect.objectContaining({ path: "/admin/platform/invitations/platform-invite-1", method: "DELETE", ifMatch: '"1"' }),
       expect.objectContaining({ path: "/admin/platform-invitations/platform-token/accept", method: "POST" }),
-      expect.objectContaining({ path: "/admin/platform/audit-events", search: "?action=platform_invitation.created&createdAfter=0&limit=10" }),
+      expect.objectContaining({ path: "/admin/platform/audit-events", search: `?action=platform_invitation.created&actorAccountId=${ACCOUNT}&createdAfter=0&limit=10` }),
     ]));
   });
 
-  it("transports App Playground control records with ETags", async () => {
-    expect((await client.listAppPlaygroundFileRoots({ appId: APP })).items).toHaveLength(1);
-    expect(await client.createAppPlaygroundFileRoot(
-      { appId: APP },
-      { rootId: "root-1", name: "Files", manifestHash: "a".repeat(64) },
-    )).toMatchObject({ value: { rootId: "root-1" }, etag: '"1"' });
-    expect(await client.patchAppPlaygroundFileRoot(
-      { appId: APP, rootId: "root-1" },
-      { name: "Renamed", manifestHash: "b".repeat(64) },
-      '"1"',
-    )).toMatchObject({ value: { name: "Renamed", revision: 2 }, etag: '"2"' });
-    expect(await client.deleteAppPlaygroundFileRoot(
-      { appId: APP, rootId: "root-1" },
-      '"2"',
-    )).toEqual({ ok: true });
+  it("transports Account-keyed platform commands without resource revisions", async () => {
+    expect(await client.listPlatformAccounts({ authority: "platform.admin" })).toMatchObject({ items: [{ accountId: ACCOUNT }] });
+    expect(await client.getPlatformAccount({ accountId: ACCOUNT })).toMatchObject({ accountId: ACCOUNT, memberships: [] });
+    await client.grantPlatformAccountAuthority({ accountId: ACCOUNT, authority: "platform.admin" });
+    await client.revokePlatformAccountAuthority({ accountId: ACCOUNT, authority: "platform.admin" });
+    await client.blockPlatformAccount({ accountId: ACCOUNT });
+    await client.restorePlatformAccount({ accountId: ACCOUNT });
+    expect(service.requests.slice(-4)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ method: "PUT", csrf: "csrf-1", ifMatch: null }),
+      expect.objectContaining({ method: "DELETE", csrf: "csrf-1", ifMatch: null }),
+    ]));
   });
 
   it("transports App issuer operations with ETags and CSRF", async () => {
@@ -594,8 +571,8 @@ describe("functional admin client", () => {
     });
     expect(await client.listAppControlAuditEvents(
       { appId: APP },
-      { limit: 10, cursor: "cursor-1", after: "event-0" },
-    )).toMatchObject({ items: [{ appId: APP, actor: { subject: "sub-1" } }] });
+      { limit: 10, cursor: "cursor-1", actorAccountId: ACCOUNT },
+    )).toMatchObject({ items: [{ appId: APP, actorAccount: { accountId: ACCOUNT } }] });
     expect(await client.listSpaceRootDomainRefs(
       { appId: APP, refDomain: "doc" },
       { spaceId: "space-1", limit: 10, cursor: "cursor-1" },
@@ -607,7 +584,7 @@ describe("functional admin client", () => {
     expect(service.requests).toEqual(expect.arrayContaining([
       expect.objectContaining({
         path: `/admin/apps/${APP}/audit-events`,
-        search: "?limit=10&cursor=cursor-1&after=event-0",
+        search: `?limit=10&cursor=cursor-1&actorAccountId=${ACCOUNT}`,
       }),
       expect.objectContaining({
         path: `/admin/apps/${APP}/root-ref-domains/doc/refs`,
@@ -620,80 +597,19 @@ describe("functional admin client", () => {
     ]));
   });
 
-  it("rejects the opposite identity contract on the shared path", async () => {
-    await expect(client.getCurrentPrincipal()).rejects.toMatchObject({
+  it("rejects the retired identity contract on the shared path", async () => {
+    await expect(client.getCurrentAdministrator()).rejects.toMatchObject({
       status: 502,
       code: "ADMIN_CONTRACT_MISMATCH",
     });
-    service.appVocabulary = true;
-    await expect(client.me()).rejects.toMatchObject({
-      status: 502,
-      code: "ADMIN_CONTRACT_MISMATCH",
-    });
-  });
-
-  it("returns ETag on etag-sensitive reads and sends it as If-Match on mutations", async () => {
-    const { value, etag } = await client.getStack({ stackId: STACK });
-    expect(value.revision).toBe(3);
-    expect(etag).toBe('"rev-3"');
-    expect(service.requests[0]!.cookie).toBe("cas_admin_session=abc");
-  });
-
-  it("reads discovered OAuth issuer state with its ETag", async () => {
-    const { value, etag } = await client.getOAuthIssuer({ stackId: STACK });
-    expect(value).toMatchObject({ metadataType: "oauth", status: "active", jwksUri: "https://issuer.example/oauth/jwks" });
-    expect(etag).toBe('"rev-4"');
-  });
-
-  it("transports Playground file-root catalog mutations with ETags", async () => {
-    expect((await client.listPlaygroundFileRoots({ stackId: STACK })).items).toHaveLength(1);
-    expect(await client.createPlaygroundFileRoot(
-      { stackId: STACK },
-      { rootId: "root-1", name: "Files", manifestHash: "a".repeat(64) },
-    )).toMatchObject({ etag: '"1"' });
-    expect(await client.patchPlaygroundFileRoot(
-      { stackId: STACK, rootId: "root-1" },
-      { name: "Renamed", manifestHash: "b".repeat(64) },
-      '"1"',
-    )).toMatchObject({ value: { name: "Renamed", revision: 2 }, etag: '"2"' });
-    expect(await client.deletePlaygroundFileRoot({ stackId: STACK, rootId: "root-1" }, '"2"')).toEqual({ ok: true });
-    expect(service.requests.at(-1)).toMatchObject({ method: "DELETE", csrf: "csrf-1", ifMatch: '"2"' });
-  });
-
-  it("posts OAuth issuer inspections with CSRF", async () => {
-    const result = await client.inspectOAuthIssuer(
-      { stackId: STACK },
-      { issuer: "https://issuer.example/oauth" },
-    );
-    expect(result).toMatchObject({ value: { inspectionId: "oinsp_test" }, etag: '"rev-1"' });
-    const request = service.requests.find((entry) => entry.path.endsWith("/oauth-issuer/inspections"))!;
-    expect(request).toMatchObject({ method: "POST", csrf: "csrf-1" });
-    expect(JSON.parse(request.body!)).toEqual({ issuer: "https://issuer.example/oauth" });
-  });
-
-  it("activates an OAuth issuer with CSRF and If-Match", async () => {
-    const result = await client.activateOAuthIssuer(
-      { stackId: STACK },
-      { inspectionId: "oinsp_test", activationProof: "proof" },
-      '"rev-1"',
-    );
-    expect(result).toMatchObject({ value: { status: "active", revision: 2 }, etag: '"rev-2"' });
-    const request = service.requests.find((entry) => entry.path.endsWith("/oauth-issuer") && entry.method === "PUT")!;
-    expect(request).toMatchObject({ method: "PUT", csrf: "csrf-1" });
-  });
-
-  it("attaches CSRF to mutations", async () => {
-    await client.patchStack({ stackId: STACK }, { description: "x" }, '"rev-3"');
-    const mutation = service.requests.find(r => r.method === "PATCH")!;
-    expect(mutation.csrf).toBe("csrf-1");
-    expect(mutation.path).toBe(casAdminRoutes.stack({ stackId: STACK }));
   });
 
   it("forces re-login after a 401 session failure", async () => {
     service.session = false;
-    await expect(client.me()).rejects.toMatchObject({ status: 401, code: "ADMIN_AUTH_REQUIRED" });
+    await expect(client.getCurrentAdministrator()).rejects.toMatchObject({ status: 401, code: "ADMIN_AUTH_REQUIRED" });
     service.session = true;
-    const me = await client.me();
-    expect(me.identity.subject).toBe("sub-1");
+    service.appVocabulary = true;
+    const me = await client.getCurrentAdministrator();
+    expect(me.account.accountId).toBe(ACCOUNT);
   });
 });

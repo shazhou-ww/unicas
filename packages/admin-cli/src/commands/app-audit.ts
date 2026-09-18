@@ -4,7 +4,7 @@ import { parseArgs } from "node:util";
 import { printJson } from "../output.js";
 import type { CliContext } from "./common.js";
 import { requireSubcommand, withAdminClient } from "./common.js";
-import { parseBoundedLimit } from "./stacks.js";
+import { parseBoundedLimit } from "./common.js";
 
 export async function appAuditCommand(ctx: CliContext, subcommand: string | undefined, argv: string[]): Promise<void> {
   requireSubcommand(
@@ -31,6 +31,8 @@ async function appAuditControl(ctx: CliContext, argv: string[]): Promise<void> {
       limit: { type: "string" },
       cursor: { type: "string" },
       after: { type: "string" },
+      "actor-account-id": { type: "string" },
+      "target-account-id": { type: "string" },
     },
     allowPositionals: true,
   });
@@ -43,6 +45,8 @@ async function appAuditControl(ctx: CliContext, argv: string[]): Promise<void> {
         ...(values.limit !== undefined ? { limit: parseBoundedLimit(values.limit) } : {}),
         ...(values.cursor !== undefined ? { cursor: values.cursor } : {}),
         ...(values.after !== undefined ? { after: values.after } : {}),
+        ...(values["actor-account-id"] !== undefined ? { actorAccountId: values["actor-account-id"] } : {}),
+        ...(values["target-account-id"] !== undefined ? { targetAccountId: values["target-account-id"] } : {}),
       },
     ));
   });

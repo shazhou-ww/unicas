@@ -1,43 +1,14 @@
-import { formatCasAdminETag, type AppAdminRoute } from "@unicas/admin-protocol";
+import type { AppAdminRoute } from "@unicas/admin-protocol";
 
 type AdminHandler = (request: Request) => Promise<Response>;
 type JsonRecord = Record<string, unknown>;
 
 export async function handleAppAdminCompatibilityRequest(
   request: Request,
-  route: AppAdminRoute,
+  _route: AppAdminRoute,
   legacyHandler: AdminHandler,
 ): Promise<Response> {
-  const pathname = new URL(request.url).pathname;
-  if (pathname.startsWith("/admin/platform/") || pathname.startsWith("/admin/platform-invitations/")) {
-    return legacyHandler(request);
-  }
-  if (route.operation === "listPeople" || route.operation === "mintManagedCapability" || route.operation === "patchApp"
-    || route.operation === "listMemberInvitations" || route.operation === "revokeMemberInvitation"
-    || route.operation === "inspectOAuthIssuer" || route.operation === "activateOAuthIssuer") {
-    return legacyHandler(request);
-  }
-
-  const legacyResponse = await legacyHandler(rewriteRequest(request, route));
-  if (!legacyResponse.headers.get("Content-Type")?.includes("application/json")) {
-    return legacyResponse;
-  }
-  const body = await legacyResponse.json();
-  if (isRecord(body) && typeof body.error === "string") {
-    return copyJsonResponse(legacyResponse, transformAppAdminError(body));
-  }
-  if (route.operation === "createMemberInvitation" && isRecord(body) && isRecord(body.invitation)
-    && typeof body.invitation.revision === "number") {
-    const response = copyJsonResponse(legacyResponse, mapInvitationResponse(body), 201);
-    response.headers.set("ETag", formatCasAdminETag(body.invitation.revision));
-    response.headers.set("Cache-Control", "no-store, no-transform");
-    return response;
-  }
-  return copyJsonResponse(
-    legacyResponse,
-    transformAppAdminResponse(route, body),
-    route.operation === "createApp" ? 201 : undefined,
-  );
+  return legacyHandler(request);
 }
 
 export function transformAppAdminError(value: JsonRecord): JsonRecord {
@@ -50,32 +21,10 @@ export function transformAppAdminError(value: JsonRecord): JsonRecord {
   };
 }
 
-function rewriteRequest(request: Request, route: AppAdminRoute): Request {
-  const url = new URL(request.url);
-  if (url.pathname.startsWith("/admin/apps")) {
-    url.pathname = url.pathname.replace(/^\/admin\/apps/, "/admin/stacks");
-  }
-  if (route.operation === "deleteMember") {
-    const issuer = url.searchParams.get("issuer");
-    if (issuer !== null) {
-      url.searchParams.delete("issuer");
-      url.searchParams.set("identityIssuer", issuer);
-    }
-  }
-  if (route.operation === "listRootDomainRefs" || route.operation === "listRootDomainEvents") {
-    const spaceId = url.searchParams.get("spaceId");
-    if (spaceId !== null) {
-      url.searchParams.delete("spaceId");
-      url.searchParams.set("tenantId", spaceId);
-    }
-  }
-  return new Request(url, request);
-}
-
 export function transformAppAdminResponse(route: AppAdminRoute, body: unknown): unknown {
   switch (route.operation) {
     case "me":
-      return mapMe(body);
+      return body;
     case "listApps":
       return mapPage(body, mapApp);
     case "createApp":
@@ -106,31 +55,11 @@ export function transformAppAdminResponse(route: AppAdminRoute, body: unknown): 
       return mapArrayProperty(body, "refs", value => renameField(value, "tenantId", "spaceId"));
     case "listRootDomainEvents":
       return mapArrayProperty(body, "events", value => renameField(value, "tenantId", "spaceId"));
-    case "listPlaygroundFileRoots":
-    case "createPlaygroundFileRoot":
-    case "patchPlaygroundFileRoot":
-    case "deletePlaygroundFileRoot":
     case "deleteMember":
       return body;
     case "mintManagedCapability":
       return body;
   }
-}
-
-function mapMe(value: unknown): unknown {
-  if (!isRecord(value) || !isRecord(value.identity) || !Array.isArray(value.memberships)) return value;
-  return {
-    principal: {
-      issuer: value.identity.identityIssuer,
-      subject: value.identity.subject,
-    },
-    profile: {
-      displayName: value.identity.displayName,
-      emailForDisplay: value.identity.emailForDisplay,
-    },
-    ...("platformAccess" in value ? { platformAccess: value.platformAccess } : {}),
-    memberships: value.memberships.map(mapMembership),
-  };
 }
 
 function mapApp(value: unknown): unknown {

@@ -16,13 +16,17 @@ export interface ControlPlaneMcpEnvConfig {
   MCP_PUBLIC_ORIGIN?: string;
   PUBLIC_ORIGIN?: string;
   MCP_ALLOWED_ORIGIN_HOSTNAMES?: string;
-  GOOGLE_OIDC_CLIENT_ID?: string;
-  GOOGLE_OIDC_CLIENT_SECRET?: string;
+  OAUTH_GOOGLE_CLIENT_ID?: string;
+  OAUTH_GOOGLE_CLIENT_SECRET?: string;
+  OAUTH_MICROSOFT_CLIENT_ID?: string;
+  OAUTH_MICROSOFT_CLIENT_SECRET?: string;
+  MICROSOFT_OIDC_DISCOVERY_URL?: string;
+  OAUTH_GITHUB_CLIENT_ID?: string;
+  OAUTH_GITHUB_CLIENT_SECRET?: string;
   OAUTH_STATE_ENCRYPTION_KEY?: string;
   SESSION_ENCRYPTION_KEYS?: string;
   OIDC_ISSUER?: string;
   OIDC_DISCOVERY_URL?: string;
-  ADMIN_EMAIL_ALLOWLIST?: string;
   CAS_AUDIT_READER_KEY?: string;
   MCP_MUTATIONS_ENABLED?: string;
 }
@@ -38,16 +42,6 @@ export function mcpConfigFromEnv(env: ControlPlaneMcpEnvConfig): ControlPlaneMcp
     resource: `${publicOrigin}/mcp`,
     allowedOriginHostnames: [...new Set(configuredOrigins)],
   };
-}
-
-export function emailAllowed(email: string | null, configuredAllowlist: string | undefined): boolean {
-  if (email === null) return false;
-  if (configuredAllowlist === undefined) return true;
-  const allowed = new Set(configuredAllowlist
-    .split(",")
-    .map((value) => value.trim().toLowerCase())
-    .filter((value) => value.length > 0));
-  return allowed.size > 0 && allowed.has(email.toLowerCase());
 }
 
 function normalizeOrigin(value: string): string {

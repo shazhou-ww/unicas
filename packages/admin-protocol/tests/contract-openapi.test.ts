@@ -6,7 +6,6 @@ import type {
   AppMemberInvitation,
   AppMembership,
   AppOAuthIssuer,
-  CasStack,
   ManagedSpaceCapability,
   Principal,
   Profile,
@@ -18,7 +17,6 @@ import {
   AppMembershipSchema,
   AppOAuthIssuerSchema,
   AppSchema,
-  CasStackSchema,
   PrincipalSchema,
   ProfileSchema,
   PatchAppRequestSchema,
@@ -27,13 +25,12 @@ import {
   ManagedSpaceCapabilitySchema,
   SpaceRootRefBalanceSchema,
   appAdminApiContract,
-  casAdminApiContract,
 } from "../src/index.js";
-import { generateAdminOpenApiDocument, generateAppAdminOpenApiDocument } from "../scripts/openapi.js";
+import { generateAppAdminOpenApiDocument } from "../scripts/openapi.js";
 
 const methods = ["get", "post", "put", "patch", "delete"] as const;
 
-function operations(document: Awaited<ReturnType<typeof generateAdminOpenApiDocument>>) {
+function operations(document: Awaited<ReturnType<typeof generateAppAdminOpenApiDocument>>) {
   return Object.values(document.paths ?? {}).flatMap((item) =>
     methods.flatMap((method) => {
       const operation = item?.[method];
@@ -61,23 +58,6 @@ describe("CAS admin schemas", () => {
       expect(PatchAppRequestSchema.safeParse(body).success).toBe(false);
     }
   });
-  test("validates stack wire records", () => {
-    expect(CasStackSchema.safeParse({
-      stackId: "stack-1",
-      displayName: "Stack 1",
-      description: "",
-      status: "active",
-      createdAt: 1,
-      revision: 1,
-    }).success).toBe(true);
-  });
-
-  test("exposes a client type derived from the contract", () => {
-    type Client = ContractRouterClient<typeof casAdminApiContract>;
-    type Stack = Awaited<ReturnType<Client["stacks"]["get"]>>;
-    expectTypeOf<Stack>().toEqualTypeOf<CasStack>();
-  });
-
   test("keeps v2 Principal identity separate from Profile metadata", () => {
     const principal: Principal = { issuer: "https://issuer.example", subject: "subject-1" };
     const profile: Profile = { displayName: "Operator", emailForDisplay: "operator@example.com" };
@@ -89,12 +69,21 @@ describe("CAS admin schemas", () => {
       createdAt: 1,
       revision: 1,
     };
-    const membership: AppMembership = { appId: app.appId, principal, profile };
+    const membership: AppMembership = {
+      appId: app.appId,
+      account: {
+        accountId: `acct_${"a".repeat(22)}`,
+        displayName: profile.displayName,
+        primaryVerifiedEmail: null,
+        avatar: { kind: "fallback", initials: "AU", colorIndex: 1 },
+      },
+    };
 
     expect(PrincipalSchema.safeParse(principal).success).toBe(true);
     expect(ProfileSchema.safeParse(profile).success).toBe(true);
     expect(AppSchema.safeParse(app).success).toBe(true);
     expect(AppMembershipSchema.safeParse(membership).success).toBe(true);
+    expect(AppMembershipSchema.safeParse({ ...membership, principal, profile }).success).toBe(false);
     expect(PrincipalSchema.safeParse({
       identityIssuer: principal.issuer,
       subject: principal.subject,
@@ -123,8 +112,9 @@ describe("CAS admin schemas", () => {
     type AppResult = Awaited<ReturnType<Client["apps"]["get"]>>;
     type MeResult = Awaited<ReturnType<Client["identity"]["me"]>>;
     expectTypeOf<AppResult>().toEqualTypeOf<App>();
-    expectTypeOf<MeResult["principal"]>().toEqualTypeOf<Principal>();
-    expectTypeOf<MeResult["profile"]>().toEqualTypeOf<Profile>();
+    expectTypeOf<MeResult["account"]>().toEqualTypeOf<import("../src/index.js").AccountSelf>();
+    expectTypeOf<MeResult["authenticatedIdentity"]>().toEqualTypeOf<import("../src/index.js").ExternalIdentitySummary>();
+    expectTypeOf<keyof MeResult>().toEqualTypeOf<"account" | "authenticatedIdentity" | "memberships">();
 
     expect(Object.keys(appAdminApiContract.apps)).toHaveLength(4);
     expect(Object.keys(appAdminApiContract.members)).toHaveLength(7);
@@ -165,7 +155,23 @@ describe("CAS admin schemas", () => {
     const auditEvent: AppControlAuditEvent = {
       eventId: "event-1",
       appId: "app-1",
-      actor: { issuer: "https://accounts.example", subject: "subject-1" },
+      actorAccount: {
+        accountId: `acct_${"a".repeat(22)}`,
+        displayName: "Operator",
+        primaryVerifiedEmail: null,
+        avatar: { kind: "fallback", initials: "OP", colorIndex: 1 },
+      },
+      authenticatedIdentity: {
+        externalIdentityId: "ext-1",
+        provider: "google",
+        accountHint: null,
+        linkedAt: 1,
+        lastAuthenticatedAt: 1,
+        currentLogin: false,
+        issuer: "https://accounts.example",
+        subject: "subject-1",
+      },
+      targetAccount: null,
       action: "app.updated",
       target: "apps/app-1",
       requestId: null,
@@ -182,6 +188,10 @@ describe("CAS admin schemas", () => {
     expect(AppOAuthIssuerSchema.safeParse(issuer).success).toBe(true);
     expect(ManagedSpaceCapabilitySchema.safeParse(capability).success).toBe(true);
     expect(AppControlAuditEventSchema.safeParse(auditEvent).success).toBe(true);
+    expect(AppControlAuditEventSchema.safeParse({
+      ...auditEvent,
+      actor: { issuer: "https://accounts.example", subject: "subject-1" },
+    }).success).toBe(false);
     expect(SpaceRootRefBalanceSchema.safeParse(balance).success).toBe(true);
     const operationCount = Object.values(appAdminApiContract)
       .reduce((count, group) => count + Object.keys(group).length, 0);
@@ -189,42 +199,38 @@ describe("CAS admin schemas", () => {
   });
 });
 
-describe("CAS admin OpenAPI", () => {
-  test("describes every control-plane operation", async () => {
-    const document = await generateAdminOpenApiDocument();
-    const allOperations = operations(document);
-
-    expect(document.openapi).toBe("3.1.1");
-    expect(Object.keys(document.paths ?? {})).toHaveLength(16);
-    expect(allOperations).toHaveLength(23);
-    expect(new Set(allOperations.map((operation) => operation.operationId)).size).toBe(23);
-    expect(document.security).toEqual([{ adminSession: [] }]);
-    expect(document.info.description).toContain("## Concurrency and idempotency");
-    expect(document.info.description).toContain("## OAuth issuer activation");
-    expect(document.paths?.["/admin/stacks/{stackId}/oauth-issuer/inspections"]?.post?.description)
-      .toContain("activation challenge");
-    expect(document.paths?.["/admin/stacks/{stackId}"]?.get)
-      .toHaveProperty("responses.200.content.application/json.schema.properties.revision.description");
-  });
-
+describe("App admin OpenAPI", () => {
   test("generates a separate complete App administrator document", async () => {
     const document = await generateAppAdminOpenApiDocument();
     const allOperations = operations(document);
     const serialized = JSON.stringify(document);
-    expect(Object.keys(document.paths ?? {})).toHaveLength(27);
+    expect(Object.keys(document.paths ?? {})).toHaveLength(28);
     expect(allOperations).toHaveLength(37);
+    expect(Object.keys(document.paths ?? {}).some(path => path.includes("/playground/"))).toBe(false);
+    expect(document.paths?.["/admin/account"]?.get?.operationId).toBe("getCurrentAccount");
+    expect(document.paths?.["/admin/account/profile"]?.patch?.operationId).toBe("patchCurrentAccountProfile");
+    expect(document.paths?.["/admin/account/identities"]?.get?.operationId).toBe("listCurrentAccountIdentities");
     expect(document.paths?.["/admin/apps/{appId}/people"]?.get).toBeDefined();
     expect(document.paths?.["/admin/platform/people"]?.get).toBeDefined();
-    expect(document.paths?.["/admin/platform/access-summary"]?.get).toBeDefined();
-    expect(document.paths?.["/admin/platform/principals"]?.get).toBeDefined();
-    expect(document.paths?.["/admin/platform/principals/{principalRef}"]?.get).toBeDefined();
-    expect(document.paths?.["/admin/platform/principals/{principalRef}/access"]?.get).toBeDefined();
-    expect(document.paths?.["/admin/platform/principals/{principalRef}/access"]?.patch).toBeDefined();
+    expect(document.paths?.["/admin/platform/access-summary"]).toBeUndefined();
+    expect(document.paths?.["/admin/platform/accounts"]?.get).toBeDefined();
+    expect(document.paths?.["/admin/platform/accounts/{accountId}"]?.get).toBeDefined();
+    expect(document.paths?.["/admin/platform/accounts/{accountId}/authorities/{authority}"]?.put).toBeDefined();
+    expect(document.paths?.["/admin/platform/accounts/{accountId}/authorities/{authority}"]?.delete).toBeDefined();
+    expect(document.paths?.["/admin/platform/accounts/{accountId}/block"]?.put).toBeDefined();
+    expect(document.paths?.["/admin/platform/accounts/{accountId}/block"]?.delete).toBeDefined();
+    expect(document.paths?.["/admin/platform/principals"]).toBeUndefined();
     expect(document.paths?.["/admin/platform/invitations"]?.get).toBeDefined();
     expect(document.paths?.["/admin/platform/invitations"]?.post).toBeDefined();
     expect(document.paths?.["/admin/platform/invitations/{invitationId}"]?.delete).toBeDefined();
     expect(document.paths?.["/admin/platform-invitations/{token}/accept"]?.post).toBeDefined();
     expect(document.paths?.["/admin/platform/audit-events"]?.get).toBeDefined();
+    const appAuditParameters = document.paths?.["/admin/apps/{appId}/audit-events"]?.get?.parameters ?? [];
+    expect(JSON.stringify(appAuditParameters)).toContain("actorAccountId");
+    expect(JSON.stringify(appAuditParameters)).toContain("targetAccountId");
+    const platformAuditParameters = document.paths?.["/admin/platform/audit-events"]?.get?.parameters ?? [];
+    expect(JSON.stringify(platformAuditParameters)).toContain("actorAccountId");
+    expect(JSON.stringify(platformAuditParameters)).not.toContain("actorPrincipalRef");
     expect(document.paths?.["/admin/apps/{appId}/member-invitations"]?.get?.operationId).toBe("listAppMemberInvitations");
     const revoke = document.paths?.["/admin/apps/{appId}/member-invitations/{invitationId}"]?.delete;
     expect(revoke?.responses?.["204"]).toHaveProperty("headers.ETag.required", true);
@@ -241,14 +247,4 @@ describe("CAS admin OpenAPI", () => {
     expect(serialized).not.toMatch(/stackId|tenantId|Stack|Tenant/);
   });
 
-  test("documents optimistic concurrency", async () => {
-    const document = await generateAdminOpenApiDocument();
-    const patch = document.paths?.["/admin/stacks/{stackId}"]?.patch;
-    const parameterNames = (patch?.parameters ?? []).map((parameter) =>
-      "$ref" in parameter ? parameter.$ref : parameter.name,
-    );
-    expect(parameterNames).toContain("if-match");
-    expect(patch?.responses).toHaveProperty("412");
-    expect(patch?.responses).toHaveProperty("428");
-  });
 });

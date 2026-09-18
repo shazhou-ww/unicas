@@ -45,6 +45,11 @@ export function stackOAuthResource(publicOrigin: string, stackId: string): strin
   return `${url.origin}/stacks/${encodeURIComponent(stackId)}`;
 }
 
+export function appOAuthResource(publicOrigin: string, appId: string): string {
+  const url = new URL(stackOAuthResource(publicOrigin, appId));
+  return `${url.origin}/v2/apps/${encodeURIComponent(appId)}`;
+}
+
 /** Email is display metadata; used only for invitation display constraints. */
 export function validateEmailConstraint(value: unknown): string | null {
   if (value === undefined || value === null) return null;
@@ -95,12 +100,16 @@ export async function sha256Hex(value: string): Promise<string> {
     .join("");
 }
 
-/** Stable, non-PII owner key shared by managed capabilities and Playground state. */
-export function managedPlaygroundOwnerKey(
+/** Stable, non-PII owner key used to isolate managed capabilities by identity. */
+export function managedIdentityOwnerKey(
   stackId: string,
   identity: { readonly identityIssuer: string; readonly subject: string },
 ): Promise<string> {
   return sha256Hex(`${stackId}\0${identity.identityIssuer}\0${identity.subject}`);
+}
+
+export function managedAccountOwnerKey(appId: string, accountId: string): Promise<string> {
+  return sha256Hex(`${appId}\0${accountId}`);
 }
 
 /** Stable canonical JSON for idempotency payload comparison. */

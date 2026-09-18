@@ -30,9 +30,6 @@ vi.mock("../src/admin-bff/index.js", () => ({
   },
   uiAssets: () => null,
 }));
-vi.mock("../src/control-operations.js", () => ({
-  createControlPlaneOperations: () => ({}),
-}));
 vi.mock("../src/mcp/worker.js", () => ({
   mcpConfigFromEnv: () => ({
     resource: "https://cas.example/mcp",

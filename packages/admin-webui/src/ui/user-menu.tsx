@@ -1,4 +1,4 @@
-import { BookOpenText, Cable, LogOut, Shield, Users } from "lucide-react";
+import { BookOpenText, Cable, CircleUserRound, LogOut, ShieldCheck } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar.js";
 import {
   DropdownMenu,
@@ -25,14 +25,16 @@ function getInitials(name: string): string {
  */
 export function UserMenu({
   me,
+  hasPlatformAdmin,
   onOpenMcpConfiguration,
   onLogout,
 }: {
   me: AppAdminMeResponse;
+  hasPlatformAdmin?: boolean;
   onOpenMcpConfiguration: () => void;
   onLogout: () => void;
 }) {
-  const displayName = me.profile.displayName ?? me.profile.emailForDisplay ?? "Account";
+  const displayName = me.account.displayName ?? me.account.primaryVerifiedEmail?.normalizedEmail ?? "Account";
   const membershipCount = me.memberships.length;
   const contextLabel = membershipCount === 1
     ? "1 App membership"
@@ -62,11 +64,25 @@ export function UserMenu({
           <div className="flex flex-col space-y-1">
             <p className="text-sm font-medium leading-none">{displayName}</p>
             <p className="text-xs leading-none text-muted-foreground">
-              {me.profile.emailForDisplay ?? me.principal.subject}
+              {me.account.primaryVerifiedEmail?.normalizedEmail ?? me.account.accountId}
             </p>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <a href="#/account" className="cursor-pointer">
+            <CircleUserRound className="mr-2 h-4 w-4" />
+            <span>Account</span>
+          </a>
+        </DropdownMenuItem>
+        {hasPlatformAdmin ? (
+          <DropdownMenuItem asChild>
+            <a href="#/platform/people" className="cursor-pointer">
+              <ShieldCheck className="mr-2 h-4 w-4" />
+              <span>Administration</span>
+            </a>
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuItem asChild>
           <a
             href="https://docs.unicas.work"

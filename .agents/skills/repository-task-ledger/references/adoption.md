@@ -35,34 +35,29 @@ Pin the companion CLI in each adopting repository instead of resolving
 `latest` during CI:
 
 ```sh
-pnpm add --save-dev repoledger@0.3.1
+pnpm add --save-dev repoledger@0.6.0
 ```
 
-Track this `repoledger.json` at the repository root, adapting only the task
-directory and shared remote branch when necessary:
+Track this `repoledger.json` at the repository root, adapting the task
+directory when necessary:
 
 ```json
 {
    "$schema": "./node_modules/repoledger/schema/v1.json",
-   "tasksDirectory": "tasks",
-   "remote": "origin",
-   "branch": "main"
+   "tasksDirectory": "tasks"
 }
 ```
 
 The pinned package supplies the schema locally for offline editor validation;
 its canonical `$id` links to the versioned schema on GitHub and is the
-configuration contract. `repoledger check` validates the repository without
-fetching or reading a developer identity; because publication is part of the
-protocol, it fails rather than claiming a complete result when Git history is
-shallow, unavailable, or missing the configured remote ref. CI must check out
-full history.
+configuration contract. `repoledger check` validates backlog plus the effective
+global or worktree identity's ongoing lane without fetching or inspecting
+history. If no identity is configured, ongoing tasks are skipped. CI or an
+explicit audit uses `repoledger check --all-identities --archived`.
 
-Run `repoledger doctor` before task work. It refreshes the configured branch,
-validates `extensions.worktreeConfig`, the authoritative worktree binding, the
-optional device-default boundary, and remote identity registration, then runs
-the same repository checks. `--offline` is diagnostic only and does not meet
-the latest-remote prerequisite.
+Run `repoledger doctor` before task work. It validates the effective global or
+worktree identity and its local lane, then runs the same local repository
+checks. Refresh the shared branch separately before publication.
 
 Use `repoledger status` to inventory current task positions, and use
 `repoledger check --task <task-name>` when focused task diagnostics are useful.
@@ -71,10 +66,11 @@ layout, and optional identity setup; add `--apply` only after reviewing that
 plan.
 
 The CLI never decides admission, ownership consent, acceptance, completion, or
-abandonment. Explicit `init --apply` and `plan ... --apply` operations may
+abandonment. Explicit `init --apply` and `task ... --apply` operations may
 modify local task files or worktree Git configuration after preflight. They
-never stage, commit, push, merge, force-update, or publish those changes. Keep
-the skill installed and required by project instructions.
+never fetch, inspect history, stage, commit, push, merge, force-update, or
+publish those changes. Keep the skill installed and required by project
+instructions.
 
 ## Admission boundary
 
@@ -138,7 +134,7 @@ duration, or expected files.
    changes files outside this repository's own `tasks/**`.
 - Once a task exists, keep managing it until completion, abandonment, or an
    explicit handoff.
-- Resolve the current identity from the worktree-scoped Git key
+- Resolve the current identity from the effective global or worktree Git key
    `task-ledger.identity`; do not use `.env`.
 - Treat accepted task work as authorization for routine non-force commits and
    publication; do not ask for confirmation solely to commit, push, or
@@ -191,68 +187,41 @@ validator rejects repository-root links back into the current task directory,
 resolves both allowed local forms without a project link-policy setting, and
 does not interpret external URIs as repository paths.
 
+## Identity setup
 
-## Worktree identity setup
-
-Repository registration, worktree binding, and an optional device suggestion
-answer different questions:
+The identity lane and Git configuration answer different questions:
 
 | Record | Scope | Meaning |
 | --- | --- | --- |
-| `tasks/ongoing/<identity>/.gitkeep` | Shared primary branch history | This name is registered and reserved. |
-| `task-ledger.identity` | Current Git worktree | Authoritatively binds this worktree to that registered name. |
-| `task-ledger.defaultIdentity` | Device-global Git config | Optionally suggests a candidate during initialization only. |
+| `tasks/ongoing/<identity>/.gitkeep` | Repository files | Defines the local identity lane. |
+| `task-ledger.identity` | Global Git config | Provides the default identity across repositories and worktrees. |
+| `task-ledger.identity` | Worktree Git config | Overrides the global identity for one worktree. |
 
-Prefer the preview-first initializer in each worktree:
+When one identity is normally used on a device, configure it globally:
+
+```sh
+git config --global task-ledger.identity <identity>
+```
+
+Git resolves a worktree value after the global value, so an explicit worktree
+binding wins when both exist. Do not store identity in `.env` or tracked files.
+
+Prefer the preview-first initializer when creating an identity lane or a
+worktree override:
 
 ```sh
 repoledger init --identity <identity>
 repoledger init --identity <identity> --apply
 ```
 
-Review the preview before apply. The initializer checks non-bare/worktree Git
-safety, scaffolds missing canonical directories, and may enable worktree config.
-When the identity lane is new, apply creates its `.gitkeep` but deliberately
-does not bind the worktree yet. Commit and publish that reservation, then rerun
-the same apply command; it binds only after the lane is visible on the refreshed
-shared branch. The CLI never commits or publishes these changes.
+Review the preview before apply. The initializer scaffolds missing canonical
+directories and creates the selected identity lane. It does not read or modify
+Git configuration. The surrounding workflow decides when to commit and publish
+repository files; the CLI never does so itself.
 
-When one identity is commonly used across repositories on a device, configure
-the machine-local suggestion with:
-
-```sh
-git config --global task-ledger.defaultIdentity <identity>
-```
-
-Do not track this value in a repository. It does not reserve the name, bind a
-worktree, or provide a fallback when a worktree binding is missing.
-
-Without repoledger, first verify an ordinary non-bare repository has no
-configured `core.worktree`, then enable worktree configuration once:
-
-```sh
-git config --local extensions.worktreeConfig true
-```
-
-Before enabling it in a nonstandard repository, inspect `core.worktree` and
-`core.bare` and follow Git's documented migration requirements. Worktree config
-is unsupported by older Git clients; all tools accessing the repository must
-support the extension.
-
-An explicit identity choice may override the device suggestion. Without the
-initializer, read that suggestion only as a candidate:
-
-```sh
-git config --global --get task-ledger.defaultIdentity
-```
-
-Validate the candidate as lowercase kebab-case, fetch the shared primary
-branch, and inspect the repository's identity lanes. Deliberately confirm a
-matching registration, or publish a clean `.gitkeep` reservation when it is
-absent. A matching global value must not trigger an automatic binding.
-
-After the existing or new registration is confirmed on the shared primary
-branch, bind a worktree manually only when the initializer is unavailable:
+To use a worktree-specific identity, configure the override through Git's
+documented worktree configuration mechanism. Repoledger does not manage or
+validate that mechanism; it reads only the effective result:
 
 ```sh
 git config --worktree task-ledger.identity <identity>
@@ -260,84 +229,74 @@ git config --worktree task-ledger.identity <identity>
 
 ### Multiple Worktrees On One Device
 
-Initialize each worktree independently with `repoledger init --identity` when
-available. A primary worktree may explicitly choose the device suggestion. For
-an additional worktree, validate or publish a different registration when the
-team requires distinct ownership; without the CLI, bind it manually:
+Worktrees that use the global identity need no additional binding. Initialize a
+worktree independently with `repoledger init --identity` only when it needs a
+different identity. Without the CLI, configure that override manually:
 
 ```sh
-git config --worktree task-ledger.identity <registered-override>
+git config --worktree task-ledger.identity <identity>
 ```
 
-That explicit value overrides the device suggestion for the current worktree.
-Leave `task-ledger.defaultIdentity` unchanged unless the device's usual identity
-has changed; an override for one worktree is not a reason to rewrite it.
-
-At the start of task work, run `repoledger doctor`. It refreshes the shared
-branch and validates the extension, binding scope, identity syntax, and remote
-lane together. Only when the CLI is unavailable, inspect the local facts
-manually:
+At the start of task work, run `repoledger doctor`. It validates identity
+syntax, its global or worktree scope, and the local lane. Only when the CLI is
+unavailable, inspect the effective value manually:
 
 ```sh
-git config --local --get extensions.worktreeConfig
+git config --get task-ledger.identity
 git config --show-origin --show-scope --get task-ledger.identity
 ```
 
-The extension must be enabled, the value must be lowercase kebab-case, the
-origin must be worktree config, and the matching `.gitkeep` must exist on the
-latest shared primary branch. Stop task work until any missing or stale binding
-is resolved. Do not guess from paths, branches, usernames, agent names, or
-visible lanes, and do not substitute the device default.
+The value must be lowercase kebab-case, its scope must be global or worktree,
+and the matching `.gitkeep` must exist on the local filesystem. Stop task work
+until any missing configuration is resolved. Do not guess from paths, branches,
+usernames, agent names, or visible lanes.
 
 ## Fallback validation invariants
 
 `repoledger check` is the canonical implementation of these invariants. Do not
 reimplement or repeat them with ad hoc commands when it is available. A
-repository that cannot use the CLI needs an equivalent validator covering at
+repository that cannot use the CLI needs an equivalent validator over backlog
+and the current identity's ongoing lane. Archived tasks and other identities
+enter the scope only when explicitly requested. Within that scope, cover at
 least:
 
 - only `backlog`, `ongoing`, and `archived` are canonical status directories;
 - task and identity names use the project's portable naming convention;
-- every non-hidden backlog and archived entry is a task directory;
-- every non-hidden ongoing entry is an identity directory;
-- every identity contains `.gitkeep`;
-- every non-hidden entry below an identity is a task directory;
+- every selected backlog or archived entry is a task directory;
+- every selected ongoing identity is a directory containing `.gitkeep`;
+- every non-hidden entry below a selected identity is a task directory;
 - every task-position directory is treated as a task even when it is empty and
    contains `Task.md` with the required headings;
 - every backlog and ongoing task plans scope, interface, business and data
    model, architecture, and delivery review checkpoints;
-- no task name appears in more than one backlog, ongoing identity, or archived
-   position;
 - backlog tasks do not contain `Progress.md`;
 - ongoing and archived tasks contain `Progress.md`;
 - progress for a task with a review plan records all five human approval states
    consistently with that plan, including dated evidence for approvals;
 - archived progress records an outcome;
-- a completed archive with a review plan has approved scope and delivery
-   checkpoints, with every conditional checkpoint approved or not applicable;
+- unresolved human approval is reported as a warning rather than invalidating
+   the local task structure;
 - progress records claim, implementation-complete, and archive publication
    milestones;
-- a completed task's history contains at least three distinct integrations on
-   the shared primary branch for those milestones;
 - any `UserAcceptance.md` contains a test target, prerequisites, numbered
    steps, matching expected results, reporting instructions, and actual status;
 - targets inside the current task directory use file-relative links;
 - repository-root and ordinary relative local links to other targets resolve,
   while external URI and fragment-only references remain external.
 
-Link checks must first determine the Git repository root, for example with
-`git rev-parse --show-toplevel`. After separating any fragment from the path,
-resolve a target beginning with one `/` from that repository root. Resolve
+Link checks use the configured repository root. After separating any fragment
+from the path, resolve a target beginning with one `/` from that root. Resolve
 every ordinary relative target from the directory containing the task
 artifact. Reject a leading `/` when its resolved target is inside the current
 task directory. Skip absolute and protocol-relative external URLs, non-file
 URI schemes, and fragment-only targets. A leading `/` must not silently use the
 process working directory or filesystem root.
 
-CI checks structure after the fact. They complement, but do not replace, the
-early identity reservation and claim publication protocol. CI cannot validate a
-developer's local `config.worktree`; agents and local tooling validate that at
-the start of task work.
+CI checks structure after the fact, typically with
+`repoledger check --all-identities --archived`. It complements, but does not
+replace, the claim publication protocol. CI cannot validate a developer's local
+`config.worktree`; agents and local tooling validate that at the start of task
+work.
 
 When adopting this checkpoint format, update backlog and ongoing tasks before
 their next substantive work. Preserve archived task history unless another

@@ -3,7 +3,7 @@
 import { UI_ASSETS } from "./ui-assets.generated.js";
 
 export { createAdminBff } from "./bff.js";
-export type { CreateAdminBffOptions } from "./bff.js";
+export type { CreateAdminBffOptions, EmailChallengeSender } from "./bff.js";
 export { configFromEnv } from "./config.js";
 export type { AdminBffConfig, AdminBffEnv } from "./config.js";
 export { OidcClient } from "./oidc.js";

@@ -39,7 +39,7 @@ export function PlatformInvitationAcceptanceView({
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Accept the platform authorities assigned to your verified Principal.
+            Accept the platform authorities assigned to your verified Account.
           </p>
           {error ? (
             <div className="flex items-center gap-2 text-sm text-destructive" role="alert">

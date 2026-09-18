@@ -9,6 +9,8 @@
  */
 
 import { EncryptJWT, jwtDecrypt } from "jose";
+import type { AccountId, ProviderKind } from "@unicas/admin-protocol";
+import type { EmailChallengeBinding, VerifiedEmailEvidence } from "@unicas/service";
 
 export interface AppInvitationContinuation {
   readonly kind: "app";
@@ -41,6 +43,56 @@ export interface PlatformInvitationSession {
 export type InvitationContinuation = AppInvitationContinuation | PlatformInvitationContinuation;
 export type InvitationSession = AppInvitationSession | PlatformInvitationSession;
 
+export interface EmailChallengeContinuation {
+  readonly challengeId: string;
+  readonly secret: string;
+  readonly binding: EmailChallengeBinding;
+  readonly avatarUrl: string | null;
+}
+
+interface IdentityMutationBase {
+  readonly accountId: AccountId;
+  readonly expectedCredentialVersion: number;
+}
+
+export interface LinkCurrentContinuation extends IdentityMutationBase {
+  readonly kind: "link-current";
+  readonly targetProvider: ProviderKind;
+  readonly currentExternalIdentityId: string;
+  readonly currentIssuer: string;
+  readonly currentSubject: string;
+  readonly currentProvider: ProviderKind;
+  readonly currentDisplayName: string | null;
+  readonly currentEmailForDisplay: string | null;
+}
+
+export interface LinkTargetContinuation extends IdentityMutationBase {
+  readonly kind: "link-target";
+  readonly targetProvider: ProviderKind;
+  readonly currentExternalIdentityId: string;
+  readonly currentIssuer: string;
+  readonly currentSubject: string;
+  readonly currentProvider: ProviderKind;
+  readonly currentDisplayName: string | null;
+  readonly currentEmailForDisplay: string | null;
+  readonly currentAuthenticatedAt: number;
+  readonly currentVerifiedEmailEvidence: readonly VerifiedEmailEvidence[];
+}
+
+export interface UnlinkContinuation extends IdentityMutationBase {
+  readonly kind: "unlink";
+  readonly targetExternalIdentityId: string;
+  readonly remainingExternalIdentityId: string;
+  readonly remainingIssuer: string;
+  readonly remainingSubject: string;
+  readonly remainingProvider: ProviderKind;
+}
+
+export type IdentityMutationContinuation =
+  | LinkCurrentContinuation
+  | LinkTargetContinuation
+  | UnlinkContinuation;
+
 export interface AdminSessionPayload {
   readonly v: 1;
   /** true once a Google identity has been verified into this session. */
@@ -50,6 +102,13 @@ export interface AdminSessionPayload {
   readonly displayName: string | null;
   readonly emailForDisplay: string | null;
   readonly csrfToken: string;
+  readonly authProvider?: ProviderKind;
+  readonly authenticatedAt?: number;
+  readonly verifiedEmailEvidence?: readonly VerifiedEmailEvidence[];
+  readonly accountId?: AccountId;
+  readonly externalIdentityId?: string;
+  readonly credentialVersion?: number;
+  readonly identityMutationContinuation?: IdentityMutationContinuation;
   /** Pre-login OIDC authorization state (login in progress). */
   readonly oidcState?: string;
   readonly oidcNonce?: string;
@@ -61,6 +120,8 @@ export interface AdminSessionPayload {
   readonly invitationAccess?: InvitationSession;
   /** Preserve the invitation login exception while full admission is rechecked. */
   readonly admittedViaInvitation?: true;
+  /** Pending invitation-bound Microsoft email verification. */
+  readonly emailChallenge?: EmailChallengeContinuation;
   /** CLI login transaction: set when this pre-login was started by the admin CLI. */
   readonly cliClientId?: string;
   readonly cliState?: string;
@@ -80,6 +141,12 @@ export interface CliOneTimeCodePayload {
   readonly subject: string;
   readonly displayName: string | null;
   readonly emailForDisplay: string | null;
+  readonly authProvider?: ProviderKind;
+  readonly authenticatedAt?: number;
+  readonly verifiedEmailEvidence?: readonly VerifiedEmailEvidence[];
+  readonly accountId?: AccountId;
+  readonly externalIdentityId?: string;
+  readonly credentialVersion?: number;
   readonly codeChallenge: string;
   readonly cliState: string;
   readonly cliRedirectUri: string;

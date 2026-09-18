@@ -26,6 +26,7 @@ export interface AdminClientConfig {
   readonly baseUrl: string;
   /** Supplies the current session; throws when the operator must log in. */
   readonly getSession: () => Promise<AdminClientSession>;
+  readonly onSessionChanged?: (session: AdminClientSession) => Promise<void>;
   readonly fetcher?: AdminHttpFetcher;
 }
 

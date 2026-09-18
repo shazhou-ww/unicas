@@ -17,7 +17,6 @@ import {
   StackCapabilityVerifier,
   type BlobStore,
   type KeyedActorPort,
-  type ControlPlaneOperations,
   type ServicePlatform,
   type SqlDatabase,
 } from "@unicas/service";
@@ -29,10 +28,12 @@ import {
 } from "./audit-reads.js";
 import { AppAuthorityRepository, AuthorityRepository } from "./control-authority.js";
 import { migrateControlSchema } from "./control-schema.js";
-import { createControlPlaneOperations } from "./control-operations.js";
 import { ControlSessionStore } from "./control-sessions.js";
-import { D1PlatformAccessRepository } from "./platform-access-repository.js";
+import { D1PlatformInvitationRepository } from "./platform-invitation-repository.js";
 import { D1PeopleRepository } from "./people-repository.js";
+import { D1AccountRepository } from "./account-repository.js";
+import { D1EmailChallengeRepository } from "./email-challenge-repository.js";
+import { CloudflareEmailChallengeSender } from "./email-challenge-sender.js";
 import { CloudflareOAuthDiscoveryPort } from "./oauth-discovery.js";
 import { CloudflareManagedIssuer } from "./managed-issuer.js";
 import {
@@ -83,7 +84,9 @@ const MCP_METADATA_PATHS = new Set([
 
 const MCP_BROWSER_PATHS = new Set([
   "/oauth/authorize",
-  "/oauth/google/callback",
+  "/oauth/callback/google",
+  "/oauth/callback/microsoft",
+  "/oauth/callback/github",
 ]);
 
 const MCP_TOKEN_PATHS = new Set([
@@ -110,6 +113,9 @@ export default {
     }
     if (request.method === "GET" && pathname === "/health") {
       return Response.json({ ok: true, service: "unicas" });
+    }
+    if (isPrefixed(pathname, "/admin/stacks")) {
+      return new Response("Not Found", { status: 404 });
     }
     const protectedResourceStackId = matchStackProtectedResourcePath(pathname);
     if (protectedResourceStackId !== null) {
@@ -143,8 +149,6 @@ export default {
           throw error;
         }
       },
-      handleAdminRequest: async ({ request: adminRequest }) =>
-        (await adminHandlerFor(env))(stripAdminHeaders(adminRequest)),
       handleAppAdminRequest: async ({ request: adminRequest, route }) =>
         handleAppAdminCompatibilityRequest(
           stripAdminHeaders(adminRequest),
@@ -202,6 +206,13 @@ export default {
       return fetchMcp(stripHeaders(request, MCP_STRIPPED_HEADERS), env, auditReader, ctx);
     }
     return new Response("Not Found", { status: 404 });
+  },
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil((async () => {
+      await ensureControlSchema(env);
+      await new D1EmailChallengeRepository(env.CAS_CONTROL_DB).pruneExpired(Date.now());
+      await new ControlSessionStore(env.CAS_CONTROL_DB).pruneExpired();
+    })());
   },
 } satisfies ExportedHandler<Env>;
 
@@ -368,33 +379,33 @@ function adminHandlerFor(env: Env): Promise<(request: Request) => Promise<Respon
       await ensureControlSchema(env);
       const config = configFromEnv(env);
       const now = config.now ?? (() => Date.now());
-      const platformRepository = new D1PlatformAccessRepository(env.CAS_CONTROL_DB);
+      const accountRepository = new D1AccountRepository(env.CAS_CONTROL_DB);
+      const platformInvitationRepository = new D1PlatformInvitationRepository(env.CAS_CONTROL_DB);
+      const managedOAuthIssuer = managedIssuerFor(env, now);
+      const oauthDiscovery = new CloudflareOAuthDiscoveryPort({
+        allowedOrigins: parseOriginAllowlist(env.CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS),
+      });
       return createAdminBff({
         config,
-        controlPlane: controlPlaneFor(env, now),
         sessionStore: new ControlSessionStore(env.CAS_CONTROL_DB, now),
         auditReader: localAuditReader(env),
         assets: uiAssets,
-        platformAccessRepository: platformRepository,
-        platformInvitationRepository: platformRepository,
-        platformAuditRepository: platformRepository,
+        platformInvitationRepository,
         peopleRepository: new D1PeopleRepository(env.CAS_CONTROL_DB),
+        accountRepository,
+        managedOAuthIssuer,
+        oauthDiscovery,
+        oauthResourcePublicOrigin: env.CAS_PUBLIC_ORIGIN ?? env.PUBLIC_ORIGIN,
+        emailChallengeRepository: new D1EmailChallengeRepository(env.CAS_CONTROL_DB),
+        emailChallengeSender: env.EMAIL && config.emailFrom
+          ? new CloudflareEmailChallengeSender(env.EMAIL, config.emailFrom)
+          : undefined,
       });
     })();
     adminHandlers.set(key, handler);
     void handler.catch(() => adminHandlers.delete(key));
   }
   return handler;
-}
-
-function controlPlaneFor(env: Env, now?: () => number): ControlPlaneOperations {
-  const allowedOrigins = parseOriginAllowlist(env.CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS);
-  return createControlPlaneOperations(env.CAS_CONTROL_DB, {
-    now,
-    oauthResourcePublicOrigin: env.CAS_PUBLIC_ORIGIN ?? env.PUBLIC_ORIGIN,
-    managedOAuthIssuer: managedIssuerFor(env, now),
-    oauthDiscovery: new CloudflareOAuthDiscoveryPort({ allowedOrigins }),
-  });
 }
 
 function managedIssuerFor(env: Env, now?: () => number): CloudflareManagedIssuer | undefined {
@@ -567,7 +578,12 @@ async function fetchMcp(
   await ensureControlSchema(env);
   const worker = createControlPlaneMcpWorker(
     mcpConfigFromEnv(env),
-    () => controlPlaneFor(env),
+    env.CAS_CONTROL_DB,
+    managedIssuerFor(env),
+    new CloudflareOAuthDiscoveryPort({
+      allowedOrigins: parseOriginAllowlist(env.CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS),
+    }),
+    env.CAS_PUBLIC_ORIGIN ?? env.PUBLIC_ORIGIN,
   );
   return worker.fetch(request, {
     ...env,

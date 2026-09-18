@@ -3,7 +3,7 @@ import type { PlatformAuditAction } from "@unicas/admin-client";
 import { printJson } from "../output.js";
 import type { CliContext } from "./common.js";
 import { withAdminClient } from "./common.js";
-import { parseBoundedLimit } from "./stacks.js";
+import { parseBoundedLimit } from "./common.js";
 
 const actions = new Set<PlatformAuditAction>([
   "platform_invitation.created",
@@ -21,8 +21,8 @@ export async function platformAuditCommand(ctx: CliContext, argv: string[]): Pro
     args: argv,
     options: {
       action: { type: "string" },
-      "actor-principal-ref": { type: "string" },
-      "target-principal-ref": { type: "string" },
+      "actor-account-id": { type: "string" },
+      "target-account-id": { type: "string" },
       "created-after": { type: "string" },
       limit: { type: "string" },
       cursor: { type: "string" },
@@ -39,8 +39,8 @@ export async function platformAuditCommand(ctx: CliContext, argv: string[]): Pro
   await withAdminClient(ctx, async admin => {
     printJson(await admin.listPlatformAuditEvents({
       ...(values.action ? { action: values.action as PlatformAuditAction } : {}),
-      ...(values["actor-principal-ref"] ? { actorPrincipalRef: values["actor-principal-ref"] } : {}),
-      ...(values["target-principal-ref"] ? { targetPrincipalRef: values["target-principal-ref"] } : {}),
+      ...(values["actor-account-id"] ? { actorAccountId: values["actor-account-id"] } : {}),
+      ...(values["target-account-id"] ? { targetAccountId: values["target-account-id"] } : {}),
       ...(createdAfter !== undefined ? { createdAfter } : {}),
       ...(values.limit ? { limit: parseBoundedLimit(values.limit) } : {}),
       ...(values.cursor ? { cursor: values.cursor } : {}),

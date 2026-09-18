@@ -18,6 +18,7 @@ export interface AppAdminMcpToolDefinition {
 }
 
 const appId = z.string().min(1);
+const accountId = z.string().regex(/^acct_[A-Za-z0-9_-]{22}$/);
 const spaceId = z.string().min(1);
 const cursor = z.string().min(1);
 const boundedLimit = z.number().int().min(1).max(200);
@@ -36,12 +37,12 @@ function tool<const Definition extends AppAdminMcpToolDefinition>(definition: De
 }
 
 export const APP_ADMIN_MCP_TOOLS = {
-  get_current_principal: tool({
-    name: "get_current_principal",
+  get_current_account: tool({
+    name: "get_current_account",
     requiredScope: "control:read",
     registration: {
-      title: "Current UniCAS Principal",
-      description: "Return the authenticated Principal, Profile, and current App memberships from the v2 contract.",
+      title: "Current UniCAS Account",
+      description: "Return the stable Account summary, current masked login identity, authorities, and App memberships.",
       inputSchema: z.object({}),
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
@@ -92,15 +93,6 @@ export const APP_ADMIN_MCP_TOOLS = {
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
   }),
-  list_app_playground_file_roots: tool({
-    name: "list_app_playground_file_roots",
-    requiredScope: "control:read",
-    registration: {
-      description: "List Principal-owned Playground file roots for an App.",
-      inputSchema: z.object({ appId }),
-      annotations: { readOnlyHint: true, destructiveHint: false },
-    },
-  }),
   list_app_ref_domains: tool({
     name: "list_app_ref_domains",
     requiredScope: "control:read",
@@ -120,7 +112,9 @@ export const APP_ADMIN_MCP_TOOLS = {
         limit: boundedLimit.optional(),
         cursor: cursor.optional(),
         after: z.string().min(1).optional(),
-      }),
+        actorAccountId: accountId.optional(),
+        targetAccountId: accountId.optional(),
+      }).strict(),
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
   }),
@@ -163,11 +157,11 @@ export const APP_ADMIN_MCP_TOOLS = {
       annotations: { destructiveHint: false, idempotentHint: true },
     },
   }),
-  list_platform_principals: tool({
-    name: "list_platform_principals",
+  list_platform_accounts: tool({
+    name: "list_platform_accounts",
     requiredScope: "control:security",
     registration: {
-      description: "List platform Principals with effective-access and authority filters.",
+      description: "List platform Accounts with effective-access and authority filters.",
       inputSchema: z.object({
         query: z.string().max(254).optional(),
         effectiveAccess: z.enum(["active", "blocked", "no_access"]).optional(),
@@ -178,28 +172,53 @@ export const APP_ADMIN_MCP_TOOLS = {
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
   }),
-  get_platform_principal: tool({
-    name: "get_platform_principal",
+  get_platform_account: tool({
+    name: "get_platform_account",
     requiredScope: "control:security",
     registration: {
-      description: "Read one platform Principal, current authorities, status, and App memberships.",
-      inputSchema: z.object({ principalRef: z.string().min(1) }),
+      description: "Read one platform Account, current authorities, block state, and App memberships.",
+      inputSchema: z.object({ accountId }),
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
   }),
-  update_platform_access: tool({
-    name: "update_platform_access",
+  grant_platform_authority: tool({
+    name: "grant_platform_authority",
     requiredScope: "control:security",
     registration: {
-      description: "Conditionally replace Platform Access fields using the current ETag and exact Principal ref confirmation.",
+      description: "Idempotently grant one platform authority to an Account after exact Account ID confirmation.",
       inputSchema: z.object({
-        principalRef: z.string().min(1),
-        confirmPrincipalRef: z.string().min(1),
-        status: z.enum(["active", "blocked"]).optional(),
-        authorities: z.array(z.enum(["platform.admin", "apps.create"])).optional(),
-        etag,
+        accountId,
+        confirmAccountId: accountId,
+        authority: z.enum(["platform.admin", "apps.create"]),
       }),
+      annotations: { destructiveHint: false, idempotentHint: true },
+    },
+  }),
+  revoke_platform_authority: tool({
+    name: "revoke_platform_authority",
+    requiredScope: "control:security",
+    registration: {
+      description: "Idempotently revoke one platform authority from an Account after exact Account ID confirmation.",
+      inputSchema: z.object({ accountId, confirmAccountId: accountId, authority: z.enum(["platform.admin", "apps.create"]) }),
       annotations: { destructiveHint: true, idempotentHint: true },
+    },
+  }),
+  block_platform_account: tool({
+    name: "block_platform_account",
+    requiredScope: "control:security",
+    registration: {
+      description: "Block an Account and invalidate its credential generation after exact Account ID confirmation.",
+      inputSchema: z.object({ accountId, confirmAccountId: accountId }),
+      annotations: { destructiveHint: true, idempotentHint: true },
+    },
+  }),
+  restore_platform_account: tool({
+    name: "restore_platform_account",
+    requiredScope: "control:security",
+    registration: {
+      description: "Idempotently restore a blocked Account after exact Account ID confirmation.",
+      inputSchema: z.object({ accountId, confirmAccountId: accountId }),
+      annotations: { destructiveHint: false, idempotentHint: true },
     },
   }),
   list_platform_invitations: tool({
@@ -259,12 +278,12 @@ export const APP_ADMIN_MCP_TOOLS = {
           "platform_access.change_denied",
           "app.create_denied",
         ]).optional(),
-        actorPrincipalRef: z.string().min(1).optional(),
-        targetPrincipalRef: z.string().min(1).optional(),
+        actorAccountId: accountId.optional(),
+        targetAccountId: accountId.optional(),
         createdAfter: z.number().int().nonnegative().optional(),
         limit: z.number().int().min(1).max(1000).optional(),
         cursor: cursor.optional(),
-      }),
+      }).strict(),
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
   }),
@@ -323,42 +342,13 @@ export const APP_ADMIN_MCP_TOOLS = {
     name: "remove_app_member",
     requiredScope: "control:security",
     registration: {
-      description: "Remove an App administrator selected by Principal using the App's current ETag.",
+      description: "Idempotently remove an App administrator selected by stable Account ID.",
       inputSchema: z.object({
         appId,
-        issuer: url,
-        subject: z.string().min(1),
-        etag,
-        confirmSubject: z.string().min(1),
+        accountId,
+        confirmAccountId: accountId,
       }),
-      annotations: { destructiveHint: true, idempotentHint: false },
-    },
-  }),
-  create_app_playground_file_root: tool({
-    name: "create_app_playground_file_root",
-    requiredScope: "control:write",
-    registration: {
-      description: "Create a Principal-owned Playground file root for an App.",
-      inputSchema: z.object({ appId, rootId, name: displayName, manifestHash }),
-      annotations: { destructiveHint: false, idempotentHint: false },
-    },
-  }),
-  update_app_playground_file_root: tool({
-    name: "update_app_playground_file_root",
-    requiredScope: "control:write",
-    registration: {
-      description: "Update a Principal-owned Playground file root using its current ETag.",
-      inputSchema: z.object({ appId, rootId, name: displayName, manifestHash, etag }),
-      annotations: { destructiveHint: false, idempotentHint: false },
-    },
-  }),
-  delete_app_playground_file_root: tool({
-    name: "delete_app_playground_file_root",
-    requiredScope: "control:write",
-    registration: {
-      description: "Delete a Principal-owned Playground file root using its current ETag.",
-      inputSchema: z.object({ appId, rootId, etag, confirmRootId: rootId }),
-      annotations: { destructiveHint: true, idempotentHint: false },
+      annotations: { destructiveHint: true, idempotentHint: true },
     },
   }),
   inspect_app_oauth_issuer: tool({

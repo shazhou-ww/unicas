@@ -19,7 +19,7 @@
     "check:repo": "pnpm check:tasks && vitest run tests/deploy-plan.test.mjs tests/docs-site.test.mjs tests/workspace-boundaries.test.mjs tests/openapi-drift.test.ts",
     "check:workspace": "vitest run tests/workspace-boundaries.test.mjs tests/deploy-plan.test.mjs",
     "check:openapi": "vitest run tests/openapi-drift.test.ts",
-    "check:tasks": "repoledger check && vitest run tests/task-policy.test.mjs",
+    "check:tasks": "repoledger check",
     "typecheck": "pnpm -r typecheck",
     "clean": "pnpm -r run clean",
     "keys:local": "node scripts/generate-local-capability-keys.mjs"
@@ -30,7 +30,7 @@
     "jose": "^6.2.10",
     "marked": "^18.0.13",
     "miniflare": "5.20260811.1-alpha",
-    "repoledger": "0.1.0",
+    "repoledger": "0.6.0",
     "rimraf": "^6.1.3",
     "typescript": "^5.9.0",
     "vitest": "^3.2.0"

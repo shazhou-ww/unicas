@@ -39,13 +39,17 @@ export async function runMcpStdioServer(options: McpStdioServerOptions): Promise
   const holder: { admin?: AdminClient } = {};
   const getOrCreateAdmin = async (): Promise<AdminClient> => {
     if (holder.admin !== undefined) return holder.admin;
-    const session = await options.store.load();
+    let session = await options.store.load();
     if (session.cookie.length === 0 || session.csrfToken.length === 0) {
       throw new Error("Not logged in. Run `unicas login` first.");
     }
     holder.admin = createAdminClient({
       baseUrl: options.adminOrigin,
       getSession: async () => ({ cookie: session.cookie, csrfToken: session.csrfToken }),
+      onSessionChanged: async next => {
+        session = { ...session, ...next };
+        await options.store.save(session);
+      },
       fetcher: options.fetchImpl,
     });
     return holder.admin;
@@ -60,22 +64,6 @@ export async function runMcpStdioServer(options: McpStdioServerOptions): Promise
 }
 
 type ToolHandler = (admin: AdminClient, args: Record<string, unknown>) => Promise<unknown>;
-type LegacyToolName =
-  | "whoami"
-  | "list_stacks"
-  | "get_stack"
-  | "list_members"
-  | "get_oauth_issuer"
-  | "list_ref_domains"
-  | "list_control_audit_events"
-  | "list_root_domain_refs"
-  | "list_root_domain_events"
-  | "create_stack"
-  | "update_stack"
-  | "invite_member"
-  | "remove_member"
-  | "inspect_oauth_issuer"
-  | "activate_oauth_issuer";
 
 function registerCatalogTool(
   server: McpServer,
@@ -145,41 +133,47 @@ async function resolveEtag(
 
 /** Maps the remote tool contract to admin-client operations. */
 const TOOL_HANDLERS = {
-  async list_platform_principals(admin, args) {
+  async list_platform_accounts(admin, args) {
     const effectiveAccess = args.effectiveAccess;
     const authority = args.authority;
-    return admin.listPlatformPrincipals({
+    return admin.listPlatformAccounts({
       ...pick(args, ["query", "limit", "cursor"]),
       ...(effectiveAccess === undefined ? {} : { effectiveAccess: str(effectiveAccess) as "active" | "blocked" | "no_access" }),
       ...(authority === undefined ? {} : { authority: str(authority) as PlatformAuthority | "none" }),
     });
   },
 
-  async get_platform_principal(admin, args) {
-    return admin.getPlatformPrincipal({ principalRef: str(args.principalRef) });
+  async get_platform_account(admin, args) {
+    return admin.getPlatformAccount({ accountId: str(args.accountId) });
   },
 
-  async update_platform_access(admin, args) {
-    const principalRef = str(args.principalRef);
-    requireMatch(args.confirmPrincipalRef, principalRef, "confirmPrincipalRef must exactly match principalRef");
-    if (args.status === undefined && args.authorities === undefined) throw new Error("at least one access change is required");
-    const requested = args.authorities;
-    if (requested !== undefined && (!Array.isArray(requested) || requested.some(authority => authority !== "platform.admin" && authority !== "apps.create"))) {
-      throw new Error("invalid platform authorities");
-    }
-    return admin.patchPlatformAccess(
-      { principalRef },
-      {
-        ...(args.status === undefined ? {} : { status: str(args.status) as "active" | "blocked" }),
-        ...(requested === undefined ? {} : { authorities: requested as PlatformAuthority[] }),
-      },
-      str(args.etag),
-    );
+  async grant_platform_authority(admin, args) {
+    const accountId = confirmedAccountId(args);
+    await admin.grantPlatformAccountAuthority({ accountId, authority: str(args.authority) as PlatformAuthority });
+    return { ok: true };
+  },
+
+  async revoke_platform_authority(admin, args) {
+    const accountId = confirmedAccountId(args);
+    await admin.revokePlatformAccountAuthority({ accountId, authority: str(args.authority) as PlatformAuthority });
+    return { ok: true };
+  },
+
+  async block_platform_account(admin, args) {
+    const accountId = confirmedAccountId(args);
+    await admin.blockPlatformAccount({ accountId });
+    return { ok: true };
+  },
+
+  async restore_platform_account(admin, args) {
+    const accountId = confirmedAccountId(args);
+    await admin.restorePlatformAccount({ accountId });
+    return { ok: true };
   },
 
   async list_platform_audit_events(admin, args) {
     return admin.listPlatformAuditEvents({
-      ...pick(args, ["actorPrincipalRef", "targetPrincipalRef", "createdAfter", "limit", "cursor"]),
+      ...pick(args, ["actorAccountId", "targetAccountId", "createdAfter", "limit", "cursor"]),
       ...(args.action === undefined ? {} : { action: str(args.action) as PlatformAuditAction }),
     });
   },
@@ -225,12 +219,8 @@ const TOOL_HANDLERS = {
     return admin.revokeAppMemberInvitation({ appId: str(args.appId), invitationId: str(args.invitationId) }, str(args.etag));
   },
 
-  async whoami(admin) {
-    return admin.me();
-  },
-
-  async get_current_principal(admin) {
-    return admin.getCurrentPrincipal();
+  async get_current_account(admin) {
+    return currentAccountOutput(await admin.getCurrentAdministrator());
   },
 
   async list_apps(admin, args) {
@@ -289,47 +279,9 @@ const TOOL_HANDLERS = {
   },
 
   async remove_app_member(admin, args) {
-    const subject = str(args.subject);
-    requireMatch(args.confirmSubject, subject, "confirmSubject must exactly match subject");
-    return admin.deleteAppMember(
-      { appId: str(args.appId) },
-      { issuer: str(args.issuer), subject },
-      str(args.etag),
-    );
-  },
-
-  async list_app_playground_file_roots(admin, args) {
-    return admin.listAppPlaygroundFileRoots({ appId: str(args.appId) });
-  },
-
-  async create_app_playground_file_root(admin, args) {
-    const result = await admin.createAppPlaygroundFileRoot(
-      { appId: str(args.appId) },
-      {
-        rootId: str(args.rootId),
-        name: str(args.name),
-        manifestHash: str(args.manifestHash),
-      },
-    );
-    return { ...result.value, etag: result.etag };
-  },
-
-  async update_app_playground_file_root(admin, args) {
-    const result = await admin.patchAppPlaygroundFileRoot(
-      { appId: str(args.appId), rootId: str(args.rootId) },
-      { name: str(args.name), manifestHash: str(args.manifestHash) },
-      str(args.etag),
-    );
-    return { ...result.value, etag: result.etag };
-  },
-
-  async delete_app_playground_file_root(admin, args) {
-    const rootId = str(args.rootId);
-    requireMatch(args.confirmRootId, rootId, "confirmRootId must exactly match rootId");
-    return admin.deleteAppPlaygroundFileRoot(
-      { appId: str(args.appId), rootId },
-      str(args.etag),
-    );
+    const accountId = str(args.accountId);
+    requireMatch(args.confirmAccountId, accountId, "confirmAccountId must exactly match accountId");
+    return admin.deleteAppMember({ appId: str(args.appId), accountId });
   },
 
   async get_app_oauth_issuer(admin, args) {
@@ -390,7 +342,7 @@ const TOOL_HANDLERS = {
   async list_app_control_audit_events(admin, args) {
     return admin.listAppControlAuditEvents(
       { appId: str(args.appId) },
-      pick(args, ["limit", "cursor", "after"]),
+      pick(args, ["limit", "cursor", "after", "actorAccountId", "targetAccountId"]),
     );
   },
 
@@ -407,103 +359,21 @@ const TOOL_HANDLERS = {
       pick(args, ["spaceId", "after", "limit"]),
     );
   },
+} satisfies Readonly<Record<AppAdminMcpToolName, ToolHandler>>;
 
-  async list_stacks(admin, args) {
-    return admin.listStacks(pick(args, ["limit", "cursor"]));
-  },
-
-  async get_stack(admin, args) {
-    return (await admin.getStack({ stackId: str(args.stackId) })).value;
-  },
-
-  async create_stack(admin, args) {
-    return admin.createStack(
-      { displayName: str(args.displayName) },
-      { idempotencyKey: args.idempotencyKey as string | undefined },
-    );
-  },
-
-  async update_stack(admin, args) {
-    const stackId = str(args.stackId);
-    const etag = await resolveEtag(admin, () => admin.getStack({ stackId }), "stack", args.etag);
-    const { value } = await admin.patchStack(
-      { stackId },
-      {
-        ...(args.displayName !== undefined ? { displayName: str(args.displayName) } : {}),
-        ...(args.description !== undefined ? { description: str(args.description) } : {}),
-      },
-      etag,
-    );
-    return value;
-  },
-
-  async list_members(admin, args) {
-    return admin.listMembers({ stackId: str(args.stackId) }, pick(args, ["limit", "cursor"]));
-  },
-
-  async invite_member(admin, args) {
-    requireMatch(args.confirmEmail, args.email, "confirmEmail must exactly match the invited email");
-    return admin.createMemberInvitation(
-      { stackId: str(args.stackId) },
-      { emailConstraint: str(args.email) },
-      { idempotencyKey: args.idempotencyKey as string | undefined },
-    );
-  },
-
-  async remove_member(admin, args) {
-    const stackId = str(args.stackId);
-    const identityIssuer = str(args.identityIssuer);
-    const subject = str(args.subject);
-    requireMatch(args.confirmSubject, subject, "confirmSubject must exactly match subject");
-    const etag = await resolveEtag(admin, () => admin.getStack({ stackId }), "stack", args.etag);
-    return admin.deleteMember({ stackId }, { identityIssuer, subject }, etag);
-  },
-
-  async get_oauth_issuer(admin, args) {
-    const result = await admin.getOAuthIssuer({ stackId: str(args.stackId) });
-    return { ...result.value, etag: result.etag };
-  },
-
-  async inspect_oauth_issuer(admin, args) {
-    const result = await admin.inspectOAuthIssuer(
-      { stackId: str(args.stackId) },
-      { issuer: str(args.issuer) },
-    );
-    return { ...result.value, etag: result.etag };
-  },
-
-  async activate_oauth_issuer(admin, args) {
-    const stackId = str(args.stackId);
-    const etag = await resolveEtag(admin, () => admin.getOAuthIssuer({ stackId }), "OAuth issuer", args.etag);
-    const result = await admin.activateOAuthIssuer({ stackId }, {
-      inspectionId: str(args.inspectionId),
-      activationProof: str(args.activationProof),
-    }, etag);
-    return { ...result.value, etag: result.etag };
-  },
-
-  async list_ref_domains(admin, args) {
-    return admin.listRefDomains({ stackId: str(args.stackId) });
-  },
-
-  async list_control_audit_events(admin, args) {
-    return admin.listControlAuditEvents({ stackId: str(args.stackId) }, pick(args, ["limit", "cursor"]));
-  },
-
-  async list_root_domain_refs(admin, args) {
-    return admin.listRootDomainRefs(
-      { stackId: str(args.stackId), refDomain: str(args.refDomain) },
-      pick(args, ["tenantId", "limit", "cursor"]),
-    );
-  },
-
-  async list_root_domain_events(admin, args) {
-    return admin.listRootDomainEvents(
-      { stackId: str(args.stackId), refDomain: str(args.refDomain) },
-      pick(args, ["tenantId", "after", "limit"]),
-    );
-  },
-} satisfies Readonly<Record<AppAdminMcpToolName | LegacyToolName, ToolHandler>>;
+function currentAccountOutput(current: Awaited<ReturnType<AdminClient["getCurrentAdministrator"]>>) {
+  return {
+    account: {
+      accountId: current.account.accountId,
+      displayName: current.account.displayName,
+      primaryVerifiedEmail: current.account.primaryVerifiedEmail,
+      avatar: current.account.avatar,
+    },
+    authenticatedIdentity: current.authenticatedIdentity,
+    platformAuthorities: current.account.platformAuthorities,
+    memberships: current.memberships,
+  };
+}
 
 function str(value: unknown): string {
   if (typeof value !== "string" || value.length === 0) {
@@ -514,6 +384,12 @@ function str(value: unknown): string {
 
 function requireMatch(actual: unknown, expected: unknown, message: string): void {
   if (actual !== expected) throw new Error(message);
+}
+
+function confirmedAccountId(args: Record<string, unknown>): string {
+  const accountId = str(args.accountId);
+  requireMatch(args.confirmAccountId, accountId, "confirmAccountId must exactly match accountId");
+  return accountId;
 }
 
 function pick(args: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {

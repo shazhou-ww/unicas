@@ -11,6 +11,23 @@ function json(body: unknown): Response {
   });
 }
 
+function accountMe(displayName: string, email: string, platformAuthorities: string[]) {
+  const identity = { externalIdentityId: "ext-current", provider: "google", accountHint: null, linkedAt: 1, lastAuthenticatedAt: 1, currentLogin: true };
+  return {
+    account: {
+      accountId: `acct_${"a".repeat(22)}`,
+      displayName,
+      primaryVerifiedEmail: { normalizedEmail: email, source: "google-oidc", verifiedAt: 1 },
+      avatar: { kind: "fallback", initials: displayName.slice(0, 2).toUpperCase(), colorIndex: 1 },
+      blockedAt: null,
+      platformAuthorities,
+      identities: [identity],
+      linkableProviders: [],
+    },
+    authenticatedIdentity: identity,
+  };
+}
+
 describe("AI tool connection", () => {
   test("opens from sidebar profile menu, copies connection details, and closes with Escape", async () => {
     const user = userEvent.setup();
@@ -19,6 +36,7 @@ describe("AI tool connection", () => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
       if (path === "/admin/me") {
         return json({
+          ...accountMe("Admin User", "admin@example.com", ["platform.admin", "apps.create"]),
           principal: { issuer: "https://accounts.example", subject: "admin" },
           profile: { displayName: "Admin User", emailForDisplay: "admin@example.com" },
           platformAccess: {
@@ -36,12 +54,12 @@ describe("AI tool connection", () => {
 
     render(<App />);
 
-    expect(await screen.findByText("Platform access")).toBeInTheDocument();
-    expect(screen.getByTitle("Create App")).toBeInTheDocument();
-
     // Open the user menu from sidebar footer
     const userMenuTrigger = await screen.findByRole("button", { name: "Open user menu" });
+    expect(screen.getByTitle("Create App")).toBeInTheDocument();
     await user.click(userMenuTrigger);
+
+    expect(await screen.findByRole("menuitem", { name: /^Administration$/i })).toBeInTheDocument();
 
     // Click "Connect AI tools" from dropdown
     const connectItem = await screen.findByRole("menuitem", { name: /connect ai tools/i });
@@ -65,7 +83,7 @@ describe("AI tool connection", () => {
     const cliPrompt = await navigator.clipboard.readText();
     expect(cliPrompt).toContain("pnpm install --global ./packages/admin-cli");
     expect(cliPrompt).toContain("unicas login");
-    expect(cliPrompt).toContain("unicas principal");
+    expect(cliPrompt).toContain("unicas account");
     expect(cliPrompt).toContain("unicas apps list");
     expect(cliPrompt).not.toContain("unicas stacks list");
     expect(cliPrompt).toContain(`${window.location.origin}/admin/assets/skills/unicas-cli/SKILL.md`);
@@ -85,6 +103,7 @@ describe("AI tool connection", () => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
       if (path === "/admin/me") {
         return json({
+          ...accountMe("App Member", "member@example.com", []),
           principal: { issuer: "https://accounts.example", subject: "member" },
           profile: { displayName: "App Member", emailForDisplay: "member@example.com" },
           platformAccess: {
@@ -100,19 +119,22 @@ describe("AI tool connection", () => {
       return new Response(null, { status: 404 });
     }));
 
+    const user = userEvent.setup();
     render(<App />);
 
-    await screen.findByRole("button", { name: "Open user menu" });
-    expect(screen.queryByText("Platform access")).not.toBeInTheDocument();
+    const userMenuTrigger = await screen.findByRole("button", { name: "Open user menu" });
+    await user.click(userMenuTrigger);
+    expect(screen.queryByRole("menuitem", { name: /^Administration$/i })).not.toBeInTheDocument();
     expect(screen.queryByTitle("Create App")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Create App" })).not.toBeInTheDocument();
   });
 
   test("denies a direct Platform route in the client for a non-admin", async () => {
-    window.location.hash = "#/platform/principals";
+    window.location.hash = "#/platform/people";
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
       if (path === "/admin/me") return json({
+        ...accountMe("Member", "member@example.com", []),
         principal: { issuer: "https://accounts.example", subject: "member" },
         profile: { displayName: "Member", emailForDisplay: "member@example.com" },
         platformAccess: { principalRef: "member-ref", status: "active", authorities: [], revision: 1 },
@@ -130,17 +152,17 @@ describe("AI tool connection", () => {
   });
 
   test("supports keyboard Platform tab routing", async () => {
-    window.location.hash = "#/platform/principals";
+    window.location.hash = "#/platform/people";
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
       if (path === "/admin/me") return json({
+        ...accountMe("Admin", "admin@example.com", ["platform.admin"]),
         principal: { issuer: "https://accounts.example", subject: "admin" },
         profile: { displayName: "Admin", emailForDisplay: "admin@example.com" },
         platformAccess: { principalRef: "admin-ref", status: "active", authorities: ["platform.admin"], revision: 1 },
         memberships: [],
       });
       if (path === "/admin/apps") return json({ items: [] });
-      if (path === "/admin/platform/access-summary") return json({ activePrincipalCount: 1, platformAdminCount: 1, appCreatorCount: 0, blockedPrincipalCount: 0, generatedAt: 1 });
       if (path.startsWith("/admin/platform/people")) return json({ items: [], nextCursor: null });
       if (path.startsWith("/admin/platform/audit-events")) return json({ items: [], nextCursor: null });
       return new Response(null, { status: 404 });
@@ -153,10 +175,10 @@ describe("AI tool connection", () => {
     expect(screen.getByRole("tab", { name: "Change Logs" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "People" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Audit" })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Platform Administration" })).toHaveClass("console-app-detail-title");
-    expect(screen.getByRole("tablist", { name: "Platform Administration sections" })).toHaveClass("console-app-tabs");
-    expect(peopleTab.closest(".console-app-detail-header")).toContainElement(screen.getByRole("heading", { name: "Platform Administration" }));
-    await waitFor(() => expect(window.location.hash).toBe("#/platform/people?filter=principals"));
+    expect(screen.getByRole("heading", { name: "Administration" })).toHaveClass("console-app-detail-title");
+    expect(screen.getByRole("tablist", { name: "Administration sections" })).toHaveClass("console-app-tabs");
+    expect(peopleTab.closest(".console-app-detail-header")).toContainElement(screen.getByRole("heading", { name: "Administration" }));
+    await waitFor(() => expect(window.location.hash).toBe("#/platform/people"));
     peopleTab.focus();
     await userEvent.setup().keyboard("{ArrowRight}");
     await waitFor(() => expect(window.location.hash).toBe("#/platform/audit"));
@@ -169,6 +191,7 @@ describe("AI tool connection", () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
       if (path === "/admin/me") return json({
+        ...accountMe("Admin", "admin@example.com", ["apps.create"]),
         principal: { issuer: "https://accounts.example", subject: "admin" },
         profile: { displayName: "Admin", emailForDisplay: "admin@example.com" },
         platformAccess: { principalRef: "admin-ref", status: "active", authorities: ["apps.create"], revision: 1 },

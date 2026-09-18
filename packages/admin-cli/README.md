@@ -7,8 +7,7 @@ Platform Access, then redirects the browser back to the CLI's loopback with a on
 that the CLI exchanges (PKCE) for a session cookie + CSRF token, persisted
 locally. The CLI never talks to Google and needs no client id or secret.
 Commands call the typed `@unicas/admin-client` over the `/admin` HTTP API;
-`unicas mcp` exposes the same 47-tool contract (32 App/platform tools plus 15 frozen v1
-tools) as the MCP ingress hosted by
+`unicas mcp` exposes the same current App/Account tool contract as the MCP ingress hosted by
 `@unicas/service-cloudflare` as a stdio MCP server backed by that client (for
 clients whose MCP support cannot do OAuth, for example DeepSeek Harness).
 
@@ -19,7 +18,7 @@ https://console.unicas.work/admin  <- /admin control-plane API (BFF session)
 unicas CLI  <- /admin/auth/cli/authorize (BFF does Google OIDC) -> cli/exchange
         |     persists ~/.unicas/session.json
         |
-        +-- plain commands:   unicas principal / unicas apps list ...
+        +-- plain commands:   unicas account / unicas apps list ...
         `-- stdio MCP server: unicas mcp   (DSH: command "unicas", args ["mcp"])
 ```
 
@@ -50,8 +49,7 @@ pnpm --filter @unicas/admin-cli unicas login
    `unicas-cli`, S256 PKCE, loopback redirect).
 2. The BFF redirects to Google (its own confidential client + secret,
    server-side), the operator signs in and consents, and the BFF verifies
-   current Platform Access by immutable Principal. The email allowlist is only
-   a pre-migration fallback when Platform Access is not configured.
+  current Account admission before issuing a session.
 3. The BFF redirects the browser back to the CLI's loopback with a one-time
    code; the CLI validates `state`, then POSTs `{ code, codeVerifier }` to
    `/admin/auth/cli/exchange` and receives the session cookie + CSRF token.
@@ -62,44 +60,50 @@ pnpm --filter @unicas/admin-cli unicas login
 
 | Command | MCP tool |
 | --- | --- |
-| `unicas principal` | `get_current_principal` |
+| `unicas account` | `get_current_account` |
 | `unicas apps list [--limit N] [--cursor C]` | `list_apps` |
 | `unicas apps get <appId>` | `get_app` |
 | `unicas apps create <displayName> [--idempotency-key K]` | `create_app` |
 | `unicas apps update <appId> [displayName] [--description D] [--etag E]` | `update_app` |
 | `unicas app-members list <appId> [--limit N] [--cursor C]` | `list_app_members` |
 | `unicas app-members invite <appId> <email> [--idempotency-key K]` | `invite_app_member` |
-| `unicas app-members remove <appId> --issuer <url> --subject <sub> [--etag E] [--confirm-subject S]` | `remove_app_member` |
+| `unicas app-members remove <appId> <accountId> --confirm-account-id <accountId>` | `remove_app_member` |
 | `unicas app-oauth-issuer get <appId>` | `get_app_oauth_issuer` |
 | `unicas app-oauth-issuer inspect <appId> <issuer>` | `inspect_app_oauth_issuer` |
 | `unicas app-oauth-issuer activate <appId> <inspectionId> --activation-proof <jws> [--etag E]` | `activate_app_oauth_issuer` |
 | `unicas app-ref-domains list <appId>` | `list_app_ref_domains` |
-| `unicas app-audit control <appId> [--limit N] [--cursor C] [--after ID]` | `list_app_control_audit_events` |
+| `unicas app-audit control <appId> [--actor-account-id ID] [--target-account-id ID] [--limit N] [--cursor C] [--after ID]` | `list_app_control_audit_events` |
 | `unicas app-audit root-domain-refs <appId> <refDomain> [--space-id S] [--limit N] [--cursor C]` | `list_space_root_domain_refs` |
 | `unicas app-audit root-domain-events <appId> <refDomain> [--space-id S] [--after N] [--limit N]` | `list_space_root_domain_events` |
-| `unicas platform-access list [--query Q] [--effective-access active\|blocked\|no_access] [--authority platform.admin\|apps.create\|none] [--limit N] [--cursor C]` | `list_platform_principals` |
-| `unicas platform-access get <principalRef>` | `get_platform_principal` |
-| `unicas platform-access update <principalRef> ... [--etag E]` | `update_platform_access` |
+| `unicas platform-access list [--query Q] [--effective-access active\|blocked\|no_access] [--authority platform.admin\|apps.create\|none] [--limit N] [--cursor C]` | `list_platform_accounts` |
+| `unicas platform-access get <accountId>` | `get_platform_account` |
+| `unicas platform-access grant\|revoke <accountId> <authority> --confirm-account-id <accountId>` | `grant_platform_authority` / `revoke_platform_authority` |
+| `unicas platform-access block\|restore <accountId> --confirm-account-id <accountId>` | `block_platform_account` / `restore_platform_account` |
 | `unicas platform-invitations list [--query Q] [--status S] [--limit N] [--cursor C]` | `list_platform_invitations` |
 | `unicas platform-invitations create <email> --authority A [--authority A] [--idempotency-key K]` | `create_platform_invitation` |
 | `unicas platform-invitations revoke <invitationId> --etag E --confirm-invitation-id <invitationId>` | `revoke_platform_invitation` |
-| `unicas platform-audit [--action A] [--actor-principal-ref R] [--target-principal-ref R] [--created-after MS] [--limit N] [--cursor C]` | `list_platform_audit_events` |
+| `unicas platform-audit [--action A] [--actor-account-id ID] [--target-account-id ID] [--created-after MS] [--limit N] [--cursor C]` | `list_platform_audit_events` |
 | `unicas logout` | RFC 7009 revocation + clears the session |
 | `unicas status` | Local session summary (no network) |
 | `unicas mcp` | Run as a stdio MCP server |
 
-MCP additionally exposes App invitation acceptance, managed issuer/capability,
-and Principal-owned Playground root operations. `whoami`, `stacks`, `members`,
-`oauth-issuer`, `ref-domains`, and `audit` retain their v1 Stack/Tenant schemas
-as explicitly labeled compatibility commands.
+MCP additionally exposes App invitation acceptance and managed issuer/capability
+operations. Retired commands (`principal`,
+`whoami`, `stacks`, `members`, `oauth-issuer`, `ref-domains`, and `audit`) are
+not supported and have no compatibility aliases. Use the current commands above.
+Old credentials without Account binding require a new login instead of migration.
+
+`unicas account` and the stdio Account tool use the client's
+`getCurrentAdministrator()` operation. Its `/admin/me` response contains only
+Account data, the masked current login method, and Account memberships.
 
 Plain commands print the tool's `structuredContent` as JSON on stdout;
 diagnostics go to stderr.
 
 ## Guardrails
 
-- **ETags.** App update, member removal, issuer activation, and MCP Playground mutations
-  need the current ETag. When `--etag` is omitted the CLI reads it first
+- **ETags.** App update and issuer activation need the current ETag. When
+  `--etag` is omitted the CLI reads it first
   (`get_app` / `get_app_oauth_issuer`).
 - **Platform authority.** Every platform command requires current
   `platform.admin`; `apps create` separately requires current `apps.create`.

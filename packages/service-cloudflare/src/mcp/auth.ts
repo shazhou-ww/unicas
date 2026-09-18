@@ -9,8 +9,13 @@ import {
   OidcClient,
   s256Challenge,
 } from "@unicas/control-auth";
-import { CONTROL_PLANE_MCP_SCOPES, emailAllowed } from "./config.js";
+import { CONTROL_PLANE_MCP_SCOPES } from "./config.js";
 import type { ControlPlaneMcpGrantProps } from "./server.js";
+import { AccountServiceError, ProviderRegistry, type AccountService, type ProviderAdapter, type VerifiedEmailEvidence } from "@unicas/service";
+import type { ProviderKind } from "@unicas/admin-protocol";
+import { checkMcpAccountAccess, type McpAccountCredential } from "./platform-access.js";
+import { GoogleProviderAdapter, createGitHubProvider, createMicrosoftPersonalProvider } from "../admin-bff/providers.js";
+import { ControlSessionStore } from "../control-sessions.js";
 
 const AUTH_COOKIE = "unicas_mcp_oauth";
 const CONSENT_COOKIE = "unicas_mcp_consent";
@@ -22,18 +27,21 @@ export interface OAuthAuthorizationEnv {
   OAUTH_PROVIDER?: OAuthHelpers;
   MCP_PUBLIC_ORIGIN?: string;
   PUBLIC_ORIGIN?: string;
-  GOOGLE_OIDC_CLIENT_ID?: string;
-  GOOGLE_OIDC_CLIENT_SECRET?: string;
+  OAUTH_GOOGLE_CLIENT_ID?: string;
+  OAUTH_GOOGLE_CLIENT_SECRET?: string;
+  OAUTH_MICROSOFT_CLIENT_ID?: string;
+  OAUTH_MICROSOFT_CLIENT_SECRET?: string;
+  MICROSOFT_OIDC_DISCOVERY_URL?: string;
+  OAUTH_GITHUB_CLIENT_ID?: string;
+  OAUTH_GITHUB_CLIENT_SECRET?: string;
   OAUTH_STATE_ENCRYPTION_KEY?: string;
   OIDC_ISSUER?: string;
   OIDC_DISCOVERY_URL?: string;
-  ADMIN_EMAIL_ALLOWLIST?: string;
 }
 
-export type PrincipalAuthorizationResult = "allowed" | "denied" | "unavailable";
-
-interface PendingGoogleAuthorization {
-  readonly kind: "google";
+interface PendingProviderAuthorization {
+  readonly kind: "provider";
+  readonly provider: ProviderKind;
   readonly oauthRequest: AuthRequest;
   readonly oidcNonce: string;
   readonly oidcCodeVerifier: string;
@@ -42,38 +50,40 @@ interface PendingGoogleAuthorization {
 interface PendingConsent {
   readonly kind: "consent";
   readonly oauthRequest: AuthRequest;
-  readonly identity: {
+  readonly identity: Required<McpAccountCredential> & {
+    readonly authProvider?: ProviderKind;
+    readonly authenticatedAt?: number;
     readonly identityIssuer: string;
     readonly subject: string;
     readonly displayName: string | null;
     readonly emailForDisplay: string | null;
+    readonly verifiedEmailEvidence: readonly VerifiedEmailEvidence[];
   };
   readonly clientName: string;
   readonly csrfToken: string;
 }
 
-type PendingAuthorization = PendingGoogleAuthorization | PendingConsent;
+type PendingAuthorization = PendingProviderAuthorization | PendingConsent;
 
 export interface OAuthAuthorizationHandlerOptions {
   readonly oidcFactory?: (env: OAuthAuthorizationEnv) => OidcClient;
-  readonly authorizePrincipal?: (
-    env: OAuthAuthorizationEnv,
-    principal: { readonly issuer: string; readonly subject: string },
-  ) => Promise<PrincipalAuthorizationResult>;
+  readonly providerRegistryFactory?: (env: OAuthAuthorizationEnv) => ProviderRegistry;
+  readonly accountServiceFactory: (env: OAuthAuthorizationEnv) => Pick<AccountService, "resolveExternalIdentity" | "authorizeCredential">;
 }
 
-export function createOAuthAuthorizationHandler(options: OAuthAuthorizationHandlerOptions = {}) {
+export function createOAuthAuthorizationHandler(options: OAuthAuthorizationHandlerOptions) {
   return {
     async fetch(request: Request, env: OAuthAuthorizationEnv): Promise<Response> {
       const url = new URL(request.url);
       if (url.pathname === "/oauth/authorize" && request.method === "GET") {
         return startAuthorization(request, env, options);
       }
-      if (url.pathname === "/oauth/google/callback" && request.method === "GET") {
-        return finishGoogleAuthentication(request, env, options);
+      const callback = /^\/oauth\/callback\/(google|microsoft|github)$/.exec(url.pathname);
+      if (callback && request.method === "GET") {
+        return finishProviderAuthentication(request, env, options, callback[1] as ProviderKind);
       }
       if (url.pathname === "/oauth/authorize" && request.method === "POST") {
-        return finishConsent(request, env);
+        return finishConsent(request, env, options);
       }
       return new Response("Not Found", { status: 404 });
     },
@@ -97,16 +107,34 @@ async function startAuthorization(
   if (unsupportedScopes.length > 0) {
     return oauthErrorRedirect(oauthRequest, "invalid_scope", "The request contains an unsupported scope");
   }
+  const registry = providerRegistry(env, options);
+  const requestedProvider = new URL(request.url).searchParams.get("provider");
+  if (requestedProvider === null && registry.list().length > 1) {
+    const links = registry.list().map(provider => {
+      const target = new URL(request.url);
+      target.searchParams.set("provider", provider.kind);
+      return `<a href="${escapeHtml(target.pathname + target.search)}">Continue with ${escapeHtml(provider.displayName)}</a>`;
+    }).join("");
+    return new Response(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in - UniCAS</title><style>body{margin:0;background:#f8f8f9;color:#18181b;font:14px/1.5 'Aptos','Segoe UI',sans-serif;letter-spacing:0}main{max-width:380px;margin:18vh auto;padding:24px}h1{font-size:24px}a{display:block;margin:12px 0;padding:12px;border:1px solid #d4d4d8;border-radius:6px;background:white;color:inherit;text-decoration:none;text-align:center}a:focus-visible{outline:2px solid #18181b;outline-offset:2px}</style></head><body><main><h1>Sign in to UniCAS</h1>${links}</main></body></html>`, {
+      headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" },
+    });
+  }
+  const selected = requestedProvider ?? registry.list()[0]?.kind;
+  if (selected !== "google" && selected !== "microsoft" && selected !== "github") return authFailure("Authentication could not be started");
+  const adapter = registry.get(selected);
+  if (!adapter) return authFailure("Authentication could not be started");
   const transactionId = randomToken();
   const oidcNonce = generateOidcNonce();
   const oidcCodeVerifier = generatePkceVerifier();
   await writeTransaction(env, transactionId, {
-    kind: "google",
+    kind: "provider",
+    provider: selected,
     oauthRequest,
     oidcNonce,
     oidcCodeVerifier,
   });
-  const location = await oidcClient(env, options).authorizationUrl({
+  const location = await adapter.begin({
+    purpose: "mcp",
     state: transactionId,
     nonce: oidcNonce,
     codeChallenge: await s256Challenge(oidcCodeVerifier),
@@ -114,42 +142,41 @@ async function startAuthorization(
   return redirectWithCookie(location, AUTH_COOKIE, transactionId);
 }
 
-async function finishGoogleAuthentication(
+async function finishProviderAuthentication(
   request: Request,
   env: OAuthAuthorizationEnv,
   options: OAuthAuthorizationHandlerOptions,
+  provider: ProviderKind,
 ): Promise<Response> {
   const url = new URL(request.url);
   const transactionId = url.searchParams.get("state");
   const code = url.searchParams.get("code");
-  if (!transactionId || !code || readCookie(request, AUTH_COOKIE) !== transactionId) {
-    return authFailure("Invalid or expired Google authorization state");
+  if (url.searchParams.has("error") || !transactionId || !code || readCookie(request, AUTH_COOKIE) !== transactionId) {
+    return authFailure("Invalid or expired authorization state");
   }
   const transaction = await takeTransaction(env, transactionId);
-  if (!transaction || transaction.kind !== "google") {
-    return authFailure("Invalid or expired Google authorization state");
+  if (!transaction || transaction.kind !== "provider" || transaction.provider !== provider) {
+    return authFailure("Invalid or expired authorization state");
   }
   try {
-    const oidc = oidcClient(env, options);
-    const exchanged = await oidc.exchangeCode({ code, codeVerifier: transaction.oidcCodeVerifier });
-    const identity = await oidc.verifyIdToken({
-      idToken: exchanged.idToken,
+    const adapter = providerRegistry(env, options).get(provider);
+    if (!adapter) return authFailure("Authentication could not be completed");
+    const identity = await adapter.complete({
+      code,
+      state: transactionId,
+      codeVerifier: transaction.oidcCodeVerifier,
       nonce: transaction.oidcNonce,
+      authenticationEventId: randomToken(),
     });
-    if (options.authorizePrincipal) {
-      const admission = await options.authorizePrincipal(env, {
-        issuer: env.OIDC_ISSUER ?? "https://accounts.google.com",
-        subject: identity.sub,
-      });
-      if (admission === "denied") {
-        return authFailure("This Google account is not allowed to access the UniCAS control plane", 403);
-      }
-      if (admission === "unavailable") {
-        return authFailure("Platform access could not be verified", 503);
-      }
-    } else if (!identity.emailVerified || !emailAllowed(identity.email, env.ADMIN_EMAIL_ALLOWLIST)) {
-      return authFailure("This Google account is not allowed to access the UniCAS control plane", 403);
+    const account = await options.accountServiceFactory(env).resolveExternalIdentity(identity.issuer, identity.subject);
+    if (!account || (!account.hasAppMembership && account.platformAuthorities.length === 0)) {
+      return authFailure("This account is not allowed to access the UniCAS control plane", 403);
     }
+    const accountBinding = {
+      accountId: account.account.accountId,
+      externalIdentityId: account.authenticatedIdentity.externalIdentityId,
+      credentialVersion: account.account.credentialVersion,
+    };
     const client = await oauthProvider(env).lookupClient(transaction.oauthRequest.clientId);
     if (!client) return authFailure("OAuth client is no longer registered");
     const consentId = randomToken();
@@ -158,10 +185,14 @@ async function finishGoogleAuthentication(
       kind: "consent",
       oauthRequest: transaction.oauthRequest,
       identity: {
-        identityIssuer: env.OIDC_ISSUER ?? "https://accounts.google.com",
-        subject: identity.sub,
-        displayName: identity.name,
-        emailForDisplay: identity.email,
+        ...accountBinding,
+        authProvider: identity.provider,
+        authenticatedAt: identity.authenticatedAt,
+        identityIssuer: identity.issuer,
+        subject: identity.subject,
+        displayName: identity.displayName,
+        emailForDisplay: identity.verifiedEmailEvidence[0]?.normalizedEmail ?? null,
+        verifiedEmailEvidence: identity.verifiedEmailEvidence,
       },
       clientName: client.clientName ?? "MCP client",
       csrfToken,
@@ -176,12 +207,12 @@ async function finishGoogleAuthentication(
       publicOrigin,
       clientRedirectOrigin,
     );
-  } catch {
-    return authFailure("Google authentication could not be completed");
+  } catch (error) {
+    return authFailure("Authentication could not be completed", error instanceof AccountServiceError ? 403 : 503);
   }
 }
 
-async function finishConsent(request: Request, env: OAuthAuthorizationEnv): Promise<Response> {
+async function finishConsent(request: Request, env: OAuthAuthorizationEnv, options: OAuthAuthorizationHandlerOptions): Promise<Response> {
   const publicOrigin = mcpPublicOrigin(env);
   if (!isSameOriginConsent(request, publicOrigin)) {
     return authFailure("Consent must be submitted from the authorization server origin", 403);
@@ -204,6 +235,8 @@ async function finishConsent(request: Request, env: OAuthAuthorizationEnv): Prom
   if (decision !== "approve") {
     return oauthDeniedRedirect(pending.oauthRequest);
   }
+  const error = await checkMcpAccountAccess(options.accountServiceFactory(env), pending.identity);
+  if (error) return error;
   const grantedScopes = pending.oauthRequest.scope.filter(
     (scope): scope is (typeof CONTROL_PLANE_MCP_SCOPES)[number] =>
       CONTROL_PLANE_MCP_SCOPES.includes(scope as (typeof CONTROL_PLANE_MCP_SCOPES)[number]),
@@ -218,7 +251,7 @@ async function finishConsent(request: Request, env: OAuthAuthorizationEnv): Prom
   };
   const { redirectTo } = await oauthProvider(env).completeAuthorization({
     request: pending.oauthRequest,
-    userId: await identityHandle(pending.identity.identityIssuer, pending.identity.subject),
+    userId: pending.identity.accountId,
     metadata: {
       clientHandle: oauthClientHandle,
       clientName: pending.clientName,
@@ -252,16 +285,38 @@ function parseOrigin(value: string): string | null {
 
 function oidcClient(env: OAuthAuthorizationEnv, options: OAuthAuthorizationHandlerOptions): OidcClient {
   if (options.oidcFactory) return options.oidcFactory(env);
-  const clientId = requireEnv(env.GOOGLE_OIDC_CLIENT_ID, "GOOGLE_OIDC_CLIENT_ID");
-  const clientSecret = requireEnv(env.GOOGLE_OIDC_CLIENT_SECRET, "GOOGLE_OIDC_CLIENT_SECRET");
+  const clientId = requireEnv(env.OAUTH_GOOGLE_CLIENT_ID, "OAUTH_GOOGLE_CLIENT_ID");
+  const clientSecret = requireEnv(env.OAUTH_GOOGLE_CLIENT_SECRET, "OAUTH_GOOGLE_CLIENT_SECRET");
   const publicOrigin = mcpPublicOrigin(env);
   return new OidcClient({
     issuer: env.OIDC_ISSUER ?? "https://accounts.google.com",
     discoveryUrl: env.OIDC_DISCOVERY_URL,
     clientId,
     clientSecret,
-    redirectUri: `${publicOrigin}/oauth/google/callback`,
+    redirectUri: `${publicOrigin}/oauth/callback/google`,
   });
+}
+
+function providerRegistry(env: OAuthAuthorizationEnv, options: OAuthAuthorizationHandlerOptions): ProviderRegistry {
+  if (options.providerRegistryFactory) return options.providerRegistryFactory(env);
+  const origin = mcpPublicOrigin(env);
+  const adapters: ProviderAdapter[] = [];
+  if (options.oidcFactory || env.OAUTH_GOOGLE_CLIENT_ID && env.OAUTH_GOOGLE_CLIENT_SECRET) {
+    adapters.push(new GoogleProviderAdapter(oidcClient(env, options), env.OIDC_ISSUER ?? "https://accounts.google.com"));
+  }
+  if (env.OAUTH_MICROSOFT_CLIENT_ID && env.OAUTH_MICROSOFT_CLIENT_SECRET) {
+    adapters.push(createMicrosoftPersonalProvider({
+      clientId: env.OAUTH_MICROSOFT_CLIENT_ID, clientSecret: env.OAUTH_MICROSOFT_CLIENT_SECRET,
+      discoveryUrl: env.MICROSOFT_OIDC_DISCOVERY_URL, redirectUri: `${origin}/oauth/callback/microsoft`,
+    }));
+  }
+  if (env.OAUTH_GITHUB_CLIENT_ID && env.OAUTH_GITHUB_CLIENT_SECRET) {
+    adapters.push(createGitHubProvider({
+      clientId: env.OAUTH_GITHUB_CLIENT_ID, clientSecret: env.OAUTH_GITHUB_CLIENT_SECRET,
+      redirectUri: `${origin}/oauth/callback/github`,
+    }));
+  }
+  return new ProviderRegistry(adapters);
 }
 
 function mcpPublicOrigin(env: OAuthAuthorizationEnv): string {
@@ -274,11 +329,24 @@ async function writeTransaction(
   value: PendingAuthorization,
 ): Promise<void> {
   const encrypted = await encryptJson(value, requireEnv(env.OAUTH_STATE_ENCRYPTION_KEY, "OAUTH_STATE_ENCRYPTION_KEY"));
+  if (env.CAS_CONTROL_DB) {
+    await new ControlSessionStore(env.CAS_CONTROL_DB).create(transactionKey(id), encrypted, TRANSACTION_TTL_SECONDS * 1000);
+    return;
+  }
   await env.OAUTH_KV.put(transactionKey(id), encrypted, { expirationTtl: TRANSACTION_TTL_SECONDS });
 }
 
 async function takeTransaction(env: OAuthAuthorizationEnv, id: string): Promise<PendingAuthorization | null> {
   const key = transactionKey(id);
+  if (env.CAS_CONTROL_DB) {
+    const consumed = await new ControlSessionStore(env.CAS_CONTROL_DB).take(key);
+    if (!consumed) return null;
+    try {
+      return await decryptJson(consumed.encryptedPayload, requireEnv(env.OAUTH_STATE_ENCRYPTION_KEY, "OAUTH_STATE_ENCRYPTION_KEY"));
+    } catch {
+      return null;
+    }
+  }
   const encrypted = await env.OAUTH_KV.get(key);
   if (!encrypted) return null;
   await env.OAUTH_KV.delete(key);
@@ -385,7 +453,7 @@ export function renderConsent(pending: PendingConsent, consentId: string, public
       <p class="intro">This application is requesting access to your UniCAS control plane.</p>
       <div class="identity">
         <span class="avatar" aria-hidden="true">${escapeHtml(identityInitial(pending))}</span>
-        <span class="identity-copy"><span>Signed in as</span><strong>${escapeHtml(pending.identity.emailForDisplay ?? pending.identity.subject)}</strong></span>
+        <span class="identity-copy"><span>Signed in as</span><strong>${escapeHtml(pending.identity.emailForDisplay ?? pending.identity.displayName ?? pending.identity.accountId ?? "UniCAS Account")}</strong></span>
       </div>
       <p class="section-title">Requested permissions</p>
       <p class="resource">${escapeHtml(String(pending.oauthRequest.resource ?? "UniCAS control plane"))}</p>
@@ -422,7 +490,7 @@ function scopeDetail(scope: string): {
 }
 
 function identityInitial(pending: PendingConsent): string {
-  const identity = pending.identity.emailForDisplay ?? pending.identity.displayName ?? pending.identity.subject;
+  const identity = pending.identity.emailForDisplay ?? pending.identity.displayName ?? pending.identity.accountId ?? "UniCAS Account";
   return identity.trim().charAt(0).toUpperCase() || "U";
 }
 
@@ -512,10 +580,6 @@ function readCookie(request: Request, name: string): string | null {
 
 function randomToken(): string {
   return base64UrlEncode(crypto.getRandomValues(new Uint8Array(24)));
-}
-
-async function identityHandle(issuer: string, subject: string): Promise<string> {
-  return sha256Hex(`${issuer}\0${subject}`);
 }
 
 async function sha256Hex(value: string): Promise<string> {

@@ -34,8 +34,8 @@ never copy one task between repositories.
 1. Read the repository's agent instructions and `tasks/README.md`; local policy
    may refine this skill.
 2. Run `repoledger doctor` before claiming or resuming when the repository has
-   adopted the CLI. It refreshes the shared branch and validates full history,
-   repository state, and the worktree identity; `--offline` is insufficient.
+   adopted the CLI. It validates local repository state and the effective Git
+   identity. Refresh the shared branch separately before publication.
 3. Use `repoledger status` as the deterministic task-position inventory, then
    read only the relevant backlog and ongoing definitions needed to judge
    semantic overlap and ownership. `status` does not establish readiness or
@@ -43,22 +43,24 @@ never copy one task between repositories.
 4. Preserve unrelated changes and never move another identity's task to clear
    a conflict.
 
-The authoritative identity is the lowercase kebab-case value of
-`task-ledger.identity` in worktree-scoped Git config. It requires
-`extensions.worktreeConfig=true` and a matching
-`tasks/ongoing/<identity>/.gitkeep` on the refreshed shared primary branch.
-Never infer it or fall back to `task-ledger.defaultIdentity`; that global value
-is only an initialization suggestion. If setup is missing, follow the
+The authoritative identity is the lowercase kebab-case effective value of
+`task-ledger.identity` from Git config. A global value provides a default across
+repositories, and a worktree-scoped value may override it when that worktree
+needs a different identity. Require a matching local
+`tasks/ongoing/<identity>/.gitkeep`; never infer identity from paths, branches,
+users, agents, or visible lanes. Identity configuration belongs to Git, not
+repoledger. If setup is missing, follow the
 [adoption guide](./references/adoption.md) before task work.
 
 Run `repoledger check --task <task-name>` after changing one task and
-`repoledger check` for repository-wide changes and CI. Focused checks still
-enforce global configuration, layout, identity-lane, and duplicate-position
-safety. The CLI validates facts but never decides admission, semantic overlap,
-ownership consent, acceptance, or lifecycle state. Explicit `init --apply` and
-`plan ... --apply` operations may perform a prevalidated local mutation, but
-never stage, commit, push, merge, or publish it. Without the CLI, apply the
-fallback checks and moves below.
+`repoledger check` for backlog plus the current worktree's ongoing tasks. Use
+`repoledger check --all-identities --archived` only when repository-wide or CI
+coverage is intended. Focused checks remain inside the selected scope. The CLI
+validates local facts but never decides admission, semantic overlap, ownership
+consent, acceptance, or lifecycle state. Explicit `init --apply` and
+`task ... --apply` operations may perform a prevalidated local mutation, but
+never fetch, inspect history, stage, commit, push, merge, or publish it. Without
+the CLI, apply the fallback checks and moves below.
 
 ## Publish Milestones
 
@@ -71,6 +73,11 @@ Before each publication, refresh the remote, reconcile concurrent work without
 discarding it, run focused checks, publish, and verify the commit is reachable
 from the refreshed remote primary branch. Local commits, side branches, and
 unmerged pull requests are not published milestones.
+
+Record `Published` and concise human-readable evidence in the milestone commit
+itself, then verify publication from Git history. Never copy commit hashes into
+task artifacts; repository history is the source of truth for exact commit
+identity and reachability.
 
 Authentication, branch protection, required review, failed validation, push
 rejection, and conflicts remain real blockers. Never force-push around them.
@@ -101,16 +108,16 @@ After `task-new` intake and admission:
    it bidirectionally when possible.
 3. After `doctor`, use `status` and the relevant task definitions to recheck
    semantic overlap and ownership.
-4. Preview `repoledger plan claim <task-name>`, review its exact source,
-   destination, reference edits, and blockers, then rerun it with `--apply`.
-   A successful apply moves the complete directory, rewrites affected links,
-   verifies the mechanical postconditions, and generates the initial
-   `Progress.md` without inventing approvals or publication evidence.
+4. Preview `repoledger task claim <task-name> --update-all-refs`, review its
+   exact source, destination, reference edits, and blockers, then rerun it with
+   `--apply`. A successful apply moves the complete directory, rewrites the
+   affected links, verifies the mechanical postconditions, and generates the
+   initial `Progress.md` without inventing approvals or publication evidence.
 5. Review and complete the generated current state and next action. If the CLI
    is unavailable, use `git mv`, the [progress template](./assets/Progress.md),
    and the manual checks in [Verify Every Move](#verify-every-move).
-6. Commit only the claim artifacts, publish them, and verify the claim before
-   substantive implementation.
+6. Mark the claim milestone `Published` with concise evidence in the claim
+   commit, publish it, and verify the claim before substantive implementation.
 
 ## Work And Coordinate
 
@@ -153,8 +160,16 @@ The checkpoints cover:
    model or data changes.
 4. **Architecture alignment:** affected modules, responsibilities, boundaries,
    dependencies, and any split or combination before structural implementation.
-5. **Delivery acceptance:** the integrated revision, validation evidence, and
-   any manual test result before marking the task completed and archiving it.
+5. **Delivery acceptance:** the published implementation, validation evidence,
+   and any manual test result before marking the task completed and archiving
+   it.
+
+Keep human review artifacts decision-first and concise: show material changes,
+governing reasons, risks, and the requested decision without repeating task
+history or embedding exhaustive implementation evidence. When installed,
+`ui-change-review` and `business-data-model-review` are optional communication
+aids for the corresponding artifacts. Their absence never blocks a checkpoint,
+and neither skill owns task state, publication, or approval.
 
 Claim publication and research needed to prepare a review artifact may happen
 before approval. At each applicable gate:
@@ -177,12 +192,14 @@ checkpoints when `Progress.md` records the reason; do not label it completed.
 
 ## Verify Every Move
 
-For a move applied by `repoledger plan ... --apply`, require `applied: true`
+For a move applied by `repoledger task ... --apply`, require `applied: true`
 with no blockers and resolve any recovery or cleanup diagnostic before further
 task work. The CLI snapshots every source artifact, confines paths and links,
-performs the move and reference rewrites transactionally, and verifies the
-destination, absent source, preserved identity marker, and unique task
-position. Do not repeat those mechanical checks with ad hoc commands.
+performs the move and requested reference rewrites transactionally, and verifies
+the destination, absent source, preserved identity marker, and unique task
+position. Without `--update-all-refs`, it leaves references unchanged and emits
+warnings that must be resolved manually. Do not repeat the other mechanical
+checks with ad hoc commands.
 
 For a manual move when the CLI is unavailable:
 
@@ -220,8 +237,8 @@ Coordinate the ownership transfer explicitly and update `Progress.md` before
 moving the task. The receiving worktree previews and applies the move with:
 
 ```sh
-repoledger plan claim <task-name> --take-from <source-identity>
-repoledger plan claim <task-name> --take-from <source-identity> --apply
+repoledger task claim <task-name> --take-from <source-identity> --update-all-refs
+repoledger task claim <task-name> --take-from <source-identity> --update-all-refs --apply
 ```
 
 Review the planned source, destination, and reference edits before apply. The
@@ -238,18 +255,20 @@ To complete:
 
 1. Finish all agent-verifiable criteria, run focused validation, and update
    `Task.md` and `Progress.md` with actual results.
-2. Publish implementation completion while the task remains ongoing and verify
-   it on the refreshed remote branch.
+2. Mark implementation completion `Published` with concise evidence in the
+   implementation-completion commit while the task remains ongoing, publish
+   it, and verify it on the refreshed remote branch.
 3. Complete any required manual user acceptance.
 4. Present the delivery checkpoint, obtain explicit human approval, record and
    publish it, and mark `Completed` only after every required criterion and
    review checkpoint passes.
 5. After recording the outcome and delivery approval, preview
-   `repoledger plan archive <task-name>`, review its exact move and reference
-   edits, then rerun it with `--apply`. In the archived `Progress.md`, mark the
-   archive action and milestone published by the resulting final integration;
-   commit, publish, and verify it separately. Without the CLI, move the whole
-   task manually and apply the fallback checks above.
+   `repoledger task archive <task-name> --update-all-refs`, review its exact
+   move and reference edits, then rerun it with `--apply`. In the archived
+   `Progress.md`, mark the archive action and milestone `Published` in the
+   resulting final integration; commit, publish, and verify it separately.
+   Without the CLI, move the whole task manually and apply the fallback checks
+   above.
 
 To abandon, record the reason, useful findings, validation state, and follow-up
 in `Progress.md`; set `Abandoned`, archive, and publish. Do not claim
@@ -267,11 +286,11 @@ of renderer behavior.
 For repository-local targets outside the task directory, use
 `/path/from/repository/root` only when the repository profile declares that all
 supported renderers resolve it. Otherwise use portable file-relative links and
-let `repoledger plan ... --apply` update move-sensitive inbound and outbound
-references. An inbound reference from archived task history blocks apply rather
-than rewriting that history. For manual moves, update the same references
-yourself. Preserve external and fragment-only links, and never couple local
-links to a machine path, repository owner, remote, or branch.
+let `repoledger task ... --update-all-refs --apply` update move-sensitive
+inbound and outbound references. Without `--update-all-refs`, the move still
+applies but all affected references remain unchanged and are reported as
+warnings for manual repair. Preserve external and fragment-only links, and
+never couple local links to a machine path, repository owner, remote, or branch.
 
 ## Canonical Layout
 

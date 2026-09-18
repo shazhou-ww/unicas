@@ -1,8 +1,6 @@
 import {
   matchAppAdminRoute,
-  matchCasAdminRoute,
   type AppAdminRoute,
-  type CasAdminRoute,
 } from "@unicas/admin-protocol";
 import {
   CapabilityError,
@@ -54,12 +52,6 @@ export interface AuthorizedSpaceCall {
   readonly refDomain?: string;
 }
 
-export interface AdminRequestContext {
-  readonly request: Request;
-  readonly route: CasAdminRoute;
-  readonly platform: ServicePlatform;
-}
-
 export interface AppAdminRequestContext {
   readonly request: Request;
   readonly route: AppAdminRoute;
@@ -69,7 +61,6 @@ export interface AppAdminRequestContext {
 export interface ServiceContext {
   readonly platform: ServicePlatform;
   authorizeTenantRequest(context: TenantRequestContext): Promise<AuthorizedTenantCall>;
-  handleAdminRequest(context: AdminRequestContext): Promise<Response>;
   authorizeSpaceRequest?(context: SpaceRequestContext): Promise<AuthorizedSpaceCall>;
   handleAppAdminRequest?(context: AppAdminRequestContext): Promise<Response>;
 }
@@ -77,7 +68,6 @@ export interface ServiceContext {
 export type UniCasServiceRoute =
   | { readonly plane: "tenant"; readonly route: CasRoute }
   | { readonly plane: "space"; readonly route: AppSpaceRoute }
-  | { readonly plane: "admin"; readonly route: CasAdminRoute }
   | { readonly plane: "app-admin"; readonly route: AppAdminRoute };
 
 export function matchUniCasServiceRoute(request: Request): UniCasServiceRoute | null {
@@ -88,8 +78,6 @@ export function matchUniCasServiceRoute(request: Request): UniCasServiceRoute | 
   if (spaceRoute) return { plane: "space", route: spaceRoute };
   const appAdminRoute = matchAppAdminRoute(request.method, pathname);
   if (appAdminRoute) return { plane: "app-admin", route: appAdminRoute };
-  const adminRoute = matchCasAdminRoute(request.method, pathname);
-  if (adminRoute) return { plane: "admin", route: adminRoute };
   return null;
 }
 
@@ -128,11 +116,6 @@ export function createUniCasService(context: ServiceContext): HttpActor {
             tenantAuthorizationErrorResponse,
           );
       }
-      if (matched.plane === "admin") return context.handleAdminRequest({
-        request,
-        route: matched.route,
-        platform: context.platform,
-      });
       if (!context.handleAppAdminRequest) return Promise.resolve(notImplementedResponse());
       return context.handleAppAdminRequest({
         request,

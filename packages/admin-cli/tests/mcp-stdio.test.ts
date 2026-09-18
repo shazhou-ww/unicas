@@ -70,7 +70,7 @@ async function startStdioServer(fetchImpl: typeof fetch): Promise<{ stdin: PassT
 describe("unicas mcp (stdio server)", () => {
   test("answers initialize, lists the tool contract, and serves tools/call from the admin client", async () => {
     await seedSession();
-    const server = new FakeAdminApi();
+    const server = new FakeAdminApi({ adminVocabulary: "app" });
     const { stdin, reader, done } = await startStdioServer(server.fetch);
 
     stdin.write(`${JSON.stringify({
@@ -98,14 +98,14 @@ describe("unicas mcp (stdio server)", () => {
     const tools = (toolsList.result as { tools: Array<{ name: string }> }).tools;
     expect(tools.map((tool) => tool.name)).toEqual(TOOL_CATALOG.map((tool) => tool.name));
     expect(tools.map((tool) => tool.name)).toContain("mint_managed_space_capability");
-    expect(tools.map((tool) => tool.name)).toContain("get_oauth_issuer");
+    expect(tools.map((tool) => tool.name)).toContain("get_app_oauth_issuer");
     expect(tools.map((tool) => tool.name)).not.toContain("add_issuer_key");
 
     stdin.write(`${JSON.stringify({
       jsonrpc: "2.0",
       id: 3,
       method: "tools/call",
-      params: { name: "whoami", arguments: {} },
+      params: { name: "get_current_account", arguments: {} },
     })}\n`);
 
     const call = await reader.next();
@@ -116,7 +116,7 @@ describe("unicas mcp (stdio server)", () => {
     };
     expect(callResult.isError).toBe(false);
     expect(callResult.structuredContent).toMatchObject({
-      identity: { subject: "sub-1" },
+      account: { accountId: `acct_${"a".repeat(22)}` },
     });
     expect(callResult.structuredContent.memberships).toHaveLength(1);
 
@@ -125,9 +125,9 @@ describe("unicas mcp (stdio server)", () => {
       id: 4,
       method: "tools/call",
       params: {
-        name: "invite_member",
+        name: "invite_app_member",
         arguments: {
-          stackId: "cas_stack_a",
+          appId: "cas_stack_a",
           email: "alice@example.com",
           confirmEmail: "mallory@example.com",
           idempotencyKey: "invite-1",
@@ -150,7 +150,7 @@ describe("unicas mcp (stdio server)", () => {
     expect(me?.cookie).toContain("cas_admin_session=");
   });
 
-  test("serves the App identity through the version-distinct principal tool", async () => {
+  test("rejects the retired Principal alias and serves the current Account tool", async () => {
     await seedSession();
     const server = new FakeAdminApi({ adminVocabulary: "app" });
     const { stdin, reader, done } = await startStdioServer(server.fetch);
@@ -175,13 +175,24 @@ describe("unicas mcp (stdio server)", () => {
     })}\n`);
 
     const call = await reader.next();
-    expect(call.result).toMatchObject({
+    expect(call.error ?? (call.result as { isError?: boolean })?.isError).toBeTruthy();
+
+    stdin.write(`${JSON.stringify({
+      jsonrpc: "2.0",
+      id: 20,
+      method: "tools/call",
+      params: { name: "get_current_account", arguments: {} },
+    })}\n`);
+    const account = await reader.next();
+    expect(account.result).toMatchObject({
       isError: false,
       structuredContent: {
-        principal: { subject: "sub-1" },
+        account: { accountId: `acct_${"a".repeat(22)}` },
+        authenticatedIdentity: { provider: "google" },
         memberships: [{ appId: "cas_stack_a" }],
       },
     });
+    expect((account.result as { structuredContent: object }).structuredContent).not.toHaveProperty("principal");
 
     stdin.write(`${JSON.stringify({
       jsonrpc: "2.0",
@@ -274,14 +285,15 @@ describe("unicas mcp (stdio server)", () => {
       structuredContent: { items: [{ eventId: "platform-event-1" }] },
     });
 
-    stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "list_platform_principals", arguments: { authority: "platform.admin" } } })}\n`);
-    expect((await reader.next()).result).toMatchObject({ isError: false, structuredContent: { items: [{ principalRef: "principal-1" }] } });
+    const platformAccountId = `acct_${"a".repeat(22)}`;
+    stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "list_platform_accounts", arguments: { authority: "platform.admin" } } })}\n`);
+    expect((await reader.next()).result).toMatchObject({ isError: false, structuredContent: { items: [{ accountId: platformAccountId }] } });
 
-    stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 11, method: "tools/call", params: { name: "get_platform_principal", arguments: { principalRef: "principal-1" } } })}\n`);
-    expect((await reader.next()).result).toMatchObject({ isError: false, structuredContent: { principalRef: "principal-1" } });
+    stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 11, method: "tools/call", params: { name: "get_platform_account", arguments: { accountId: platformAccountId } } })}\n`);
+    expect((await reader.next()).result).toMatchObject({ isError: false, structuredContent: { accountId: platformAccountId } });
 
-    stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 12, method: "tools/call", params: { name: "update_platform_access", arguments: { principalRef: "principal-1", confirmPrincipalRef: "principal-1", authorities: ["apps.create"], etag: '"1"' } } })}\n`);
-    expect((await reader.next()).result).toMatchObject({ isError: false, structuredContent: { etag: '"2"' } });
+    stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 12, method: "tools/call", params: { name: "revoke_platform_authority", arguments: { accountId: platformAccountId, confirmAccountId: platformAccountId, authority: "apps.create" } } })}\n`);
+    expect((await reader.next()).result).toMatchObject({ isError: false, structuredContent: { ok: true } });
 
     stdin.end();
     await done;
@@ -299,7 +311,7 @@ describe("unicas mcp (stdio server)", () => {
     })}\n`);
     await reader.next();
     stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized", params: {} })}\n`);
-    stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "whoami", arguments: {} } })}\n`);
+    stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_current_account", arguments: {} } })}\n`);
 
     const call = await reader.next();
     const callResult = call.result as { isError?: boolean; structuredContent?: { message?: string } };

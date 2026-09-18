@@ -55,11 +55,15 @@ export async function withAdminClient<T>(
   ctx: CliContext,
   fn: (admin: AdminClient) => Promise<T>,
 ): Promise<T> {
-  const session = await ctx.store.load();
+  let session = await ctx.store.load();
   requireLoggedIn(session);
   const admin = createAdminClient({
     baseUrl: ctx.config.adminOrigin,
     getSession: async () => ({ cookie: session.cookie, csrfToken: session.csrfToken }),
+    onSessionChanged: async next => {
+      session = { ...session, ...next };
+      await ctx.store.save(session);
+    },
     fetcher: ctx.fetchImpl,
   });
   return fn(admin);
@@ -69,26 +73,18 @@ export async function withAdminClient<T>(
 // ETag resolution
 // ---------------------------------------------------------------------------
 
-export async function resolveStackEtag(admin: AdminClient, stackId: string): Promise<string> {
-  const { etag } = await admin.getStack({ stackId });
-  if (etag.length === 0) {
-    throw new CliError(`could not resolve the current ETag for stack '${stackId}'`, 1);
+export function parseBoundedLimit(value: string): number {
+  const limit = Number(value);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+    throw new Error(`invalid --limit '${value}'; expected an integer between 1 and 200`);
   }
-  return etag;
+  return limit;
 }
 
 export async function resolveAppEtag(admin: AdminClient, appId: string): Promise<string> {
   const { etag } = await admin.getApp({ appId });
   if (etag.length === 0) {
     throw new CliError(`could not resolve the current ETag for App '${appId}'`, 1);
-  }
-  return etag;
-}
-
-export async function resolveOAuthIssuerEtag(admin: AdminClient, stackId: string): Promise<string> {
-  const { etag } = await admin.getOAuthIssuer({ stackId });
-  if (etag.length === 0) {
-    throw new CliError(`could not resolve the current ETag for OAuth issuer of stack '${stackId}'`, 1);
   }
   return etag;
 }

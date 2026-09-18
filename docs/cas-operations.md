@@ -10,8 +10,9 @@ Runbooks, SLOs, and alerting for the independently deployed CAS middleware
 | Control D1 | `unicas-control` (`3a64d58d-…`) | Apps, issuers, members, and audit; physical tables still use Stack names |
 | Data D1 | `unicas-tenant` (`c3924c96-…`) | App/Space nodes, edges, and Root Refs; resource name is a physical compatibility identifier |
 | R2 | `unicas-content`, `unicas-content-preview` | node content |
+| Email | `EMAIL` send binding | Microsoft invitation challenges from the configured UniCAS sender |
 
-Secrets live only as Worker secrets (Google OIDC client secret,
+Secrets live only as Worker secrets (Google, Microsoft, and GitHub client secrets,
 `SESSION_ENCRYPTION_KEYS`, `OAUTH_STATE_ENCRYPTION_KEY`,
 `CAS_AUDIT_READER_KEY`, managed issuer private keys) — never
 in vars or source. Deployment credentials are supplied through
@@ -48,6 +49,8 @@ Cloudflare dashboard / logpush):
    `unknown_issuer` and `registry_unavailable` in their HTTP responses.
 - `admin_oidc_callback_failed` — administrator login callback failures with a
    bounded reason and no token material.
+- `admin_email_challenge_delivery_failed` — generic Email binding failure; the
+   event contains no address, code, invitation token, or provider payload.
 
 Roll-up per 5-min window (via CF Analytics API or a logpush consumer):
 service request count + 5xx rate, Space 401/403 rate by error code
@@ -179,172 +182,55 @@ invitation ETag. Acceptance returns only `{ appId }` for navigation. The
 Console's Members section includes Administrators and Invitations views with
 filtering, refresh, paging, and revoke confirmation. A freshly created URL is
 copyable only from that creation result and is cleared when switching Apps;
-the invitation list cannot recover it. Legacy creation/acceptance response
-shapes remain unchanged.
+the invitation list cannot recover it.
 
-### Platform Access bootstrap and migration
+### Platform Account bootstrap and reset
 
-Platform authorization is deny-by-default and keyed only by exact OIDC
-`(issuer, subject)`. `ADMIN_EMAIL_ALLOWLIST` is a legacy fallback, not a source
-for Principal records or authorities. An App membership grants administrator
-access only to that App. `platform.admin` and `apps.create` are independent.
+Administrator authorization is deny-by-default and belongs to the stable
+Account. `platform.admin` and `apps.create` are independent child authorities;
+App membership grants access only to that App. Exact provider issuer/subject is
+stored only on External Identity and retained with audit evidence.
 
-This procedure assumes the separate App/Space physical cutover is complete.
-Before applying Platform Access, inspect only schema metadata:
+Fresh control-schema initialization creates only the current Account/App model.
+It does not inspect, synthesize, backfill, or upgrade legacy administrator data.
+For the authorized internal-development production cutover, use
+`stacks/unicas/deploy/reset-smoke.mjs` from the exact release candidate. Its
+preview inventories the fixed production bindings and refuses unknown tables,
+Apps, Spaces, issuer configuration, R2 prefixes, or KV key formats. Execution
+requires the exact Smoke App ID and either a reviewed backup directory or the
+explicit `DELETE-ALL-TEST-DATA-NO-BACKUP` confirmation.
 
-```sql
-SELECT name FROM sqlite_master WHERE type = 'table'
-   AND name IN ('cas_apps', 'cas_app_members', 'cas_stacks', 'cas_stack_members')
-   ORDER BY name;
-PRAGMA table_info(cas_apps);
-PRAGMA table_info(cas_app_members);
-```
+Execution first deploys and verifies a maintenance Worker on both service
+origins, directly enumerates the dedicated R2 and KV bindings, then repeats the
+D1 inventory and rejects any change. Pending direct-upload sessions or physical
+objects outside the Smoke node and temporary-upload prefixes stop the reset. It
+captures the authorized Google issuer/subject entirely inside D1, clears the
+bounded test state, creates exactly the current Account/App and App/Space schemas, and
+bootstraps the Account, two platform authorities, Smoke App membership,
+external issuer, and audit evidence. The subject is never returned through
+Wrangler or written to a local file. Any failure leaves maintenance active;
+only the held release workflow restores the normal Worker. If schema creation
+completed but final verification was interrupted, rerun with `--verify-current`
+and the exact App ID instead of attempting the destructive path again.
 
-The authoritative tables must be `cas_apps` and `cas_app_members`, keyed by
-`app_id` and immutable Principal fields. If legacy Stack tables are still
-authoritative, or both families contain unresolved live data, stop and complete
-the separately reviewed physical cutover first. The runtime's compatibility
-rename of `stack_id` in OAuth inspections and control audit is not a migration
-of Stack memberships, issuer registries, tenant nodes, or object storage.
-Never infer successful data migration merely from a successful Worker startup.
+Bootstrap the first Account through the local bootstrap or a restricted,
+environment-specific initialization procedure that atomically creates:
 
-Use this two-phase cutover so the enforcing Worker never starts without an
-active Platform Admin:
+1. one `cas_accounts` row and its `cas_account_profiles` row;
+2. one exact `cas_external_identities` binding;
+3. `platform.admin` and, when required, `apps.create` rows in
+   `cas_account_platform_authorities`.
 
-1. Export `unicas-control` and verify the backup before any write.
-2. Resolve each initial administrator's exact verified OIDC issuer and subject
-   out of band. Do not derive subject from email or store production identity
-   values in this repository, tickets, chat, or logs.
-3. Generate opaque `prn_` and `evt_` identifiers locally. Put the SQL below in
-   a restricted temporary file outside the checkout, replace every placeholder,
-   and delete the file after verification. Never put the Cloudflare token or
-   Principal values on a command line.
-4. Execute the SQL against remote `unicas-control` while the old Worker and
-   allowlist are still serving traffic.
-5. Verify `active_admins >= 1` with the count-only query below, then deploy the
-   new Worker. Verify Console login, `unicas principal`, a Platform Access read,
-   and a denied App creation from a Principal lacking `apps.create`.
-6. Establish a second Platform Admin through the protected API before relying
-   on the final-administrator guard. Keep `ADMIN_EMAIL_ALLOWLIST` provisioned
-   through the rollback window; the new Worker ignores it as authorization
-   when Platform Access is configured.
-7. After the rollback window and invitation/re-login checks pass, delete the
-   legacy secret with Wrangler. Do not manufacture grants from its email list.
+Do not derive an Account from email, write Principal/operator compatibility
+rows, or copy provider identity into membership rows. Verify bootstrap with
+count-only queries over active Accounts and Account authorities, then establish
+a second Platform Admin through the protected API.
 
-Bootstrap SQL template:
-
-```sql
-BEGIN TRANSACTION;
-CREATE TABLE IF NOT EXISTS cas_platform_principals (
-  principal_ref TEXT PRIMARY KEY,
-  identity_issuer TEXT NOT NULL,
-  subject TEXT NOT NULL,
-  status TEXT NOT NULL CHECK(status IN ('active','blocked')),
-  platform_admin INTEGER NOT NULL DEFAULT 0 CHECK(platform_admin IN (0,1)),
-  apps_create INTEGER NOT NULL DEFAULT 0 CHECK(apps_create IN (0,1)),
-  revision INTEGER NOT NULL DEFAULT 1,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  UNIQUE(identity_issuer, subject)
-);
-CREATE TABLE IF NOT EXISTS cas_platform_audit_events (
-  event_id TEXT PRIMARY KEY,
-  actor_issuer TEXT NOT NULL,
-  actor_subject TEXT NOT NULL,
-  target_issuer TEXT,
-  target_subject TEXT,
-  target_invitation_id TEXT,
-  action TEXT NOT NULL,
-  result TEXT NOT NULL CHECK(result IN ('succeeded','denied')),
-  request_id TEXT,
-  created_at INTEGER NOT NULL,
-  details_json TEXT NOT NULL DEFAULT '{}'
-);
-INSERT INTO cas_platform_principals
-  (principal_ref, identity_issuer, subject, status, platform_admin,
-   apps_create, revision, created_at, updated_at)
-VALUES
-  ('<generated-principal-ref>', '<exact-oidc-issuer>', '<exact-oidc-subject>',
-   'active', 1, <0-or-1-for-app-creation>, 1, <epoch-ms>, <epoch-ms>);
-INSERT INTO cas_platform_audit_events
-  (event_id, actor_issuer, actor_subject, target_issuer, target_subject,
-   target_invitation_id, action, result, request_id, created_at, details_json)
-VALUES
-  ('<generated-event-id>', '<exact-oidc-issuer>', '<exact-oidc-subject>',
-   '<exact-oidc-issuer>', '<exact-oidc-subject>', NULL,
-   'platform_access.authority_changed', 'succeeded', NULL, <epoch-ms>,
-   '{"source":"out-of-band-bootstrap"}');
-COMMIT;
-```
-
-Execute and verify without selecting Principal data:
-
-```powershell
-pnpm --filter @unicas/service-cloudflare exec wrangler d1 execute unicas-control --remote --file <secure-temporary-sql-file>
-pnpm --filter @unicas/service-cloudflare exec wrangler d1 execute unicas-control --remote --command "SELECT COUNT(*) AS active_admins FROM cas_platform_principals WHERE status = 'active' AND platform_admin = 1"
-```
-
-The application never exposes a bootstrap endpoint. Platform invitation
-idempotency replay stores its bearer token only as AES-256-GCM JWE under
-`SESSION_ENCRYPTION_KEYS`; retain old keys until both sessions and pending
-invitation/idempotency records sealed by them have expired.
-
-#### Rollback
-
-The Platform Access migration on the supported App/Space schema is additive.
-The rollback target must be an App/Space-compatible Worker from before Platform
-Access enforcement, not a pre-physical-cutover Stack/Tenant Worker.
-Before the rollback window closes, retain the old
-Worker version and `ADMIN_EMAIL_ALLOWLIST`. A Worker rollback reactivates the
-old allowlist behavior and ignores the new D1 tables; it must not delete grants,
-invitations, or platform audit. If the secret was already removed, restore it
-interactively before rolling back. After recovery, diagnose and redeploy the
-new authorization path rather than keeping two authorization sources active.
-
-#### Break-glass
-
-Use break-glass only when no active Platform Admin can use the protected API.
-The operator needs direct D1 edit permission through a narrowly scoped
-Cloudflare API token. Supply that token through the normal Wrangler credential
-environment, never as an argument or through chat. Back up D1 first, then run a
-restricted temporary SQL transaction that upserts one verified immutable
-Principal to `status='active', platform_admin=1`, increments its revision, and
-adds a `platform_access.restored` audit event with
-`{"source":"operator-break-glass"}`. Do not change App memberships or use
-email as the key. Verify only the active-admin count, sign in, establish a
-second administrator through the normal API, and remove any temporary
-authority through the normal conditional workflow.
-
-Break-glass SQL template:
-
-```sql
-BEGIN TRANSACTION;
-INSERT INTO cas_platform_principals
-   (principal_ref, identity_issuer, subject, status, platform_admin,
-    apps_create, revision, created_at, updated_at)
-VALUES
-   ('<generated-principal-ref>', '<exact-oidc-issuer>', '<exact-oidc-subject>',
-    'active', 1, <0-or-1-for-app-creation>, 1, <epoch-ms>, <epoch-ms>)
-ON CONFLICT(identity_issuer, subject) DO UPDATE SET
-   status = 'active',
-   platform_admin = 1,
-   apps_create = MAX(cas_platform_principals.apps_create, excluded.apps_create),
-   revision = cas_platform_principals.revision + 1,
-   updated_at = excluded.updated_at;
-INSERT INTO cas_platform_audit_events
-   (event_id, actor_issuer, actor_subject, target_issuer, target_subject,
-    target_invitation_id, action, result, request_id, created_at, details_json)
-VALUES
-   ('<generated-event-id>', '<exact-oidc-issuer>', '<exact-oidc-subject>',
-    '<exact-oidc-issuer>', '<exact-oidc-subject>', NULL,
-    'platform_access.restored', 'succeeded', NULL, <epoch-ms>,
-    '{"source":"operator-break-glass"}');
-COMMIT;
-```
-
-If D1 is unavailable, authorization intentionally fails closed. Restore D1
-reachability or use the documented Worker rollback; there is no header, OAuth
-scope, environment flag, or client-side control that bypasses Platform Access.
+Platform invitation idempotency replay stores its bearer token only as an
+encrypted value under `SESSION_ENCRYPTION_KEYS`; retain old keys until sessions
+and pending invitation receipts sealed with them have expired. If D1 is
+unavailable, authorization fails closed; there is no bypass flag or fallback
+email allowlist.
 
 ### Suspend and restore an App
 
@@ -435,13 +321,12 @@ not a durable one). R2 content is referenced by node hashes in the physical
 `unicas-tenant` D1
 backup; a restore re-verifies blobs through the canonical read path.
 
-For the split-origin smoke-only cutover, review the live reset plan after both
-exports complete:
+For the split-origin smoke-only cutover, review the live reset plan without
+executing it:
 
 ```powershell
 node stacks/unicas/deploy/reset-smoke.mjs `
-   --expected-stack-id <current-smoke-stack-id> `
-   --backup-dir <off-machine-cutover-directory>
+   --expected-stack-id <current-smoke-stack-id>
 ```
 
 This is a physical pre-cutover tool: its Stack/Tenant flags and output match the
@@ -452,24 +337,30 @@ unexpected object-key shape, or a managed issuer not bound to
 they do not merely delete rows, because retained `stack_id`/`tenant_id` columns
 would block the new Worker from creating the clean App/Space schema.
 
-With `--backup-dir`, the rendered plan downloads every D1-derived canonical R2
-object before showing its delete. Execution verifies each downloaded object's
-SHA-256 against its canonical key and writes `backup-manifest.json` containing
-the D1 and R2 sizes and hashes. A missing, empty, stale, or mismatched backup
-aborts before any R2 delete or D1 drop.
+With `--backup-dir`, pass a fresh empty directory. After maintenance is active,
+the script creates both D1 exports itself, downloads every physically
+enumerated R2 object, verifies each canonical object's SHA-256, and writes
+`backup-manifest.json` with D1 and R2 sizes and hashes. Existing export or
+manifest files abort the operation so stale backups cannot satisfy the guard.
 
 Run the destructive command only inside the approved maintenance window, then
 deploy the new Worker immediately so it can create the `app_id`/`space_id`
 tables. Do not reuse this one-time pre-cutover tool after the physical cutover.
-After reviewing the printed R2, OAuth KV, and D1 commands, execute only with
-the same explicit physical Stack ID and the directory containing both
-non-empty exports:
+After reviewing the printed R2, OAuth KV, and D1 commands, execute with the
+same explicit physical Stack ID and either a fresh backup directory:
 
 ```powershell
 node stacks/unicas/deploy/reset-smoke.mjs --execute `
    --expected-stack-id <current-smoke-stack-id> `
    --backup-dir <off-machine-cutover-directory>
 ```
+
+or, only when test-data disposal is explicitly approved, omit the directory
+and add `--confirm DELETE-ALL-TEST-DATA-NO-BACKUP`.
+
+The operation also refuses to start while either direct-upload signing secret
+is configured. Revoke the underlying R2 API token first; deleting only the
+Worker binding does not invalidate already signed URLs.
 
 This tool targets only the isolated `unicas-*` resources committed in this
 repository. It has no legacy Worker, route, database, bucket, or namespace

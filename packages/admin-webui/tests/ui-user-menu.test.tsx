@@ -5,6 +5,17 @@ import { describe, expect, test, vi } from "vitest";
 import { UserMenu } from "../src/ui/index.js";
 
 const mockMe = {
+  account: {
+    accountId: `acct_${"a".repeat(22)}`,
+    displayName: "Admin User",
+    primaryVerifiedEmail: { normalizedEmail: "admin@example.com", source: "google-oidc", verifiedAt: 1 },
+    avatar: { kind: "fallback", initials: "AU", colorIndex: 1 },
+    blockedAt: null,
+    platformAuthorities: [],
+    identities: [{ externalIdentityId: "ext-admin", provider: "google", accountHint: null, linkedAt: 1, lastAuthenticatedAt: 1, currentLogin: true }],
+    linkableProviders: [],
+  },
+  authenticatedIdentity: { externalIdentityId: "ext-admin", provider: "google", accountHint: null, linkedAt: 1, lastAuthenticatedAt: 1, currentLogin: true },
   principal: { issuer: "https://accounts.example", subject: "admin" },
   profile: { displayName: "Admin User", emailForDisplay: "admin@example.com" },
   platformAccess: {
@@ -17,6 +28,14 @@ const mockMe = {
 };
 
 describe("UserMenu", () => {
+  test("links to the Account view", async () => {
+    const user = userEvent.setup();
+    render(<UserMenu me={mockMe as never} onOpenMcpConfiguration={vi.fn()} onLogout={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: "Open user menu" }));
+    expect(screen.getByRole("menuitem", { name: "Account" })).toHaveAttribute("href", "#/account");
+  });
+
   test("keeps sign out inside the username menu", async () => {
     const user = userEvent.setup();
     const onLogout = vi.fn();

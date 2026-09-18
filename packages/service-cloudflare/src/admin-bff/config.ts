@@ -9,6 +9,13 @@ export interface AdminBffConfig {
   readonly googleClientId: string;
   /** Google OIDC client secret (secret). */
   readonly googleClientSecret: string;
+  readonly microsoftClientId?: string;
+  readonly microsoftClientSecret?: string;
+  readonly microsoftDiscoveryUrl?: string;
+  readonly githubClientId?: string;
+  readonly githubClientSecret?: string;
+  /** Verified sender address for invitation email challenges. */
+  readonly emailFrom?: string;
   /**
    * Versioned session encryption keys: key id -> base64url 32-byte AES key.
    * New sessions use the newest key; older keys decrypt until retired.
@@ -31,13 +38,6 @@ export interface AdminBffConfig {
   readonly csrfEnforced?: boolean;
   /** Shared secret for the private tenant audit-reader RPC. */
   readonly auditReaderKey?: string;
-  /** Optional production test account that can bypass OIDC with HTTP Basic. */
-  readonly testAccount?: {
-    readonly email: string;
-    readonly password: string;
-  };
-  /** Exact, case-insensitive emails allowed to create an admin session. */
-  readonly emailAllowlist?: readonly string[];
   /** Clock for tests. */
   readonly now?: () => number;
 }
@@ -50,8 +50,15 @@ export const DEFAULT_SESSION_COOKIE_NAME = "cas_admin_session";
 export const CAS_ADMIN_WEBUI_MOUNT = "/admin" as const;
 
 export interface AdminBffEnv {
-  GOOGLE_OIDC_CLIENT_ID?: string;
-  GOOGLE_OIDC_CLIENT_SECRET?: string;
+  OAUTH_GOOGLE_CLIENT_ID?: string;
+  OAUTH_GOOGLE_CLIENT_SECRET?: string;
+  OAUTH_MICROSOFT_CLIENT_ID?: string;
+  OAUTH_MICROSOFT_CLIENT_SECRET?: string;
+  MICROSOFT_OIDC_DISCOVERY_URL?: string;
+  OAUTH_GITHUB_CLIENT_ID?: string;
+  OAUTH_GITHUB_CLIENT_SECRET?: string;
+  EMAIL?: SendEmail;
+  ADMIN_EMAIL_FROM?: string;
   SESSION_ENCRYPTION_KEYS?: string;
   OIDC_ISSUER?: string;
   OIDC_DISCOVERY_URL?: string;
@@ -63,15 +70,24 @@ export interface AdminBffEnv {
   SESSION_COOKIE_SAME_SITE?: string;
   CSRF_ENFORCE?: string;
   CAS_AUDIT_READER_KEY?: string;
-  ADMIN_TEST_ACCOUNT_EMAIL?: string;
-  ADMIN_TEST_ACCOUNT_PASSWORD?: string;
-  ADMIN_EMAIL_ALLOWLIST?: string;
 }
 
 /** Parse Worker bindings into a validated BFF config; throws on misconfig. */
 export function configFromEnv(env: AdminBffEnv): AdminBffConfig {
-  const googleClientId = env.GOOGLE_OIDC_CLIENT_ID ?? "";
-  const googleClientSecret = env.GOOGLE_OIDC_CLIENT_SECRET ?? "";
+  const googleClientId = env.OAUTH_GOOGLE_CLIENT_ID ?? "";
+  const googleClientSecret = env.OAUTH_GOOGLE_CLIENT_SECRET ?? "";
+  const microsoftClientId = optionalCredentialPair(
+    env.OAUTH_MICROSOFT_CLIENT_ID,
+    env.OAUTH_MICROSOFT_CLIENT_SECRET,
+    "OAUTH_MICROSOFT_CLIENT_ID",
+    "OAUTH_MICROSOFT_CLIENT_SECRET",
+  );
+  const githubClientId = optionalCredentialPair(
+    env.OAUTH_GITHUB_CLIENT_ID,
+    env.OAUTH_GITHUB_CLIENT_SECRET,
+    "OAUTH_GITHUB_CLIENT_ID",
+    "OAUTH_GITHUB_CLIENT_SECRET",
+  );
   const keysRaw = env.SESSION_ENCRYPTION_KEYS ?? "";
   let sessionEncryptionKeys: Readonly<Record<string, string>>;
   try {
@@ -99,31 +115,21 @@ export function configFromEnv(env: AdminBffEnv): AdminBffConfig {
     throw new Error("ADMIN_PUBLIC_ORIGIN or PUBLIC_ORIGIN must be configured");
   }
   new URL(publicOrigin); // throws on malformed origin
-  const testAccountEmail = env.ADMIN_TEST_ACCOUNT_EMAIL?.trim().toLowerCase() ?? "";
-  const testAccountPassword = env.ADMIN_TEST_ACCOUNT_PASSWORD ?? "";
-  if ((testAccountEmail.length === 0) !== (testAccountPassword.length === 0)) {
-    throw new Error("ADMIN_TEST_ACCOUNT_EMAIL and ADMIN_TEST_ACCOUNT_PASSWORD must be configured together");
+  const emailFrom = env.ADMIN_EMAIL_FROM?.trim().toLowerCase();
+  if (emailFrom) validateEmail(emailFrom, "ADMIN_EMAIL_FROM");
+  if (microsoftClientId && (!env.EMAIL || !emailFrom)) {
+    throw new Error("Microsoft OIDC requires EMAIL and ADMIN_EMAIL_FROM for invitation challenges");
   }
-  if (testAccountEmail.length > 0) validateEmail(testAccountEmail, "ADMIN_TEST_ACCOUNT_EMAIL");
 
-  let emailAllowlist: readonly string[] | undefined;
-  if (env.ADMIN_EMAIL_ALLOWLIST !== undefined) {
-    emailAllowlist = [...new Set(
-      env.ADMIN_EMAIL_ALLOWLIST.split(",")
-        .map((email) => email.trim().toLowerCase())
-        .filter((email) => email.length > 0),
-    )];
-    if (emailAllowlist.length === 0) {
-      throw new Error("ADMIN_EMAIL_ALLOWLIST must contain at least one email");
-    }
-    for (const email of emailAllowlist) validateEmail(email, "ADMIN_EMAIL_ALLOWLIST");
-    if (testAccountEmail.length > 0 && !emailAllowlist.includes(testAccountEmail)) {
-      throw new Error("ADMIN_TEST_ACCOUNT_EMAIL must be included in ADMIN_EMAIL_ALLOWLIST");
-    }
-  }
   return {
     googleClientId,
     googleClientSecret,
+    microsoftClientId: microsoftClientId?.id,
+    microsoftClientSecret: microsoftClientId?.secret,
+    microsoftDiscoveryUrl: env.MICROSOFT_OIDC_DISCOVERY_URL,
+    githubClientId: githubClientId?.id,
+    githubClientSecret: githubClientId?.secret,
+    emailFrom,
     sessionEncryptionKeys,
     oidcIssuer: env.OIDC_ISSUER ?? DEFAULT_OIDC_ISSUER,
     oidcDiscoveryUrl: env.OIDC_DISCOVERY_URL,
@@ -134,11 +140,21 @@ export function configFromEnv(env: AdminBffEnv): AdminBffConfig {
     sessionCookieSameSite: (env.SESSION_COOKIE_SAME_SITE as "Lax" | "Strict" | "None") ?? "Lax",
     csrfEnforced: env.CSRF_ENFORCE !== "false",
     auditReaderKey: env.CAS_AUDIT_READER_KEY,
-    testAccount: testAccountEmail.length > 0
-      ? { email: testAccountEmail, password: testAccountPassword }
-      : undefined,
-    emailAllowlist,
   };
+}
+
+function optionalCredentialPair(
+  id: string | undefined,
+  secret: string | undefined,
+  idName: string,
+  secretName: string,
+): { readonly id: string; readonly secret: string } | undefined {
+  const normalizedId = id ?? "";
+  const normalizedSecret = secret ?? "";
+  if ((normalizedId.length === 0) !== (normalizedSecret.length === 0)) {
+    throw new Error(`${idName} and ${secretName} must be configured together`);
+  }
+  return normalizedId.length > 0 ? { id: normalizedId, secret: normalizedSecret } : undefined;
 }
 
 function validateEmail(email: string, variable: string): void {

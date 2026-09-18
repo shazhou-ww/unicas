@@ -84,6 +84,5 @@ logic without making the public tool responsible for UniCAS policy.
 
 ## References
 
-- [UniCAS task policy test](/tests/task-policy.test.mjs)
 - [UniCAS task profile](/tasks/README.md)
 - [Source repoledger task](https://github.com/shazhou-ww/skills/blob/main/tasks/archived/build-repoledger-cli/Task.md)

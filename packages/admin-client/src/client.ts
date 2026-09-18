@@ -1,8 +1,7 @@
 /**
  * `createAdminClient` — typed HTTP transport for the `/admin` control-plane
  * API (the BFF surface). One plain function per operation, paths built from
- * `casAdminRoutes`, request/response types straight from `@unicas/admin-protocol`
- * (the frozen contract — no tool-mirror duplication).
+ * `appAdminRoutes` and request/response types from `@unicas/admin-protocol`.
  *
  * The session provider yields the BFF session cookie + CSRF token; mutations
  * send `If-Match` (ETag preconditions) and `Idempotency-Key` where the
@@ -11,7 +10,7 @@
 
 import {
   appAdminRoutes,
-  casAdminRoutes,
+  AppAdminMeResponseSchema,
   CasAdminETagHeader,
   CasAdminIdempotencyKeyHeader,
   CasAdminIfMatchHeader,
@@ -29,6 +28,8 @@ import type {
   CasAdminPageQuery,
 } from "@unicas/admin-protocol";
 import type {
+  AccountSelf,
+  AccountId,
   App,
   AppAdminMeResponse,
   AppControlAuditEvent,
@@ -38,31 +39,14 @@ import type {
   AppOAuthIssuer,
   AppOAuthIssuerInspection,
   AppRefDomain,
-  CasControlAuditEvent,
-  CasMemberInvitation,
-  CasOperatorIdentity,
-  CasOperatorIdentityKey,
-  CasOAuthIssuerInspection,
-  CasPlaygroundFileRoot,
-  CasRefDomain,
-  CasRootRefBalance,
-  CasRootRefEvent,
-  CasStack,
-  CasStackId,
-  CasStackMember,
-  CasStackOAuthIssuer,
-  CasManagedCapability,
   ManagedSpaceCapability,
-  PlatformAccessSummary,
-  PlatformAccessState,
+  PlatformAccountDetail,
+  PlatformAccountPage,
   PlatformAuditAction,
-  PlatformAuditPage,
+  PlatformAccountAuditPage,
   PlatformAuthority,
   PlatformInvitation,
   PlatformInvitationPage,
-  PlatformPrincipalDetail,
-  PlatformPrincipalPage,
-  Principal,
   SpaceRootRefBalance,
   SpaceRootRefEvent,
 } from "@unicas/admin-protocol";
@@ -77,8 +61,13 @@ import type {
 export interface AdminClient {
   listAppPeople(path: { readonly appId: AppId }, query?: AppPeopleQuery): Promise<PeoplePage<AppPerson>>;
   listPlatformPeople(query?: PlatformPeopleQuery): Promise<PeoplePage<PlatformPerson>>;
-  me(): Promise<{ readonly identity: CasOperatorIdentity; readonly memberships: readonly CasStackMember[] }>;
-  getCurrentPrincipal(): Promise<AppAdminMeResponse>;
+  getCurrentAdministrator(): Promise<AppAdminMeResponse>;
+  getCurrentAccount(): Promise<AccountSelf>;
+  listCurrentAccountIdentities(): Promise<AccountSelf["identities"]>;
+  patchCurrentAccountProfile(body: {
+    readonly displayName?: string | null;
+    readonly avatarExternalIdentityId?: string | null;
+  }): Promise<void>;
   listApps(query?: CasAdminPageQuery): Promise<CasAdminPage<App>>;
   createApp(
     body: { readonly displayName: string },
@@ -95,9 +84,7 @@ export interface AdminClient {
     query?: CasAdminPageQuery,
   ): Promise<CasAdminPage<AppMembership>>;
   deleteAppMember(
-    path: { readonly appId: AppId },
-    principal: Principal,
-    ifMatch: string,
+    path: { readonly appId: AppId; readonly accountId: AccountId },
   ): Promise<{ readonly ok: true }>;
   createAppMemberInvitation(
     path: { readonly appId: AppId },
@@ -113,21 +100,18 @@ export interface AdminClient {
     path: { readonly appId: AppId; readonly invitationId: string },
     ifMatch: string,
   ): Promise<{ readonly etag: string }>;
-  getPlatformAccessSummary(): Promise<PlatformAccessSummary>;
-  listPlatformPrincipals(query?: {
+  listPlatformAccounts(query?: {
     readonly query?: string;
     readonly effectiveAccess?: "active" | "blocked" | "no_access";
     readonly authority?: PlatformAuthority | "none";
     readonly limit?: number;
     readonly cursor?: string;
-  }): Promise<PlatformPrincipalPage>;
-  getPlatformPrincipal(path: { readonly principalRef: string }): Promise<PlatformPrincipalDetail>;
-  getPlatformAccess(path: { readonly principalRef: string }): Promise<AdminClientRead<PlatformAccessState>>;
-  patchPlatformAccess(
-    path: { readonly principalRef: string },
-    body: { readonly status?: "active" | "blocked"; readonly authorities?: readonly PlatformAuthority[] },
-    ifMatch: string,
-  ): Promise<{ readonly etag: string }>;
+  }): Promise<PlatformAccountPage>;
+  getPlatformAccount(path: { readonly accountId: AccountId }): Promise<PlatformAccountDetail>;
+  grantPlatformAccountAuthority(path: { readonly accountId: AccountId; readonly authority: PlatformAuthority }): Promise<void>;
+  revokePlatformAccountAuthority(path: { readonly accountId: AccountId; readonly authority: PlatformAuthority }): Promise<void>;
+  blockPlatformAccount(path: { readonly accountId: AccountId }): Promise<void>;
+  restorePlatformAccount(path: { readonly accountId: AccountId }): Promise<void>;
   listPlatformInvitations(query?: {
     readonly query?: string;
     readonly status?: PlatformInvitation["status"];
@@ -142,26 +126,12 @@ export interface AdminClient {
   acceptPlatformInvitation(path: { readonly token: string }): Promise<void>;
   listPlatformAuditEvents(query?: {
     readonly action?: PlatformAuditAction;
-    readonly actorPrincipalRef?: string;
-    readonly targetPrincipalRef?: string;
+    readonly actorAccountId?: AccountId;
+    readonly targetAccountId?: AccountId;
     readonly createdAfter?: number;
     readonly limit?: number;
     readonly cursor?: string;
-  }): Promise<PlatformAuditPage>;
-  listAppPlaygroundFileRoots(path: { readonly appId: AppId }): Promise<{ readonly items: readonly CasPlaygroundFileRoot[] }>;
-  createAppPlaygroundFileRoot(
-    path: { readonly appId: AppId },
-    body: { readonly rootId: string; readonly name: string; readonly manifestHash: string },
-  ): Promise<AdminClientRead<CasPlaygroundFileRoot>>;
-  patchAppPlaygroundFileRoot(
-    path: { readonly appId: AppId; readonly rootId: string },
-    body: { readonly name: string; readonly manifestHash: string },
-    ifMatch: string,
-  ): Promise<AdminClientRead<CasPlaygroundFileRoot>>;
-  deleteAppPlaygroundFileRoot(
-    path: { readonly appId: AppId; readonly rootId: string },
-    ifMatch: string,
-  ): Promise<{ readonly ok: true }>;
+  }): Promise<PlatformAccountAuditPage>;
   getAppOAuthIssuer(
     path: { readonly appId: AppId },
     query?: { readonly optional?: boolean },
@@ -185,7 +155,11 @@ export interface AdminClient {
   listAppRefDomains(path: { readonly appId: AppId }): Promise<{ readonly domains: readonly AppRefDomain[] }>;
   listAppControlAuditEvents(
     path: { readonly appId: AppId },
-    query?: CasAdminPageQuery & { readonly after?: string },
+    query?: CasAdminPageQuery & {
+      readonly after?: string;
+      readonly actorAccountId?: AccountId;
+      readonly targetAccountId?: AccountId;
+    },
   ): Promise<CasAdminPage<AppControlAuditEvent>>;
   listSpaceRootDomainRefs(
     path: { readonly appId: AppId; readonly refDomain: string },
@@ -195,77 +169,6 @@ export interface AdminClient {
     path: { readonly appId: AppId; readonly refDomain: string },
     query?: { readonly spaceId?: string; readonly after?: number; readonly limit?: number },
   ): Promise<{ readonly events: readonly SpaceRootRefEvent[]; readonly latestRevision: number; readonly nextAfter: number }>;
-  listStacks(query?: CasAdminPageQuery): Promise<CasAdminPage<CasStack>>;
-  createStack(
-    body: { readonly displayName: string },
-    headers?: CasAdminCreateHeaders,
-  ): Promise<CasStack>;
-  getStack(path: { readonly stackId: CasStackId }): Promise<AdminClientRead<CasStack>>;
-  patchStack(
-    path: { readonly stackId: CasStackId },
-    body: { readonly displayName?: string; readonly description?: string },
-    ifMatch: string,
-  ): Promise<AdminClientRead<CasStack>>;
-  listMembers(
-    path: { readonly stackId: CasStackId },
-    query?: CasAdminPageQuery,
-  ): Promise<CasAdminPage<CasStackMember>>;
-  listPlaygroundFileRoots(path: { readonly stackId: CasStackId }): Promise<{ readonly items: readonly CasPlaygroundFileRoot[] }>;
-  createPlaygroundFileRoot(
-    path: { readonly stackId: CasStackId },
-    body: { readonly rootId: string; readonly name: string; readonly manifestHash: string },
-  ): Promise<AdminClientRead<CasPlaygroundFileRoot>>;
-  patchPlaygroundFileRoot(
-    path: { readonly stackId: CasStackId; readonly rootId: string },
-    body: { readonly name: string; readonly manifestHash: string },
-    ifMatch: string,
-  ): Promise<AdminClientRead<CasPlaygroundFileRoot>>;
-  deletePlaygroundFileRoot(
-    path: { readonly stackId: CasStackId; readonly rootId: string },
-    ifMatch: string,
-  ): Promise<{ readonly ok: true }>;
-  deleteMember(
-    path: { readonly stackId: CasStackId },
-    query: CasOperatorIdentityKey,
-    ifMatch: string,
-  ): Promise<{ readonly ok: true }>;
-  createMemberInvitation(
-    path: { readonly stackId: CasStackId },
-    body: { readonly emailConstraint?: string },
-    headers?: CasAdminCreateHeaders,
-  ): Promise<{ readonly invitation: CasMemberInvitation; readonly acceptUrl: string }>;
-  getOAuthIssuer(path: { readonly stackId: CasStackId }): Promise<AdminClientRead<CasStackOAuthIssuer>>;
-  getManagedOAuthIssuer(path: { readonly stackId: CasStackId }): Promise<AdminClientRead<CasStackOAuthIssuer>>;
-  patchManagedOAuthIssuer(
-    path: { readonly stackId: CasStackId },
-    body: { readonly enabled: boolean },
-    ifMatch: string,
-  ): Promise<AdminClientRead<CasStackOAuthIssuer>>;
-  mintManagedCapability(path: { readonly stackId: CasStackId }): Promise<CasManagedCapability>;
-  inspectOAuthIssuer(
-    path: { readonly stackId: CasStackId },
-    body: {
-      readonly issuer: string;
-    },
-  ): Promise<AdminClientRead<CasOAuthIssuerInspection>>;
-  activateOAuthIssuer(
-    path: { readonly stackId: CasStackId },
-    body: { readonly inspectionId: string; readonly activationProof: string },
-    ifMatch: string,
-  ): Promise<AdminClientRead<CasStackOAuthIssuer>>;
-  listRefDomains(path: { readonly stackId: CasStackId }): Promise<{ readonly domains: readonly CasRefDomain[] }>;
-  listControlAuditEvents(
-    path: { readonly stackId: CasStackId },
-    query?: CasAdminPageQuery,
-  ): Promise<CasAdminPage<CasControlAuditEvent>>;
-  listRootDomainRefs(
-    path: { readonly stackId: CasStackId; readonly refDomain: string },
-    query?: { readonly tenantId?: string; readonly limit?: number; readonly cursor?: string },
-  ): Promise<{ readonly revision: number; readonly refs: readonly CasRootRefBalance[]; readonly nextCursor: string | null }>;
-  listRootDomainEvents(
-    path: { readonly stackId: CasStackId; readonly refDomain: string },
-    query?: { readonly tenantId?: string; readonly after?: number; readonly limit?: number },
-  ): Promise<{ readonly events: readonly CasRootRefEvent[]; readonly latestRevision: number; readonly nextAfter: number }>;
 }
 
 export function createAdminClient(config: AdminClientConfig): AdminClient {
@@ -289,6 +192,16 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
       headers.set("X-CSRF-Token", current.csrfToken);
     }
     const response = await fetcher(`${baseUrl}${route}`, { ...init, headers });
+    const csrfToken = response.headers.get("X-CSRF-Token");
+    const cookieName = current.cookie.split("=", 1)[0]?.trim();
+    const replacement = response.headers.getSetCookie()
+      .map(value => value.split(";", 1)[0]!.trim())
+      .find(value => cookieName && value.startsWith(`${cookieName}=`));
+    if (replacement && csrfToken) {
+      const next = { cookie: replacement, csrfToken };
+      await config.onSessionChanged?.(next);
+      session = next;
+    }
     if (response.status === 401) {
       // The session expired or the operator was removed; force re-login.
       session = null;
@@ -338,30 +251,40 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
   const ifMatchHeader = (ifMatch: string): Record<string, string> => ({ [CasAdminIfMatchHeader]: ifMatch });
 
   return {
-    async me() {
-      const response = await requireOk(await request(casAdminRoutes.me()), "me");
-      const body: unknown = await response.json();
-      if (!isRecord(body) || !isRecord(body.identity) || !Array.isArray(body.memberships)) {
-        throw new AdminClientError(502, "ADMIN_CONTRACT_MISMATCH", "legacy administrator identity response was not returned");
-      }
-      return body as { readonly identity: CasOperatorIdentity; readonly memberships: readonly CasStackMember[] };
-    },
-
-    async getCurrentPrincipal() {
+    async getCurrentAdministrator() {
       const response = await requireOk(
         await request(appAdminRoutes.me()),
-        "getCurrentPrincipal",
+        "getCurrentAdministrator",
       );
       const body: unknown = await response.json();
-      if (!isRecord(body)
-        || !isRecord(body.principal)
-        || !isRecord(body.profile)
-        || !isRecord(body.platformAccess)
-        || !Array.isArray(body.platformAccess.authorities)
-        || !Array.isArray(body.memberships)) {
-        throw new AdminClientError(502, "ADMIN_CONTRACT_MISMATCH", "App administrator identity response was not returned");
-      }
-      return body as unknown as AppAdminMeResponse;
+      const parsed = AppAdminMeResponseSchema.safeParse(body);
+      if (!parsed.success) throw new AdminClientError(502, "ADMIN_CONTRACT_MISMATCH", "Account administrator response was not returned");
+      return parsed.data;
+    },
+
+    async getCurrentAccount() {
+      const response = await requireOk(
+        await request(appAdminRoutes.account()),
+        "getCurrentAccount",
+      );
+      return await response.json() as AccountSelf;
+    },
+
+    async listCurrentAccountIdentities() {
+      const response = await requireOk(
+        await request(appAdminRoutes.accountIdentities()),
+        "listCurrentAccountIdentities",
+      );
+      const body = await response.json() as { readonly identities: AccountSelf["identities"] };
+      return body.identities;
+    },
+
+    async patchCurrentAccountProfile(body) {
+      await requireOk(await request(appAdminRoutes.accountProfile(), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }), "patchCurrentAccountProfile");
     },
 
     async listApps(query) {
@@ -434,11 +357,10 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
       return response.json();
     },
 
-    async deleteAppMember(path, principal, ifMatch) {
+    async deleteAppMember(path) {
       const response = await requireOk(
-        await request(`${appAdminRoutes.members(path)}${queryString(principal)}`, {
+        await request(`${appAdminRoutes.members(path)}${queryString({ accountId: path.accountId })}`, {
           method: "DELETE",
-          headers: ifMatchHeader(ifMatch),
         }),
         "deleteAppMember",
       );
@@ -469,45 +391,33 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
       return response.json();
     },
 
-    async getPlatformAccessSummary() {
-      const response = await requireOk(await request(appAdminRoutes.accessSummary()), "getPlatformAccessSummary");
-      return response.json();
-    },
-
-    async listPlatformPrincipals(query) {
+    async listPlatformAccounts(query) {
       const response = await requireOk(
-        await request(`${appAdminRoutes.platformPrincipals()}${queryString(query)}`),
-        "listPlatformPrincipals",
+        await request(`${appAdminRoutes.platformAccounts()}${queryString(query)}`),
+        "listPlatformAccounts",
       );
       return response.json();
     },
 
-    async getPlatformPrincipal(path) {
-      const response = await requireOk(
-        await request(appAdminRoutes.platformPrincipal(path)),
-        "getPlatformPrincipal",
-      );
+    async getPlatformAccount(path) {
+      const response = await requireOk(await request(appAdminRoutes.platformAccount(path)), "getPlatformAccount");
       return response.json();
     },
 
-    async getPlatformAccess(path) {
-      const response = await requireOk(
-        await request(appAdminRoutes.platformPrincipalAccess(path)),
-        "getPlatformAccess",
-      );
-      return { value: await response.json(), etag: readEtag(response) };
+    async grantPlatformAccountAuthority(path) {
+      await requireOk(await request(appAdminRoutes.platformAccountAuthority(path), { method: "PUT" }), "grantPlatformAccountAuthority");
     },
 
-    async patchPlatformAccess(path, body, ifMatch) {
-      const response = await requireOk(
-        await request(appAdminRoutes.platformPrincipalAccess(path), {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", ...ifMatchHeader(ifMatch) },
-          body: JSON.stringify(body),
-        }),
-        "patchPlatformAccess",
-      );
-      return { etag: readEtag(response) };
+    async revokePlatformAccountAuthority(path) {
+      await requireOk(await request(appAdminRoutes.platformAccountAuthority(path), { method: "DELETE" }), "revokePlatformAccountAuthority");
+    },
+
+    async blockPlatformAccount(path) {
+      await requireOk(await request(appAdminRoutes.platformAccountBlock(path), { method: "PUT" }), "blockPlatformAccount");
+    },
+
+    async restorePlatformAccount(path) {
+      await requireOk(await request(appAdminRoutes.platformAccountBlock(path), { method: "DELETE" }), "restorePlatformAccount");
     },
 
     async listPlatformInvitations(query) {
@@ -553,49 +463,6 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
       const response = await requireOk(
         await request(`${appAdminRoutes.platformAuditEvents()}${queryString(query)}`),
         "listPlatformAuditEvents",
-      );
-      return response.json();
-    },
-
-    async listAppPlaygroundFileRoots(path) {
-      const response = await requireOk(
-        await request(appAdminRoutes.playgroundFileRoots(path)),
-        "listAppPlaygroundFileRoots",
-      );
-      return response.json();
-    },
-
-    async createAppPlaygroundFileRoot(path, body) {
-      const response = await requireOk(
-        await request(appAdminRoutes.playgroundFileRoots(path), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-        "createAppPlaygroundFileRoot",
-      );
-      return { value: await response.json(), etag: readEtag(response) };
-    },
-
-    async patchAppPlaygroundFileRoot(path, body, ifMatch) {
-      const response = await requireOk(
-        await request(appAdminRoutes.playgroundFileRoot(path), {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", ...ifMatchHeader(ifMatch) },
-          body: JSON.stringify(body),
-        }),
-        "patchAppPlaygroundFileRoot",
-      );
-      return { value: await response.json(), etag: readEtag(response) };
-    },
-
-    async deleteAppPlaygroundFileRoot(path, ifMatch) {
-      const response = await requireOk(
-        await request(appAdminRoutes.playgroundFileRoot(path), {
-          method: "DELETE",
-          headers: ifMatchHeader(ifMatch),
-        }),
-        "deleteAppPlaygroundFileRoot",
       );
       return response.json();
     },
@@ -692,211 +559,6 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
       return response.json();
     },
 
-    async listStacks(query) {
-      const response = await requireOk(
-        await request(`${casAdminRoutes.stacks()}${queryString(pageQuery(query))}`),
-        "listStacks",
-      );
-      return response.json();
-    },
-
-    async createStack(body, headers) {
-      const response = await requireOk(
-        await request(casAdminRoutes.stacks(), {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...mutationHeaders(headers),
-          },
-          body: JSON.stringify(body),
-        }),
-        "createStack",
-      );
-      return response.json();
-    },
-
-    async getStack(path) {
-      const response = await requireOk(await request(casAdminRoutes.stack(path)), "getStack");
-      return { value: await response.json(), etag: readEtag(response) };
-    },
-
-    async patchStack(path, body, ifMatch) {
-      const response = await requireOk(
-        await request(casAdminRoutes.stack(path), {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", ...ifMatchHeader(ifMatch) },
-          body: JSON.stringify(body),
-        }),
-        "patchStack",
-      );
-      return { value: await response.json(), etag: readEtag(response) };
-    },
-
-    async listMembers(path, query) {
-      const response = await requireOk(
-        await request(`${casAdminRoutes.members(path)}${queryString(pageQuery(query))}`),
-        "listMembers",
-      );
-      return response.json();
-    },
-
-    async listPlaygroundFileRoots(path) {
-      const response = await requireOk(
-        await request(casAdminRoutes.playgroundFileRoots(path)),
-        "listPlaygroundFileRoots",
-      );
-      return response.json();
-    },
-
-    async createPlaygroundFileRoot(path, body) {
-      const response = await requireOk(
-        await request(casAdminRoutes.playgroundFileRoots(path), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-        "createPlaygroundFileRoot",
-      );
-      return { value: await response.json(), etag: readEtag(response) };
-    },
-
-    async patchPlaygroundFileRoot(path, body, ifMatch) {
-      const response = await requireOk(
-        await request(casAdminRoutes.playgroundFileRoot(path), {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", ...ifMatchHeader(ifMatch) },
-          body: JSON.stringify(body),
-        }),
-        "patchPlaygroundFileRoot",
-      );
-      return { value: await response.json(), etag: readEtag(response) };
-    },
-
-    async deletePlaygroundFileRoot(path, ifMatch) {
-      const response = await requireOk(
-        await request(casAdminRoutes.playgroundFileRoot(path), {
-          method: "DELETE",
-          headers: ifMatchHeader(ifMatch),
-        }),
-        "deletePlaygroundFileRoot",
-      );
-      return response.json();
-    },
-
-    async deleteMember(path, query, ifMatch) {
-      const response = await requireOk(
-        await request(`${casAdminRoutes.members(path)}${queryString(query)}`, {
-          method: "DELETE",
-          headers: ifMatchHeader(ifMatch),
-        }),
-        "deleteMember",
-      );
-      return response.json();
-    },
-
-    async createMemberInvitation(path, body, headers) {
-      const response = await requireOk(
-        await request(casAdminRoutes.memberInvitations(path), {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...mutationHeaders(headers),
-          },
-          body: JSON.stringify(body),
-        }),
-        "createMemberInvitation",
-      );
-      return response.json();
-    },
-
-    async getOAuthIssuer(path) {
-      const response = await requireOk(
-        await request(casAdminRoutes.oauthIssuer(path)),
-        "getOAuthIssuer",
-      );
-      return { value: await response.json(), etag: readEtag(response) };
-    },
-
-    async getManagedOAuthIssuer(path) {
-      const response = await requireOk(
-        await request(casAdminRoutes.managedIssuer(path)),
-        "getManagedOAuthIssuer",
-      );
-      return { value: await response.json(), etag: readEtag(response) };
-    },
-
-    async patchManagedOAuthIssuer(path, body, ifMatch) {
-      const response = await requireOk(
-        await request(casAdminRoutes.managedIssuer(path), {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", ...ifMatchHeader(ifMatch) },
-          body: JSON.stringify(body),
-        }),
-        "patchManagedOAuthIssuer",
-      );
-      return { value: await response.json(), etag: readEtag(response) };
-    },
-
-    async mintManagedCapability(path) {
-      const response = await requireOk(
-        await request(casAdminRoutes.managedCapability(path), { method: "POST" }),
-        "mintManagedCapability",
-      );
-      return response.json();
-    },
-
-    async inspectOAuthIssuer(path, body) {
-      const response = await requireOk(
-        await request(casAdminRoutes.oauthIssuerInspections(path), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-        "inspectOAuthIssuer",
-      );
-      return { value: await response.json(), etag: readEtag(response) };
-    },
-
-    async activateOAuthIssuer(path, body, ifMatch) {
-      const response = await requireOk(
-        await request(casAdminRoutes.oauthIssuer(path), {
-          method: "PUT",
-          headers: { "Content-Type": "application/json", ...ifMatchHeader(ifMatch) },
-          body: JSON.stringify(body),
-        }),
-        "activateOAuthIssuer",
-      );
-      return { value: await response.json(), etag: readEtag(response) };
-    },
-
-    async listRefDomains(path) {
-      const response = await requireOk(await request(casAdminRoutes.refDomains(path)), "listRefDomains");
-      return response.json();
-    },
-
-    async listControlAuditEvents(path, query) {
-      const response = await requireOk(
-        await request(`${casAdminRoutes.controlAuditEvents(path)}${queryString(pageQuery(query))}`),
-        "listControlAuditEvents",
-      );
-      return response.json();
-    },
-
-    async listRootDomainRefs(path, query) {
-      const response = await requireOk(
-        await request(`${casAdminRoutes.rootDomainRefs(path)}${queryString(query)}`),
-        "listRootDomainRefs",
-      );
-      return response.json();
-    },
-
-    async listRootDomainEvents(path, query) {
-      const response = await requireOk(
-        await request(`${casAdminRoutes.rootDomainEvents(path)}${queryString(query)}`),
-        "listRootDomainEvents",
-      );
-      return response.json();
-    },
   };
 }
 

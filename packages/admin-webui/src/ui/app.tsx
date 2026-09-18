@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { CircleAlert, LoaderCircle } from "lucide-react";
-import type { App as AppResource, AppAdminMeResponse, AppOAuthIssuer } from "@unicas/admin-client";
+import type { App as AppResource, AppAdminMeResponse } from "@unicas/admin-client";
 import { api } from "./api.js";
 import { navigate, parseAppRoute, parsePlatformRoute, useHashRoute, matchRoute } from "./router.js";
 import { AppSidebar } from "./components/app-sidebar.js";
@@ -15,11 +15,10 @@ import { IssuerView } from "./views/issuer.js";
 import { UsageView } from "./views/usage.js";
 import { PeopleView } from "./views/people.js";
 import { ControlAuditView } from "./views/control-audit.js";
-import { PlaygroundView } from "./views/file-playground.js";
-import { PlaygroundCacheContext, createPlaygroundCacheSession, type PlaygroundCacheSession } from "./playground-cache.js";
 import { formatErrorSafe } from "./views/view-helpers.js";
 import { PlatformAuditView } from "./views/platform/audit.js";
 import { PlatformInvitationAcceptanceView } from "./views/platform-invitation-acceptance.js";
+import { AccountView } from "./views/account.js";
 import { TabsTrigger } from "@/components/ui/tabs.js";
 
 export function App() {
@@ -31,35 +30,26 @@ export function App() {
   const [apps, setApps] = useState<AppResource[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mcpOpen, setMcpOpen] = useState(false);
-  const [cacheSession, setCacheSession] = useState<PlaygroundCacheSession | null>(null);
 
   // Per-app detail state
   const [currentApp, setCurrentApp] = useState<AppResource | null>(null);
   const [appError, setAppError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const [focusManagedIssuer, setFocusManagedIssuer] = useState(false);
-  const [playgroundAccess, setPlaygroundAccess] = useState<{ appId: string; enabled: boolean } | null>(null);
 
   useEffect(() => {
     if (inviteToken !== null) return;
     let active = true;
-    let session: PlaygroundCacheSession | undefined;
     Promise.all([
       api<AppAdminMeResponse>("/admin/me"),
       api<{ items: AppResource[] }>("/admin/apps"),
     ]).then(([meResponse, appsResponse]) => {
       if (!active) return;
-      session = createPlaygroundCacheSession({
-        identityIssuer: meResponse.principal.issuer,
-        subject: meResponse.principal.subject,
-      });
-      setCacheSession(session);
       setMe(meResponse);
       setApps(appsResponse.items);
     }).catch((caught) => {
       if (active) setError(formatErrorSafe(caught));
     });
-    return () => { active = false; session?.close(); };
+    return () => { active = false; };
   }, [inviteToken]);
 
   async function refreshNavigation() {
@@ -79,7 +69,6 @@ export function App() {
   async function logout() {
     setMe(null);
     try {
-      await cacheSession?.clear();
       await fetch("/admin/auth/logout", { method: "POST", credentials: "same-origin" });
     } finally {
       window.location.href = "/admin/auth/login";
@@ -92,8 +81,8 @@ export function App() {
   useEffect(() => {
     if (appRoute?.section === "invitations") {
       window.location.replace(`#/apps/${encodeURIComponent(appRoute.appId)}/members?filter=pending`);
-    } else if (platformRoute?.section === "principals" || platformRoute?.section === "invitations") {
-      window.location.replace(`#/platform/people?filter=${platformRoute.section === "principals" ? "principals" : "pending"}`);
+    } else if (platformRoute?.section === "invitations") {
+      window.location.replace("#/platform/people?filter=pending");
     }
   }, [route]);
 
@@ -121,21 +110,7 @@ export function App() {
 
   const selectedAppId = appRoute?.appId ?? null;
 
-  useEffect(() => {
-    let active = true;
-    setPlaygroundAccess(null);
-    if (!selectedAppId) return;
-    api<AppOAuthIssuer>(`/admin/apps/${encodeURIComponent(selectedAppId)}/managed-issuer`)
-      .then(issuer => {
-        if (active) setPlaygroundAccess({ appId: selectedAppId, enabled: issuer?.status === "active" });
-      })
-      .catch(() => {
-        if (active) setPlaygroundAccess({ appId: selectedAppId, enabled: false });
-      });
-    return () => { active = false; };
-  }, [selectedAppId, appRoute?.section, reloadKey]);
-
-  const authorities = me?.platformAccess?.authorities ?? [];
+  const authorities = me?.account.platformAuthorities ?? [];
   const hasPlatformAdmin = authorities.includes("platform.admin");
   const canCreateApps = authorities.includes("apps.create");
 
@@ -144,6 +119,8 @@ export function App() {
     detail = <LoginErrorView />;
   } else if (inviteMatch) {
     detail = <InvitationView token={inviteMatch.params.token!} />;
+  } else if (route === "/account") {
+    detail = <AccountView />;
   } else if (appRoute) {
     if (appError) {
       detail = (
@@ -170,11 +147,7 @@ export function App() {
             return (
               <div className="space-y-6">
                 <AppOverviewView key={currentApp.appId} app={currentApp} onChanged={() => setReloadKey((k) => k + 1)} />
-                <IssuerView
-                  appId={appRoute.appId}
-                  focusManagedIssuer={focusManagedIssuer}
-                  onManagedIssuerChanged={issuer => setPlaygroundAccess({ appId: appRoute.appId, enabled: issuer.status === "active" })}
-                />
+                <IssuerView appId={appRoute.appId} />
                 <UsageView appId={appRoute.appId} />
               </div>
             );
@@ -182,11 +155,6 @@ export function App() {
             return <PeopleView scope={{ appId: appRoute.appId, appRevision: currentApp.revision, onChanged: () => { setReloadKey((k) => k + 1); void refreshNavigation(); } }} initialFilter={appRoute.peopleFilter} />;
           case "invitations":
             return null;
-          case "playground":
-            return <PlaygroundView appId={appRoute.appId} onOpenManagedIssuer={() => {
-              setFocusManagedIssuer(true);
-              navigate(`/apps/${encodeURIComponent(appRoute.appId)}/overview`);
-            }} />;
           case "change-logs":
             return <ControlAuditView appId={appRoute.appId} />;
           default:
@@ -199,7 +167,6 @@ export function App() {
             appId={appRoute.appId}
             activeSection={appRoute.section}
             displayName={currentApp.displayName}
-            playgroundEnabled={playgroundAccess?.appId === appRoute.appId && playgroundAccess.enabled}
             onTabChange={(section) => navigate(`/apps/${encodeURIComponent(appRoute.appId)}/${section}`)}
             content={renderSection()}
           />
@@ -220,7 +187,6 @@ export function App() {
       const renderPlatformSection = () => {
         switch (platformRoute.section) {
           case "people": return <PeopleView scope={{ platform: true }} initialFilter={platformRoute.peopleFilter} />;
-          case "principals":
           case "invitations": return null;
           case "audit": return <PlatformAuditView />;
           default: return null;
@@ -229,10 +195,10 @@ export function App() {
       detail = (
         <div>
           <WorkspaceDetailHeader
-            title="Platform Administration"
+            title="Administration"
             value={platformRoute.section}
             onValueChange={value => navigate(`/platform/${value}`)}
-            navigationLabel="Platform Administration sections"
+            navigationLabel="Administration sections"
             content={renderPlatformSection()}
           >
             <TabsTrigger value="people">Members</TabsTrigger>
@@ -290,9 +256,7 @@ export function App() {
             <span>{error}</span>
           </div>
         ) : null}
-        <PlaygroundCacheContext value={cacheSession}>
-          {me || route === "/login-error" ? detail : null}
-        </PlaygroundCacheContext>
+        {me || route === "/login-error" ? detail : null}
       </main>
       <McpConfigurationDialog open={mcpOpen} onClose={() => setMcpOpen(false)} />
       <CopyNotifications />

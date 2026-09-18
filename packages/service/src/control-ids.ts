@@ -21,6 +21,19 @@ export function generateStackId(): string {
   return `cas_${randomBase64Url(12)}`;
 }
 
+/** Durable Account id containing 128 bits of entropy in base64url form. */
+export function generateAccountId(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return `acct_${encodeBase64Url(bytes)}`;
+}
+
+export function generateExternalIdentityId(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return `ext_${encodeBase64Url(bytes)}`;
+}
+
 export function generateInvitationId(): string {
   return `inv_${randomBase64Url(12)}`;
 }
@@ -49,4 +62,20 @@ export function generateInvitationToken(): string {
 /** Possession-challenge nonce. */
 export function generateNonce(): string {
   return randomBase64Url(16);
+}
+
+function encodeBase64Url(bytes: Uint8Array): string {
+  let encoded = "";
+  for (let offset = 0; offset < bytes.length; offset += 3) {
+    const first = bytes[offset]!;
+    const second = bytes[offset + 1];
+    const third = bytes[offset + 2];
+    encoded += ALPHABET[first >>> 2];
+    encoded += ALPHABET[((first & 0x03) << 4) | ((second ?? 0) >>> 4)];
+    if (second !== undefined) {
+      encoded += ALPHABET[((second & 0x0f) << 2) | ((third ?? 0) >>> 6)];
+    }
+    if (third !== undefined) encoded += ALPHABET[third & 0x3f];
+  }
+  return encoded;
 }

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
@@ -13,24 +13,8 @@ describe("service-cloudflare package boundary", () => {
     expect(pkg.private).toBe(true);
     expect(pkg.dependencies["@unicas/service"]).toBe("workspace:*");
     expect(pkg.dependencies["@unicas/control-plane"]).toBeUndefined();
-    expect(readFileSync(join(root, "src/control-admin-repository.ts"), "utf8"))
-      .toContain("implements ControlPlaneAdminRepository");
-    expect(readFileSync(join(root, "src/control-operations.ts"), "utf8"))
-      .toContain("createControlPlaneOperations");
-    const operations = readFileSync(join(root, "src/control-operations.ts"), "utf8");
-    expect(operations).not.toContain("@unicas/control-plane");
-    expect(operations).not.toContain("legacy");
-    for (const operation of [
-      "listMembers",
-      "deleteMember",
-      "createMemberInvitation",
-      "acceptMemberInvitation",
-      "getOAuthIssuer",
-      "inspectOAuthIssuer",
-      "listControlAuditEvents",
-    ]) {
-      expect(operations).toContain(`${operation}: admin.${operation}.bind(admin)`);
-    }
+    expect(existsSync(join(root, "src/control-admin-repository.ts"))).toBe(false);
+    expect(existsSync(join(root, "src/control-operations.ts"))).toBe(false);
     expect(wrangler).toContain('name = "unicas"');
     expect(wrangler).toContain('pattern = "api.unicas.work"');
     expect(wrangler).toContain('pattern = "console.unicas.work"');

@@ -19,7 +19,7 @@ const WORKSPACE_ALIASES = Object.fromEntries(Object.entries({
   "@unicas/codec": "packages/codec/src/index.ts",
   "@unicas/tenant-protocol/openapi.json": "packages/tenant-protocol/openapi/tenant-v1.openapi.json",
   "@unicas/tenant-protocol": "packages/tenant-protocol/src/index.ts",
-  "@unicas/admin-protocol/openapi.json": "packages/admin-protocol/openapi/admin-v1.openapi.json",
+  "@unicas/admin-protocol/openapi-v2.json": "packages/admin-protocol/openapi/admin-v2.openapi.json",
   "@unicas/admin-protocol": "packages/admin-protocol/src/index.ts",
   "@unicas/service": "packages/service/src/index.ts",
   "@unicas/control-auth": "packages/control-auth/src/index.ts",
@@ -83,11 +83,11 @@ export async function startLocalUnicasRuntime({
   ]);
 
   const adminOrigin = process.env.UNICAS_ADMIN_ORIGIN ?? "http://localhost:4070";
-  const useGoogle = Boolean(process.env.GOOGLE_OIDC_CLIENT_ID)
-    || Boolean(process.env.GOOGLE_OIDC_CLIENT_SECRET);
+  const useGoogle = Boolean(process.env.OAUTH_GOOGLE_CLIENT_ID)
+    || Boolean(process.env.OAUTH_GOOGLE_CLIENT_SECRET);
   const adminBindings = {
-    GOOGLE_OIDC_CLIENT_ID: process.env.GOOGLE_OIDC_CLIENT_ID ?? "unicas-local-admin",
-    GOOGLE_OIDC_CLIENT_SECRET: process.env.GOOGLE_OIDC_CLIENT_SECRET ?? "unicas-local-admin-secret",
+    OAUTH_GOOGLE_CLIENT_ID: process.env.OAUTH_GOOGLE_CLIENT_ID ?? "unicas-local-admin",
+    OAUTH_GOOGLE_CLIENT_SECRET: process.env.OAUTH_GOOGLE_CLIENT_SECRET ?? "unicas-local-admin-secret",
     SESSION_ENCRYPTION_KEYS: JSON.stringify({ local: SESSION_KEY }),
     ADMIN_PUBLIC_ORIGIN: adminOrigin,
     PUBLIC_ORIGIN: adminOrigin,
@@ -158,9 +158,21 @@ export async function startLocalUnicasRuntime({
     const controlDb = await mf.getD1Database("CAS_CONTROL_DB", "unicas-service");
     await migrateControlSchema(controlDb);
     const now = Date.now();
+    const accountId = "acct_0000000000000000000000";
+    const externalIdentityId = "ext_local_operator";
+    const issuer = `http://${publicHost}:${ports.mockOidc}`;
     await controlDb.prepare(
-      "INSERT OR IGNORE INTO cas_platform_principals (principal_ref, identity_issuer, subject, status, platform_admin, apps_create, revision, created_at, updated_at) VALUES ('prn_local_operator', ?, 'local-operator', 'active', 1, 1, 1, ?, ?)",
-    ).bind(`http://${publicHost}:${ports.mockOidc}`, now, now).run();
+      "INSERT OR IGNORE INTO cas_accounts (account_id, credential_version, created_at, updated_at) VALUES (?, 1, ?, ?)",
+    ).bind(accountId, now, now).run();
+    await controlDb.prepare(
+      "INSERT OR IGNORE INTO cas_account_profiles (account_id, display_name, display_name_source, updated_at) VALUES (?, 'Local Operator', ?, ?)",
+    ).bind(accountId, externalIdentityId, now).run();
+    await controlDb.prepare(
+      "INSERT OR IGNORE INTO cas_external_identities (external_identity_id, account_id, provider, issuer, subject, linked_at, last_authenticated_at, display_name) VALUES (?, ?, 'google', ?, 'local-operator', ?, ?, 'Local Operator')",
+    ).bind(externalIdentityId, accountId, issuer, now, now).run();
+    await controlDb.prepare(
+      "INSERT OR IGNORE INTO cas_account_platform_authorities (account_id, authority, granted_at) VALUES (?, 'platform.admin', ?), (?, 'apps.create', ?)",
+    ).bind(accountId, now, accountId, now).run();
   }
   return {
     mf,

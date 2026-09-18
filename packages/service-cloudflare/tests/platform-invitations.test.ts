@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
-import { PlatformAccessService, PlatformAuditService, PlatformInvitationService } from "@unicas/service";
+import { AccountService, PlatformInvitationService, sha256Hex } from "@unicas/service";
+import { D1AccountRepository } from "../src/account-repository.js";
 import { migrateControlSchema } from "../src/control-schema.js";
 import { InvitationTokenCrypto } from "../src/invitation-token-crypto.js";
-import { D1PlatformAccessRepository } from "../src/platform-access-repository.js";
+import { D1PlatformInvitationRepository } from "../src/platform-invitation-repository.js";
 
 let runtime: Miniflare | undefined;
 afterEach(async () => { await runtime?.dispose(); runtime = undefined; });
@@ -17,7 +18,7 @@ function encryptionKey(): string {
 }
 
 describe("D1 platform invitations", () => {
-  test("seals idempotency, conditionally revokes, atomically accepts, and preserves blocked state", async () => {
+  test("seals idempotency, revokes conditionally, grants an Account, and preserves blocked state", async () => {
     runtime = new Miniflare(convertV4MiniflareOptions({
       workers: [{
         name: "platform-invitation-test",
@@ -25,127 +26,157 @@ describe("D1 platform invitations", () => {
         script: "export default { fetch() { return new Response('ok'); } }",
         compatibilityDate: "2025-08-17",
         d1Databases: { DB: "platform-invitation-test" },
-      }]
+      }],
     }));
     await runtime.ready;
     const db = await runtime.getD1Database("DB", "platform-invitation-test");
     await migrateControlSchema(db);
-    const actor = { issuer: "https://accounts.example", subject: "admin" };
-    await db.prepare("INSERT INTO cas_platform_principals (principal_ref, identity_issuer, subject, status, platform_admin, apps_create, revision, created_at, updated_at) VALUES ('actor-ref', ?, ?, 'active', 1, 0, 1, 1, 1)").bind(actor.issuer, actor.subject).run();
-    const repository = new D1PlatformAccessRepository(db);
-    const accessService = new PlatformAccessService(repository, () => 1000);
+    const accounts = new AccountService(new D1AccountRepository(db), () => 1000);
+    const admin = await accounts.createForExternalIdentity({
+      provider: "google",
+      issuer: "https://accounts.example",
+      subject: "admin",
+    });
+    await db.prepare(
+      "INSERT INTO cas_account_platform_authorities (account_id, authority, granted_at) VALUES (?, 'platform.admin', 1)",
+    ).bind(admin.account.accountId).run();
+    const repository = new D1PlatformInvitationRepository(db);
     let invitationNumber = 0;
     let tokenNumber = 0;
     const service = new PlatformInvitationService(
       repository,
-      accessService,
+      accounts,
       new InvitationTokenCrypto({ current: encryptionKey() }),
       {
         now: () => 1000,
         invitationTtlMs: 1000,
         generateInvitationId: () => `invitation-${++invitationNumber}`,
         generateInvitationToken: () => `${++tokenNumber}`.padStart(32, "t"),
-        generatePrincipalRef: () => `principal-${invitationNumber}`,
         generateEventId: () => `event-${crypto.randomUUID()}`,
       },
     );
+    const adminActor = {
+      accountId: admin.account.accountId,
+      externalIdentityId: admin.authenticatedIdentity.externalIdentityId,
+    };
 
-    const created = await service.create(actor, {
+    const created = await service.create(adminActor, {
       emailConstraint: "creator@example.com",
       authorities: ["apps.create"],
     }, "create-1", "request-create");
-    await expect(service.create(actor, {
+    await expect(service.create(adminActor, {
       emailConstraint: "creator@example.com",
       authorities: ["apps.create"],
     }, "create-1")).resolves.toEqual(created);
     const token = created.acceptUrl.split("/")[3]!;
-    const idempotency = await db.prepare("SELECT sealed_token FROM cas_platform_invitation_idempotency").first<{ sealed_token: string }>();
+    const idempotency = await db.prepare(
+      "SELECT actor_account_id, sealed_token FROM cas_platform_invitation_idempotency",
+    ).first<{ actor_account_id: string; sealed_token: string }>();
+    expect(idempotency?.actor_account_id).toBe(admin.account.accountId);
     expect(idempotency?.sealed_token).not.toContain(token);
-    expect(await service.list(actor, {})).toMatchObject({
-      items: [{ invitationId: created.invitationId, emailConstraint: "creator@example.com", authorities: ["apps.create"] }],
+    await expect(service.list(admin.account.accountId, {})).resolves.toMatchObject({
+      items: [{
+        invitationId: created.invitationId,
+        createdByAccountId: admin.account.accountId,
+        authorities: ["apps.create"],
+      }],
     });
+    await expect(service.revoke(adminActor, created.invitationId, '"1"', "request-revoke"))
+      .resolves.toEqual({ revision: 2 });
+    await expect(service.revoke(adminActor, created.invitationId, '"2"'))
+      .resolves.toEqual({ revision: 2 });
 
-    await expect(service.revoke(actor, created.invitationId, '"1"', "request-revoke")).resolves.toEqual({ revision: 2 });
-    await expect(service.revoke(actor, created.invitationId, '"2"')).resolves.toEqual({ revision: 2 });
-
-    const acceptedInvitation = await service.create(actor, {
+    const invitee = await accounts.createForExternalIdentity({
+      provider: "microsoft",
+      issuer: "https://accounts.example",
+      subject: "invitee",
+    });
+    const acceptedInvitation = await service.create(adminActor, {
       emailConstraint: "invitee@example.com",
       authorities: ["platform.admin"],
     }, "create-2");
-    const invitee = { issuer: actor.issuer, subject: "invitee" };
-    await service.accept(
-      invitee,
-      { displayName: "Invitee", emailForDisplay: "invitee@example.com" },
-      acceptedInvitation.acceptUrl.split("/")[3]!,
-      "request-accept",
-    );
-    expect(await repository.getAccess(invitee)).toMatchObject({
-      status: "active",
-      authorities: ["platform.admin"],
-      revision: 1,
+    const acceptedToken = acceptedInvitation.acceptUrl.split("/")[3]!;
+    await db.prepare(
+      `INSERT INTO cas_email_challenges
+        (challenge_id, invitation_kind, invitation_id, invitation_token_hash,
+         identity_issuer, subject, authentication_event_id, normalized_email,
+         code_hash, expires_at, max_attempts, last_sent_at, verified_at, created_at)
+       VALUES ('challenge-platform', 'platform', ?, ?, ?, ?, 'auth-invitee',
+         'invitee@example.com', ?, 2000, 5, 900, 900, 900)`,
+    ).bind(
+      acceptedInvitation.invitationId,
+      await sha256Hex(acceptedToken),
+      invitee.authenticatedIdentity.issuer,
+      invitee.authenticatedIdentity.subject,
+      "0".repeat(64),
+    ).run();
+    await service.accept({
+      accountId: invitee.account.accountId,
+      externalIdentityId: invitee.authenticatedIdentity.externalIdentityId,
+    }, [{
+      normalizedEmail: "invitee@example.com",
+      source: "unicas-email-challenge",
+      verifiedAt: 900,
+      expiresAt: 2_000,
+      authenticationEventId: "auth-invitee",
+      challengeId: "challenge-platform",
+    }], acceptedToken, "request-accept");
+    expect(await db.prepare(
+      "SELECT consumed_at FROM cas_email_challenges WHERE challenge_id = 'challenge-platform'",
+    ).first()).toEqual({ consumed_at: 1000 });
+    expect(await db.prepare(
+      "SELECT authority FROM cas_account_platform_authorities WHERE account_id = ?",
+    ).bind(invitee.account.accountId).all()).toMatchObject({
+      results: [{ authority: "platform.admin" }],
     });
-    await db.prepare("INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES ('app-1', 'App One', '', 'active', 1, 1)").run();
-    await db.prepare("INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at) VALUES ('app-1', ?, ?, 1)").bind(invitee.issuer, invitee.subject).run();
-    await db.prepare("INSERT INTO cas_control_audit_events (event_id, app_id, identity_issuer, subject, action, target, created_at) VALUES ('activity-1', 'app-1', ?, ?, 'session.login', 'principal', 900)").bind(invitee.issuer, invitee.subject).run();
-    const access = await repository.getAccess(invitee);
-    expect(await repository.getPrincipal(access!.principalRef)).toMatchObject({
-      lastActiveAt: 900,
-      appMembershipCount: 1,
-      memberships: [{ appId: "app-1", principal: invitee }],
-    });
-    expect(await repository.listPrincipals({ after: "", limit: 10 })).toEqual(expect.arrayContaining([
-      expect.objectContaining({ principal: invitee, lastActiveAt: 900, appMembershipCount: 1 }),
-    ]));
-    expect(await accessService.listPrincipals(actor, {
-      query: "invitee@example.com",
-      effectiveAccess: "active",
-      authority: "platform.admin",
-      limit: 10,
-    })).toMatchObject({ items: [{ principal: invitee }], nextCursor: null });
-    const firstPrincipalPage = await accessService.listPrincipals(actor, { authority: "platform.admin", limit: 1 });
-    expect(firstPrincipalPage.nextCursor).toEqual(expect.any(String));
-    await expect(accessService.listPrincipals(actor, {
-      authority: "none",
-      limit: 1,
-      cursor: firstPrincipalPage.nextCursor!,
-    })).rejects.toMatchObject({ code: "INVALID_CURSOR" });
+    expect(await db.prepare(
+      "SELECT primary_verified_email FROM cas_accounts WHERE account_id = ?",
+    ).bind(invitee.account.accountId).first()).toEqual({ primary_verified_email: "invitee@example.com" });
 
-    const blocked = { issuer: actor.issuer, subject: "blocked" };
-    await db.prepare("INSERT INTO cas_platform_principals (principal_ref, identity_issuer, subject, status, platform_admin, apps_create, revision, created_at, updated_at) VALUES ('blocked-ref', ?, ?, 'blocked', 0, 0, 1, 1, 1)").bind(blocked.issuer, blocked.subject).run();
-    const blockedInvitation = await service.create(actor, {
+    const blocked = await accounts.createForExternalIdentity({
+      provider: "github",
+      issuer: "https://github.com",
+      subject: "42",
+    });
+    await db.prepare("UPDATE cas_accounts SET blocked_at = 999 WHERE account_id = ?")
+      .bind(blocked.account.accountId).run();
+    const blockedInvitation = await service.create(adminActor, {
       emailConstraint: "blocked@example.com",
       authorities: ["apps.create"],
     }, "create-3");
-    await expect(service.accept(
-      blocked,
-      { displayName: "Blocked", emailForDisplay: "blocked@example.com" },
-      blockedInvitation.acceptUrl.split("/")[3]!,
-    )).rejects.toMatchObject({ code: "PLATFORM_ACCESS_REQUIRED" });
-    expect(await repository.getInvitation(blockedInvitation.invitationId, 1000)).toMatchObject({ status: "pending" });
-    expect(await repository.getAccess(blocked)).toMatchObject({ status: "blocked", authorities: [] });
+    await expect(service.accept({
+      accountId: blocked.account.accountId,
+      externalIdentityId: blocked.authenticatedIdentity.externalIdentityId,
+    }, [{
+      normalizedEmail: "blocked@example.com",
+      source: "google-oidc",
+      verifiedAt: 900,
+      expiresAt: 2_000,
+      authenticationEventId: "auth-blocked",
+    }], blockedInvitation.acceptUrl.split("/")[3]!)).rejects.toMatchObject({
+      code: "PLATFORM_ACCESS_REQUIRED",
+    });
+    expect(await repository.getInvitation(blockedInvitation.invitationId, 1000))
+      .toMatchObject({ status: "pending" });
 
-    const audit = await db.prepare("SELECT action, target_invitation_id, request_id FROM cas_platform_audit_events ORDER BY created_at, action").all();
+    const audit = await db.prepare(
+      "SELECT action, actor_account_id, actor_external_identity_id, target_account_id, target_invitation_id, request_id FROM cas_platform_audit_events ORDER BY created_at, action",
+    ).all();
     expect(audit.results).toEqual(expect.arrayContaining([
-      { action: "platform_invitation.created", target_invitation_id: created.invitationId, request_id: "request-create" },
-      { action: "platform_invitation.revoked", target_invitation_id: created.invitationId, request_id: "request-revoke" },
-      { action: "platform_invitation.accepted", target_invitation_id: acceptedInvitation.invitationId, request_id: "request-accept" },
+      expect.objectContaining({
+        action: "platform_invitation.created",
+        actor_account_id: admin.account.accountId,
+        actor_external_identity_id: admin.authenticatedIdentity.externalIdentityId,
+        target_invitation_id: created.invitationId,
+        request_id: "request-create",
+      }),
+      expect.objectContaining({
+        action: "platform_invitation.accepted",
+        actor_account_id: invitee.account.accountId,
+        target_account_id: invitee.account.accountId,
+        target_invitation_id: acceptedInvitation.invitationId,
+        request_id: "request-accept",
+      }),
     ]));
-    const auditService = new PlatformAuditService(repository, new PlatformAccessService(repository));
-    const firstAuditPage = await auditService.list(actor, { limit: 2, createdAfter: 0 });
-    expect(firstAuditPage.items).toHaveLength(2);
-    expect(firstAuditPage.nextCursor).toEqual(expect.any(String));
-    expect(firstAuditPage.items[0]!.createdAt).toBeGreaterThanOrEqual(firstAuditPage.items[1]!.createdAt);
-    expect(JSON.stringify(firstAuditPage)).not.toMatch(/platform-token|sealed_token|session/i);
-    const secondAuditPage = await auditService.list(actor, { limit: 2, createdAfter: 0, cursor: firstAuditPage.nextCursor! });
-    expect(secondAuditPage.items.map(event => event.eventId)).not.toEqual(expect.arrayContaining(firstAuditPage.items.map(event => event.eventId)));
-    const acceptedAudit = await auditService.list(actor, { action: "platform_invitation.accepted", limit: 10 });
-    expect(acceptedAudit.items).toEqual([expect.objectContaining({
-      actorPrincipalRef: access!.principalRef,
-      targetPrincipalRef: access!.principalRef,
-      targetInvitationId: acceptedInvitation.invitationId,
-      requestId: "request-accept",
-    })]);
-    await expect(auditService.list(actor, { action: "platform_invitation.created", cursor: firstAuditPage.nextCursor! }))
-      .rejects.toMatchObject({ code: "INVALID_CURSOR" });
-  }, 15_000);
+  }, 20_000);
 });

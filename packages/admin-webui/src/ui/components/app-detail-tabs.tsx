@@ -37,14 +37,12 @@ export function AppDetailTabs({
   appId,
   displayName,
   activeSection,
-  playgroundEnabled,
   onTabChange,
   content,
 }: {
   appId: string;
   displayName: string;
   activeSection: AppSection;
-  playgroundEnabled: boolean;
   onTabChange: (section: AppSection) => void;
   content: ReactNode;
 }) {
@@ -61,14 +59,6 @@ export function AppDetailTabs({
           {tab.label}
         </TabsTrigger>
       ))}
-      <TabsTrigger
-        value="playground"
-        className="console-playground-tab"
-        disabled={!playgroundEnabled}
-        title={playgroundEnabled ? "Playground" : "Enable the managed issuer to use Playground"}
-      >
-        Playground
-      </TabsTrigger>
     </WorkspaceDetailHeader>
   );
 }

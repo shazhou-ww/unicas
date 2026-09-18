@@ -35,9 +35,16 @@ Vite proxies Space, managed-issuer, and discovery routes to the direct edge so
 the local browser topology matches production's single public origin.
 
 The local runtime uses its mock OIDC provider by default. To use Google OIDC,
-set both `GOOGLE_OIDC_CLIENT_ID` and `GOOGLE_OIDC_CLIENT_SECRET`. Optionally set
+set both `OAUTH_GOOGLE_CLIENT_ID` and `OAUTH_GOOGLE_CLIENT_SECRET`. Optionally set
 `GOOGLE_OIDC_ISSUER`; register
 `http://localhost:4070/admin/auth/callback` as the redirect URI.
+
+Microsoft and GitHub are configuration-driven. Supply each complete client ID
+and secret pair to enable it. Register
+`/admin/auth/callback/microsoft` and `/admin/auth/callback/github` on the
+browser-facing administrator origin. The default local runtime has no outbound
+Email binding, so a Microsoft email-constrained invitation intentionally fails
+closed; repository and BFF tests provide a local fake sender.
 
 Other local settings:
 
@@ -47,7 +54,7 @@ Other local settings:
 | `UNICAS_LOCAL_PUBLIC_HOST` | Same as `UNICAS_LOCAL_HOST` | Browser-visible host for local OIDC endpoints; Docker sets `localhost` |
 | `UNICAS_ADMIN_ORIGIN` | `http://localhost:4070` | Browser-facing administrator origin |
 
-To exercise managed issuers and Playground locally, set both
+To exercise managed issuers locally, set both
 `MANAGED_ISSUER_PRIVATE_KEY_PKCS8` and `MANAGED_ISSUER_KEY_ID` before startup.
 Host and Docker modes forward the pair together; supplying only one leaves the
 managed issuer unavailable.
@@ -113,20 +120,24 @@ issuer identifiers remain compatibility contracts and are not renamed.
 Provision secrets with Wrangler so values never appear in shell history:
 
 ```powershell
-pnpm --filter @unicas/service-cloudflare exec wrangler secret put GOOGLE_OIDC_CLIENT_SECRET
-pnpm --filter @unicas/service-cloudflare exec wrangler secret put SESSION_ENCRYPTION_KEYS
-pnpm --filter @unicas/service-cloudflare exec wrangler secret put OAUTH_STATE_ENCRYPTION_KEY
+pnpm --filter @unicas/service-cloudflare exec wrangler secret put OAUTH_GOOGLE_CLIENT_SECRET
+pnpm --filter @unicas/service-cloudflare exec wrangler secret put OAUTH_MICROSOFT_CLIENT_SECRET
+pnpm --filter @unicas/service-cloudflare exec wrangler secret put OAUTH_GITHUB_CLIENT_SECRET
 ```
+
+The production deployment checks Cloudflare for `SESSION_ENCRYPTION_KEYS` and
+`OAUTH_STATE_ENCRYPTION_KEY` before publishing the Worker. It generates each
+missing value directly into a Worker secret with 32 bytes of cryptographic
+randomness and never overwrites an existing value. These internal encryption
+keys do not pass through GitHub. Key rotation remains an explicit operation.
 
 `SESSION_ENCRYPTION_KEYS` is a non-empty JSON object mapping key IDs to
 base64url keys, for example `{"2026-09":"<base64url-32-byte-key>"}`. Keep old
 entries during rotation until sessions and pending platform-invitation replay
 receipts sealed with them have expired.
 
-`ADMIN_EMAIL_ALLOWLIST` is optional only for rollback to a pre-Platform-Access
-Worker. It is not an authorization source after the no-gap bootstrap in
-[CAS Middleware Operations](cas-operations.md#platform-access-bootstrap-and-migration).
-Keep it through the rollback window, then remove it deliberately.
+Administrator admission is owned by Account platform authorities and App
+memberships. There is no email-allowlist fallback.
 
 Additional features require these secrets:
 
@@ -136,6 +147,8 @@ Additional features require these secrets:
 | `CAS_R2_SECRET_ACCESS_KEY` | Presigned direct R2 uploads |
 | `MANAGED_ISSUER_PRIVATE_KEY_PKCS8` | UniCAS-managed App issuers |
 | `CAS_AUDIT_READER_KEY` | Protected physical audit-reader RPC |
+| `OAUTH_MICROSOFT_CLIENT_SECRET` | Microsoft personal-account administrator login |
+| `OAUTH_GITHUB_CLIENT_SECRET` | GitHub administrator login and verified Emails API lookup |
 
 `MANAGED_ISSUER_KEY_ID` is the corresponding non-secret key ID in
 `wrangler.toml`. The current implementation exposes one managed signing key;
@@ -143,9 +156,16 @@ add key-ring overlap support before rotating it in production.
 
 Optional OIDC/session variables include `OIDC_ISSUER`, `OIDC_DISCOVERY_URL`,
 `SESSION_TTL_MS`, `SESSION_COOKIE_NAME`, `SESSION_COOKIE_SECURE`, and
-`SESSION_COOKIE_SAME_SITE`. `ADMIN_TEST_ACCOUNT_EMAIL` and
-`ADMIN_TEST_ACCOUNT_PASSWORD` are test-only and must never be enabled in
-production.
+`SESSION_COOKIE_SAME_SITE`.
+
+Set the corresponding non-secret `OAUTH_MICROSOFT_CLIENT_ID` and
+`OAUTH_GITHUB_CLIENT_ID` variables before enabling those providers. Microsoft
+configuration additionally requires the `EMAIL` send binding and a validated
+`ADMIN_EMAIL_FROM` address on an onboarded UniCAS Email Service domain; Worker
+startup rejects an incomplete combination. The hourly scheduled handler deletes
+expired challenge rows. Challenge codes are never stored or logged, and resend
+limits apply across repeated callbacks for the same invitation, identity, and
+destination.
 
 `CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS` is optional. Unset or blank permits public
 HTTPS issuer discovery; a comma-separated value restricts discovery to those
@@ -270,6 +290,12 @@ secrets:
 | --- | --- | --- |
 | Variable | `CLOUDFLARE_ACCOUNT_ID` | ID of the one production Cloudflare account |
 | Secret | `CLOUDFLARE_API_TOKEN` | Dedicated **Edit Cloudflare Workers** token scoped to that account and the `unicas.work` zone |
+| Variable | `OAUTH_GOOGLE_CLIENT_ID` | Google Web OAuth client ID |
+| Secret | `OAUTH_GOOGLE_CLIENT_SECRET` | Google Web OAuth client secret |
+| Variable | `OAUTH_MICROSOFT_CLIENT_ID` | Microsoft Application (client) ID |
+| Secret | `OAUTH_MICROSOFT_CLIENT_SECRET` | Microsoft client secret value |
+| Variable | `OAUTH_GITHUB_CLIENT_ID` | GitHub OAuth App client ID |
+| Secret | `OAUTH_GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret |
 | Variable | `UNICAS_SMOKE_APP_ID` | Provisioned production smoke App ID |
 | Variable | `UNICAS_SMOKE_ISSUER` | Issuer registered for the smoke App |
 | Variable | `UNICAS_SMOKE_AUDIENCE` | Audience registered for the smoke App |
@@ -285,11 +311,12 @@ when that step fails. It does not set `UNICAS_SMOKE_ALLOW_OTHER_ORIGIN` or
 `UNICAS_SMOKE_ENABLE_CONCURRENCY`; production smoke remains pinned to
 `https://api.unicas.work` with the Cloudflare-safe concurrency behavior.
 
-Worker runtime secrets remain provisioned only in Cloudflare. Do not copy
-`GOOGLE_OIDC_CLIENT_SECRET`, session or OAuth encryption keys, R2 credentials,
-managed-issuer keys, the audit-reader key, or any future Worker runtime secret
-into GitHub for routine deployment. Wrangler preserves those secrets when it
-publishes a new version.
+The release workflow copies the three provider client secrets from the
+protected GitHub Environment into Cloudflare. Internal session and OAuth-state
+encryption keys remain provisioned only in Cloudflare: the production deploy
+creates them when absent and preserves them on later releases. Do not copy R2
+credentials, managed-issuer keys, the audit-reader key, or other Worker runtime
+secrets into GitHub for routine deployment.
 
 The production smoke App uses the dedicated external issuer
 `https://unicas.work/deploy-smoke`. The product-site Worker serves its OAuth
@@ -318,6 +345,34 @@ Initial provisioning is an explicit bootstrap operation:
 5. Dispatch **CI** from `release` and retain the bootstrap key file only in the
    approved operator credential store until rotation or recovery no longer
    requires it.
+
+For the one-time Account-model production cutover, configure a required
+reviewer on the `Production` Environment before merging the promotion pull
+request. Let the release revision pass `validate` and stop at that environment
+approval. From a checkout of the exact release SHA:
+
+1. Preview the bounded inventory with
+   `node stacks/unicas/deploy/reset-smoke.mjs --expected-stack-id <app-id>`.
+2. Execute the authorized no-backup reset with `--execute`, the same App ID,
+   and `--confirm DELETE-ALL-TEST-DATA-NO-BACKUP`.
+3. Require the script to report `resetVerified`, `bootstrapVerified`, and
+   `maintenanceActive` without printing provider identity data.
+4. Approve the held Production deployment. The workflow replaces maintenance,
+   materializes missing internal encryption keys, and runs canonical smoke.
+
+The maintenance Worker physically enumerates the dedicated R2 bucket and OAuth
+KV namespace after traffic is stopped. A pending direct upload, an unexpected
+object prefix, a changed KV inventory, or a non-empty post-delete inventory
+fails closed. The reset also refuses any configured direct-upload signing
+credential because an already signed R2 URL bypasses Worker maintenance; the
+underlying R2 API token must be revoked first. If only final count verification is interrupted after the schema
+commit, run the same script with `--verify-current --expected-stack-id <app-id>`;
+that mode verifies the current schema and bootstrap without reading retired
+tables or repeating deletion.
+
+Do not approve first: the old Worker could recreate retired tables between the
+reset and deployment. Do not run reset before the release job is waiting for
+approval: validation failure would leave an unnecessary maintenance window.
 
 Use `main` for normal development integration and keep `release` as a promotion
 branch, not a second development line. Protect `release`, require the **CI**

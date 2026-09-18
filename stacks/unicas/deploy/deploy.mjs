@@ -10,6 +10,11 @@ const SMOKE_ENVIRONMENT_KEYS = [
   "UNICAS_SMOKE_KID",
   "UNICAS_SMOKE_KEY_FILE",
 ];
+const OAUTH_VARIABLE_KEYS = [
+  "OAUTH_GOOGLE_CLIENT_ID",
+  "OAUTH_MICROSOFT_CLIENT_ID",
+  "OAUTH_GITHUB_CLIENT_ID",
+];
 
 export function parseArgs(argv) {
   const options = { dryRun: false, production: false, skipSmoke: false, env: undefined };
@@ -30,7 +35,7 @@ export function parseArgs(argv) {
   return options;
 }
 
-export function deploymentPlan({ dryRun = false, env, production = false, skipSmoke } = {}) {
+export function deploymentPlan({ dryRun = false, env, production = false, skipSmoke, environment = process.env } = {}) {
   if (env && production) {
     throw new Error("--production and --env cannot be used together");
   }
@@ -44,10 +49,16 @@ export function deploymentPlan({ dryRun = false, env, production = false, skipSm
     throw new Error("--env requires --skip-smoke; run smoke separately with an explicit base URL");
   }
   const envArgs = env ? ["--env", env] : [];
-  const commands = [
+  const workerVars = OAUTH_VARIABLE_KEYS.flatMap(key => environment[key]
+    ? ["--var", `${key}:${environment[key]}`]
+    : []);
+  const commands = production
+    ? [["node", "stacks/unicas/deploy/ensure-encryption-secrets.mjs"]]
+    : [];
+  commands.push(
     ["pnpm", "--filter", SERVICE_PACKAGE, "build"],
-    ["pnpm", "--filter", SERVICE_PACKAGE, "exec", "wrangler", "deploy", ...envArgs],
-  ];
+    ["pnpm", "--filter", SERVICE_PACKAGE, "exec", "wrangler", "deploy", ...envArgs, ...workerVars],
+  );
   if (!skipSmoke) {
     commands.push(["pnpm", "--filter", "@unicas/codec", "build"]);
     commands.push(["pnpm", "--filter", "@unicas/tenant-protocol", "build"]);
@@ -59,9 +70,9 @@ export function deploymentPlan({ dryRun = false, env, production = false, skipSm
 
 export function validateDeploymentEnvironment(options, environment = process.env) {
   if (options.dryRun || options.skipSmoke) return;
-  const missing = SMOKE_ENVIRONMENT_KEYS.filter((key) => !environment[key]);
+  const missing = [...SMOKE_ENVIRONMENT_KEYS, ...OAUTH_VARIABLE_KEYS].filter((key) => !environment[key]);
   if (missing.length > 0) {
-    throw new Error(`production smoke configuration is missing: ${missing.join(", ")}`);
+    throw new Error(`production deployment configuration is missing: ${missing.join(", ")}`);
   }
 }
 

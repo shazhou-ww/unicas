@@ -42,7 +42,7 @@ export function matchRoute(pattern: string, path: string): RouteMatch | null {
   return { pattern, params };
 }
 
-export type AppSection = "overview" | "members" | "invitations" | "playground" | "change-logs";
+export type AppSection = "overview" | "members" | "invitations" | "change-logs";
 
 export interface AppRoute {
   readonly appId: string;
@@ -57,25 +57,25 @@ export function parseAppRoute(path: string): AppRoute | null {
   if (segments.length < 2 || segments[0] !== "apps") return null;
   const appId = decodeURIComponent(segments[1]!);
   const section = segments[2] ?? "overview";
-  const validSections: AppSection[] = ["overview", "members", "invitations", "playground", "change-logs"];
+  const validSections: AppSection[] = ["overview", "members", "invitations", "change-logs"];
   if (!validSections.includes(section as AppSection)) return null;
   return { appId, section: section as AppSection, ...(search ? { peopleFilter: new URLSearchParams(search).get("filter") ?? "current" } : {}) };
 }
 
-export type PlatformSection = "people" | "principals" | "invitations" | "audit";
+export type PlatformSection = "people" | "invitations" | "audit";
 
 export interface PlatformRoute {
   readonly section: PlatformSection;
   readonly peopleFilter?: string;
 }
 
-/** Parse a platform route like /platform/principals into section. */
+/** Parse a platform route into its current section. */
 export function parsePlatformRoute(path: string): PlatformRoute | null {
   const [pathname, search] = path.split("?");
   const segments = pathname!.split("/").filter(Boolean);
   if (segments.length < 1 || segments[0] !== "platform") return null;
   const section = segments[1] ?? "people";
-  const validSections: PlatformSection[] = ["people", "principals", "invitations", "audit"];
+  const validSections: PlatformSection[] = ["people", "invitations", "audit"];
   if (!validSections.includes(section as PlatformSection)) return null;
   return { section: section as PlatformSection, ...(search ? { peopleFilter: new URLSearchParams(search).get("filter") ?? "current" } : {}) };
 }

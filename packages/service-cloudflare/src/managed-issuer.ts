@@ -2,20 +2,16 @@ import { exportJWK, importPKCS8, SignJWT } from "jose";
 import {
   CapabilityAlgorithm,
   CapabilityTokenType,
-  CapabilityVersion,
   SpaceCapabilityVersion,
-  casManagePermission,
-  casReadPermission,
-  casWritePermission,
   spaceCasManagePermission,
   spaceCasReadPermission,
   spaceCasWritePermission,
 } from "@unicas/tenant-protocol";
 import type {
-  ControlOAuthIssuerRecord,
-  ManagedCapabilityIssuer,
+  AccountManagedCapabilityIssuer,
+  AccountOAuthIssuerRecord,
 } from "@unicas/service";
-import { managedPlaygroundOwnerKey } from "@unicas/service";
+import { managedAccountOwnerKey } from "@unicas/service";
 
 const CAPABILITY_LIFETIME_SECONDS = 60 * 60;
 
@@ -26,7 +22,7 @@ export interface ManagedIssuerOptions {
   readonly now?: () => number;
 }
 
-export class CloudflareManagedIssuer implements ManagedCapabilityIssuer {
+export class CloudflareManagedIssuer implements AccountManagedCapabilityIssuer {
   readonly #origin: string;
   readonly #privateKeyPkcs8: string;
   readonly #keyId: string;
@@ -42,14 +38,14 @@ export class CloudflareManagedIssuer implements ManagedCapabilityIssuer {
     this.#now = options.now ?? (() => Date.now());
   }
 
-  async provision(stackId: string, createdAt: number): Promise<ControlOAuthIssuerRecord> {
+  async provision(appId: string, createdAt: number): Promise<AccountOAuthIssuerRecord> {
     const material = await this.#material();
-    const issuer = this.issuer(stackId);
+    const issuer = this.issuer(appId);
     return {
-      stackId,
+      appId,
       mode: "managed",
       issuer,
-      audience: `${this.#origin}/stacks/${encodeURIComponent(stackId)}`,
+      audience: `${this.#origin}/v2/apps/${encodeURIComponent(appId)}`,
       metadataUrl: `${issuer}/.well-known/oauth-authorization-server`,
       metadataType: "oauth",
       authorizationEndpoint: `${issuer}/authorize`,
@@ -68,58 +64,14 @@ export class CloudflareManagedIssuer implements ManagedCapabilityIssuer {
     };
   }
 
-  async issue(input: Parameters<ManagedCapabilityIssuer["issue"]>[0]) {
-    const expectedIssuer = this.issuer(input.stack.stackId);
-    if (input.issuer.issuer !== expectedIssuer || input.issuer.mode !== "managed") {
-      throw new TypeError("managed issuer binding does not match the stack");
-    }
-    const material = await this.#material();
-    const identityDigest = await managedPlaygroundOwnerKey(input.stack.stackId, input.identity);
-    const tenantId = `member_${identityDigest.slice(0, 24)}`;
-    const subject = `member:${identityDigest}`;
-    const permissions = [
-      casReadPermission(tenantId),
-      casWritePermission(tenantId),
-      casManagePermission(tenantId),
-    ];
-    const issuedAt = Math.floor(this.#now() / 1000);
-    const expiresAt = issuedAt + CAPABILITY_LIFETIME_SECONDS;
-    const accessToken = await new SignJWT({
-      ver: CapabilityVersion,
-      tenantId,
-      permissions,
-      refDomain: `playground:${identityDigest.slice(0, 16)}`,
-    })
-      .setProtectedHeader({ alg: CapabilityAlgorithm, kid: this.#keyId, typ: CapabilityTokenType })
-      .setIssuer(expectedIssuer)
-      .setSubject(subject)
-      .setAudience(input.issuer.audience)
-      .setIssuedAt(issuedAt)
-      .setNotBefore(issuedAt - 5)
-      .setExpirationTime(expiresAt)
-      .setJti(crypto.randomUUID())
-      .sign(material.privateKey);
-    return {
-      accessToken,
-      tokenType: "Bearer" as const,
-      expiresIn: CAPABILITY_LIFETIME_SECONDS,
-      expiresAt: expiresAt * 1000,
-      issuer: expectedIssuer,
-      audience: input.issuer.audience,
-      tenantId,
-      permissions,
-    };
-  }
-
-  async issueSpace(input: Parameters<ManagedCapabilityIssuer["issue"]>[0]) {
-    const expectedIssuer = this.issuer(input.stack.stackId);
+  async issueAccountSpace(input: Parameters<AccountManagedCapabilityIssuer["issueAccountSpace"]>[0]) {
+    const expectedIssuer = this.issuer(input.app.appId);
     if (input.issuer.issuer !== expectedIssuer || input.issuer.mode !== "managed") {
       throw new TypeError("managed issuer binding does not match the app");
     }
     const material = await this.#material();
-    const identityDigest = await managedPlaygroundOwnerKey(input.stack.stackId, input.identity);
-    const spaceId = `member_${identityDigest.slice(0, 24)}`;
-    const subject = `member:${identityDigest}`;
+    const accountDigest = await managedAccountOwnerKey(input.app.appId, input.accountId);
+    const spaceId = `member_${accountDigest.slice(0, 24)}`;
     const permissions = [
       spaceCasReadPermission(spaceId),
       spaceCasWritePermission(spaceId),
@@ -131,11 +83,11 @@ export class CloudflareManagedIssuer implements ManagedCapabilityIssuer {
       ver: SpaceCapabilityVersion,
       spaceId,
       permissions,
-      refDomain: `playground:${identityDigest.slice(0, 16)}`,
+      refDomain: `account:${accountDigest.slice(0, 16)}`,
     })
       .setProtectedHeader({ alg: CapabilityAlgorithm, kid: this.#keyId, typ: CapabilityTokenType })
       .setIssuer(expectedIssuer)
-      .setSubject(subject)
+      .setSubject(`account:${accountDigest}`)
       .setAudience(input.issuer.audience)
       .setIssuedAt(issuedAt)
       .setNotBefore(issuedAt - 5)

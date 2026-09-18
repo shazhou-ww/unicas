@@ -2,20 +2,20 @@
  * `/admin` BFF dispatcher (testable, no Worker globals).
  *
  * Owns: Google OIDC login/callback/logout, encrypted session cookies, CSRF
- * and origin checks, the frozen control-plane API routes, the invitation
+ * and origin checks, current administrator API routes, the invitation
  * accept page redirect, and SPA shell serving. Persistence and control
  * operations are injected by the deployment.
  */
 
 import {
   CasAdminErrorCodes,
+  AccountIdSchema,
   casAdminErrorHttpStatus,
   formatCasAdminETag,
   matchAppAdminRoute,
-  matchCasAdminRoute,
   matchPlatformAdminRoute,
   PatchAppRequestSchema,
-  PatchPlatformAccessSchema,
+  PatchAccountProfileSchema,
   AppInvitationQuerySchema,
   InspectAppIssuerRequestSchema,
   ActivateAppIssuerRequestSchema,
@@ -23,17 +23,19 @@ import {
 import type {
   AppAdminRoute,
   CasAdminErrorResponse,
-  CasAdminRoute,
+  ProviderKind,
 } from "@unicas/admin-protocol";
 import type {
-  ControlPlaneCallContext,
-  ControlPlaneOperations,
   ControlSessionRepository,
-  PlatformAccessRepository,
-  PlatformAuditRepository,
+  AccountRepository,
+  AccountManagedCapabilityIssuer,
+  OAuthDiscoveryPort,
+  EmailChallengeRepository,
   PlatformInvitationRepository,
 } from "@unicas/service";
-import { PlatformAccessError, PlatformAccessService, PlatformAuditService, PlatformInvitationService, sha256Hex } from "@unicas/service";
+import { AccountService, AccountServiceError, EMAIL_CHALLENGE_TTL_MS, EmailChallengeError, EmailChallengeService, PlatformAccessError, PlatformInvitationService, ProviderRegistry, sha256Hex } from "@unicas/service";
+import type { AccountResolution, AuthenticatedProviderResult, ProviderAdapter } from "@unicas/service";
+import { requireInvitationEmailEvidence } from "@unicas/service";
 import type { AdminBffConfig } from "./config.js";
 const ADMIN_ASSET_CACHE_BUSTER = "issuer-discovery-v1";
 
@@ -45,7 +47,6 @@ import {
   OidcError,
   s256Challenge,
 } from "./oidc.js";
-import type { VerifiedOidcIdentity } from "./oidc.js";
 import {
   clearSessionCookie,
   generateCsrfToken,
@@ -54,15 +55,24 @@ import {
   SessionCrypto,
   sessionCookieHeader,
 } from "./session.js";
-import type { AdminSessionPayload, CliOneTimeCodePayload } from "./session.js";
+import type {
+  AdminSessionPayload,
+  CliOneTimeCodePayload,
+  IdentityMutationContinuation,
+} from "./session.js";
 import { checkCsrfToken, checkSameOrigin } from "./csrf.js";
-import { transformAppAdminError } from "../app-admin-adapter.js";
+import { transformAppAdminResponse } from "../app-admin-adapter.js";
 import { InvitationTokenCrypto } from "../invitation-token-crypto.js";
 import { PeopleService, type PeopleRepository } from "@unicas/service";
+import {
+  createGitHubProvider,
+  createMicrosoftPersonalProvider,
+  GoogleProviderAdapter,
+  ProviderAdapterError,
+} from "./providers.js";
 
 export interface CreateAdminBffOptions {
   readonly config: AdminBffConfig;
-  readonly controlPlane: ControlPlaneOperations;
   readonly sessionStore: ControlSessionRepository;
   /** Inject a client for tests; defaults to a real Google client. */
   readonly oidc?: OidcClient;
@@ -75,14 +85,23 @@ export interface CreateAdminBffOptions {
   readonly auditReader?: {
     fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
   };
-  /**
-   * Platform access repository. When present, login and authenticated requests
-   * are gated by the deny-by-default admission guard.
-   */
-  readonly platformAccessRepository?: PlatformAccessRepository;
   readonly platformInvitationRepository?: PlatformInvitationRepository;
-  readonly platformAuditRepository?: PlatformAuditRepository;
   readonly peopleRepository?: PeopleRepository;
+  readonly providerRegistry?: ProviderRegistry;
+  readonly accountRepository?: AccountRepository;
+  readonly managedOAuthIssuer?: AccountManagedCapabilityIssuer;
+  readonly oauthDiscovery?: OAuthDiscoveryPort;
+  readonly oauthResourcePublicOrigin?: string;
+  readonly emailChallengeRepository?: EmailChallengeRepository;
+  readonly emailChallengeSender?: EmailChallengeSender;
+}
+
+export interface EmailChallengeSender {
+  send(input: {
+    readonly to: string;
+    readonly code: string;
+    readonly expiresAt: number;
+  }): Promise<void>;
 }
 
 const NOT_AVAILABLE_MESSAGE = "Root Ref audit reads are not yet available from the admin plane";
@@ -102,7 +121,6 @@ function isLoopbackRedirect(value: string | null): value is string {
     return false;
   }
 }
-const TEST_ACCOUNT_ISSUER = "urn:unicas:manage:test-account";
 
 /** Read-side refDomain validation; reserved migration domains are readable. */
 function validateAuditRefDomain(value: string): string | null {
@@ -115,22 +133,24 @@ function validateAuditRefDomain(value: string): string | null {
 export function createAdminBff(options: CreateAdminBffOptions): (request: Request) => Promise<Response> {
   const { config } = options;
   const now = config.now ?? (() => Date.now());
-  const controlPlane = options.controlPlane;
   const sessionStore = options.sessionStore;
   const sessionCrypto = new SessionCrypto(config.sessionEncryptionKeys);
-  const platformAccess = options.platformAccessRepository
-    ? new PlatformAccessService(options.platformAccessRepository, now)
+  const accountService = options.accountRepository
+    ? new AccountService(options.accountRepository, now, options.managedOAuthIssuer ?? null, {
+      oauthDiscovery: options.oauthDiscovery,
+      oauthResourcePublicOrigin: options.oauthResourcePublicOrigin ?? config.publicOrigin,
+    })
     : null;
-  const platformInvitations = platformAccess && options.platformInvitationRepository
+  const emailChallenges = options.emailChallengeRepository
+    ? new EmailChallengeService(options.emailChallengeRepository, { now })
+    : null;
+  const platformInvitations = accountService && options.platformInvitationRepository
     ? new PlatformInvitationService(
       options.platformInvitationRepository,
-      platformAccess,
+      accountService,
       new InvitationTokenCrypto(config.sessionEncryptionKeys),
       { now },
     )
-    : null;
-  const platformAudit = platformAccess && options.platformAuditRepository
-    ? new PlatformAuditService(options.platformAuditRepository, platformAccess)
     : null;
   const oidc = options.oidc
     ?? new OidcClient({
@@ -138,8 +158,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       discoveryUrl: config.oidcDiscoveryUrl,
       clientId: config.googleClientId,
       clientSecret: config.googleClientSecret,
-      redirectUri: `${config.publicOrigin}/admin/auth/callback`,
+      redirectUri: `${config.publicOrigin}/admin/auth/callback/google`,
     });
+  const providerRegistry = options.providerRegistry ?? new ProviderRegistry(configuredProviderAdapters());
   const assets = options.assets ?? (async () => null);
   const sessionTtlMs = config.sessionTtlMs ?? 8 * 60 * 60 * 1000;
   const cookieName = config.sessionCookieName ?? "cas_admin_session";
@@ -150,9 +171,30 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     maxAgeSeconds: Math.ceil(sessionTtlMs / 1000),
   };
   const absolutize = (path: string): string => `${config.publicOrigin}${path}`;
-  const emailAllowlist = config.emailAllowlist
-    ? new Set(config.emailAllowlist.map((email) => email.toLowerCase()))
-    : null;
+
+  function configuredProviderAdapters(): readonly ProviderAdapter[] {
+    const adapters: ProviderAdapter[] = [
+      new GoogleProviderAdapter(oidc, config.oidcIssuer ?? "https://accounts.google.com", now),
+    ];
+    if (config.microsoftClientId && config.microsoftClientSecret) {
+      adapters.push(createMicrosoftPersonalProvider({
+        clientId: config.microsoftClientId,
+        clientSecret: config.microsoftClientSecret,
+        discoveryUrl: config.microsoftDiscoveryUrl,
+        redirectUri: `${config.publicOrigin}/admin/auth/callback/microsoft`,
+        now,
+      }));
+    }
+    if (config.githubClientId && config.githubClientSecret) {
+      adapters.push(createGitHubProvider({
+        clientId: config.githubClientId,
+        clientSecret: config.githubClientSecret,
+        redirectUri: `${config.publicOrigin}/admin/auth/callback/github`,
+        now,
+      }));
+    }
+    return adapters;
+  }
 
   return async function adminFetch(request: Request): Promise<Response> {
     try {
@@ -172,11 +214,13 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     if (pathname === "/admin/auth/login" && method === "GET") {
       return handleLoginPage(request, url);
     }
-    if (pathname === "/admin/auth/oidc" && method === "GET") {
-      return handleOidcLogin(url);
+    const providerStart = /^\/admin\/auth\/start\/(google|microsoft|github)$/.exec(pathname);
+    if (providerStart && method === "GET") {
+      return handleProviderLogin(providerStart[1] as ProviderKind, url);
     }
-    if (pathname === "/admin/auth/callback" && method === "GET") {
-      return handleCallback(request, url);
+    const providerCallback = /^\/admin\/auth\/callback\/(google|microsoft|github)$/.exec(pathname);
+    if (providerCallback && method === "GET") {
+      return handleCallback(request, url, providerCallback[1] as ProviderKind);
     }
     if (pathname === "/admin/auth/logout" && method === "POST") {
       return handleLogout(request);
@@ -186,6 +230,23 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     }
     if (pathname === "/admin/auth/cli/exchange" && method === "POST") {
       return handleCliExchange(request);
+    }
+    if (pathname === "/admin/auth/email-challenge" && method === "GET") {
+      return handleEmailChallengePage(request);
+    }
+    if (pathname === "/admin/auth/email-challenge/verify" && method === "POST") {
+      return handleEmailChallengeVerification(request);
+    }
+    if (pathname === "/admin/auth/email-challenge/resend" && method === "POST") {
+      return handleEmailChallengeResend(request);
+    }
+    const linkStart = /^\/admin\/auth\/link\/(google|microsoft|github)$/.exec(pathname);
+    if (linkStart && method === "POST") {
+      return handleLinkStart(request, linkStart[1] as ProviderKind);
+    }
+    const unlinkStart = /^\/admin\/auth\/unlink\/([^/]+)$/.exec(pathname);
+    if (unlinkStart && method === "POST") {
+      return handleUnlinkStart(request, decodeURIComponent(unlinkStart[1]!));
     }
 
     const inviteMatch = /^\/admin\/invitations\/([^/]+)$/.exec(pathname);
@@ -211,23 +272,53 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       return handlePlatformAdminApi(request, url, platformRoute);
     }
 
-    const route = matchCasAdminRoute(method, pathname);
-    if (route) {
-      return handleAdminApi(request, url, route);
-    }
     const appRoute = matchAppAdminRoute(method, pathname);
+    if (appRoute?.operation === "me") return handleCurrentAdministrator(request);
+    if (appRoute?.operation === "acceptMemberInvitation") {
+      return handleMemberInvitationAcceptance(request, appRoute.token);
+    }
+    if (appRoute?.operation === "acceptPlatformInvitation") {
+      return handlePlatformInvitationAcceptance(request, appRoute.token);
+    }
+    if (appRoute?.operation === "getAccount"
+      || appRoute?.operation === "listAccountIdentities"
+      || appRoute?.operation === "patchAccountProfile") {
+      return handleAccountApi(request, appRoute.operation);
+    }
+    if (appRoute?.operation === "listApps" || appRoute?.operation === "createApp") {
+      return handleAccountApps(request, url, appRoute.operation);
+    }
+    if (appRoute?.operation === "getApp" || appRoute?.operation === "patchApp") {
+      return handleAccountApps(request, url, appRoute.operation, appRoute.appId);
+    }
+    if (appRoute?.operation === "listMembers" || appRoute?.operation === "deleteMember") {
+      return handleAccountAppMembers(request, url, appRoute.appId, appRoute.operation);
+    }
+    if (appRoute?.operation === "listControlAuditEvents") {
+      return handleAccountAppAudit(request, url, appRoute.appId);
+    }
+    if (appRoute?.operation === "listRefDomains" || appRoute?.operation === "listRootDomainRefs"
+      || appRoute?.operation === "listRootDomainEvents") {
+      return handleAccountAuditRead(request, url, appRoute);
+    }
     if (appRoute?.operation === "listPeople") return handlePeople(request, appRoute.appId);
     if (appRoute?.operation === "mintManagedCapability") {
       return handleManagedSpaceCapability(request, appRoute.appId);
     }
-    if (appRoute?.operation === "patchApp") {
-      return handleAppPatch(request, appRoute.appId);
+    if (appRoute?.operation === "getManagedIssuer" || appRoute?.operation === "patchManagedIssuer") {
+      return handleAccountManagedIssuer(request, appRoute.appId, appRoute.operation);
+    }
+    if (appRoute?.operation === "getOAuthIssuer") {
+      return handleAccountOAuthIssuer(request, url, appRoute.appId);
     }
     if (appRoute?.operation === "inspectOAuthIssuer" || appRoute?.operation === "activateOAuthIssuer") {
       return handleAppIssuerMutation(request, appRoute.appId, appRoute.operation);
     }
     if (appRoute?.operation === "listMemberInvitations" || appRoute?.operation === "revokeMemberInvitation") {
       return handleAppInvitations(request, appRoute.appId, appRoute.operation === "revokeMemberInvitation" ? appRoute.invitationId : undefined);
+    }
+    if (appRoute?.operation === "createMemberInvitation") {
+      return handleCreateAppInvitation(request, appRoute.appId);
     }
     return json({ error: "Not Found" }, 404);
   };
@@ -238,9 +329,6 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
 
   async function handleLoginPage(request: Request, url: URL): Promise<Response> {
     const returnTo = sanitizeReturnTo(url.searchParams.get("returnTo")) ?? undefined;
-    if (url.searchParams.get("test-account") === "1") {
-      return handleTestAccountLogin(request, returnTo);
-    }
     const sessionId = readSessionId(request);
     const session = sessionId ? await readSession(sessionId) : null;
     if (session?.authenticated) {
@@ -249,16 +337,24 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         headers: { Location: returnTo ?? "/admin/" },
       });
     }
-    const oidcUrl = new URL("/admin/auth/oidc", config.publicOrigin);
-    if (returnTo) oidcUrl.searchParams.set("returnTo", returnTo);
+    const configuredProviders = providerRegistry.list();
+    const googleOnly = configuredProviders.length === 1 && configuredProviders[0]?.kind === "google";
+    const providerButtons = configuredProviders.map(provider => {
+      const path = `/admin/auth/start/${provider.kind}`;
+      const providerUrl = new URL(path, config.publicOrigin);
+      if (returnTo) providerUrl.searchParams.set("returnTo", returnTo);
+      return `<a class="btn${configuredProviders.length === 1 ? " btn-primary" : ""}" href="${providerUrl.pathname}${providerUrl.search}">Continue with ${escapeHtml(provider.displayName)}</a>`;
+    }).join("\n          ");
+    const retryUrl = new URL(
+      googleOnly ? "/admin/auth/start/google" : "/admin/auth/login",
+      config.publicOrigin,
+    );
+    if (returnTo) retryUrl.searchParams.set("returnTo", returnTo);
     const error = url.searchParams.get("error");
     const accessRestricted = error === "not-allowed" || error === "access-denied";
     const errorMessage = error === "oidc-failed"
-      ? "Google sign-in could not be completed. Please try again."
+      ? `${googleOnly ? "Google" : "Provider"} sign-in could not be completed. Please try again.`
       : null;
-    const testAccountLink = config.testAccount
-      ? `<a class="btn" href="/admin/auth/login?test-account=1${returnTo ? `&amp;returnTo=${encodeURIComponent(returnTo)}` : ""}">Use test account</a>`
-      : "";
     const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -279,18 +375,16 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         </div>
         <p class="login-eyebrow">UniCAS Admin</p>
         <h1>No management access</h1>
-        <p class="login-copy" role="alert">This Google account does not have management access to UniCAS. Sign in with another account or contact the UniCAS team.</p>
+        <p class="login-copy" role="alert">This ${googleOnly ? "Google account" : "login"} does not have management access to UniCAS. Sign in with another ${googleOnly ? "Google account" : "method"} or contact the UniCAS team.</p>
         <div class="login-actions">
-          <a class="btn" href="${oidcUrl.pathname}${oidcUrl.search}">Sign in with another Google account</a>
-          ${testAccountLink}
+          <a class="btn" href="${retryUrl.pathname}${retryUrl.search}">Sign in with another ${googleOnly ? "Google account" : "method"}</a>
         </div>` : `
         <p class="login-eyebrow">Restricted console</p>
         <h1>Sign in to UniCAS</h1>
-        <p class="login-copy">Use an approved Google account to continue.</p>
+        <p class="login-copy">${googleOnly ? "Use an approved Google account" : "Choose a configured login method"} to continue.</p>
         ${errorMessage ? `<div class="state error" role="alert">${errorMessage}</div>` : ""}
         <div class="login-actions">
-          <a class="btn btn-primary" href="${oidcUrl.pathname}${oidcUrl.search}">Continue with Google</a>
-          ${testAccountLink}
+          ${providerButtons}
         </div>`}
     </section>
   </main>
@@ -302,15 +396,32 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     });
   }
 
-  async function handleOidcLogin(url: URL): Promise<Response> {
+  async function handleProviderLogin(provider: ProviderKind, url: URL): Promise<Response> {
     const returnTo = sanitizeReturnTo(url.searchParams.get("returnTo")) ?? undefined;
-    return startOidcLogin(returnTo);
+    return startProviderLogin(provider, returnTo);
   }
 
   async function startOidcLogin(
     returnTo?: string,
     invitationContinuation?: AdminSessionPayload["invitationContinuation"],
   ): Promise<Response> {
+    return startProviderLogin("google", returnTo, invitationContinuation);
+  }
+
+  async function startProviderLogin(
+    providerKind: ProviderKind,
+    returnTo?: string,
+    invitationContinuation?: AdminSessionPayload["invitationContinuation"],
+    cli?: {
+      readonly clientId: string;
+      readonly state: string;
+      readonly codeChallenge: string;
+      readonly redirectUri: string;
+    },
+    identityMutationContinuation?: IdentityMutationContinuation,
+  ): Promise<Response> {
+    const provider = providerRegistry.get(providerKind);
+    if (!provider) return new Response("Not Found", { status: 404 });
     const oidcState = generateOidcState();
     const oidcNonce = generateOidcNonce();
     const codeVerifier = generatePkceVerifier();
@@ -324,14 +435,25 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       displayName: null,
       emailForDisplay: null,
       csrfToken: "",
+      authProvider: providerKind,
       oidcState,
       oidcNonce,
       codeVerifier,
       returnTo,
       invitationContinuation,
+      identityMutationContinuation,
+      cliClientId: cli?.clientId,
+      cliState: cli?.state,
+      cliCodeChallenge: cli?.codeChallenge,
+      cliRedirectUri: cli?.redirectUri,
     };
     await sessionStore.create(sessionId, await sessionCrypto.encrypt(payload), sessionTtlMs);
-    const authorizationUrl = await oidc.authorizationUrl({ state: oidcState, nonce: oidcNonce, codeChallenge });
+    const authorizationUrl = await provider.begin({
+      purpose: cli ? "cli" : "login",
+      state: oidcState,
+      nonce: oidcNonce,
+      codeChallenge,
+    });
     return new Response(null, {
       status: 302,
       headers: {
@@ -341,55 +463,20 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     });
   }
 
-  async function handleTestAccountLogin(request: Request, returnTo?: string): Promise<Response> {
-    const account = config.testAccount;
-    if (!account) return new Response("Not Found", { status: 404 });
-    const credentials = readBasicCredentials(request);
-    const emailMatches = credentials
-      ? await secureEqual(credentials.email.toLowerCase(), account.email.toLowerCase())
-      : false;
-    const passwordMatches = credentials
-      ? await secureEqual(credentials.password, account.password)
-      : false;
-    if (!emailMatches || !passwordMatches) {
-      await auditLoginFailure("test-account");
-      return new Response(null, {
-        status: 401,
-        headers: {
-          "WWW-Authenticate": 'Basic realm="UniCAS test account", charset="UTF-8"',
-          "Cache-Control": "no-store",
-        },
-      });
-    }
-    if (!isEmailAllowed(account.email, true)) {
-      await auditLoginFailure("test-account-email-not-allowed");
-      return new Response(null, { status: 403, headers: { "Cache-Control": "no-store" } });
-    }
-    const authenticatedPayload: AdminSessionPayload = {
-      v: 1,
-      authenticated: true,
-      identityIssuer: TEST_ACCOUNT_ISSUER,
-      subject: account.email.toLowerCase(),
-      displayName: account.email,
-      emailForDisplay: account.email,
-      csrfToken: generateCsrfToken(),
-    };
-    return createAuthenticatedSession(
-      request,
-      authenticatedPayload,
-      returnTo ?? "/admin/",
-      readSessionId(request),
-    );
-  }
-
-  async function handleCallback(request: Request, callbackUrl: URL): Promise<Response> {
+  async function handleCallback(
+    request: Request,
+    callbackUrl: URL,
+    callbackProvider: ProviderKind,
+  ): Promise<Response> {
     const error = callbackUrl.searchParams.get("error");
     const code = callbackUrl.searchParams.get("code");
     const state = callbackUrl.searchParams.get("state");
     const sessionId = readSessionId(request);
     const preLogin = sessionId ? await readSession(sessionId) : null;
 
-    if (error || !code || !state || !preLogin || preLogin.oidcState !== state) {
+    const expectedProvider = preLogin?.authProvider ?? "google";
+    if (error || !code || !state || !preLogin || preLogin.oidcState !== state
+      || expectedProvider !== callbackProvider || !providerRegistry.get(callbackProvider)) {
       if (sessionId && preLogin) await sessionStore.delete(sessionId);
       const reason = error
         ? "provider_error"
@@ -399,24 +486,29 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
             ? "missing_state"
             : !preLogin
               ? "missing_prelogin_session"
-              : "state_mismatch";
+              : preLogin.oidcState !== state
+                ? "state_mismatch"
+                : "provider_mismatch";
       console.error(JSON.stringify({ event: "admin_oidc_callback_failed", reason }));
       await auditLoginFailure(reason);
       return oidcCallbackFailure(preLogin, reason);
     }
-    let identity: VerifiedOidcIdentity;
+    let identity: AuthenticatedProviderResult;
     try {
-      const exchanged = await oidc.exchangeCode({
+      identity = await providerRegistry.get(callbackProvider)!.complete({
         code,
+        state,
         codeVerifier: preLogin.codeVerifier!,
-      });
-      identity = await oidc.verifyIdToken({
-        idToken: exchanged.idToken,
-        nonce: preLogin.oidcNonce!,
+        nonce: preLogin.oidcNonce ?? null,
+        authenticationEventId: generateRequestId(),
       });
     } catch (caught) {
       if (sessionId) await sessionStore.delete(sessionId);
-      const reason = caught instanceof OidcError ? caught.code : "unexpected_oidc_error";
+      const reason = caught instanceof ProviderAdapterError
+        ? caught.code
+        : caught instanceof OidcError
+          ? caught.code
+          : "unexpected_provider_error";
       console.error(JSON.stringify({
         event: "admin_oidc_callback_failed",
         reason,
@@ -426,83 +518,44 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       return oidcCallbackFailure(preLogin, reason);
     }
 
-    const invitationContinuation = preLogin.invitationContinuation;
-    if (platformAccess === null
-      && !invitationContinuation
-      && !isEmailAllowed(identity.email, identity.emailVerified)) {
-      if (sessionId) await sessionStore.delete(sessionId);
-      await auditLoginFailure("email-not-allowed");
-      return new Response(null, {
-        status: 302,
-        headers: { Location: "/admin/auth/login?error=not-allowed" },
-      });
+    if (preLogin.identityMutationContinuation) {
+      return completeIdentityMutation(request, sessionId!, preLogin, identity);
     }
 
-    const loginPrincipal = {
-      issuer: config.oidcIssuer ?? "https://accounts.google.com",
-      subject: identity.sub,
-    };
+    const invitationContinuation = preLogin.invitationContinuation;
+    const authenticatedAt = identity.authenticatedAt;
+    const verifiedEmailEvidence = identity.verifiedEmailEvidence;
+    const emailForDisplay = verifiedEmailEvidence[0]?.normalizedEmail ?? null;
     let invitationAccess: AdminSessionPayload["invitationAccess"];
-    if (platformAccess !== null) {
-      try {
-        if (invitationContinuation?.kind === "app") {
-          const authorization = await platformAccess.authorizeAppInvitationLogin(
-            loginPrincipal,
-            identity.email,
-            identity.emailVerified,
-            invitationContinuation.token,
-          );
-          if (authorization.mode === "invitation") {
-            invitationAccess = {
-              kind: "app",
-              invitationId: authorization.invitation.invitationId,
-              appId: authorization.invitation.appId,
-              tokenHash: authorization.invitation.tokenHash,
-            };
-          }
-        } else if (invitationContinuation?.kind === "platform") {
-          if (!platformInvitations) throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
-          const invitation = await platformInvitations.authorizeLogin(
-            loginPrincipal,
-            identity.email,
-            identity.emailVerified,
-            invitationContinuation.token,
-          );
-          invitationAccess = {
-            kind: "platform",
-            invitationId: invitation.invitationId,
-            tokenHash: invitation.tokenHash,
-          };
-        } else {
-          await platformAccess.requireAccess(loginPrincipal);
-        }
-      } catch (error) {
-        if (error instanceof PlatformAccessError && error.code === "PLATFORM_ACCESS_REQUIRED") {
-          if (sessionId) await sessionStore.delete(sessionId);
-          await auditLoginFailure("platform-access-denied");
-          if (preLogin.cliClientId !== undefined && preLogin.cliRedirectUri && preLogin.cliState) {
-            const redirect = new URL(preLogin.cliRedirectUri);
-            redirect.searchParams.set("error", "access_denied");
-            redirect.searchParams.set("error_description", "platform access denied");
-            redirect.searchParams.set("state", preLogin.cliState);
-            return new Response(null, {
-              status: 302,
-              headers: { Location: redirect.toString() },
-            });
-          }
+    let accountResolution: AccountResolution | null = null;
+    try {
+      const authorization = await authorizeAccountLogin(identity, invitationContinuation);
+      if (authorization.mode === "email-challenge") {
+        return await beginEmailChallenge(request, sessionId!, preLogin, identity, authorization);
+      }
+      accountResolution = authorization.account;
+      invitationAccess = authorization.invitationAccess;
+    } catch (error) {
+      if (error instanceof AccountServiceError || error instanceof EmailChallengeError
+        || error instanceof PlatformAccessError && error.code === "PLATFORM_ACCESS_REQUIRED") {
+        if (sessionId) await sessionStore.delete(sessionId);
+        await auditLoginFailure("platform-access-denied");
+        if (preLogin.cliClientId !== undefined && preLogin.cliRedirectUri && preLogin.cliState) {
+          const redirect = new URL(preLogin.cliRedirectUri);
+          redirect.searchParams.set("error", "access_denied");
+          redirect.searchParams.set("error_description", "platform access denied");
+          redirect.searchParams.set("state", preLogin.cliState);
           return new Response(null, {
             status: 302,
-            headers: { Location: "/admin/auth/login?error=access-denied" },
+            headers: { Location: redirect.toString() },
           });
         }
-        throw error;
+        return new Response(null, {
+          status: 302,
+          headers: { Location: "/admin/auth/login?error=access-denied" },
+        });
       }
-    } else if (invitationContinuation) {
-      if (sessionId) await sessionStore.delete(sessionId);
-      return new Response(null, {
-        status: 302,
-        headers: { Location: "/admin/auth/login?error=access-denied" },
-      });
+      throw error;
     }
 
     if (preLogin.cliClientId !== undefined) {
@@ -513,15 +566,21 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       const cliPayload: CliOneTimeCodePayload = {
         v: 1,
         kind: "cli-code",
-        identityIssuer: config.oidcIssuer ?? "https://accounts.google.com",
-        subject: identity.sub,
-        displayName: identity.name,
-        emailForDisplay: identity.email,
+        identityIssuer: identity.issuer,
+        subject: identity.subject,
+        displayName: identity.displayName,
+        emailForDisplay,
+        authProvider: identity.provider,
+        authenticatedAt,
+        verifiedEmailEvidence,
+        accountId: accountResolution?.account.accountId,
+        externalIdentityId: accountResolution?.authenticatedIdentity.externalIdentityId,
+        credentialVersion: accountResolution?.account.credentialVersion,
         codeChallenge: preLogin.cliCodeChallenge!,
         cliState: preLogin.cliState!,
         cliRedirectUri: preLogin.cliRedirectUri!,
       };
-      await sessionStore.create(oneTimeCode, await sessionCrypto.encrypt(cliPayload), CLI_CODE_TTL_MS);
+      await persistSession(oneTimeCode, cliPayload, CLI_CODE_TTL_MS);
       if (sessionId) await sessionStore.delete(sessionId);
       const redirect = new URL(cliPayload.cliRedirectUri);
       redirect.searchParams.set("code", oneTimeCode);
@@ -536,11 +595,17 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     const authenticatedPayload: AdminSessionPayload = {
       v: 1,
       authenticated: true,
-      identityIssuer: config.oidcIssuer ?? "https://accounts.google.com",
-      subject: identity.sub,
-      displayName: identity.name,
-      emailForDisplay: identity.email,
+      identityIssuer: identity.issuer,
+      subject: identity.subject,
+      displayName: identity.displayName,
+      emailForDisplay,
       csrfToken: generateCsrfToken(),
+      authProvider: identity.provider,
+      authenticatedAt,
+      verifiedEmailEvidence,
+      accountId: accountResolution?.account.accountId,
+      externalIdentityId: accountResolution?.authenticatedIdentity.externalIdentityId,
+      credentialVersion: accountResolution?.account.credentialVersion,
       invitationAccess,
       admittedViaInvitation: invitationContinuation ? true : undefined,
     };
@@ -554,6 +619,97 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         : preLogin.returnTo ?? "/admin/",
       sessionId,
     );
+  }
+
+  async function authorizeAccountLogin(
+    identity: AuthenticatedProviderResult,
+    invitation: AdminSessionPayload["invitationContinuation"],
+  ): Promise<
+    | {
+      readonly mode: "authorized";
+      readonly account: AccountResolution;
+      readonly invitationAccess?: AdminSessionPayload["invitationAccess"];
+    }
+    | {
+      readonly mode: "email-challenge";
+      readonly invitationKind: "app" | "platform";
+      readonly invitationId: string;
+      readonly invitationTokenHash: string;
+      readonly email: string;
+    }
+  > {
+    if (!accountService) throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
+    let account = await accountService.resolveExternalIdentity(identity.issuer, identity.subject);
+    const admitted = account !== null
+      && (account.platformAuthorities.length > 0 || account.hasAppMembership);
+    if (!invitation) {
+      if (!account || !admitted) throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
+      return { mode: "authorized", account };
+    }
+
+    let invitationAccess: AdminSessionPayload["invitationAccess"];
+    if (invitation.kind === "app") {
+      const resolved = await accountService.resolveAppMemberInvitation(invitation.token);
+      if (resolved.invitationId !== invitation.invitationId || resolved.appId !== invitation.appId) {
+        throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
+      }
+      if (resolved.emailConstraint !== null) {
+        try {
+          requireInvitationEmailEvidence(identity.verifiedEmailEvidence, resolved.emailConstraint, now());
+        } catch {
+          if (identity.provider === "microsoft") {
+            return {
+              mode: "email-challenge",
+              invitationKind: "app",
+              invitationId: resolved.invitationId,
+              invitationTokenHash: resolved.tokenHash,
+              email: resolved.emailConstraint,
+            };
+          }
+          throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
+        }
+      }
+      invitationAccess = {
+        kind: "app",
+        invitationId: resolved.invitationId,
+        appId: resolved.appId,
+        tokenHash: resolved.tokenHash,
+      };
+    } else {
+      if (!platformInvitations) throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
+      const resolved = await platformInvitations.resolve(invitation.token);
+      if (resolved.invitationId !== invitation.invitationId) {
+        throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
+      }
+      try {
+        requireInvitationEmailEvidence(identity.verifiedEmailEvidence, resolved.emailConstraint, now());
+      } catch {
+        if (identity.provider === "microsoft") {
+          return {
+            mode: "email-challenge",
+            invitationKind: "platform",
+            invitationId: resolved.invitationId,
+            invitationTokenHash: resolved.tokenHash,
+            email: resolved.emailConstraint,
+          };
+        }
+        throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
+      }
+      invitationAccess = {
+        kind: "platform",
+        invitationId: resolved.invitationId,
+        tokenHash: resolved.tokenHash,
+      };
+    }
+
+    account ??= await accountService.createForExternalIdentity({
+      provider: identity.provider,
+      issuer: identity.issuer,
+      subject: identity.subject,
+      displayName: identity.displayName,
+      avatarUrl: identity.avatarUrl,
+    });
+    return { mode: "authorized", account, invitationAccess };
   }
 
   function oidcCallbackFailure(
@@ -582,15 +738,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     target: string,
     previousSessionId: string | null,
   ): Promise<Response> {
-    const authenticatedId = generateSessionId();
-    await sessionStore.create(authenticatedId, await sessionCrypto.encrypt(authenticatedPayload), sessionTtlMs);
-    if (previousSessionId) await sessionStore.delete(previousSessionId);
-    await controlPlane.recordSessionAudit(
-      serviceContext(authenticatedPayload, request),
-      "session.login",
-      `${authenticatedPayload.identityIssuer}:${authenticatedPayload.subject}`,
-      null,
-    );
+    const authenticatedId = await persistAuthenticatedSession(request, authenticatedPayload, previousSessionId);
     return new Response(null, {
       status: 302,
       headers: {
@@ -600,17 +748,310 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     });
   }
 
+  async function persistAuthenticatedSession(
+    request: Request,
+    authenticatedPayload: AdminSessionPayload,
+    previousSessionId: string | null,
+  ): Promise<string> {
+    const authenticatedId = generateSessionId();
+    await persistSession(authenticatedId, authenticatedPayload, sessionTtlMs);
+    if (previousSessionId) await sessionStore.delete(previousSessionId);
+    await recordAccountSessionAudit(authenticatedPayload, request, "session.login");
+    return authenticatedId;
+  }
+
+  async function beginEmailChallenge(
+    request: Request,
+    previousSessionId: string,
+    preLogin: AdminSessionPayload,
+    identity: AuthenticatedProviderResult,
+    required: {
+      readonly invitationKind: "app" | "platform";
+      readonly invitationId: string;
+      readonly invitationTokenHash: string;
+      readonly email: string;
+    },
+  ): Promise<Response> {
+    if (!emailChallenges || !options.emailChallengeSender || !preLogin.invitationContinuation) {
+      throw new PlatformAccessError("PLATFORM_ACCESS_REQUIRED", 403);
+    }
+    const challenge = await emailChallenges.create({
+      invitationKind: required.invitationKind,
+      invitationId: required.invitationId,
+      invitationTokenHash: required.invitationTokenHash,
+      issuer: identity.issuer,
+      subject: identity.subject,
+      authenticationEventId: identity.authenticationEventId,
+      email: required.email,
+    });
+    const challengePayload: AdminSessionPayload = {
+      v: 1,
+      authenticated: false,
+      identityIssuer: identity.issuer,
+      subject: identity.subject,
+      displayName: identity.displayName,
+      emailForDisplay: null,
+      csrfToken: generateCsrfToken(),
+      authProvider: "microsoft",
+      authenticatedAt: identity.authenticatedAt,
+      invitationContinuation: preLogin.invitationContinuation,
+      emailChallenge: {
+        challengeId: challenge.challengeId,
+        secret: challenge.secret,
+        binding: challenge.binding,
+        avatarUrl: identity.avatarUrl,
+      },
+    };
+    const challengeSessionId = generateSessionId();
+    try {
+      await sessionStore.create(
+        challengeSessionId,
+        await sessionCrypto.encrypt(challengePayload),
+        Math.min(sessionTtlMs, EMAIL_CHALLENGE_TTL_MS),
+      );
+      await sessionStore.delete(previousSessionId);
+      await options.emailChallengeSender.send({
+        to: challenge.binding.normalizedEmail,
+        code: challenge.code,
+        expiresAt: challenge.expiresAt,
+      });
+    } catch {
+      await emailChallenges.invalidate(challenge);
+      await Promise.allSettled([
+        sessionStore.delete(challengeSessionId),
+        sessionStore.delete(previousSessionId),
+      ]);
+      console.error(JSON.stringify({ event: "admin_email_challenge_delivery_failed" }));
+      throw new EmailChallengeError();
+    }
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: "/admin/auth/email-challenge",
+        "Cache-Control": "no-store",
+        "Set-Cookie": sessionCookieHeader(cookieOptions, challengeSessionId),
+      },
+    });
+  }
+
+  async function handleEmailChallengePage(request: Request): Promise<Response> {
+    const pending = await readEmailChallengeSession(request);
+    if (!pending) return emailChallengePageFailure();
+    try {
+      const description = await emailChallenges!.describe(
+        pending.payload.emailChallenge!.challengeId,
+        pending.payload.emailChallenge!.binding,
+      );
+      return new Response(emailChallengePage(description.maskedEmail, pending.payload.csrfToken), {
+        status: 200,
+        headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+      });
+    } catch {
+      await sessionStore.delete(pending.sessionId);
+      return emailChallengePageFailure();
+    }
+  }
+
+  async function handleEmailChallengeVerification(request: Request): Promise<Response> {
+    const pending = await readEmailChallengeSession(request);
+    if (!pending || !(await passCsrf(request, pending.payload))) return emailChallengeFailure();
+    const body = await readJsonBody<{ code?: unknown }>(request);
+    if (typeof body?.code !== "string") return emailChallengeFailure();
+    try {
+      const challenge = pending.payload.emailChallenge!;
+      const evidence = await emailChallenges!.verify({
+        challengeId: challenge.challengeId,
+        binding: challenge.binding,
+        secret: challenge.secret,
+        code: body.code,
+      });
+      const identity: AuthenticatedProviderResult = {
+        provider: "microsoft",
+        issuer: pending.payload.identityIssuer,
+        subject: pending.payload.subject,
+        displayName: pending.payload.displayName,
+        avatarUrl: challenge.avatarUrl,
+        accountHint: null,
+        verifiedEmailEvidence: [evidence],
+        authenticatedAt: pending.payload.authenticatedAt!,
+        authenticationEventId: challenge.binding.authenticationEventId,
+      };
+      const authorization = await authorizeAccountLogin(identity, pending.payload.invitationContinuation);
+      if (authorization.mode !== "authorized") throw new EmailChallengeError();
+      const next = invitationTarget(pending.payload.invitationContinuation!);
+      const authenticatedPayload: AdminSessionPayload = {
+        v: 1,
+        authenticated: true,
+        identityIssuer: identity.issuer,
+        subject: identity.subject,
+        displayName: identity.displayName,
+        emailForDisplay: evidence.normalizedEmail,
+        csrfToken: generateCsrfToken(),
+        authProvider: identity.provider,
+        authenticatedAt: identity.authenticatedAt,
+        verifiedEmailEvidence: [evidence],
+        accountId: authorization.account.account.accountId,
+        externalIdentityId: authorization.account.authenticatedIdentity.externalIdentityId,
+        credentialVersion: authorization.account.account.credentialVersion,
+        invitationAccess: authorization.invitationAccess,
+        admittedViaInvitation: true,
+      };
+      const authenticatedId = await persistAuthenticatedSession(request, authenticatedPayload, pending.sessionId);
+      const response = json({ next }, 200);
+      response.headers.set("Set-Cookie", sessionCookieHeader(cookieOptions, authenticatedId));
+      response.headers.set("X-CSRF-Token", authenticatedPayload.csrfToken);
+      return response;
+    } catch (error) {
+      if (error instanceof EmailChallengeError || error instanceof AccountServiceError
+        || error instanceof PlatformAccessError) {
+        return emailChallengeFailure();
+      }
+      throw error;
+    }
+  }
+
+  async function handleEmailChallengeResend(request: Request): Promise<Response> {
+    const pending = await readEmailChallengeSession(request);
+    if (!pending || !(await passCsrf(request, pending.payload))) return emailChallengeFailure();
+    try {
+      const current = pending.payload.emailChallenge!;
+      const resent = await emailChallenges!.resend({
+        challengeId: current.challengeId,
+        binding: current.binding,
+      });
+      const nextPayload: AdminSessionPayload = {
+        ...pending.payload,
+        emailChallenge: { ...current, secret: resent.secret },
+      };
+      const nextSessionId = generateSessionId();
+      try {
+        await sessionStore.create(
+          nextSessionId,
+          await sessionCrypto.encrypt(nextPayload),
+          Math.min(sessionTtlMs, Math.max(1, resent.expiresAt - now())),
+        );
+        await sessionStore.delete(pending.sessionId);
+        await options.emailChallengeSender!.send({
+          to: resent.binding.normalizedEmail,
+          code: resent.code,
+          expiresAt: resent.expiresAt,
+        });
+      } catch {
+        await emailChallenges!.invalidate(resent);
+        await Promise.allSettled([
+          sessionStore.delete(nextSessionId),
+          sessionStore.delete(pending.sessionId),
+        ]);
+        console.error(JSON.stringify({ event: "admin_email_challenge_delivery_failed" }));
+        const response = emailChallengeFailure();
+        response.headers.set("Set-Cookie", clearSessionCookie(cookieOptions));
+        return response;
+      }
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Cache-Control": "no-store",
+          "Set-Cookie": sessionCookieHeader(cookieOptions, nextSessionId),
+        },
+      });
+    } catch (error) {
+      if (error instanceof EmailChallengeError) {
+        return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+      }
+      throw error;
+    }
+  }
+
+  async function readEmailChallengeSession(request: Request): Promise<{
+    readonly sessionId: string;
+    readonly payload: AdminSessionPayload;
+  } | null> {
+    if (!emailChallenges || !options.emailChallengeSender) return null;
+    const sessionId = readSessionId(request);
+    if (!sessionId) return null;
+    const payload = await readSession(sessionId);
+    if (!payload || payload.authenticated || payload.authProvider !== "microsoft"
+      || !payload.emailChallenge || !payload.invitationContinuation) return null;
+    return { sessionId, payload };
+  }
+
+  function emailChallengePage(maskedEmail: string, csrfToken: string): string {
+    return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Verify email - UniCAS</title>
+  <link rel="stylesheet" href="/admin/assets/index.css?v=${ADMIN_ASSET_CACHE_BUSTER}" />
+</head>
+<body>
+  <main class="login-shell">
+    <section class="login-panel">
+      <p class="login-eyebrow">Invitation verification</p>
+      <h1>Check your email</h1>
+      <p class="login-copy">Enter the six-digit code sent to <strong>${escapeHtml(maskedEmail)}</strong>.</p>
+      <form id="email-challenge-form" class="login-actions">
+        <label for="email-challenge-code">Verification code</label>
+        <input id="email-challenge-code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required />
+        <button class="btn btn-primary" type="submit">Verify</button>
+        <button class="btn" id="email-challenge-resend" type="button">Send another code</button>
+      </form>
+      <p id="email-challenge-status" class="state" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+  <script>
+    const csrf = ${JSON.stringify(csrfToken)};
+    const status = document.getElementById("email-challenge-status");
+    document.getElementById("email-challenge-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const code = document.getElementById("email-challenge-code").value;
+      const response = await fetch("/admin/auth/email-challenge/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+        body: JSON.stringify({ code }),
+      });
+      if (response.ok) {
+        const result = await response.json();
+        window.location.assign(result.next);
+        return;
+      }
+      status.textContent = "The code could not be verified. Check it and try again.";
+    });
+    document.getElementById("email-challenge-resend").addEventListener("click", async () => {
+      await fetch("/admin/auth/email-challenge/resend", {
+        method: "POST",
+        headers: { "X-CSRF-Token": csrf },
+      });
+      status.textContent = "If delivery is available, a new code is on its way.";
+    });
+  </script>
+</body>
+</html>`;
+  }
+
+  function emailChallengePageFailure(): Response {
+    return new Response("Email verification could not be completed.", {
+      status: 400,
+      headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+    });
+  }
+
+  function emailChallengeFailure(): Response {
+    return json({ error: "EMAIL_CHALLENGE_FAILED", message: "email verification failed" }, 400);
+  }
+
+  function invitationTarget(invitation: NonNullable<AdminSessionPayload["invitationContinuation"]>): string {
+    return invitation.kind === "app"
+      ? `/admin/#/invitations/${encodeURIComponent(invitation.token)}`
+      : `/admin/#/platform-invitations/${encodeURIComponent(invitation.token)}`;
+  }
+
   async function handleLogout(request: Request): Promise<Response> {
     const sessionId = readSessionId(request);
     if (sessionId) {
       const payload = await readSession(sessionId);
       if (payload) {
-        await controlPlane.recordSessionAudit(
-          serviceContext(payload, request),
-          "session.logout",
-          `${payload.identityIssuer}:${payload.subject}`,
-          null,
-        );
+        await recordAccountSessionAudit(payload, request, "session.logout");
       }
       await sessionStore.delete(sessionId);
     }
@@ -621,14 +1062,14 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
   }
 
   async function handleInvitationPage(request: Request, token: string): Promise<Response> {
-    if (platformAccess === null) {
-      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "platform access service is not configured");
+    if (accountService === null) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is not configured");
     }
     let invitation;
     try {
-      invitation = await platformAccess.resolveAppInvitation(token);
+      invitation = await accountService.resolveAppMemberInvitation(token);
     } catch (error) {
-      if (error instanceof PlatformAccessError) {
+      if (error instanceof AccountServiceError) {
         return adminErrorResponse(error.code as CasAdminErrorResponse["error"], "invitation is not available");
       }
       throw error;
@@ -642,18 +1083,17 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
           headers: { Location: `/admin/#/invitations/${encodeURIComponent(token)}` },
         });
       }
-      try {
-        await platformAccess.requireAccess({ issuer: payload.identityIssuer, subject: payload.subject });
-        return new Response(null, {
-          status: 302,
-          headers: { Location: `/admin/#/invitations/${encodeURIComponent(token)}` },
-        });
-      } catch (error) {
-        if (!(error instanceof PlatformAccessError) || error.code !== "PLATFORM_ACCESS_REQUIRED") throw error;
-        if (sessionId) await sessionStore.delete(sessionId);
-      }
+      return new Response(null, {
+        status: 302,
+        headers: { Location: `/admin/#/invitations/${encodeURIComponent(token)}` },
+      });
     }
-    return startOidcLogin(undefined, {
+    const provider = invitationProvider(request);
+    if (provider instanceof Response) return provider;
+    if (provider === null) {
+      return providerSelectionPage(request, "Choose a login method to accept this App invitation.");
+    }
+    return startProviderLogin(provider, undefined, {
       kind: "app",
       invitationId: invitation.invitationId,
       appId: invitation.appId,
@@ -685,7 +1125,12 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       });
     }
     if (sessionId) await sessionStore.delete(sessionId);
-    return startOidcLogin(undefined, {
+    const provider = invitationProvider(request);
+    if (provider instanceof Response) return provider;
+    if (provider === null) {
+      return providerSelectionPage(request, "Choose a login method to accept this platform invitation.");
+    }
+    return startProviderLogin(provider, undefined, {
       kind: "platform",
       invitationId: invitation.invitationId,
       tokenHash: invitation.tokenHash,
@@ -725,6 +1170,49 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     });
   }
 
+  function invitationProvider(request: Request): ProviderKind | null | Response {
+    const configured = providerRegistry.list();
+    const requested = new URL(request.url).searchParams.get("provider");
+    if (requested !== null) {
+      const provider = parseProviderKind(requested);
+      return provider && providerRegistry.get(provider)
+        ? provider
+        : new Response("Not Found", { status: 404 });
+    }
+    return configured.length === 1 ? configured[0]!.kind : null;
+  }
+
+  function providerSelectionPage(request: Request, copy: string): Response {
+    const url = new URL(request.url);
+    const buttons = providerRegistry.list().map(provider => {
+      const target = new URL(url);
+      target.search = "";
+      target.searchParams.set("provider", provider.kind);
+      return `<a class="btn" href="${target.pathname}${target.search}">Continue with ${escapeHtml(provider.displayName)}</a>`;
+    }).join("\n          ");
+    return new Response(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Choose login - UniCAS</title>
+  <link rel="stylesheet" href="/admin/assets/index.css?v=${ADMIN_ASSET_CACHE_BUSTER}" />
+</head>
+<body>
+  <main class="login-shell">
+    <section class="login-panel">
+      <h1>Continue to UniCAS</h1>
+      <p class="login-copy">${escapeHtml(copy)}</p>
+      <div class="login-actions">${buttons}</div>
+    </section>
+  </main>
+</body>
+</html>`, {
+      status: 200,
+      headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+    });
+  }
+
   // ------------------------------------------------------------------
   // Frozen admin API
   // ------------------------------------------------------------------
@@ -741,40 +1229,195 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     if (!state || !cliCodeChallenge || codeChallengeMethod !== "S256" || !isLoopbackRedirect(redirectUri)) {
       return new Response("Invalid CLI authorization request", { status: 400 });
     }
-    const oidcState = generateOidcState();
-    const oidcNonce = generateOidcNonce();
-    const codeVerifier = generatePkceVerifier();
-    const oidcCodeChallenge = await s256Challenge(codeVerifier);
-    const sessionId = generateSessionId();
-    const payload: AdminSessionPayload = {
-      v: 1,
-      authenticated: false,
-      identityIssuer: "",
-      subject: "",
-      displayName: null,
-      emailForDisplay: null,
-      csrfToken: "",
-      oidcState,
-      oidcNonce,
-      codeVerifier,
-      cliClientId: clientId,
-      cliState: state,
-      cliCodeChallenge,
-      cliRedirectUri: redirectUri,
-    };
-    await sessionStore.create(sessionId, await sessionCrypto.encrypt(payload), sessionTtlMs);
-    const authorizationUrl = await oidc.authorizationUrl({
-      state: oidcState,
-      nonce: oidcNonce,
-      codeChallenge: oidcCodeChallenge,
+    const provider = parseProviderKind(url.searchParams.get("provider") ?? "google");
+    if (!provider || !providerRegistry.get(provider)) {
+      return new Response("Unsupported or disabled login provider", { status: 400 });
+    }
+    return startProviderLogin(provider, undefined, undefined, {
+      clientId,
+      state,
+      codeChallenge: cliCodeChallenge,
+      redirectUri,
     });
-    return new Response(null, {
-      status: 302,
-      headers: {
-        Location: authorizationUrl,
-        "Set-Cookie": sessionCookieHeader(cookieOptions, sessionId),
+  }
+
+  async function handleLinkStart(request: Request, targetProvider: ProviderKind): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!(await passCsrf(request, auth.payload))) return csrfRejected();
+    if (!accountService || !auth.payload.accountId || !auth.payload.externalIdentityId
+      || auth.payload.credentialVersion === undefined || !auth.payload.authProvider
+      || !providerRegistry.get(targetProvider)) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account linking is unavailable");
+    }
+    const response = await startProviderLogin(
+      auth.payload.authProvider,
+      "/admin/#/account",
+      undefined,
+      undefined,
+      {
+        kind: "link-current",
+        accountId: auth.payload.accountId,
+        expectedCredentialVersion: auth.payload.credentialVersion,
+        targetProvider,
+        currentExternalIdentityId: auth.payload.externalIdentityId,
+        currentIssuer: auth.payload.identityIssuer,
+        currentSubject: auth.payload.subject,
+        currentProvider: auth.payload.authProvider,
+        currentDisplayName: auth.payload.displayName,
+        currentEmailForDisplay: auth.payload.emailForDisplay,
       },
-    });
+    );
+    await sessionStore.delete(auth.sessionId);
+    return identityMutationStartResponse(request, response);
+  }
+
+  async function handleUnlinkStart(request: Request, targetExternalIdentityId: string): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!(await passCsrf(request, auth.payload))) return csrfRejected();
+    if (!accountService || !auth.payload.accountId || auth.payload.credentialVersion === undefined) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account unlinking is unavailable");
+    }
+    const body = await readJsonBody<{ remainingExternalIdentityId?: unknown }>(request);
+    if (!body || typeof body.remainingExternalIdentityId !== "string") {
+      return invalidRequest("remainingExternalIdentityId is required");
+    }
+    let remaining;
+    try {
+      remaining = await accountService.requireActiveIdentity(
+        auth.payload.accountId,
+        body.remainingExternalIdentityId,
+      );
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        return json({ error: error.code }, error.code === "IDENTITY_ACCOUNT_MISMATCH" ? 409 : 404);
+      }
+      throw error;
+    }
+    if (!providerRegistry.get(remaining.provider)) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Remaining login provider is unavailable");
+    }
+    const response = await startProviderLogin(
+      remaining.provider,
+      "/admin/#/account",
+      undefined,
+      undefined,
+      {
+        kind: "unlink",
+        accountId: auth.payload.accountId,
+        expectedCredentialVersion: auth.payload.credentialVersion,
+        targetExternalIdentityId,
+        remainingExternalIdentityId: remaining.externalIdentityId,
+        remainingIssuer: remaining.issuer,
+        remainingSubject: remaining.subject,
+        remainingProvider: remaining.provider,
+      },
+    );
+    await sessionStore.delete(auth.sessionId);
+    return identityMutationStartResponse(request, response);
+  }
+
+  async function completeIdentityMutation(
+    request: Request,
+    sessionId: string,
+    preLogin: AdminSessionPayload,
+    identity: AuthenticatedProviderResult,
+  ): Promise<Response> {
+    if (!accountService || !preLogin.identityMutationContinuation) {
+      await sessionStore.delete(sessionId);
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE);
+    }
+    const mutation = preLogin.identityMutationContinuation;
+    try {
+      if (mutation.kind === "link-current") {
+        if (identity.issuer !== mutation.currentIssuer || identity.subject !== mutation.currentSubject) {
+          throw new AccountServiceError("IDENTITY_ACCOUNT_MISMATCH");
+        }
+        const response = await startProviderLogin(
+          mutation.targetProvider,
+          "/admin/#/account",
+          undefined,
+          undefined,
+          {
+            ...mutation,
+            kind: "link-target",
+            currentAuthenticatedAt: identity.authenticatedAt,
+            currentVerifiedEmailEvidence: identity.verifiedEmailEvidence,
+          },
+        );
+        await sessionStore.delete(sessionId);
+        return response;
+      }
+
+      if (mutation.kind === "link-target") {
+        if (identity.provider !== mutation.targetProvider) {
+          throw new AccountServiceError("IDENTITY_ACCOUNT_MISMATCH");
+        }
+        const resolution = await accountService.linkExternalIdentity({
+          accountId: mutation.accountId,
+          currentExternalIdentityId: mutation.currentExternalIdentityId,
+          credentialVersion: mutation.expectedCredentialVersion,
+          currentAuthenticatedAt: mutation.currentAuthenticatedAt,
+          target: identity,
+        });
+        return createAuthenticatedSession(request, {
+          v: 1,
+          authenticated: true,
+          identityIssuer: mutation.currentIssuer,
+          subject: mutation.currentSubject,
+          displayName: mutation.currentDisplayName,
+          emailForDisplay: mutation.currentEmailForDisplay,
+          csrfToken: generateCsrfToken(),
+          authProvider: mutation.currentProvider,
+          authenticatedAt: mutation.currentAuthenticatedAt,
+          verifiedEmailEvidence: mutation.currentVerifiedEmailEvidence,
+          accountId: resolution.account.accountId,
+          externalIdentityId: mutation.currentExternalIdentityId,
+          credentialVersion: resolution.account.credentialVersion,
+        }, "/admin/#/account", sessionId);
+      }
+
+      if (identity.issuer !== mutation.remainingIssuer || identity.subject !== mutation.remainingSubject) {
+        throw new AccountServiceError("IDENTITY_ACCOUNT_MISMATCH");
+      }
+      const resolution = await accountService.unlinkExternalIdentity({
+        accountId: mutation.accountId,
+        credentialVersion: mutation.expectedCredentialVersion,
+        targetExternalIdentityId: mutation.targetExternalIdentityId,
+        remainingExternalIdentityId: mutation.remainingExternalIdentityId,
+        remainingAuthenticatedAt: identity.authenticatedAt,
+      });
+      return createAuthenticatedSession(request, {
+        v: 1,
+        authenticated: true,
+        identityIssuer: identity.issuer,
+        subject: identity.subject,
+        displayName: identity.displayName,
+        emailForDisplay: identity.verifiedEmailEvidence[0]?.normalizedEmail ?? null,
+        csrfToken: generateCsrfToken(),
+        authProvider: identity.provider,
+        authenticatedAt: identity.authenticatedAt,
+        verifiedEmailEvidence: identity.verifiedEmailEvidence,
+        accountId: resolution.account.accountId,
+        externalIdentityId: mutation.remainingExternalIdentityId,
+        credentialVersion: resolution.account.credentialVersion,
+      }, "/admin/#/account", sessionId);
+    } catch (error) {
+      await sessionStore.delete(sessionId);
+      if (error instanceof AccountServiceError) {
+        const code = error.code === "IDENTITY_LINK_CONFLICT"
+          ? "link-conflict"
+          : error.code === "FINAL_IDENTITY_CANNOT_BE_UNLINKED"
+            ? "final-identity"
+            : "authentication-state-changed";
+        return new Response(null, {
+          status: 302,
+          headers: { Location: `/admin/#/account?identityError=${code}` },
+        });
+      }
+      throw error;
+    }
   }
 
   async function handleCliExchange(request: Request): Promise<Response> {
@@ -810,15 +1453,16 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       displayName: payload.displayName,
       emailForDisplay: payload.emailForDisplay,
       csrfToken: generateCsrfToken(),
+      authProvider: payload.authProvider,
+      authenticatedAt: payload.authenticatedAt,
+      verifiedEmailEvidence: payload.verifiedEmailEvidence,
+      accountId: payload.accountId,
+      externalIdentityId: payload.externalIdentityId,
+      credentialVersion: payload.credentialVersion,
     };
     const sessionId = generateSessionId();
-    await sessionStore.create(sessionId, await sessionCrypto.encrypt(authenticatedPayload), sessionTtlMs);
-    await controlPlane.recordSessionAudit(
-      serviceContext(authenticatedPayload, request),
-      "session.login",
-      `${authenticatedPayload.identityIssuer}:${authenticatedPayload.subject}`,
-      null,
-    );
+    await persistSession(sessionId, authenticatedPayload, sessionTtlMs);
+    await recordAccountSessionAudit(authenticatedPayload, request, "session.login");
     return Response.json(
       {
         csrfToken: authenticatedPayload.csrfToken,
@@ -843,36 +1487,334 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     const auth = await requireAuthenticated(request);
     if (auth instanceof Response) return auth;
     if (!(await passCsrf(request, auth.payload))) return csrfRejected();
-    const context = serviceContext(auth.payload, request);
-    const body = await readJsonBody(request);
-    if (operation === "inspectOAuthIssuer") {
-      const parsed = InspectAppIssuerRequestSchema.safeParse(body);
-      if (!parsed.success) return invalidRequest("A valid issuer URL is required");
-      const result = await controlPlane.inspectAppOAuthIssuer(context, appId, parsed.data.issuer);
-      return "error" in result ? json(transformAppAdminError({ ...result }), casAdminErrorHttpStatus[result.error]) : json(result, 201);
+    if (!accountService || !auth.payload.accountId || !auth.payload.externalIdentityId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
     }
-    const parsed = ActivateAppIssuerRequestSchema.safeParse(body);
-    if (!parsed.success) return invalidRequest("A candidate inspection and activation proof are required");
-    const result = await controlPlane.activateAppOAuthIssuer(context, appId, parsed.data, {
-      ifMatch: request.headers.get("If-Match") ?? undefined,
-      ifNoneMatch: request.headers.get("If-None-Match") ?? undefined,
-    });
-    return "error" in result ? json(transformAppAdminError({ ...result }), casAdminErrorHttpStatus[result.error])
-      : new Response(null, { status: 204, headers: { ETag: formatCasAdminETag(result.revision), "Cache-Control": REVISION_CACHE_CONTROL } });
+    const body = await readJsonBody(request);
+    try {
+      if (operation === "inspectOAuthIssuer") {
+        const parsed = InspectAppIssuerRequestSchema.safeParse(body);
+        if (!parsed.success) return invalidRequest("A valid issuer URL is required");
+        return json(await accountService.inspectAppOAuthIssuer({
+          actorAccountId: auth.payload.accountId,
+          actorExternalIdentityId: auth.payload.externalIdentityId,
+          appId,
+          issuer: parsed.data.issuer,
+          requestId: request.headers.get("X-Request-Id") ?? undefined,
+          traceId: request.headers.get("X-Trace-Id") ?? undefined,
+          callerChannel: "admin-webui",
+        }), 201);
+      }
+      const parsed = ActivateAppIssuerRequestSchema.safeParse(body);
+      if (!parsed.success) return invalidRequest("A candidate inspection and activation proof are required");
+      const revision = await accountService.activateAppOAuthIssuer({
+        actorAccountId: auth.payload.accountId,
+        actorExternalIdentityId: auth.payload.externalIdentityId,
+        appId,
+        ...parsed.data,
+        ifMatch: request.headers.get("If-Match") ?? undefined,
+        ifNoneMatch: request.headers.get("If-None-Match") ?? undefined,
+        requestId: request.headers.get("X-Request-Id") ?? undefined,
+        traceId: request.headers.get("X-Trace-Id") ?? undefined,
+        callerChannel: "admin-webui",
+      });
+      return new Response(null, { status: 204, headers: { ETag: formatCasAdminETag(revision), "Cache-Control": REVISION_CACHE_CONTROL } });
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "APP_MEMBERSHIP_REQUIRED" || error.code === "ACCOUNT_BLOCKED" ? 403
+          : error.code === "PRECONDITION_REQUIRED" ? 428
+            : error.code === "REVISION_MISMATCH" ? 412
+              : error.code === "ISSUER_CONFLICT" ? 409
+                : error.code === "SERVICE_UNAVAILABLE" ? 503
+                  : 400;
+        return json({ error: error.code }, status);
+      }
+      throw error;
+    }
+  }
+
+  async function handleAccountApi(
+    request: Request,
+    operation: "getAccount" | "listAccountIdentities" | "patchAccountProfile",
+  ): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!accountService || !auth.payload.accountId || !auth.payload.externalIdentityId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
+    }
+    try {
+      if (operation === "patchAccountProfile") {
+        if (!(await passCsrf(request, auth.payload))) return csrfRejected();
+        const parsed = PatchAccountProfileSchema.safeParse(await readJsonBody(request));
+        if (!parsed.success) return invalidRequest("A valid Account profile patch is required");
+        await accountService.updateProfile({
+          accountId: auth.payload.accountId,
+          ...parsed.data,
+        });
+        return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+      }
+      const account = await accountService.getSelf(
+        auth.payload.accountId,
+        auth.payload.externalIdentityId,
+        providerRegistry.list().map(provider => provider.kind),
+      );
+      return json(operation === "getAccount" ? account : { identities: account.identities }, 200);
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "ACCOUNT_BLOCKED" ? 403
+          : error.code === "IDENTITY_NOT_FOUND" ? 404
+            : 409;
+        return json({ error: error.code }, status);
+      }
+      throw error;
+    }
+  }
+
+  async function handleCurrentAdministrator(request: Request): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!accountService || !auth.payload.accountId || !auth.payload.externalIdentityId) {
+      return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED, "Account login required");
+    }
+    const account = await accountService.getSelf(
+      auth.payload.accountId,
+      auth.payload.externalIdentityId,
+      providerRegistry.list().map(provider => provider.kind),
+    );
+    const authenticatedIdentity = account.identities.find(identity => identity.currentLogin);
+    if (!authenticatedIdentity) {
+      return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED, "Account login required");
+    }
+    const response = json({
+      account,
+      authenticatedIdentity,
+      memberships: await accountService.listAccountMemberships(auth.payload.accountId),
+    }, 200);
+    response.headers.set("X-CSRF-Token", auth.payload.csrfToken);
+    return response;
+  }
+
+  async function handleAccountAppMembers(
+    request: Request,
+    url: URL,
+    appId: string,
+    operation: "listMembers" | "deleteMember",
+  ): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!accountService || !auth.payload.accountId || !auth.payload.externalIdentityId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
+    }
+    try {
+      if (operation === "listMembers") {
+        return json(await accountService.listAppMembers({
+          actorAccountId: auth.payload.accountId,
+          appId,
+          ...pageQuery(queryFromUrl(url)),
+        }), 200);
+      }
+      if (!(await passCsrf(request, auth.payload))) return csrfRejected();
+      const accountId = AccountIdSchema.safeParse(url.searchParams.get("accountId"));
+      if (!accountId.success) return invalidRequest("A valid accountId is required");
+      await accountService.removeAppMember({
+        actorAccountId: auth.payload.accountId,
+        actorExternalIdentityId: auth.payload.externalIdentityId,
+        appId,
+        targetAccountId: accountId.data,
+        requestId: request.headers.get("X-Request-Id") ?? undefined,
+        traceId: request.headers.get("X-Trace-Id") ?? undefined,
+        callerChannel: "admin-webui",
+      });
+      return json({ ok: true }, 200);
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "APP_MEMBERSHIP_REQUIRED" || error.code === "ACCOUNT_BLOCKED" ? 403
+          : error.code === "INVALID_CURSOR" || error.code === "INVALID_REQUEST" ? 400
+            : error.code === "LAST_MEMBER" ? 409
+              : 404;
+        return json({ error: error.code }, status);
+      }
+      throw error;
+    }
+  }
+
+  async function handleAccountApps(
+    request: Request,
+    url: URL,
+    operation: "listApps" | "createApp" | "getApp" | "patchApp",
+    appId?: string,
+  ): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!accountService || !auth.payload.accountId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
+    }
+    try {
+      if (operation === "createApp") {
+        if (!auth.payload.externalIdentityId) return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED);
+        if (!(await passCsrf(request, auth.payload))) return csrfRejected();
+        const body = await readJsonBody<{ displayName?: unknown }>(request);
+        if (!body || typeof body.displayName !== "string") return invalidRequest("A valid displayName is required");
+        const app = await accountService.createApp({
+          actorAccountId: auth.payload.accountId,
+          actorExternalIdentityId: auth.payload.externalIdentityId,
+          displayName: body.displayName,
+          idempotencyKey: request.headers.get("Idempotency-Key") ?? undefined,
+          requestId: request.headers.get("X-Request-Id") ?? undefined,
+          traceId: request.headers.get("X-Trace-Id") ?? undefined,
+          callerChannel: "admin-webui",
+        });
+        return Response.json({ appId: app.appId }, {
+          status: 201,
+          headers: { ETag: formatCasAdminETag(app.revision), "Cache-Control": REVISION_CACHE_CONTROL },
+        });
+      }
+      if (operation === "getApp") {
+        if (!appId) return json({ error: "Not Found" }, 404);
+        const app = await accountService.getApp(auth.payload.accountId, appId);
+        return Response.json(app, {
+          status: 200,
+          headers: { ETag: formatCasAdminETag(app.revision), "Cache-Control": REVISION_CACHE_CONTROL },
+        });
+      }
+      if (operation === "patchApp") {
+        if (!auth.payload.externalIdentityId) return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED);
+        if (!(await passCsrf(request, auth.payload))) return csrfRejected();
+        const parsed = PatchAppRequestSchema.safeParse(await readJsonBody(request));
+        if (!parsed.success) return invalidRequest("A valid App patch is required");
+        if (!appId) return json({ error: "Not Found" }, 404);
+        const revision = await accountService.patchApp({
+          actorAccountId: auth.payload.accountId,
+          actorExternalIdentityId: auth.payload.externalIdentityId,
+          appId,
+          patch: parsed.data,
+          ifMatch: request.headers.get("If-Match") ?? undefined,
+          requestId: request.headers.get("X-Request-Id") ?? undefined,
+          traceId: request.headers.get("X-Trace-Id") ?? undefined,
+          callerChannel: "admin-webui",
+        });
+        return new Response(null, {
+          status: 204,
+          headers: { ETag: formatCasAdminETag(revision), "Cache-Control": REVISION_CACHE_CONTROL },
+        });
+      }
+      return json(await accountService.listApps({
+        actorAccountId: auth.payload.accountId,
+        ...pageQuery(queryFromUrl(url)),
+      }), 200);
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "ACCOUNT_BLOCKED" || error.code === "APP_CREATION_AUTHORITY_REQUIRED"
+          || error.code === "APP_MEMBERSHIP_REQUIRED" ? 403
+          : error.code === "INVALID_CURSOR" || error.code === "INVALID_REQUEST" ? 400
+            : error.code === "PRECONDITION_REQUIRED" ? 428
+              : error.code === "REVISION_MISMATCH" ? 412
+                : error.code === "IDEMPOTENCY_CONFLICT" ? 409
+                  : 404;
+        return json({ error: error.code }, status);
+      }
+      throw error;
+    }
+  }
+
+  async function handleAccountAppAudit(request: Request, url: URL, appId: string): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!accountService || !auth.payload.accountId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
+    }
+    try {
+      return json(await accountService.listAppAuditEvents({
+        actorAccountId: auth.payload.accountId,
+        appId,
+        query: queryFromUrl(url),
+      }), 200);
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "APP_MEMBERSHIP_REQUIRED" || error.code === "ACCOUNT_BLOCKED" ? 403
+          : error.code === "INVALID_CURSOR" || error.code === "INVALID_REQUEST" ? 400
+            : 404;
+        return json({ error: error.code }, status);
+      }
+      throw error;
+    }
+  }
+
+  async function handleAccountAuditRead(
+    request: Request,
+    url: URL,
+    route: AppAdminRoute & { operation: "listRefDomains" | "listRootDomainRefs" | "listRootDomainEvents" },
+  ): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!accountService || !auth.payload.accountId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
+    }
+    try {
+      await accountService.requireAppMembership(auth.payload.accountId, route.appId);
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        return json({ error: error.code }, error.code === "APP_MEMBERSHIP_REQUIRED" ? 403 : 503);
+      }
+      throw error;
+    }
+    if (route.operation !== "listRefDomains") {
+      const domainError = validateAuditRefDomain(route.refDomain);
+      if (domainError) return adminErrorResponse(CasAdminErrorCodes.INVALID_REQUEST, domainError);
+    }
+    if (!options.auditReader) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, NOT_AVAILABLE_MESSAGE);
+    }
+    const rpcPath = route.operation === "listRefDomains"
+      ? "/_internal/audit/domains"
+      : route.operation === "listRootDomainRefs"
+        ? "/_internal/audit/refs"
+        : "/_internal/audit/events";
+    const rpcUrl = new URL(`https://cas-audit.internal${rpcPath}`);
+    rpcUrl.searchParams.set("stackId", route.appId);
+    if (route.operation !== "listRefDomains") rpcUrl.searchParams.set("refDomain", route.refDomain);
+    const query = queryFromUrl(url);
+    if (query.spaceId !== undefined) rpcUrl.searchParams.set("tenantId", query.spaceId);
+    if (query.limit !== undefined) rpcUrl.searchParams.set("limit", query.limit);
+    if (query.cursor !== undefined) rpcUrl.searchParams.set("cursor", query.cursor);
+    if (query.after !== undefined) rpcUrl.searchParams.set("after", query.after);
+    const headers: Record<string, string> = {};
+    if (config.auditReaderKey) headers["X-CAS-Audit-Reader-Key"] = config.auditReaderKey;
+    try {
+      const rpcResponse = await options.auditReader.fetch(rpcUrl.toString(), { headers });
+      const body = await rpcResponse.json();
+      const transformed = transformAppAdminResponse(route, body);
+      return json(transformed, rpcResponse.status);
+    } catch {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "audit reader is unavailable");
+    }
   }
 
   async function handlePeople(request: Request, appId?: string): Promise<Response> {
     const auth = await requireAuthenticated(request);
     if (auth instanceof Response) return auth;
     if (!options.peopleRepository) return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "people queries are unavailable");
-    const actor = { issuer: auth.payload.identityIssuer, subject: auth.payload.subject };
     const service = new PeopleService(options.peopleRepository, async scope => {
       if ("appId" in scope) {
-        const result = await controlPlane.listAppMemberInvitations(serviceContext(auth.payload, request), scope.appId, { limit: 1 });
-        if ("error" in result) throw new PlatformAccessError(result.error === "STACK_MEMBERSHIP_REQUIRED" ? "APP_MEMBERSHIP_REQUIRED" : result.error, casAdminErrorHttpStatus[result.error]);
+        if (!accountService || !auth.payload.accountId) {
+          throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
+        }
+        try {
+          await accountService.requireAppMembership(auth.payload.accountId, scope.appId);
+        } catch (error) {
+          if (error instanceof AccountServiceError) {
+            throw new PlatformAccessError(error.code, error.code === "APP_MEMBERSHIP_REQUIRED" ? 403 : 503);
+          }
+          throw error;
+        }
       } else {
-        if (!platformAccess) throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
-        await platformAccess.requireAccess(actor, "platform.admin");
+        if (!accountService || !auth.payload.accountId) throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
+        try {
+          await accountService.requirePlatformAuthority(auth.payload.accountId, "platform.admin");
+        } catch (error) {
+          if (error instanceof AccountServiceError) throw new PlatformAccessError(error.code, 403);
+          throw error;
+        }
       }
     }, now);
     const params = queryFromUrl(new URL(request.url));
@@ -889,38 +1831,94 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
   async function handleAppInvitations(request: Request, appId: string, invitationId?: string): Promise<Response> {
     const auth = await requireAuthenticated(request);
     if (auth instanceof Response) return auth;
-    const context = serviceContext(auth.payload, request);
-    if (invitationId !== undefined) {
-      if (!(await passCsrf(request, auth.payload))) return csrfRejected();
-      const result = await controlPlane.revokeAppMemberInvitation(context, appId, invitationId, {
-        ifMatch: request.headers.get("If-Match") ?? undefined,
-      });
-      if ("error" in result) return json(transformAppAdminError({ ...result }), result.error === "INVITATION_NOT_PENDING" ? 409 : casAdminErrorHttpStatus[result.error]);
-      return new Response(null, { status: 204, headers: { ETag: formatCasAdminETag(result.revision), "Cache-Control": REVISION_CACHE_CONTROL } });
+    if (!accountService || !auth.payload.accountId || !auth.payload.externalIdentityId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
     }
-    const params = queryFromUrl(new URL(request.url));
-    const parsed = AppInvitationQuerySchema.safeParse({ ...params, ...(params.limit === undefined ? {} : { limit: Number(params.limit) }) });
-    if (!parsed.success) return invalidRequest("Invalid invitation filters or pagination");
-    const result = await controlPlane.listAppMemberInvitations(context, appId, parsed.data);
-    return "error" in result
-      ? json(transformAppAdminError({ ...result }), casAdminErrorHttpStatus[result.error])
-      : json(result, 200);
+    try {
+      if (invitationId !== undefined) {
+        if (!(await passCsrf(request, auth.payload))) return csrfRejected();
+        const revision = await accountService.revokeAppMemberInvitation({
+          actorAccountId: auth.payload.accountId,
+          actorExternalIdentityId: auth.payload.externalIdentityId,
+          appId,
+          invitationId,
+          ifMatch: request.headers.get("If-Match") ?? undefined,
+          requestId: request.headers.get("X-Request-Id") ?? undefined,
+          traceId: request.headers.get("X-Trace-Id") ?? undefined,
+          callerChannel: "admin-webui",
+        });
+        return new Response(null, { status: 204, headers: { ETag: formatCasAdminETag(revision), "Cache-Control": REVISION_CACHE_CONTROL } });
+      }
+      const params = queryFromUrl(new URL(request.url));
+      const parsed = AppInvitationQuerySchema.safeParse({
+        ...params,
+        ...(params.limit === undefined ? {} : { limit: Number(params.limit) }),
+      });
+      if (!parsed.success) return invalidRequest("Invalid invitation filters or pagination");
+      return json(await accountService.listAppMemberInvitations({
+        actorAccountId: auth.payload.accountId,
+        actorExternalIdentityId: auth.payload.externalIdentityId,
+        appId,
+        ...parsed.data,
+        callerChannel: "admin-webui",
+      }), 200);
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "APP_MEMBERSHIP_REQUIRED" || error.code === "ACCOUNT_BLOCKED" ? 403
+          : error.code === "PRECONDITION_REQUIRED" ? 428
+            : error.code === "REVISION_MISMATCH" ? 412
+              : error.code === "INVITATION_NOT_PENDING" ? 409
+                : error.code === "NOT_FOUND" ? 404
+                  : error.code === "INVALID_CURSOR" || error.code === "INVALID_REQUEST" ? 400
+                    : 401;
+        return json({ error: error.code }, status);
+      }
+      throw error;
+    }
   }
 
-  async function handleAppPatch(request: Request, appId: string): Promise<Response> {
+  async function handleCreateAppInvitation(request: Request, appId: string): Promise<Response> {
     const auth = await requireAuthenticated(request);
     if (auth instanceof Response) return auth;
     if (!(await passCsrf(request, auth.payload))) return csrfRejected();
-    const parsed = PatchAppRequestSchema.safeParse(await readJsonBody(request));
-    if (!parsed.success) return invalidRequest("A valid App patch is required");
-    const result = await controlPlane.patchApp(serviceContext(auth.payload, request), appId, parsed.data, {
-      ifMatch: request.headers.get("If-Match") ?? undefined,
-    });
-    if ("error" in result) return json(transformAppAdminError({ ...result }), casAdminErrorHttpStatus[result.error]);
-    return new Response(null, {
-      status: 204,
-      headers: { ETag: formatCasAdminETag(result.revision), "Cache-Control": REVISION_CACHE_CONTROL },
-    });
+    if (!accountService || !auth.payload.accountId || !auth.payload.externalIdentityId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
+    }
+    const body = await readJsonBody<{ emailConstraint?: unknown }>(request);
+    if (body !== null && (Array.isArray(body)
+      || Object.keys(body).some(key => key !== "emailConstraint")
+      || body.emailConstraint !== undefined && typeof body.emailConstraint !== "string")) {
+      return invalidRequest("A valid invitation body is required");
+    }
+    try {
+      const result = await accountService.createAppMemberInvitation({
+        actorAccountId: auth.payload.accountId,
+        actorExternalIdentityId: auth.payload.externalIdentityId,
+        appId,
+        emailConstraint: body?.emailConstraint as string | undefined,
+        idempotencyKey: request.headers.get("Idempotency-Key") ?? undefined,
+        requestId: request.headers.get("X-Request-Id") ?? undefined,
+        traceId: request.headers.get("X-Trace-Id") ?? undefined,
+        callerChannel: "admin-webui",
+      });
+      return Response.json({
+        invitationId: result.invitationId,
+        acceptUrl: absolutize(result.acceptUrl),
+        expiresAt: result.expiresAt,
+      }, {
+        status: 201,
+        headers: { ETag: formatCasAdminETag(result.revision), "Cache-Control": REVISION_CACHE_CONTROL },
+      });
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "APP_MEMBERSHIP_REQUIRED" || error.code === "ACCOUNT_BLOCKED" ? 403
+          : error.code === "IDEMPOTENCY_CONFLICT" ? 409
+            : error.code === "INVALID_REQUEST" ? 400
+              : 401;
+        return json({ error: error.code }, status);
+      }
+      throw error;
+    }
   }
 
   async function handleMemberInvitationAcceptance(request: Request, token: string): Promise<Response> {
@@ -949,12 +1947,30 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       if (auth instanceof Response) return auth;
     }
     if (!(await passCsrf(request, payload))) return csrfRejected();
-
-    const result = await controlPlane.acceptMemberInvitation(
-      serviceContext(payload, request),
-      { path: { token } },
-    );
-    if ("error" in result) return json(result, casAdminErrorHttpStatus[result.error]);
+    if (!accountService || !payload.accountId || !payload.externalIdentityId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
+    }
+    let appId: string;
+    try {
+      appId = await accountService.acceptAppMemberInvitation({
+        accountId: payload.accountId,
+        externalIdentityId: payload.externalIdentityId,
+        token,
+        verifiedEmailEvidence: payload.verifiedEmailEvidence,
+        requestId: request.headers.get("X-Request-Id") ?? undefined,
+        traceId: request.headers.get("X-Trace-Id") ?? undefined,
+        callerChannel: "admin-webui",
+      });
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "ACCOUNT_BLOCKED" ? 403
+          : error.code === "INVALID_REQUEST" ? 400
+            : error.code === "NOT_FOUND" ? 404
+              : 401;
+        return json({ error: error.code }, status);
+      }
+      throw error;
+    }
 
     const nextPayload: AdminSessionPayload = {
       v: 1,
@@ -964,14 +1980,19 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       displayName: payload.displayName,
       emailForDisplay: payload.emailForDisplay,
       csrfToken: generateCsrfToken(),
+      authProvider: payload.authProvider,
+      authenticatedAt: payload.authenticatedAt,
+      accountId: payload.accountId,
+      externalIdentityId: payload.externalIdentityId,
+      credentialVersion: payload.credentialVersion,
       admittedViaInvitation: payload.admittedViaInvitation || payload.invitationAccess
         ? true
         : undefined,
     };
     const nextSessionId = generateSessionId();
-    await sessionStore.create(nextSessionId, await sessionCrypto.encrypt(nextPayload), sessionTtlMs);
+    await persistSession(nextSessionId, nextPayload, sessionTtlMs);
     await sessionStore.delete(sessionId);
-    const response = json(result, 200);
+    const response = json({ appId }, 200);
     response.headers.set("Set-Cookie", sessionCookieHeader(cookieOptions, nextSessionId));
     response.headers.set("X-CSRF-Token", nextPayload.csrfToken);
     return response;
@@ -994,8 +2015,8 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     if (!(await passCsrf(request, payload))) return csrfRejected();
     try {
       await platformInvitations.accept(
-        { issuer: payload.identityIssuer, subject: payload.subject },
-        { displayName: payload.displayName, emailForDisplay: payload.emailForDisplay },
+        { accountId: payload.accountId!, externalIdentityId: payload.externalIdentityId! },
+        payload.verifiedEmailEvidence ?? [],
         token,
         request.headers.get("X-Request-Id"),
       );
@@ -1013,10 +2034,15 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       displayName: payload.displayName,
       emailForDisplay: payload.emailForDisplay,
       csrfToken: generateCsrfToken(),
+      authProvider: payload.authProvider,
+      authenticatedAt: payload.authenticatedAt,
+      accountId: payload.accountId,
+      externalIdentityId: payload.externalIdentityId,
+      credentialVersion: payload.credentialVersion,
       admittedViaInvitation: true,
     };
     const nextSessionId = generateSessionId();
-    await sessionStore.create(nextSessionId, await sessionCrypto.encrypt(nextPayload), sessionTtlMs);
+    await persistSession(nextSessionId, nextPayload, sessionTtlMs);
     await sessionStore.delete(sessionId);
     return new Response(null, {
       status: 204,
@@ -1028,254 +2054,105 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     });
   }
 
-  async function handleAdminApi(
-    request: Request,
-    url: URL,
-    route: CasAdminRoute,
-  ): Promise<Response> {
-    if (route.operation === "acceptMemberInvitation") {
-      return handleMemberInvitationAcceptance(request, route.token);
-    }
-    if (route.operation === "acceptPlatformInvitation") {
-      return handlePlatformInvitationAcceptance(request, route.token);
-    }
-    const auth = await requireAuthenticated(request);
-    if (auth instanceof Response) return auth;
-    if (isMutating(request.method) && !(await passCsrf(request, auth.payload))) {
-      return csrfRejected();
-    }
-    const ctx = serviceContext(auth.payload, request);
-    const query = queryFromUrl(url);
-    const mutation = {
-      ifMatch: request.headers.get("If-Match") ?? undefined,
-      idempotencyKey: request.headers.get("Idempotency-Key") ?? undefined,
-    };
-
-    switch (route.operation) {
-      case "me": {
-        const result = await controlPlane.me(ctx);
-        if ("error" in result) return json(result, casAdminErrorHttpStatus[result.error]);
-        let responseResult: typeof result & {
-          platformAccess?: {
-            principalRef: string;
-            status: "active";
-            authorities: readonly ("platform.admin" | "apps.create")[];
-            revision: number;
-          }
-        } = result;
-        if (platformAccess !== null) {
-          try {
-            const state = await platformAccess.requireAccess({
-              issuer: auth.payload.identityIssuer,
-              subject: auth.payload.subject,
-            });
-            if (!state) {
-              return adminErrorResponse(
-                CasAdminErrorCodes.SERVICE_UNAVAILABLE,
-                "platform access state is unavailable",
-              );
-            }
-            responseResult = {
-              ...result,
-              platformAccess: {
-                principalRef: state.principalRef,
-                status: "active",
-                authorities: state.authorities,
-                revision: state.revision,
-              },
-            };
-          } catch (error) {
-            if (error instanceof PlatformAccessError) {
-              return adminErrorResponse(error.code as CasAdminErrorResponse["error"]);
-            }
-            throw error;
-          }
-        }
-        const response = json(responseResult, 200);
-        response.headers.set("X-CSRF-Token", auth.payload.csrfToken);
-        return response;
-      }
-      case "listStacks": {
-        const result = await controlPlane.listStacks(ctx, { query: pageQuery(query) });
-        return json(result, "error" in result ? casAdminErrorHttpStatus[result.error] : 200);
-      }
-      case "createStack": {
-        if (platformAccess !== null) {
-          try {
-            await platformAccess.requireAccess(
-              { issuer: auth.payload.identityIssuer, subject: auth.payload.subject },
-              "apps.create",
-            );
-          } catch (error) {
-            if (error instanceof PlatformAccessError) {
-              return adminErrorResponse(error.code as CasAdminErrorResponse["error"]);
-            }
-            throw error;
-          }
-        }
-        const body = await readJsonBody<{ displayName?: unknown }>(request);
-        if (!body) return invalidRequest("JSON body is required");
-        const result = await controlPlane.createStack(ctx, { body: { displayName: String(body.displayName ?? "") } }, mutation);
-        return jsonWithEtag(result);
-      }
-      case "getStack": {
-        const result = await controlPlane.getStack(ctx, { path: { stackId: route.stackId } });
-        return jsonWithEtag(result);
-      }
-      case "patchStack": {
-        const body = await readJsonBody<{ displayName?: unknown; description?: unknown }>(request);
-        if (!body) return invalidRequest("JSON body is required");
-        const result = await controlPlane.patchStack(ctx, {
-          path: { stackId: route.stackId },
-          body: {
-            displayName: body.displayName === undefined ? undefined : String(body.displayName),
-            description: body.description === undefined ? undefined : String(body.description),
-          },
-        }, mutation);
-        return jsonWithEtag(result);
-      }
-      case "listMembers": {
-        const result = await controlPlane.listMembers(ctx, { path: { stackId: route.stackId }, query: pageQuery(query) });
-        return json(result, "error" in result ? casAdminErrorHttpStatus[result.error] : 200);
-      }
-      case "listPlaygroundFileRoots": {
-        const result = await controlPlane.listPlaygroundFileRoots(ctx, { path: { stackId: route.stackId } });
-        return json(result, "error" in result ? casAdminErrorHttpStatus[result.error] : 200);
-      }
-      case "createPlaygroundFileRoot": {
-        const body = await readJsonBody<{ rootId?: unknown; name?: unknown; manifestHash?: unknown }>(request);
-        if (!body) return invalidRequest("JSON body is required");
-        const result = await controlPlane.createPlaygroundFileRoot(ctx, {
-          path: { stackId: route.stackId },
-          body: {
-            rootId: String(body.rootId ?? ""),
-            name: String(body.name ?? ""),
-            manifestHash: String(body.manifestHash ?? ""),
-          },
-        });
-        return jsonWithEtag(result);
-      }
-      case "patchPlaygroundFileRoot": {
-        const body = await readJsonBody<{ name?: unknown; manifestHash?: unknown }>(request);
-        if (!body) return invalidRequest("JSON body is required");
-        const result = await controlPlane.patchPlaygroundFileRoot(ctx, {
-          path: { stackId: route.stackId, rootId: route.rootId },
-          body: { name: String(body.name ?? ""), manifestHash: String(body.manifestHash ?? "") },
-        }, mutation);
-        return jsonWithEtag(result);
-      }
-      case "deletePlaygroundFileRoot": {
-        const result = await controlPlane.deletePlaygroundFileRoot(ctx, {
-          path: { stackId: route.stackId, rootId: route.rootId },
-        }, mutation);
-        return json(result, "error" in result ? casAdminErrorHttpStatus[result.error] : 200);
-      }
-      case "deleteMember": {
-        const result = await controlPlane.deleteMember(ctx, {
-          path: { stackId: route.stackId },
-          query: {
-            identityIssuer: query.identityIssuer ?? "",
-            subject: query.subject ?? "",
-          },
-        }, mutation);
-        return json(result, "error" in result ? casAdminErrorHttpStatus[result.error] : 200);
-      }
-      case "createMemberInvitation": {
-        const body = await readJsonBody<{ emailConstraint?: unknown }>(request);
-        const result = await controlPlane.createMemberInvitation(ctx, {
-          path: { stackId: route.stackId },
-          body: body === null || body.emailConstraint === undefined
-            ? undefined
-            : { emailConstraint: String(body.emailConstraint) },
-        }, mutation);
-        if ("error" in result) return json(result, casAdminErrorHttpStatus[result.error]);
-        return json({ ...result, acceptUrl: absolutize(result.acceptUrl) }, 200);
-      }
-      case "getOAuthIssuer": {
-        if (query.optional !== undefined && query.optional !== "true" && query.optional !== "false") {
-          return invalidRequest("optional must be true or false");
-        }
-        const result = await controlPlane.getOAuthIssuer(ctx, {
-          path: { stackId: route.stackId },
-          query: { optional: query.optional === "true" },
-        });
-        if (result === null) return json(null, 200);
-        return jsonWithEtag(result);
-      }
-      case "getManagedIssuer": {
-        const result = await controlPlane.getManagedOAuthIssuer(ctx, { path: { stackId: route.stackId } });
-        return jsonWithEtag(result);
-      }
-      case "patchManagedIssuer": {
-        const body = await readJsonBody<{ enabled?: unknown }>(request);
-        if (!body || typeof body.enabled !== "boolean") return invalidRequest("enabled must be a boolean");
-        const result = await controlPlane.patchManagedOAuthIssuer(ctx, {
-          path: { stackId: route.stackId },
-          body: { enabled: body.enabled },
-        }, mutation);
-        return jsonWithEtag(result);
-      }
-      case "mintManagedCapability": {
-        const result = await controlPlane.mintManagedCapability(ctx, { path: { stackId: route.stackId } });
-        const response = json(result, "error" in result ? casAdminErrorHttpStatus[result.error] : 200);
-        response.headers.set("Cache-Control", "no-store");
-        return response;
-      }
-      case "inspectOAuthIssuer": {
-        const body = await readJsonBody<{ issuer?: unknown }>(request);
-        if (!body || Array.isArray(body)) return invalidRequest("JSON object body is required");
-        if (Object.keys(body).some((key) => key !== "issuer")) {
-          return invalidRequest("OAuth issuer inspection accepts only issuer");
-        }
-        if (typeof body.issuer !== "string") return invalidRequest("issuer must be a string");
-        const result = await controlPlane.inspectOAuthIssuer(ctx, {
-          path: { stackId: route.stackId },
-          body: { issuer: body.issuer },
-        });
-        return jsonWithEtag(result);
-      }
-      case "activateOAuthIssuer": {
-        const body = await readJsonBody<{ inspectionId?: unknown; activationProof?: unknown }>(request);
-        if (!body) return invalidRequest("JSON body is required");
-        const result = await controlPlane.activateOAuthIssuer(ctx, {
-          path: { stackId: route.stackId },
-          body: {
-            inspectionId: String(body.inspectionId ?? ""),
-            activationProof: String(body.activationProof ?? ""),
-          },
-        }, mutation);
-        return jsonWithEtag(result);
-      }
-      case "listControlAuditEvents": {
-        const result = await controlPlane.listControlAuditEvents(ctx, {
-          path: { stackId: route.stackId },
-          query: pageQuery(query),
-        });
-        return json(result, "error" in result ? casAdminErrorHttpStatus[result.error] : 200);
-      }
-      case "listRefDomains":
-      case "listRootDomainRefs":
-      case "listRootDomainEvents": {
-        return handleAuditRead(request, route, ctx, query);
-      }
-      default:
-        return json({ error: "Not Found" }, 404);
-    }
-  }
-
   async function handleManagedSpaceCapability(request: Request, appId: string): Promise<Response> {
     const auth = await requireAuthenticated(request);
     if (auth instanceof Response) return auth;
     if (!(await passCsrf(request, auth.payload))) return csrfRejected();
-    const result = await controlPlane.mintManagedSpaceCapability(
-      serviceContext(auth.payload, request),
-      appId,
-    );
-    const response = "error" in result
-      ? json(transformAppAdminError({ ...result }), result.error === "APP_SUSPENDED" ? 403 : casAdminErrorHttpStatus[result.error])
-      : json(result, 201);
-    response.headers.set("Cache-Control", "no-store");
-    return response;
+    if (!accountService || !auth.payload.accountId || !auth.payload.externalIdentityId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
+    }
+    try {
+      const result = await accountService.mintManagedSpaceCapability({
+        actorAccountId: auth.payload.accountId,
+        actorExternalIdentityId: auth.payload.externalIdentityId,
+        appId,
+      });
+      const response = json(result, 201);
+      response.headers.set("Cache-Control", "no-store");
+      return response;
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "APP_MEMBERSHIP_REQUIRED" || error.code === "APP_SUSPENDED"
+          || error.code === "ACCOUNT_BLOCKED" ? 403
+          : error.code === "INVALID_REQUEST" ? 400
+            : error.code === "SERVICE_UNAVAILABLE" ? 503
+              : 401;
+        const response = json({ error: error.code }, status);
+        response.headers.set("Cache-Control", "no-store");
+        return response;
+      }
+      throw error;
+    }
+  }
+
+  async function handleAccountManagedIssuer(
+    request: Request,
+    appId: string,
+    operation: "getManagedIssuer" | "patchManagedIssuer",
+  ): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!accountService || !auth.payload.accountId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
+    }
+    try {
+      if (operation === "getManagedIssuer") {
+        return jsonWithEtag(await accountService.getManagedOAuthIssuer(auth.payload.accountId, appId));
+      }
+      if (!auth.payload.externalIdentityId) return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED);
+      if (!(await passCsrf(request, auth.payload))) return csrfRejected();
+      const body = await readJsonBody<{ enabled?: unknown }>(request);
+      if (!body || typeof body.enabled !== "boolean") return invalidRequest("enabled must be a boolean");
+      return jsonWithEtag(await accountService.patchManagedOAuthIssuer({
+        actorAccountId: auth.payload.accountId,
+        actorExternalIdentityId: auth.payload.externalIdentityId,
+        appId,
+        enabled: body.enabled,
+        ifMatch: request.headers.get("If-Match") ?? undefined,
+        requestId: request.headers.get("X-Request-Id") ?? undefined,
+        traceId: request.headers.get("X-Trace-Id") ?? undefined,
+        callerChannel: "admin-webui",
+      }));
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "APP_MEMBERSHIP_REQUIRED" || error.code === "ACCOUNT_BLOCKED" ? 403
+          : error.code === "PRECONDITION_REQUIRED" ? 428
+            : error.code === "REVISION_MISMATCH" ? 412
+              : error.code === "INVALID_REQUEST" ? 400
+                : error.code === "NOT_FOUND" ? 404
+                  : 401;
+        return json({ error: error.code }, status);
+      }
+      throw error;
+    }
+  }
+
+  async function handleAccountOAuthIssuer(request: Request, url: URL, appId: string): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!accountService || !auth.payload.accountId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
+    }
+    const optionalValue = url.searchParams.get("optional");
+    if (optionalValue !== null && optionalValue !== "true" && optionalValue !== "false") {
+      return invalidRequest("optional must be true or false");
+    }
+    try {
+      const result = await accountService.getAppOAuthIssuer(
+        auth.payload.accountId,
+        appId,
+        optionalValue === "true",
+      );
+      return result === null ? json(null, 200) : jsonWithEtag(result);
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "APP_MEMBERSHIP_REQUIRED" || error.code === "ACCOUNT_BLOCKED" ? 403
+          : error.code === "NOT_FOUND" ? 404
+            : 401;
+        return json({ error: error.code }, status);
+      }
+      throw error;
+    }
   }
 
   // ------------------------------------------------------------------
@@ -1287,49 +2164,63 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     url: URL,
     route: AppAdminRoute,
   ): Promise<Response> {
-    if (platformAccess === null) {
-      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "platform access service is not configured");
+    if (accountService === null) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is not configured");
     }
     const auth = await requireAuthenticated(request);
     if (auth instanceof Response) return auth;
     if (isMutating(request.method) && !(await passCsrf(request, auth.payload))) return csrfRejected();
 
-    const actor = { issuer: auth.payload.identityIssuer, subject: auth.payload.subject };
+    if (!auth.payload.accountId || !auth.payload.externalIdentityId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account session is incomplete");
+    }
+    const actor = { accountId: auth.payload.accountId, externalIdentityId: auth.payload.externalIdentityId };
 
     try {
       switch (route.operation) {
-        case "accessSummary": {
-          const summary = await platformAccess.getAccessSummary(actor);
-          return json(summary, 200);
+        case "listPlatformAccounts": {
+          if (!accountService || !auth.payload.accountId) throw new Error("Account service unavailable");
+          return json(await accountService.listPlatformAccounts({
+            actorAccountId: auth.payload.accountId,
+            query: queryFromUrl(url),
+          }), 200);
         }
-        case "listPlatformPrincipals": {
-          const query = queryFromUrl(url);
-          return json(await platformAccess.listPrincipals(actor, query), 200);
+        case "getPlatformAccount": {
+          if (!accountService || !auth.payload.accountId) throw new Error("Account service unavailable");
+          return json(await accountService.getPlatformAccount(auth.payload.accountId, route.accountId), 200);
         }
-        case "getPlatformPrincipal": {
-          const principal = await platformAccess.getPrincipal(actor, route.principalRef);
-          return json(principal, 200);
-        }
-        case "getPlatformAccess": {
-          const access = await platformAccess.getAccessState(actor, route.principalRef);
-          const response = json(access, 200);
-          response.headers.set("ETag", formatCasAdminETag(access.revision));
-          response.headers.set("Cache-Control", REVISION_CACHE_CONTROL);
-          return response;
-        }
-        case "patchPlatformAccess": {
-          const ifMatch = request.headers.get("If-Match") ?? undefined;
-          const body = await readJsonBody<unknown>(request);
-          if (body === null) return invalidRequest("JSON body is required");
-          const { revision } = await platformAccess.patchAccess(actor, route.principalRef, body, ifMatch);
-          return new Response(null, {
-            status: 204,
-            headers: { ETag: formatCasAdminETag(revision), "Cache-Control": REVISION_CACHE_CONTROL },
+        case "grantPlatformAccountAuthority":
+        case "revokePlatformAccountAuthority": {
+          if (!accountService || !auth.payload.accountId || !auth.payload.externalIdentityId) {
+            throw new Error("Account service unavailable");
+          }
+          await accountService.setPlatformAuthority({
+            actorAccountId: auth.payload.accountId,
+            actorExternalIdentityId: auth.payload.externalIdentityId,
+            targetAccountId: route.accountId,
+            authority: route.authority,
+            grant: route.operation === "grantPlatformAccountAuthority",
+            requestId: request.headers.get("X-Request-Id") ?? undefined,
           });
+          return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+        }
+        case "blockPlatformAccount":
+        case "restorePlatformAccount": {
+          if (!accountService || !auth.payload.accountId || !auth.payload.externalIdentityId) {
+            throw new Error("Account service unavailable");
+          }
+          await accountService.setPlatformBlocked({
+            actorAccountId: auth.payload.accountId,
+            actorExternalIdentityId: auth.payload.externalIdentityId,
+            targetAccountId: route.accountId,
+            blocked: route.operation === "blockPlatformAccount",
+            requestId: request.headers.get("X-Request-Id") ?? undefined,
+          });
+          return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
         }
         case "listPlatformInvitations": {
           if (!platformInvitations) throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
-          return json(await platformInvitations.list(actor, queryFromUrl(url)), 200);
+          return json(await platformInvitations.list(actor.accountId, queryFromUrl(url)), 200);
         }
         case "createPlatformInvitation": {
           if (!platformInvitations) throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
@@ -1364,13 +2255,24 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
           });
         }
         case "listPlatformAuditEvents": {
-          if (!platformAudit) throw new PlatformAccessError("SERVICE_UNAVAILABLE", 503);
-          return json(await platformAudit.list(actor, queryFromUrl(url)), 200);
+          if (!accountService || !auth.payload.accountId) throw new Error("Account service unavailable");
+          return json(await accountService.listPlatformAuditEvents({
+            actorAccountId: auth.payload.accountId,
+            query: queryFromUrl(url),
+          }), 200);
         }
         default:
           return json({ error: "Not Found" }, 404);
       }
     } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "PLATFORM_ADMIN_REQUIRED" || error.code === "ACCOUNT_BLOCKED" ? 403
+          : error.code === "ACCOUNT_NOT_FOUND" ? 404
+            : error.code === "INVALID_CURSOR" || error.code === "INVALID_REQUEST" ? 400
+              : error.code === "LAST_PLATFORM_ADMIN" || error.code === "SELF_BLOCK_FORBIDDEN" ? 409
+                : 409;
+        return json({ error: error.code }, status);
+      }
       if (error instanceof PlatformAccessError) {
         const body: CasAdminErrorResponse = { error: error.code as CasAdminErrorResponse["error"] };
         return json(body, error.status);
@@ -1379,55 +2281,16 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     }
   }
 
-  /** Root Ref audit reads: membership first, then the private reader RPC. */
-  async function handleAuditRead(
-    request: Request,
-    route: CasAdminRoute & { operation: "listRefDomains" | "listRootDomainRefs" | "listRootDomainEvents" },
-    ctx: ControlPlaneCallContext,
-    query: Record<string, string>,
-  ): Promise<Response> {
-    const membership = await controlPlane.getStack(ctx, { path: { stackId: route.stackId } });
-    if ("error" in membership) {
-      return json(membership, casAdminErrorHttpStatus[membership.error]);
-    }
-    if (route.operation !== "listRefDomains") {
-      const domainError = validateAuditRefDomain(route.refDomain);
-      if (domainError) return adminErrorResponse(CasAdminErrorCodes.INVALID_REQUEST, domainError);
-    }
-    if (!options.auditReader) {
-      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, NOT_AVAILABLE_MESSAGE);
-    }
-    const rpcPath = route.operation === "listRefDomains"
-      ? "/_internal/audit/domains"
-      : route.operation === "listRootDomainRefs"
-        ? "/_internal/audit/refs"
-        : "/_internal/audit/events";
-    const rpcUrl = new URL(`https://cas-audit.internal${rpcPath}`);
-    rpcUrl.searchParams.set("stackId", route.stackId);
-    if (route.operation !== "listRefDomains") {
-      rpcUrl.searchParams.set("refDomain", route.refDomain);
-    }
-    if (query.tenantId !== undefined) rpcUrl.searchParams.set("tenantId", query.tenantId);
-    if (query.limit !== undefined) rpcUrl.searchParams.set("limit", query.limit);
-    if (query.cursor !== undefined) rpcUrl.searchParams.set("cursor", query.cursor);
-    if (query.after !== undefined) rpcUrl.searchParams.set("after", query.after);
-    const headers: Record<string, string> = {};
-    if (config.auditReaderKey) headers["X-CAS-Audit-Reader-Key"] = config.auditReaderKey;
-    try {
-      const rpcResponse = await options.auditReader.fetch(rpcUrl.toString(), { headers });
-      const body = await rpcResponse.text();
-      return new Response(body, {
-        status: rpcResponse.status,
-        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-      });
-    } catch {
-      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "audit reader is unavailable");
-    }
-  }
-
   // ------------------------------------------------------------------
   // Session / auth helpers
   // ------------------------------------------------------------------
+
+  async function persistSession(sessionId: string, payload: AdminSessionPayload | CliOneTimeCodePayload, ttlMs: number): Promise<void> {
+    const account = payload.accountId && payload.externalIdentityId && payload.credentialVersion !== undefined
+      ? { accountId: payload.accountId, externalIdentityId: payload.externalIdentityId, credentialVersion: payload.credentialVersion }
+      : undefined;
+    await sessionStore.create(sessionId, await sessionCrypto.encrypt(payload), ttlMs, account);
+  }
 
   function readSessionId(request: Request): string | null {
     const cookies = parseCookies(request);
@@ -1440,13 +2303,30 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     if (!stored) return null;
     try {
       const payload = await sessionCrypto.decrypt(stored.encryptedPayload);
-      if (platformAccess === null
-        && payload.authenticated
-        && !payload.invitationAccess
-        && !payload.admittedViaInvitation
-        && !isEmailAllowed(payload.emailForDisplay, true)) {
-        await sessionStore.delete(sessionId);
-        return null;
+      if (accountService && payload.authenticated) {
+        try {
+          if (payload.accountId && payload.externalIdentityId && payload.credentialVersion !== undefined) {
+            const resolved = await accountService.authorizeCredential({
+              accountId: payload.accountId,
+              externalIdentityId: payload.externalIdentityId,
+              credentialVersion: payload.credentialVersion,
+            });
+            if (resolved.authenticatedIdentity.issuer !== payload.identityIssuer
+              || resolved.authenticatedIdentity.subject !== payload.subject) throw new AccountServiceError("IDENTITY_ACCOUNT_MISMATCH");
+            if (!payload.invitationAccess
+              && resolved.platformAuthorities.length === 0
+              && !resolved.hasAppMembership) {
+              await sessionStore.delete(sessionId);
+              return null;
+            }
+          } else {
+            throw new AccountServiceError("IDENTITY_NOT_FOUND");
+          }
+        } catch (error) {
+          if (!(error instanceof AccountServiceError)) throw error;
+          await sessionStore.delete(sessionId);
+          return null;
+        }
       }
       return payload;
     } catch {
@@ -1471,21 +2351,6 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         "this session is limited to its invitation",
       );
     }
-    if (platformAccess !== null) {
-      const sessionPrincipal = {
-        issuer: payload.identityIssuer,
-        subject: payload.subject,
-      };
-      try {
-        await platformAccess.requireAccess(sessionPrincipal);
-      } catch (error) {
-        if (error instanceof PlatformAccessError && error.code === "PLATFORM_ACCESS_REQUIRED") {
-          await sessionStore.delete(sessionId);
-          return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED, "login required");
-        }
-        throw error;
-      }
-    }
     await sessionStore.touch(sessionId, sessionTtlMs);
     return { payload, sessionId };
   }
@@ -1499,45 +2364,24 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       && checkCsrfToken(request, payload.csrfToken);
   }
 
-  function serviceContext(
+  async function recordAccountSessionAudit(
     payload: AdminSessionPayload,
     request: Request,
-  ): ControlPlaneCallContext {
-    return {
-      identity: { identityIssuer: payload.identityIssuer, subject: payload.subject },
-      profile: {
-        displayName: payload.displayName,
-        emailForDisplay: payload.emailForDisplay,
-      },
+    action: "session.login" | "session.logout",
+  ): Promise<void> {
+    if (!accountService || !payload.accountId || !payload.externalIdentityId) return;
+    await accountService.recordSessionAudit({
+      accountId: payload.accountId,
+      externalIdentityId: payload.externalIdentityId,
+      action,
       requestId: request.headers.get("X-Request-Id") ?? generateRequestId(),
       traceId: generateRequestId(),
-      caller: { channel: "admin-webui" },
-    };
+      callerChannel: "admin-webui",
+    });
   }
 
   async function auditLoginFailure(state: string): Promise<void> {
-    try {
-      await controlPlane.recordSessionAudit(
-        {
-          identity: {
-            identityIssuer: config.oidcIssuer ?? "https://accounts.google.com",
-            subject: "unauthenticated",
-          },
-          requestId: generateRequestId(),
-          traceId: generateRequestId(),
-        },
-        "session.login_failed",
-        state.length > 0 ? state : "oidc-callback",
-        null,
-      );
-    } catch {
-      // Auditing must never break the login flow.
-    }
-  }
-
-  function isEmailAllowed(email: string | null, emailVerified: boolean): boolean {
-    if (!emailAllowlist) return true;
-    return emailVerified && email !== null && emailAllowlist.has(email.toLowerCase());
+    console.error(JSON.stringify({ event: "admin_oidc_login_failed", statePresent: state.length > 0 }));
   }
 
   function sanitizeReturnTo(value: string | null): string | null {
@@ -1552,11 +2396,34 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
 // Response helpers
 // ----------------------------------------------------------------------
 
+function parseProviderKind(value: string): ProviderKind | null {
+  return value === "google" || value === "microsoft" || value === "github" ? value : null;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 function json(body: unknown, status: number): Response {
   return Response.json(body, {
     status,
     headers: { "Cache-Control": "no-store" },
   });
+}
+
+function identityMutationStartResponse(request: Request, response: Response): Response {
+  if (!request.headers.get("Accept")?.includes("application/json")) return response;
+  const redirectTo = response.headers.get("Location");
+  if (!redirectTo || response.status < 300 || response.status >= 400) return response;
+  const headers = new Headers({ "Cache-Control": "no-store" });
+  const setCookie = response.headers.get("Set-Cookie");
+  if (setCookie) headers.set("Set-Cookie", setCookie);
+  return Response.json({ redirectTo }, { status: 200, headers });
 }
 
 function isMutating(method: string): boolean {
@@ -1644,23 +2511,6 @@ function generateRequestId(): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-function readBasicCredentials(request: Request): { email: string; password: string } | null {
-  const authorization = request.headers.get("Authorization");
-  const match = authorization ? /^Basic\s+([^\s]+)$/i.exec(authorization) : null;
-  if (!match) return null;
-  try {
-    const binary = atob(match[1]!);
-    const decoded = new TextDecoder().decode(
-      Uint8Array.from(binary, (character) => character.charCodeAt(0)),
-    );
-    const separator = decoded.indexOf(":");
-    if (separator < 1) return null;
-    return { email: decoded.slice(0, separator), password: decoded.slice(separator + 1) };
-  } catch {
-    return null;
-  }
 }
 
 async function secureEqual(left: string, right: string): Promise<boolean> {

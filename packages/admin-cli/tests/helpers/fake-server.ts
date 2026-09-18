@@ -5,7 +5,7 @@
  * provider.
  */
 
-import { appAdminRoutes, casAdminRoutes } from "@unicas/admin-protocol";
+import { appAdminRoutes } from "@unicas/admin-protocol";
 import { s256Challenge } from "@unicas/control-auth";
 
 export interface FakeAdminOptions {
@@ -164,16 +164,29 @@ export class FakeAdminApi {
     }
 
     // me
-    if (url.pathname === casAdminRoutes.me()) {
+    if (url.pathname === appAdminRoutes.me()) {
       if (this.#options.adminVocabulary === "app") {
+        const account = {
+          accountId: `acct_${"a".repeat(22)}`,
+          displayName: "Alice",
+          primaryVerifiedEmail: null,
+          avatar: { kind: "fallback", initials: "AL", colorIndex: 1 },
+          blockedAt: null,
+          platformAuthorities: ["platform.admin", "apps.create"],
+          identities: [{ externalIdentityId: "ext-alice", provider: "google", accountHint: null, linkedAt: 1, lastAuthenticatedAt: 1, currentLogin: true }],
+          linkableProviders: [],
+        };
         return json({
-          principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-          profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
-          platformAccess: { principalRef: "principal-1", status: "active", authorities: ["platform.admin", "apps.create"], revision: 1 },
+          account,
+          authenticatedIdentity: account.identities[0],
           memberships: [{
             appId: "cas_stack_a",
-            principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-            profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+            account: {
+              accountId: account.accountId,
+              displayName: account.displayName,
+              primaryVerifiedEmail: account.primaryVerifiedEmail,
+              avatar: account.avatar,
+            },
           }],
         });
       }
@@ -183,16 +196,18 @@ export class FakeAdminApi {
       });
     }
     if (url.pathname === appAdminRoutes.platformInvitations() && method === "GET") {
-      return json({ items: [{
-        invitationId: "platform-invite-1",
-        emailConstraint: "developer@example.com",
-        authorities: ["apps.create"],
-        status: "pending",
-        expiresAt: 1_800_000_000,
-        createdAt: 1,
-        createdBy: { issuer: "https://accounts.google.com", subject: "sub-1" },
-        revision: 1,
-      }], nextCursor: null });
+      return json({
+        items: [{
+          invitationId: "platform-invite-1",
+          emailConstraint: "developer@example.com",
+          authorities: ["apps.create"],
+          status: "pending",
+          expiresAt: 1_800_000_000,
+          createdAt: 1,
+          createdBy: { issuer: "https://accounts.google.com", subject: "sub-1" },
+          revision: 1,
+        }], nextCursor: null
+      });
     }
     if (url.pathname === appAdminRoutes.platformInvitations() && method === "POST") {
       return Response.json({
@@ -205,64 +220,44 @@ export class FakeAdminApi {
       return new Response(null, { status: 204, headers: { ETag: '"2"' } });
     }
     if (url.pathname === appAdminRoutes.platformAuditEvents() && method === "GET") {
-      return json({ items: [{
-        eventId: "platform-event-1",
-        action: "platform_invitation.created",
-        actorPrincipalRef: "principal-1",
-        actorPrincipal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-        targetPrincipalRef: null,
-        targetPrincipal: null,
-        targetInvitationId: "platform-invite-1",
-        result: "succeeded",
-        requestId: "request-1",
-        createdAt: 100,
-        details: {},
-      }], nextCursor: null });
-    }
-    if (url.pathname === appAdminRoutes.platformPrincipals() && method === "GET") {
-      return json({ items: [{
-        principalRef: "principal-1",
-        principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-        profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
-        status: "active",
-        authorities: ["platform.admin", "apps.create"],
-        revision: 1,
-        createdAt: 1,
-        updatedAt: 1,
-        effectiveAccess: "active",
-        appMembershipCount: 1,
-        lastActiveAt: 1,
-      }], nextCursor: null });
-    }
-    if (url.pathname === appAdminRoutes.platformPrincipal({ principalRef: "principal-1" }) && method === "GET") {
+      const accountId = `acct_${"a".repeat(22)}`;
       return json({
-        principalRef: "principal-1",
-        principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-        profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
-        status: "active",
-        authorities: ["platform.admin", "apps.create"],
-        revision: 1,
-        createdAt: 1,
-        updatedAt: 1,
-        effectiveAccess: "active",
-        appMembershipCount: 1,
-        lastActiveAt: 1,
-        memberships: [],
+        items: [{
+          eventId: "platform-event-1",
+          action: "platform_invitation.created",
+          actorAccount: { accountId, displayName: "Alice", primaryVerifiedEmail: null, avatar: { kind: "fallback", initials: "AL", colorIndex: 1 } },
+          authenticatedIdentity: { externalIdentityId: "ext-alice", provider: "google", accountHint: null, linkedAt: 1, lastAuthenticatedAt: 1, currentLogin: false, issuer: "https://accounts.google.com", subject: "sub-1" },
+          targetAccount: null,
+          targetInvitationId: "platform-invite-1",
+          result: "succeeded",
+          requestId: "request-1",
+          createdAt: 100,
+          details: {},
+        }], nextCursor: null
       });
     }
-    if (url.pathname === appAdminRoutes.platformPrincipalAccess({ principalRef: "principal-1" }) && method === "GET") {
-      return Response.json({
-        principalRef: "principal-1",
-        principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-        status: "active",
-        authorities: ["platform.admin", "apps.create"],
-        revision: 1,
-        createdAt: 1,
-        updatedAt: 1,
-      }, { headers: { ETag: '"1"' } });
+    const platformAccount = {
+      accountId: `acct_${"a".repeat(22)}`,
+      displayName: "Alice",
+      primaryVerifiedEmail: null,
+      avatar: { kind: "fallback", initials: "AL", colorIndex: 1 },
+      blockedAt: null,
+      platformAuthorities: ["platform.admin", "apps.create"],
+      createdAt: 1,
+      updatedAt: 1,
+      effectiveAccess: "active",
+      appMembershipCount: 1,
+      lastActiveAt: 1,
+    };
+    if (url.pathname === appAdminRoutes.platformAccounts() && method === "GET") {
+      return json({ items: [platformAccount], nextCursor: null });
     }
-    if (url.pathname === appAdminRoutes.platformPrincipalAccess({ principalRef: "principal-1" }) && method === "PATCH") {
-      return new Response(null, { status: 204, headers: { ETag: '"2"' } });
+    if (url.pathname === appAdminRoutes.platformAccount({ accountId: platformAccount.accountId }) && method === "GET") {
+      return json({ ...platformAccount, memberships: [] });
+    }
+    if ((url.pathname === appAdminRoutes.platformAccountAuthority({ accountId: platformAccount.accountId, authority: "apps.create" })
+      || url.pathname === appAdminRoutes.platformAccountBlock({ accountId: platformAccount.accountId })) && method !== "GET") {
+      return new Response(null, { status: 204 });
     }
     // Apps
     if (url.pathname === appAdminRoutes.apps() && method === "GET") {
@@ -300,8 +295,12 @@ export class FakeAdminApi {
       return json({
         items: [{
           appId: "cas_app_a",
-          principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-          profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
+          account: {
+            accountId: `acct_${"a".repeat(22)}`,
+            displayName: "Alice",
+            primaryVerifiedEmail: null,
+            avatar: { kind: "fallback", initials: "AL", colorIndex: 1 },
+          },
         }],
         nextCursor: null,
       });
@@ -347,11 +346,14 @@ export class FakeAdminApi {
       return json({ domains: [{ appId: "cas_app_a", refDomain: "doc", revision: 1 }] });
     }
     if (url.pathname === appAdminRoutes.controlAuditEvents({ appId: "cas_app_a" })) {
+      const accountId = `acct_${"a".repeat(22)}`;
       return json({
         items: [{
           eventId: "event-1",
           appId: "cas_app_a",
-          actor: { issuer: "https://accounts.google.com", subject: "sub-1" },
+          actorAccount: { accountId, displayName: "Alice", primaryVerifiedEmail: null, avatar: { kind: "fallback", initials: "AL", colorIndex: 1 } },
+          authenticatedIdentity: { externalIdentityId: "ext-alice", provider: "google", accountHint: null, linkedAt: 1, lastAuthenticatedAt: 1, currentLogin: false, issuer: "https://accounts.google.com", subject: "sub-1" },
+          targetAccount: null,
           action: "app.updated",
           target: "cas_app_a",
           requestId: null,
@@ -371,95 +373,6 @@ export class FakeAdminApi {
         latestRevision: 1,
         nextAfter: 1,
       });
-    }
-    // stacks
-    if (url.pathname === casAdminRoutes.stacks() && method === "GET") {
-      return json({ items: [...this.stacks.values()], nextCursor: null });
-    }
-    if (url.pathname === casAdminRoutes.stacks() && method === "POST") {
-      const stack: FakeStack = {
-        stackId: "cas_stack_new",
-        displayName: String(body?.displayName ?? ""),
-        description: "",
-        status: "active",
-        createdAt: 2,
-        revision: 1,
-      };
-      this.stacks.set(stack.stackId, stack);
-      return jsonWithEtag(stack);
-    }
-    const stackMatch = /^\/admin\/stacks\/([^/]+)$/.exec(url.pathname);
-    if (stackMatch) {
-      const stackId = decodeURIComponent(stackMatch[1]!);
-      const stack = this.stacks.get(stackId);
-      if (method === "GET") {
-        return stack === undefined ? json({ error: "NOT_FOUND" }, 404) : jsonWithEtag(stack);
-      }
-      if (method === "PATCH" && stack !== undefined) {
-        if (headers.get("If-Match") !== `"rev-${stack.revision}"`) return json({ error: "REVISION_MISMATCH" }, 412);
-        stack.revision += 1;
-        if (body?.displayName !== undefined) stack.displayName = String(body.displayName);
-        if (body?.description !== undefined) stack.description = String(body.description);
-        return jsonWithEtag(stack);
-      }
-      return json({ error: "NOT_FOUND" }, 404);
-    }
-    // members
-    if (url.pathname === casAdminRoutes.members({ stackId: "cas_stack_a" }) && method === "GET") {
-      const rows = this.members.get("cas_stack_a") ?? [];
-      return json({ items: rows.map((row) => ({ stackId: "cas_stack_a", ...row, displayName: null, emailForDisplay: null })), nextCursor: null });
-    }
-    if (url.pathname === casAdminRoutes.members({ stackId: "cas_stack_a" }) && method === "DELETE") {
-      return json({ ok: true });
-    }
-    if (url.pathname === casAdminRoutes.memberInvitations({ stackId: "cas_stack_a" }) && method === "POST") {
-      return json({
-        invitation: { invitationId: "inv-1", stackId: "cas_stack_a", status: "pending", emailConstraint: body?.emailConstraint ?? null, expiresAt: 1_800_000_000, createdAt: 1, revision: 1 },
-        acceptUrl: `${FAKE_ORIGIN}/admin/invitations/inv-1/accept`,
-      });
-    }
-    // OAuth issuer
-    if (url.pathname === casAdminRoutes.oauthIssuerInspections({ stackId: "cas_stack_a" }) && method === "POST") {
-      const record = {
-        issuer: String(body?.issuer ?? ""),
-        audience: "https://cas.example/stacks/cas_stack_a",
-        capabilityMaxLifetimeSeconds: 1800,
-        status: "pending" as const,
-        revision: 1,
-      };
-      this.oauthIssuer.set("cas_stack_a", record);
-      return jsonWithEtag({
-        inspectionId: "oinsp_test",
-        stackId: "cas_stack_a",
-        ...record,
-        challenge: "cas-oauth-issuer-inspection-v1\\nchallenge",
-        expiresAt: 1_800_000_000,
-        keys: [],
-      });
-    }
-    if (url.pathname === casAdminRoutes.oauthIssuer({ stackId: "cas_stack_a" }) && method === "GET") {
-      const record = this.oauthIssuer.get("cas_stack_a");
-      return record === undefined ? json({ error: "NOT_FOUND" }, 404) : jsonWithEtag({ stackId: "cas_stack_a", ...record });
-    }
-    if (url.pathname === casAdminRoutes.oauthIssuer({ stackId: "cas_stack_a" }) && method === "PUT") {
-      const current = this.oauthIssuer.get("cas_stack_a");
-      if (!current) return json({ error: "NOT_FOUND" }, 404);
-      const record = { ...current, status: "active" as const, revision: current.revision + 1 };
-      this.oauthIssuer.set("cas_stack_a", record);
-      return jsonWithEtag({ stackId: "cas_stack_a", ...record });
-    }
-    // ref-domains + audit
-    if (url.pathname === casAdminRoutes.refDomains({ stackId: "cas_stack_a" })) {
-      return json({ domains: [{ stackId: "cas_stack_a", refDomain: "doc", revision: 1 }] });
-    }
-    if (url.pathname === casAdminRoutes.controlAuditEvents({ stackId: "cas_stack_a" })) {
-      return json({ items: [], nextCursor: null });
-    }
-    if (url.pathname === casAdminRoutes.rootDomainRefs({ stackId: "cas_stack_a", refDomain: "doc" })) {
-      return json({ revision: 1, refs: [], nextCursor: null });
-    }
-    if (url.pathname === casAdminRoutes.rootDomainEvents({ stackId: "cas_stack_a", refDomain: "doc" })) {
-      return json({ events: [], latestRevision: 1, nextAfter: 1 });
     }
     return json({ error: "NOT_FOUND" }, 404);
   }

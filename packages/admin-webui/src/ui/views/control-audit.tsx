@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { ChevronsDown } from "lucide-react";
+import { ChevronsDown, Search } from "lucide-react";
 import type { AppControlAuditEvent } from "@unicas/admin-client";
 import { api } from "../api.js";
 import { formatErrorSafe } from "./view-helpers.js";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -29,13 +31,19 @@ export function ControlAuditView({ appId }: { appId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [actorAccountId, setActorAccountId] = useState("");
+  const [targetAccountId, setTargetAccountId] = useState("");
+  const [filters, setFilters] = useState({ actorAccountId: "", targetAccountId: "" });
 
   const load = useCallback(async (nextCursor: string | null, replace: boolean) => {
     setLoading(true);
     setError(null);
     try {
-      const query = nextCursor ? `?limit=50&cursor=${encodeURIComponent(nextCursor)}` : "?limit=50";
-      const result = await api<AuditPage>(`/admin/apps/${encodeURIComponent(appId)}/audit-events${query}`);
+      const query = new URLSearchParams({ limit: "50" });
+      if (nextCursor) query.set("cursor", nextCursor);
+      if (filters.actorAccountId) query.set("actorAccountId", filters.actorAccountId);
+      if (filters.targetAccountId) query.set("targetAccountId", filters.targetAccountId);
+      const result = await api<AuditPage>(`/admin/apps/${encodeURIComponent(appId)}/audit-events?${query}`);
       setPage((previous) => {
         if (!replace && previous) {
           return { items: [...previous.items, ...result.items], nextCursor: result.nextCursor };
@@ -48,7 +56,7 @@ export function ControlAuditView({ appId }: { appId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [appId]);
+  }, [appId, filters]);
 
   useEffect(() => {
     void load(null, true);
@@ -56,6 +64,14 @@ export function ControlAuditView({ appId }: { appId: string }) {
 
   return (
     <section className="space-y-4" aria-label="Change Logs">
+      <form className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]" onSubmit={event => {
+        event.preventDefault();
+        setFilters({ actorAccountId: actorAccountId.trim(), targetAccountId: targetAccountId.trim() });
+      }}>
+        <div className="space-y-2"><Label htmlFor="app-audit-actor">Actor Account ID</Label><Input id="app-audit-actor" value={actorAccountId} onChange={event => setActorAccountId(event.target.value)} /></div>
+        <div className="space-y-2"><Label htmlFor="app-audit-target">Target Account ID</Label><Input id="app-audit-target" value={targetAccountId} onChange={event => setTargetAccountId(event.target.value)} /></div>
+        <div className="flex items-end"><Button type="submit"><Search className="h-4 w-4" />Apply</Button></div>
+      </form>
       {error ? (
         <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive mb-4" role="alert">
           {error}
@@ -99,9 +115,9 @@ export function ControlAuditView({ appId }: { appId: string }) {
                       ) : null}
                     </div>
                   </TableCell>
-                  <TableCell>{event.actor.subject}</TableCell>
+                  <TableCell className="text-xs"><div className="font-medium">{event.actorAccount.displayName ?? event.actorAccount.accountId}</div><div className="font-mono text-muted-foreground">{event.actorAccount.accountId}</div><div className="break-all font-mono text-muted-foreground">{event.authenticatedIdentity.issuer} / {event.authenticatedIdentity.subject}</div></TableCell>
                   <TableCell>
-                    <code className="text-xs">{event.target}</code>
+                    <code className="text-xs">{event.targetAccount?.accountId ?? event.target}</code>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{event.requestId ?? "—"}</TableCell>
                 </TableRow>
