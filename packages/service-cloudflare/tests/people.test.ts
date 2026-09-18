@@ -14,16 +14,21 @@ test("D1 combines people before filtering and paging without merging shared emai
   const db = await runtime.getD1Database("DB", "people");
   await migrateControlSchema(db);
   const accounts = new AccountService(new D1AccountRepository(db), () => 1);
+  await db.prepare(
+    "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES ('cas_one', 'One', '', 'active', 1, 1)",
+  ).run();
+  const createdAccounts = [];
   for (const [issuer, provider] of [["issuer-a", "google"], ["issuer-b", "github"]] as const) {
     const created = await accounts.createForExternalIdentity({ provider, issuer, subject: "same", displayName: "Alice" });
+    createdAccounts.push(created);
     await db.prepare("UPDATE cas_accounts SET primary_verified_email = 'same@example.test', email_verification_source = 'google-oidc', email_verified_at = 1 WHERE account_id = ?").bind(created.account.accountId).run();
-    await db.prepare("INSERT INTO cas_operator_identities (identity_issuer, subject, display_name, email_for_display, created_at, account_id) VALUES (?, 'same', 'Alice', 'same@example.test', 1, ?)").bind(issuer, created.account.accountId).run();
-    await db.prepare("INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES ('cas_one', ?, 'same', 100, ?)").bind(issuer, created.account.accountId).run();
-    await db.prepare("INSERT INTO cas_platform_principals (principal_ref, identity_issuer, subject, status, platform_admin, apps_create, revision, created_at, updated_at, account_id) VALUES (?, ?, 'same', 'active', 0, 1, 1, 100, 100, ?)").bind(issuer, issuer, created.account.accountId).run();
+    await db.prepare("INSERT INTO cas_app_members (app_id, account_id, joined_at) VALUES ('cas_one', ?, 100)").bind(created.account.accountId).run();
+    await db.prepare("INSERT INTO cas_account_platform_authorities (account_id, authority, granted_at) VALUES (?, 'apps.create', 100)").bind(created.account.accountId).run();
   }
+  const creator = createdAccounts[0]!;
   for (const [invitationId, status, expiry] of [["pending", "pending", 3000], ["expired", "pending", 500], ["accepted", "accepted", 3000]] as const) {
     await db.prepare("INSERT INTO cas_app_member_invitations (invitation_id, app_id, status, email_constraint, token_hash, expires_at, created_at, revision) VALUES (?, 'cas_one', ?, 'same@example.test', ?, ?, 100, 1)").bind(invitationId, status, invitationId, expiry).run();
-    await db.prepare("INSERT INTO cas_platform_invitations (invitation_id, email_constraint, platform_admin, apps_create, status, token_hash, expires_at, created_at, created_by_issuer, created_by_subject, revision) VALUES (?, 'same@example.test', 1, 0, ?, ?, ?, 100, 'issuer-a', 'same', 1)").bind(invitationId, status, invitationId, expiry).run();
+    await db.prepare("INSERT INTO cas_platform_invitations (invitation_id, email_constraint, platform_admin, apps_create, status, token_hash, expires_at, created_at, created_by_account_id, created_by_external_identity_id, revision) VALUES (?, 'same@example.test', 1, 0, ?, ?, ?, 100, ?, ?, 1)").bind(invitationId, status, invitationId, expiry, creator.account.accountId, creator.authenticatedIdentity.externalIdentityId).run();
   }
   const service = new PeopleService(new D1PeopleRepository(db), async () => { }, () => 1000);
   for (const scope of [{ appId: "cas_one" }, { platform: true as const }]) {

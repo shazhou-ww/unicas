@@ -10,7 +10,6 @@ Status: accepted terminology
 | **Space** | An App-scoped logical boundary for data ownership, isolation, authorization, and usage accounting |
 | **Account** | The stable opaque UniCAS administrator subject that owns access, memberships, profile, sessions, and resource relationships |
 | **External Identity** | One immutable provider `(issuer, subject)` login bound to an Account; exact identity remains privileged audit evidence |
-| **Principal** | Deprecated administrator compatibility projection keyed by `(issuer, subject)`; new contracts use Account |
 | **Profile** | Mutable, non-authoritative Account display metadata such as display name and avatar |
 | **Member** | An Account granted equal administrator authority over an App |
 | **Platform Access** | Administrator-plane admission for an Account; active authority or App membership grants admission, while `blockedAt` denies every linked identity |
@@ -33,7 +32,7 @@ Valid mappings include:
 one Account -> one personal Space
 one Account -> multiple Spaces
 multiple Accounts -> one shared Space
-service Principal -> one automation Space
+service Account -> one automation Space
 ```
 
 Use **Space** as a capitalized UniCAS resource name. For storage measurements,

@@ -70,6 +70,12 @@ describe("control-plane MCP OAuth authorization", () => {
       const responses = await Promise.all([callback(), callback()]);
       expect(responses.map(response => response.status).sort()).toEqual([200, 400]);
       const accountId = `acct_${"a".repeat(22)}`;
+      await database.prepare(
+        "INSERT INTO cas_accounts (account_id, credential_version, created_at, updated_at) VALUES (?, 1, 1, 1)",
+      ).bind(accountId).run();
+      await database.prepare(
+        "INSERT INTO cas_external_identities (external_identity_id, account_id, provider, issuer, subject, linked_at) VALUES ('current-ext', ?, 'google', 'https://accounts.google.com', 'current-subject', 1)",
+      ).bind(accountId).run();
       const sessions = new ControlSessionStore(database, () => 1000);
       await sessions.create("new-browser", "encrypted", 500, { accountId, externalIdentityId: "current-ext", credentialVersion: 1 });
       expect(await database.prepare("SELECT account_id, external_identity_id, credential_version FROM cas_admin_sessions WHERE session_id = 'new-browser'").first()).toEqual({ account_id: accountId, external_identity_id: "current-ext", credential_version: 1 });

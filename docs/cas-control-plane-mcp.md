@@ -37,8 +37,8 @@ discarded after identity verification and are never accepted by `/mcp`.
 
 | Scope | Operations |
 | --- | --- |
-| `control:read` | Account/Profile, Apps, membership, App issuers, Playground roots, observed refDomains, and App/Space audit reads |
-| `control:write` | App creation/metadata and Account-owned Playground root mutations |
+| `control:read` | Account/Profile, Apps, membership, App issuers, observed refDomains, and App/Space audit reads |
+| `control:write` | App creation and metadata updates |
 | `control:security` | App member invitation/removal, issuer lifecycle, and managed Space capability issuance |
 
 Scopes do not imply each other. Current App membership is checked during each
@@ -61,10 +61,8 @@ login; no legacy identity mapping or credential upgrade is performed.
 
 The shared administrator endpoint `GET /admin/me` returns only `account`,
 `authenticatedIdentity` (masked login summary), and Account-keyed `memberships`.
-The typed client exposes it as `getCurrentAdministrator`; neither `me()` nor
-`getCurrentPrincipal()` is a compatibility alias. Principal/Profile and
-`platformAccess` response fields are retired. Console caches are isolated by
-the stable Account ID rather than the external provider identity.
+The typed client exposes it as `getCurrentAdministrator`. Legacy
+Principal/Profile and `platformAccess` response fields are not accepted.
 
 Production authorization and consent transactions use encrypted records in
 control D1 and atomic deletion on use, with a ten-minute expiry. Outstanding
@@ -82,16 +80,12 @@ App read tools:
 - `get_current_account`
 - `list_apps`, `get_app`, `list_app_members`
 - `get_app_oauth_issuer`, `get_app_managed_issuer`
-- `list_app_playground_file_roots`
 - `list_app_ref_domains`, `list_app_control_audit_events`
 - `list_space_root_domain_refs`, `list_space_root_domain_events`
 
 App write tools:
 
 - `create_app`, `update_app`
-- `create_app_playground_file_root`
-- `update_app_playground_file_root`
-- `delete_app_playground_file_root`
 
 `update_app` accepts optional `status: "active" | "suspended"` alongside
 metadata, requires the current App ETag and `control:write`, and returns only
@@ -126,8 +120,7 @@ ETag and exact `confirmInvitationId`; success returns only `{ etag }`. Creation
 returns `{ invitationId, acceptUrl, expiresAt, etag }`, and acceptance returns
 only `{ appId }`. App membership is checked by the server independently of scopes.
 
-The shared catalog is the authoritative tool inventory. Retired v1 tools and
-the `get_current_principal` alias are not registered. Clients must use the
+The shared catalog is the authoritative tool inventory. Clients must use the
 current Account/App tools; no compatibility aliases are provided.
 
 An App's signing authority is exclusively a discovered OAuth issuer:
@@ -221,7 +214,7 @@ node stacks/unicas/deploy/mcp-oauth-smoke.mjs
 ```
 
 The release gate additionally requires a real GitHub Copilot flow through the
-custom domain: discovery, Google login, consent, `get_current_principal`, a paginated App read,
+custom domain: discovery, provider login, consent, `get_current_account`, a paginated App read,
 refresh, revoke, and reauthorization. A manually injected bearer token does not
 replace that test.
 
@@ -232,10 +225,9 @@ UniCAS consent page in a browser while its callback listener is running.
 ## Rollout and incident response
 
 1. Create the dedicated production OAuth KV namespace and replace its binding ID.
-2. Register `https://console.unicas.work/admin/auth/callback` and
-  `https://api.unicas.work/oauth/google/callback` with Google before enabling
-  split-origin administrator or MCP login. Keep the existing apex callbacks
-  during the migration window.
+2. Register `https://console.unicas.work/admin/auth/callback/{provider}` and
+  `https://api.unicas.work/oauth/callback/{provider}` for each configured
+  provider before enabling split-origin administrator or MCP login.
 3. Set Worker secrets and deploy `@unicas/service-cloudflare` with mutations disabled.
 4. Validate OAuth discovery and read tools from GitHub Copilot.
 5. Observe authorization failures, scope/member denials, D1/KV errors, and audit

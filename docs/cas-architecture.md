@@ -446,9 +446,8 @@ Space JWTs are never accepted by admin routes even if they contain
 admin-looking scopes, and OIDC admin sessions are never accepted by Space routes. The
 `@unicas/service-cloudflare` worker owns the admin BFF (src/admin-bff): OIDC
 callback, secure session, CSRF boundary, and admin BFF routes; the
-`@unicas/admin-webui` package is the browser UI only. Browser code receives
-only short-lived managed Space capabilities for Playground; it never receives
-OIDC client secrets, or storage bindings.
+`@unicas/admin-webui` package is the browser UI only. Browser code never
+receives OIDC client secrets or storage bindings.
 
 An email-bound pending App or platform invitation may start a special provider
 continuation for an Account without full admission. Google and GitHub can

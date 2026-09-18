@@ -267,7 +267,7 @@ describe("Account service", () => {
       revision: 2,
     };
     const issuer = {
-      stackId: app.appId,
+      appId: app.appId,
       mode: "managed" as const,
       issuer: "https://cas.example/managed-issuers/cas_app_a",
       audience: "https://cas.example/stacks/cas_app_a",
@@ -323,7 +323,7 @@ describe("Account service", () => {
   test("reads and conditionally updates managed issuers through Account membership", async () => {
     const { repository, service } = fixture();
     const issuer = {
-      stackId: "cas_app_a",
+      appId: "cas_app_a",
       mode: "managed" as const,
       issuer: "https://cas.example/managed-issuers/cas_app_a",
       audience: "https://cas.example/stacks/cas_app_a",
@@ -346,23 +346,23 @@ describe("Account service", () => {
     vi.mocked(repository.hasAppMembership).mockResolvedValue(true);
     vi.mocked(repository.getManagedOAuthIssuer).mockResolvedValue(issuer);
 
-    await expect(service.getManagedOAuthIssuer(accountId, issuer.stackId)).resolves.toMatchObject({
-      appId: issuer.stackId,
+    await expect(service.getManagedOAuthIssuer(accountId, issuer.appId)).resolves.toMatchObject({
+      appId: issuer.appId,
       status: "active",
       revision: 4,
     });
     const updated = await service.patchManagedOAuthIssuer({
       actorAccountId: accountId,
       actorExternalIdentityId: identity.externalIdentityId,
-      appId: issuer.stackId,
+      appId: issuer.appId,
       enabled: false,
       ifMatch: '"4"',
     });
-    expect(updated).toMatchObject({ appId: issuer.stackId, status: "disabled", revision: 5 });
+    expect(updated).toMatchObject({ appId: issuer.appId, status: "disabled", revision: 5 });
     expect(repository.commitPatchAccountManagedOAuthIssuer).toHaveBeenCalledWith(expect.objectContaining({
       actorAccountId: accountId,
       actorExternalIdentityId: identity.externalIdentityId,
-      appId: issuer.stackId,
+      appId: issuer.appId,
       expectedRevision: 4,
       enabled: false,
       nextRevision: 5,
@@ -372,14 +372,14 @@ describe("Account service", () => {
     await expect(service.patchManagedOAuthIssuer({
       actorAccountId: accountId,
       actorExternalIdentityId: identity.externalIdentityId,
-      appId: issuer.stackId,
+      appId: issuer.appId,
       enabled: false,
       ifMatch: '"4"',
     })).rejects.toMatchObject({ code: "REVISION_MISMATCH" });
     await expect(service.patchManagedOAuthIssuer({
       actorAccountId: accountId,
       actorExternalIdentityId: identity.externalIdentityId,
-      appId: issuer.stackId,
+      appId: issuer.appId,
       enabled: true,
       ifMatch: '"4"',
     })).rejects.toMatchObject({ code: "INVALID_REQUEST" });
@@ -389,7 +389,7 @@ describe("Account service", () => {
     const { repository, service } = fixture();
     vi.mocked(repository.hasAppMembership).mockResolvedValue(true);
     vi.mocked(repository.getAppOAuthIssuer).mockResolvedValue({
-      stackId: "cas_app_a",
+      appId: "cas_app_a",
       mode: "external",
       issuer: "https://issuer.example",
       audience: "https://api.example/app",

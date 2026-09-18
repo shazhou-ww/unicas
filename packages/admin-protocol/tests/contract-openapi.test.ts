@@ -6,7 +6,6 @@ import type {
   AppMemberInvitation,
   AppMembership,
   AppOAuthIssuer,
-  CasStack,
   ManagedSpaceCapability,
   Principal,
   Profile,
@@ -18,7 +17,6 @@ import {
   AppMembershipSchema,
   AppOAuthIssuerSchema,
   AppSchema,
-  CasStackSchema,
   PrincipalSchema,
   ProfileSchema,
   PatchAppRequestSchema,
@@ -27,13 +25,12 @@ import {
   ManagedSpaceCapabilitySchema,
   SpaceRootRefBalanceSchema,
   appAdminApiContract,
-  casAdminApiContract,
 } from "../src/index.js";
-import { generateAdminOpenApiDocument, generateAppAdminOpenApiDocument } from "../scripts/openapi.js";
+import { generateAppAdminOpenApiDocument } from "../scripts/openapi.js";
 
 const methods = ["get", "post", "put", "patch", "delete"] as const;
 
-function operations(document: Awaited<ReturnType<typeof generateAdminOpenApiDocument>>) {
+function operations(document: Awaited<ReturnType<typeof generateAppAdminOpenApiDocument>>) {
   return Object.values(document.paths ?? {}).flatMap((item) =>
     methods.flatMap((method) => {
       const operation = item?.[method];
@@ -61,23 +58,6 @@ describe("CAS admin schemas", () => {
       expect(PatchAppRequestSchema.safeParse(body).success).toBe(false);
     }
   });
-  test("validates stack wire records", () => {
-    expect(CasStackSchema.safeParse({
-      stackId: "stack-1",
-      displayName: "Stack 1",
-      description: "",
-      status: "active",
-      createdAt: 1,
-      revision: 1,
-    }).success).toBe(true);
-  });
-
-  test("exposes a client type derived from the contract", () => {
-    type Client = ContractRouterClient<typeof casAdminApiContract>;
-    type Stack = Awaited<ReturnType<Client["stacks"]["get"]>>;
-    expectTypeOf<Stack>().toEqualTypeOf<CasStack>();
-  });
-
   test("keeps v2 Principal identity separate from Profile metadata", () => {
     const principal: Principal = { issuer: "https://issuer.example", subject: "subject-1" };
     const profile: Profile = { displayName: "Operator", emailForDisplay: "operator@example.com" };
@@ -215,42 +195,24 @@ describe("CAS admin schemas", () => {
     expect(SpaceRootRefBalanceSchema.safeParse(balance).success).toBe(true);
     const operationCount = Object.values(appAdminApiContract)
       .reduce((count, group) => count + Object.keys(group).length, 0);
-    expect(operationCount).toBe(38);
+    expect(operationCount).toBe(37);
   });
 });
 
-describe("CAS admin OpenAPI", () => {
-  test("describes every control-plane operation", async () => {
-    const document = await generateAdminOpenApiDocument();
-    const allOperations = operations(document);
-
-    expect(document.openapi).toBe("3.1.1");
-    expect(Object.keys(document.paths ?? {})).toHaveLength(14);
-    expect(allOperations).toHaveLength(19);
-    expect(new Set(allOperations.map((operation) => operation.operationId)).size).toBe(19);
-    expect(Object.keys(document.paths ?? {}).some(path => path.includes("/playground/"))).toBe(false);
-    expect(document.security).toEqual([{ adminSession: [] }]);
-    expect(document.info.description).toContain("## Concurrency and idempotency");
-    expect(document.info.description).toContain("## OAuth issuer activation");
-    expect(document.paths?.["/admin/stacks/{stackId}/oauth-issuer/inspections"]?.post?.description)
-      .toContain("activation challenge");
-    expect(document.paths?.["/admin/stacks/{stackId}"]?.get)
-      .toHaveProperty("responses.200.content.application/json.schema.properties.revision.description");
-  });
-
+describe("App admin OpenAPI", () => {
   test("generates a separate complete App administrator document", async () => {
     const document = await generateAppAdminOpenApiDocument();
     const allOperations = operations(document);
     const serialized = JSON.stringify(document);
-    expect(Object.keys(document.paths ?? {})).toHaveLength(29);
-    expect(allOperations).toHaveLength(38);
+    expect(Object.keys(document.paths ?? {})).toHaveLength(28);
+    expect(allOperations).toHaveLength(37);
     expect(Object.keys(document.paths ?? {}).some(path => path.includes("/playground/"))).toBe(false);
     expect(document.paths?.["/admin/account"]?.get?.operationId).toBe("getCurrentAccount");
     expect(document.paths?.["/admin/account/profile"]?.patch?.operationId).toBe("patchCurrentAccountProfile");
     expect(document.paths?.["/admin/account/identities"]?.get?.operationId).toBe("listCurrentAccountIdentities");
     expect(document.paths?.["/admin/apps/{appId}/people"]?.get).toBeDefined();
     expect(document.paths?.["/admin/platform/people"]?.get).toBeDefined();
-    expect(document.paths?.["/admin/platform/access-summary"]?.get).toBeDefined();
+    expect(document.paths?.["/admin/platform/access-summary"]).toBeUndefined();
     expect(document.paths?.["/admin/platform/accounts"]?.get).toBeDefined();
     expect(document.paths?.["/admin/platform/accounts/{accountId}"]?.get).toBeDefined();
     expect(document.paths?.["/admin/platform/accounts/{accountId}/authorities/{authority}"]?.put).toBeDefined();
@@ -285,14 +247,4 @@ describe("CAS admin OpenAPI", () => {
     expect(serialized).not.toMatch(/stackId|tenantId|Stack|Tenant/);
   });
 
-  test("documents optimistic concurrency", async () => {
-    const document = await generateAdminOpenApiDocument();
-    const patch = document.paths?.["/admin/stacks/{stackId}"]?.patch;
-    const parameterNames = (patch?.parameters ?? []).map((parameter) =>
-      "$ref" in parameter ? parameter.$ref : parameter.name,
-    );
-    expect(parameterNames).toContain("if-match");
-    expect(patch?.responses).toHaveProperty("412");
-    expect(patch?.responses).toHaveProperty("428");
-  });
 });

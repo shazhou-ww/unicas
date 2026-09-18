@@ -14,8 +14,6 @@ import {
   AppSchema,
   CasHashSchema,
   ManagedSpaceCapabilitySchema,
-  PrincipalSchema,
-  ProfileSchema,
   SpaceRootRefBalanceSchema,
   SpaceRootRefEventSchema,
   ExternalIdentitySummarySchema,
@@ -26,10 +24,9 @@ import {
 import {
   CreatePlatformInvitationSchema,
   PlatformAuditActionSchema,
+  PlatformAccountQuerySchema,
   PlatformAuthoritySchema,
   PlatformInvitationQuerySchema,
-  PlatformPrincipalQuerySchema,
-  PatchPlatformAccessSchema,
 } from "./platform-access.js";
 
 export const AppAdminApiBasePath = "/admin/apps";
@@ -375,30 +372,10 @@ const PlatformInvitationSchema = z.object({
   status: z.enum(["pending", "accepted", "expired", "revoked"]),
   expiresAt: z.number().int().nonnegative(),
   createdAt: z.number().int().nonnegative(),
-  createdBy: PrincipalSchema,
+  createdByAccountId: AccountIdSchema,
   revision: RevisionSchema,
 }).readonly();
-const PlatformPeopleInvitationSchema = PlatformInvitationSchema.unwrap().omit({ createdBy: true }).readonly();
-
-const platformAccessStateShape = {
-  principalRef: z.string().min(1),
-  principal: PrincipalSchema,
-  status: z.enum(["active", "blocked"]),
-  authorities: z.array(PlatformAuthoritySchema).readonly(),
-  revision: RevisionSchema,
-  createdAt: z.number().int().nonnegative(),
-  updatedAt: z.number().int().nonnegative(),
-};
-const PlatformAccessStateSchema = z.object(platformAccessStateShape).readonly();
-
-const platformPrincipalListItemShape = {
-  ...platformAccessStateShape,
-  profile: ProfileSchema,
-  effectiveAccess: z.enum(["active", "blocked", "no_access"]),
-  appMembershipCount: z.number().int().nonnegative(),
-  lastActiveAt: z.number().int().nonnegative().nullable(),
-};
-const PlatformPrincipalListItemSchema = z.object(platformPrincipalListItemShape).readonly();
+const PlatformPeopleInvitationSchema = PlatformInvitationSchema.unwrap().omit({ createdByAccountId: true }).readonly();
 
 export const listAppPeopleContract = appProcedure
   .route({ method: "GET", path: "/admin/apps/{appId}/people", operationId: "listAppPeople", summary: "Search App members and invitations", inputStructure: "detailed", tags: ["Members"] })
@@ -416,49 +393,6 @@ export const listPlatformPeopleContract = appProcedure
     z.object({ kind: z.literal("invitation"), invitation: PlatformPeopleInvitationSchema }).strict(),
   ])).meta({ id: "PlatformPeoplePage" }));
 
-const PlatformPrincipalDetailSchema = z.object({
-  ...platformPrincipalListItemShape,
-  memberships: z.array(AppMembershipSchema).readonly(),
-}).readonly();
-
-export const getPlatformAccessSummaryContract = appProcedure
-  .route({ method: "GET", path: "/admin/platform/access-summary", operationId: "getPlatformAccessSummary", summary: "Read platform access counts", inputStructure: "detailed", tags: ["Platform Access"] })
-  .input(z.object({}).readonly())
-  .output(z.object({
-    activePrincipalCount: z.number().int().nonnegative(),
-    platformAdminCount: z.number().int().nonnegative(),
-    appCreatorCount: z.number().int().nonnegative(),
-    blockedPrincipalCount: z.number().int().nonnegative(),
-    generatedAt: z.number().int().nonnegative(),
-  }).readonly());
-
-export const listPlatformPrincipalsContract = appProcedure
-  .route({ method: "GET", path: "/admin/platform/principals", operationId: "listPlatformPrincipals", summary: "List platform Principals", inputStructure: "detailed", tags: ["Platform Access"] })
-  .input(z.object({ query: PlatformPrincipalQuerySchema.optional() }).readonly())
-  .output(pageSchema(PlatformPrincipalListItemSchema).meta({ id: "PlatformPrincipalPage" }));
-
-export const getPlatformPrincipalContract = appProcedure
-  .route({ method: "GET", path: "/admin/platform/principals/{principalRef}", operationId: "getPlatformPrincipal", summary: "Read one platform Principal", inputStructure: "detailed", tags: ["Platform Access"] })
-  .input(z.object({ params: z.object({ principalRef: z.string().min(1) }).readonly() }).readonly())
-  .output(PlatformPrincipalDetailSchema);
-
-export const getPlatformPrincipalAccessContract = appProcedure
-  .route({ method: "GET", path: "/admin/platform/principals/{principalRef}/access", operationId: "getPlatformPrincipalAccess", summary: "Read versioned platform access", inputStructure: "detailed", outputStructure: "detailed", tags: ["Platform Access"] })
-  .input(z.object({ params: z.object({ principalRef: z.string().min(1) }).readonly() }).readonly())
-  .output(z.object({
-    headers: z.object({ ETag: z.string().regex(/^"(0|[1-9][0-9]*)"$/) }).readonly(),
-    body: PlatformAccessStateSchema,
-  }).readonly());
-
-export const patchPlatformPrincipalAccessContract = appProcedure
-  .route({ method: "PATCH", path: "/admin/platform/principals/{principalRef}/access", operationId: "patchPlatformPrincipalAccess", summary: "Change platform access", inputStructure: "detailed", outputStructure: "detailed", successStatus: 204, tags: ["Platform Access"] })
-  .input(z.object({
-    params: z.object({ principalRef: z.string().min(1) }).readonly(),
-    headers: mutationHeaders,
-    body: PatchPlatformAccessSchema,
-  }).readonly())
-  .output(z.object({ headers: z.object({ ETag: z.string().regex(/^"(0|[1-9][0-9]*)"$/) }).readonly() }).readonly());
-
 const platformAccountParams = z.object({ accountId: AccountIdSchema }).readonly();
 const platformAccountAuthorityParams = z.object({
   accountId: AccountIdSchema,
@@ -467,7 +401,7 @@ const platformAccountAuthorityParams = z.object({
 
 export const listPlatformAccountsContract = appProcedure
   .route({ method: "GET", path: "/admin/platform/accounts", operationId: "listPlatformAccounts", summary: "List platform Accounts", inputStructure: "detailed", tags: ["Platform Access"] })
-  .input(z.object({ query: PlatformPrincipalQuerySchema.optional() }).readonly())
+  .input(z.object({ query: PlatformAccountQuerySchema.optional() }).readonly())
   .output(pageSchema(PlatformAccountListItemSchema).meta({ id: "PlatformAccountPage" }));
 
 export const getPlatformAccountContract = appProcedure
@@ -579,7 +513,6 @@ export const appAdminApiContract = {
     listRootEvents: listSpaceRootDomainEventsContract,
   },
   platform: {
-    accessSummary: getPlatformAccessSummaryContract,
     listPeople: listPlatformPeopleContract,
     listAccounts: listPlatformAccountsContract,
     getAccount: getPlatformAccountContract,

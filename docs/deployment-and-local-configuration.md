@@ -54,7 +54,7 @@ Other local settings:
 | `UNICAS_LOCAL_PUBLIC_HOST` | Same as `UNICAS_LOCAL_HOST` | Browser-visible host for local OIDC endpoints; Docker sets `localhost` |
 | `UNICAS_ADMIN_ORIGIN` | `http://localhost:4070` | Browser-facing administrator origin |
 
-To exercise managed issuers and Playground locally, set both
+To exercise managed issuers locally, set both
 `MANAGED_ISSUER_PRIVATE_KEY_PKCS8` and `MANAGED_ISSUER_KEY_ID` before startup.
 Host and Docker modes forward the pair together; supplying only one leaves the
 managed issuer unavailable.
@@ -132,10 +132,8 @@ base64url keys, for example `{"2026-09":"<base64url-32-byte-key>"}`. Keep old
 entries during rotation until sessions and pending platform-invitation replay
 receipts sealed with them have expired.
 
-`ADMIN_EMAIL_ALLOWLIST` is optional only for rollback to a pre-Platform-Access
-Worker. It is not an authorization source after the no-gap bootstrap in
-[CAS Middleware Operations](cas-operations.md#platform-access-bootstrap-and-migration).
-Keep it through the rollback window, then remove it deliberately.
+Administrator admission is owned by Account platform authorities and App
+memberships. There is no email-allowlist fallback.
 
 Additional features require these secrets:
 
@@ -154,9 +152,7 @@ add key-ring overlap support before rotating it in production.
 
 Optional OIDC/session variables include `OIDC_ISSUER`, `OIDC_DISCOVERY_URL`,
 `SESSION_TTL_MS`, `SESSION_COOKIE_NAME`, `SESSION_COOKIE_SECURE`, and
-`SESSION_COOKIE_SAME_SITE`. `ADMIN_TEST_ACCOUNT_EMAIL` and
-`ADMIN_TEST_ACCOUNT_PASSWORD` are test-only and must never be enabled in
-production.
+`SESSION_COOKIE_SAME_SITE`.
 
 Set the corresponding non-secret `MICROSOFT_OIDC_CLIENT_ID` and
 `GITHUB_OAUTH_CLIENT_ID` variables before enabling those providers. Microsoft

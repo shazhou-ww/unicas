@@ -17,16 +17,24 @@ const OAUTH_BINDING = "OAUTH_KV";
 const CONTROL_TABLES = [
   "cas_oauth_issuer_inspection_keys",
   "cas_oauth_issuer_inspections",
-  "cas_stack_managed_issuers",
-  "cas_stack_oauth_issuers",
-  "cas_playground_file_roots",
-  "cas_stack_member_invitations",
-  "cas_stack_members",
+  "cas_app_managed_issuers",
+  "cas_app_oauth_issuers",
+  "cas_app_member_invitations",
+  "cas_app_members",
+  "cas_account_app_invitation_idempotency",
+  "cas_account_app_idempotency",
+  "cas_platform_invitation_idempotency",
+  "cas_platform_invitations",
   "cas_control_audit_events",
-  "cas_control_idempotency",
+  "cas_platform_audit_events",
   "cas_admin_sessions",
-  "cas_operator_identities",
-  "cas_stacks",
+  "cas_email_challenges",
+  "cas_account_platform_authorities",
+  "cas_external_identities",
+  "cas_account_profiles",
+  "cas_account_aliases",
+  "cas_apps",
+  "cas_accounts",
   "cas_control_meta",
 ];
 
@@ -43,14 +51,14 @@ const TENANT_TABLES = [
 
 export const SCOPED_INVENTORY_QUERIES = {
   control: [
-    `SELECT 'cas_stacks' AS source, stack_id FROM cas_stacks GROUP BY stack_id
-     UNION ALL SELECT 'cas_stack_members', stack_id FROM cas_stack_members GROUP BY stack_id
-     UNION ALL SELECT 'cas_stack_member_invitations', stack_id FROM cas_stack_member_invitations GROUP BY stack_id
-     UNION ALL SELECT 'cas_playground_file_roots', stack_id FROM cas_playground_file_roots GROUP BY stack_id`,
-    `SELECT 'cas_stack_oauth_issuers' AS source, stack_id FROM cas_stack_oauth_issuers GROUP BY stack_id
-     UNION ALL SELECT 'cas_stack_managed_issuers', stack_id FROM cas_stack_managed_issuers GROUP BY stack_id
-     UNION ALL SELECT 'cas_oauth_issuer_inspections', stack_id FROM cas_oauth_issuer_inspections GROUP BY stack_id
-     UNION ALL SELECT 'cas_control_audit_events', stack_id FROM cas_control_audit_events WHERE stack_id IS NOT NULL GROUP BY stack_id`,
+    `SELECT 'cas_apps' AS source, app_id AS stack_id FROM cas_apps GROUP BY app_id
+     UNION ALL SELECT 'cas_app_members', app_id FROM cas_app_members GROUP BY app_id
+      UNION ALL SELECT 'cas_app_member_invitations', app_id FROM cas_app_member_invitations GROUP BY app_id
+      UNION ALL SELECT 'cas_account_app_invitation_idempotency', app_id FROM cas_account_app_invitation_idempotency GROUP BY app_id`,
+    `SELECT 'cas_app_oauth_issuers' AS source, app_id AS stack_id FROM cas_app_oauth_issuers GROUP BY app_id
+     UNION ALL SELECT 'cas_app_managed_issuers', app_id FROM cas_app_managed_issuers GROUP BY app_id
+     UNION ALL SELECT 'cas_oauth_issuer_inspections', app_id FROM cas_oauth_issuer_inspections GROUP BY app_id
+     UNION ALL SELECT 'cas_control_audit_events', app_id FROM cas_control_audit_events WHERE app_id IS NOT NULL GROUP BY app_id`,
   ],
   data: [
     `SELECT 'cas_nodes' AS source, stack_id, tenant_id FROM cas_nodes GROUP BY stack_id, tenant_id

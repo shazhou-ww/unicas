@@ -4,8 +4,6 @@ import type { D1Database } from "@cloudflare/workers-types";
 import {
   AccountService,
   ProviderRegistry,
-  type ControlPlaneCallContext,
-  type ControlPlaneOperations,
   type ControlSessionRepository,
   type ProviderAdapter,
   type StoredSession,
@@ -13,7 +11,6 @@ import {
 import { createAdminBff } from "../src/admin-bff/bff.js";
 import type { AdminBffConfig } from "../src/admin-bff/config.js";
 import { D1AccountRepository } from "../src/account-repository.js";
-import { D1PlatformAccessRepository } from "../src/platform-access-repository.js";
 import { migrateControlSchema } from "../src/control-schema.js";
 
 let runtime: Miniflare | undefined;
@@ -111,28 +108,7 @@ describe("BFF Account identity mutations", () => {
     await db.prepare(
       "INSERT INTO cas_account_platform_authorities (account_id, authority, granted_at) VALUES (?, 'platform.admin', 1)",
     ).bind(created.account.accountId).run();
-    await db.prepare(
-      `INSERT INTO cas_platform_principals
-        (principal_ref, identity_issuer, subject, status, platform_admin, apps_create,
-         revision, created_at, updated_at, account_id)
-       VALUES ('actor-ref', ?, ?, 'active', 1, 0, 1, 1, 1, ?)`,
-    ).bind(
-      created.authenticatedIdentity.issuer,
-      created.authenticatedIdentity.subject,
-      created.account.accountId,
-    ).run();
     const sessions = new MemorySessions();
-    const controlPlane = {
-      recordSessionAudit: async () => undefined,
-      me: async (context: ControlPlaneCallContext) => ({
-        identity: {
-          ...context.identity,
-          displayName: context.profile?.displayName ?? null,
-          emailForDisplay: context.profile?.emailForDisplay ?? null,
-        },
-        memberships: [],
-      }),
-    } as unknown as ControlPlaneOperations;
     const config: AdminBffConfig = {
       googleClientId: "google",
       googleClientSecret: "secret",
@@ -144,10 +120,8 @@ describe("BFF Account identity mutations", () => {
     };
     const bff = createAdminBff({
       config,
-      controlPlane,
       sessionStore: sessions,
       accountRepository: repository,
-      platformAccessRepository: new D1PlatformAccessRepository(db),
       providerRegistry: new ProviderRegistry([adapter("google", now), adapter("github", now)]),
     });
 
@@ -187,12 +161,8 @@ describe("BFF Account identity mutations", () => {
     ).run();
     for (const member of [created, targetMember]) {
       await db.prepare(
-        "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES ('cas_app_a', ?, ?, 1, ?)",
-      ).bind(
-        member.authenticatedIdentity.issuer,
-        member.authenticatedIdentity.subject,
-        member.account.accountId,
-      ).run();
+        "INSERT INTO cas_app_members (app_id, account_id, joined_at) VALUES ('cas_app_a', ?, 1)",
+      ).bind(member.account.accountId).run();
     }
     expect(await (await bff(new Request("https://console.example/admin/platform/accounts", {
       headers: { Cookie: initialCookie },

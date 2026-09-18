@@ -60,9 +60,6 @@ vi.mock("../src/admin-bff/index.js", () => ({
   createAdminBff: vi.fn(() => handlers.admin),
   uiAssets: vi.fn(),
 }));
-vi.mock("../src/control-operations.js", () => ({
-  createControlPlaneOperations: vi.fn(() => ({})),
-}));
 vi.mock("../src/mcp/worker.js", () => ({
   mcpConfigFromEnv: vi.fn(() => ({
     resource: "https://cas.example/mcp",
@@ -73,7 +70,7 @@ vi.mock("../src/mcp/worker.js", () => ({
 }));
 
 import worker, { type Env } from "../src/worker.js";
-import { createControlPlaneOperations } from "../src/control-operations.js";
+import { createAdminBff } from "../src/admin-bff/index.js";
 
 const env = {
   CAS_CONTROL_DB: {},
@@ -132,7 +129,7 @@ describe("service-cloudflare public routing", () => {
     const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response('{"keys":[]}'));
     try {
       await worker.fetch(new Request("https://cas.example/admin/apps"), { ...env, CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS: restriction }, ctx);
-      const options = vi.mocked(createControlPlaneOperations).mock.calls.at(-1)![1]!;
+      const options = vi.mocked(createAdminBff).mock.calls.at(-1)![0]!;
       expect(options.oauthDiscovery).toBeDefined();
       const discovery = options.oauthDiscovery!;
       await expect(discovery.inspectIssuer({ issuer: "https://independent.example/oauth" })).rejects.toThrow();
@@ -145,7 +142,7 @@ describe("service-cloudflare public routing", () => {
     const fetcher = vi.spyOn(globalThis, "fetch");
     try {
       await worker.fetch(new Request("https://cas.example/admin/apps"), { ...env, CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS: "https://approved.example" }, ctx);
-      const options = vi.mocked(createControlPlaneOperations).mock.calls.at(-1)![1]!;
+      const options = vi.mocked(createAdminBff).mock.calls.at(-1)![0]!;
       await expect(options.oauthDiscovery!.inspectIssuer({ issuer: "https://independent.example/oauth" })).rejects.toThrow("not allowlisted");
       expect(fetcher).not.toHaveBeenCalled();
     } finally { fetcher.mockRestore(); }

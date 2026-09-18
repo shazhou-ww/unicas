@@ -5,14 +5,14 @@ import type {
   AccountAppIdempotencyRecord,
   AccountAppInvitationIdempotencyRecord,
   AccountAppInvitationRecord,
+  AccountOAuthIssuerInspectionRecord,
+  AccountOAuthIssuerRecord,
   AppAccountAuditRecord,
   AccountProfileRecord,
   AccountPlatformViewRecord,
   AccountRecord,
   AccountRepository,
   AccountWithIdentityCreate,
-  ControlOAuthIssuerInspectionRecord,
-  ControlOAuthIssuerRecord,
   DiscoveredOAuthJwk,
   ExternalIdentityRecord,
   PlatformAccountAuditRecord,
@@ -53,7 +53,7 @@ interface ManagedOAuthIssuerRow {
   readonly jwks_uri: string;
   readonly scopes_supported: string;
   readonly code_challenge_methods_supported: string;
-  readonly status: ControlOAuthIssuerRecord["status"];
+  readonly status: AccountOAuthIssuerRecord["status"];
   readonly verified_at: number;
   readonly jwks_digest: string;
   readonly capability_max_lifetime_seconds: number;
@@ -61,7 +61,7 @@ interface ManagedOAuthIssuerRow {
 }
 
 interface AppOAuthIssuerRow extends ManagedOAuthIssuerRow {
-  readonly metadata_type: ControlOAuthIssuerRecord["metadataType"];
+  readonly metadata_type: AccountOAuthIssuerRecord["metadataType"];
   readonly registration_endpoint: string | null;
   readonly last_refresh_at: number | null;
   readonly last_refresh_error: string | null;
@@ -73,7 +73,7 @@ interface OAuthIssuerInspectionRow {
   readonly issuer: string;
   readonly audience: string;
   readonly metadata_url: string;
-  readonly metadata_type: ControlOAuthIssuerRecord["metadataType"];
+  readonly metadata_type: AccountOAuthIssuerRecord["metadataType"];
   readonly authorization_endpoint: string;
   readonly token_endpoint: string;
   readonly jwks_uri: string;
@@ -358,7 +358,7 @@ export class D1AccountRepository implements AccountRepository {
     } : null;
   }
 
-  async getManagedOAuthIssuer(appId: AppId): Promise<ControlOAuthIssuerRecord | null> {
+  async getManagedOAuthIssuer(appId: AppId): Promise<AccountOAuthIssuerRecord | null> {
     const row = await this.db.prepare(
       `SELECT app_id, issuer, audience, metadata_url, authorization_endpoint,
         token_endpoint, jwks_uri, scopes_supported, code_challenge_methods_supported,
@@ -366,7 +366,7 @@ export class D1AccountRepository implements AccountRepository {
        FROM cas_app_managed_issuers WHERE app_id = ?`,
     ).bind(appId).first<ManagedOAuthIssuerRow>();
     return row ? {
-      stackId: row.app_id,
+      appId: row.app_id,
       mode: "managed",
       issuer: row.issuer,
       audience: row.audience,
@@ -388,7 +388,7 @@ export class D1AccountRepository implements AccountRepository {
     } : null;
   }
 
-  async getAppOAuthIssuer(appId: AppId): Promise<ControlOAuthIssuerRecord | null> {
+  async getAppOAuthIssuer(appId: AppId): Promise<AccountOAuthIssuerRecord | null> {
     const row = await this.db.prepare(
       `SELECT app_id, issuer, audience, metadata_url, metadata_type,
         authorization_endpoint, token_endpoint, jwks_uri, registration_endpoint,
@@ -398,7 +398,7 @@ export class D1AccountRepository implements AccountRepository {
        FROM cas_app_oauth_issuers WHERE app_id = ?`,
     ).bind(appId).first<AppOAuthIssuerRow>();
     return row ? {
-      stackId: row.app_id,
+      appId: row.app_id,
       mode: "external",
       issuer: row.issuer,
       audience: row.audience,
@@ -435,7 +435,7 @@ export class D1AccountRepository implements AccountRepository {
         this.#requireAppActor(input),
         this.db.prepare(
           "SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM cas_app_oauth_issuers WHERE issuer = ? AND app_id != ?) THEN 1 ELSE json_extract('invalid', '$') END AS available",
-        ).bind(inspection.issuer, inspection.stackId),
+        ).bind(inspection.issuer, inspection.appId),
         this.db.prepare(
           `INSERT INTO cas_oauth_issuer_inspections
             (inspection_id, app_id, issuer, audience, metadata_url, metadata_type,
@@ -445,7 +445,7 @@ export class D1AccountRepository implements AccountRepository {
              created_at, expires_at, used_at, revision)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)`,
         ).bind(
-          inspection.inspectionId, inspection.stackId, inspection.issuer,
+          inspection.inspectionId, inspection.appId, inspection.issuer,
           inspection.audience, inspection.metadataUrl, inspection.metadataType,
           inspection.authorizationEndpoint, inspection.tokenEndpoint,
           inspection.jwksUri, inspection.registrationEndpoint,
@@ -467,7 +467,7 @@ export class D1AccountRepository implements AccountRepository {
     }
   }
 
-  async getAppOAuthIssuerInspection(inspectionId: string): Promise<ControlOAuthIssuerInspectionRecord | null> {
+  async getAppOAuthIssuerInspection(inspectionId: string): Promise<AccountOAuthIssuerInspectionRecord | null> {
     const row = await this.db.prepare(
       "SELECT * FROM cas_oauth_issuer_inspections WHERE inspection_id = ?",
     ).bind(inspectionId).first<OAuthIssuerInspectionRow>();
@@ -785,8 +785,8 @@ export class D1AccountRepository implements AccountRepository {
         this.db.prepare("SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('invalid', '$') END AS claimed"),
         this.db.prepare(
           `INSERT OR IGNORE INTO cas_app_members
-            (app_id, identity_issuer, subject, joined_at, account_id)
-           SELECT ?, issuer, subject, ?, account_id FROM cas_external_identities
+            (app_id, account_id, joined_at)
+           SELECT ?, account_id, ? FROM cas_external_identities
            WHERE external_identity_id = ? AND account_id = ? AND unlinked_at IS NULL`,
         ).bind(input.invitation.appId, input.now, input.externalIdentityId, input.accountId),
         ...initializePrimaryContact,
@@ -813,10 +813,10 @@ export class D1AccountRepository implements AccountRepository {
   ): Promise<"recorded" | "account-unavailable"> {
     const result = await this.db.prepare(
       `INSERT INTO cas_control_audit_events
-        (event_id, app_id, identity_issuer, subject, action, target, request_id,
+        (event_id, app_id, action, target, request_id,
          trace_id, caller_channel, oauth_client_handle, tool_name, created_at,
          original_account_id, external_identity_id, target_account_id)
-       SELECT ?, NULL, issuer, subject, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, NULL
+       SELECT ?, NULL, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, NULL
        FROM cas_external_identities
        WHERE external_identity_id = ? AND account_id = ? AND unlinked_at IS NULL
          AND EXISTS (SELECT 1 FROM cas_accounts WHERE account_id = ? AND blocked_at IS NULL)`,
@@ -867,10 +867,10 @@ export class D1AccountRepository implements AccountRepository {
     );
     const audit = this.db.prepare(
       `INSERT INTO cas_control_audit_events
-        (event_id, app_id, identity_issuer, subject, action, target, request_id,
+        (event_id, app_id, action, target, request_id,
          trace_id, caller_channel, oauth_client_handle, tool_name, created_at,
          original_account_id, external_identity_id, target_account_id)
-       SELECT ?, ?, identity.issuer, identity.subject, ?, issuer.issuer, ?, ?, ?,
+       SELECT ?, ?, ?, issuer.issuer, ?, ?, ?,
          ?, ?, ?, ?, ?, NULL
        FROM cas_external_identities AS identity
        JOIN cas_app_managed_issuers AS issuer ON issuer.app_id = ?
@@ -937,11 +937,11 @@ export class D1AccountRepository implements AccountRepository {
       input.app.appId, input.expectedRevision);
     const audit = this.db.prepare(
       `INSERT INTO cas_control_audit_events
-        (event_id, app_id, identity_issuer, subject, action, target, request_id,
+        (event_id, app_id, action, target, request_id,
          trace_id, caller_channel, oauth_client_handle, tool_name, created_at,
          original_account_id, external_identity_id, target_account_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
-    ).bind(input.eventId, input.app.appId, identity.issuer, identity.subject, input.action,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+    ).bind(input.eventId, input.app.appId, input.action,
       input.app.appId, input.requestId ?? null, input.traceId ?? null,
       input.callerChannel ?? null, input.oauthClientHandle ?? null, input.toolName ?? null,
       input.now, input.actorAccountId, input.actorExternalIdentityId);
@@ -1007,15 +1007,15 @@ export class D1AccountRepository implements AccountRepository {
         "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES (?, ?, ?, ?, ?, ?)",
       ).bind(input.app.appId, input.app.displayName, input.app.description, input.app.status, input.app.createdAt, input.app.revision),
       this.db.prepare(
-        "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES (?, ?, ?, ?, ?)",
-      ).bind(input.app.appId, identity.issuer, identity.subject, input.app.createdAt, input.actorAccountId),
+        "INSERT INTO cas_app_members (app_id, account_id, joined_at) VALUES (?, ?, ?)",
+      ).bind(input.app.appId, input.actorAccountId, input.app.createdAt),
       this.db.prepare(
         `INSERT INTO cas_control_audit_events
-          (event_id, app_id, identity_issuer, subject, action, target, request_id,
+          (event_id, app_id, action, target, request_id,
            trace_id, caller_channel, oauth_client_handle, tool_name, created_at,
            original_account_id, external_identity_id, target_account_id)
-         VALUES (?, ?, ?, ?, 'app.created', ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
-      ).bind(input.eventId, input.app.appId, identity.issuer, identity.subject, input.app.appId,
+         VALUES (?, ?, 'app.created', ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+      ).bind(input.eventId, input.app.appId, input.app.appId,
         input.requestId ?? null, input.traceId ?? null, input.callerChannel ?? null,
         input.oauthClientHandle ?? null, input.toolName ?? null,
         input.app.createdAt, input.actorAccountId, input.actorExternalIdentityId),
@@ -1024,7 +1024,7 @@ export class D1AccountRepository implements AccountRepository {
       const issuer = input.managedIssuer;
       statements.push(this.db.prepare(
         "INSERT INTO cas_app_managed_issuers (app_id, issuer, audience, metadata_url, authorization_endpoint, token_endpoint, jwks_uri, scopes_supported, code_challenge_methods_supported, status, verified_at, jwks_digest, capability_max_lifetime_seconds, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)",
-      ).bind(issuer.stackId, issuer.issuer, issuer.audience, issuer.metadataUrl,
+      ).bind(issuer.appId, issuer.issuer, issuer.audience, issuer.metadataUrl,
         issuer.authorizationEndpoint, issuer.tokenEndpoint, issuer.jwksUri,
         JSON.stringify(issuer.scopesSupported), JSON.stringify(issuer.codeChallengeMethodsSupported),
         issuer.verifiedAt, issuer.jwksDigest, issuer.capabilityMaxLifetimeSeconds, issuer.revision));
@@ -1110,10 +1110,10 @@ export class D1AccountRepository implements AccountRepository {
     );
     const audit = this.db.prepare(
       `INSERT INTO cas_control_audit_events
-        (event_id, app_id, identity_issuer, subject, action, target, request_id,
+        (event_id, app_id, action, target, request_id,
          trace_id, caller_channel, oauth_client_handle, tool_name, created_at,
          original_account_id, external_identity_id, target_account_id)
-       SELECT ?, ?, issuer, subject, 'member.removed', ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?
+       SELECT ?, ?, 'member.removed', ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?
        FROM cas_external_identities
        WHERE external_identity_id = ? AND account_id = ? AND unlinked_at IS NULL
          AND EXISTS (SELECT 1 FROM cas_app_members WHERE app_id = ? AND account_id = ?)`,
@@ -1214,23 +1214,22 @@ export class D1AccountRepository implements AccountRepository {
     const changeCondition = input.grant ? "NOT EXISTS" : "EXISTS";
     const audit = this.db.prepare(
       `INSERT INTO cas_platform_audit_events
-        (event_id, actor_issuer, actor_subject, target_issuer, target_subject,
-         target_invitation_id, action, result, request_id, created_at, details_json,
-         actor_account_id, actor_external_identity_id, target_account_id)
-       SELECT ?, actor.issuer, actor.subject, NULL, NULL, NULL,
-         'platform_access.authority_changed', 'succeeded', ?, ?, ?, ?, ?, ?
+        (event_id, actor_account_id, actor_external_identity_id, target_account_id,
+         target_invitation_id, action, result, request_id, created_at, details_json)
+       SELECT ?, ?, ?, ?, NULL,
+         'platform_access.authority_changed', 'succeeded', ?, ?, ?
        FROM cas_external_identities actor
        WHERE actor.external_identity_id = ? AND actor.account_id = ? AND actor.unlinked_at IS NULL
          AND ${changeCondition} (SELECT 1 FROM cas_account_platform_authorities authority
            WHERE authority.account_id = ? AND authority.authority = ?)`,
     ).bind(
       input.eventId,
-      input.requestId ?? null,
-      input.now,
-      JSON.stringify({ authority: input.authority, granted: input.grant }),
       input.actorAccountId,
       input.actorExternalIdentityId,
       input.targetAccountId,
+      input.requestId ?? null,
+      input.now,
+      JSON.stringify({ authority: input.authority, granted: input.grant }),
       input.actorExternalIdentityId,
       input.actorAccountId,
       input.targetAccountId,
@@ -1285,22 +1284,21 @@ export class D1AccountRepository implements AccountRepository {
     ).bind(Number(input.blocked), input.targetAccountId, input.targetAccountId);
     const audit = this.db.prepare(
       `INSERT INTO cas_platform_audit_events
-        (event_id, actor_issuer, actor_subject, target_issuer, target_subject,
-         target_invitation_id, action, result, request_id, created_at, details_json,
-         actor_account_id, actor_external_identity_id, target_account_id)
-       SELECT ?, actor.issuer, actor.subject, NULL, NULL, NULL, ?, 'succeeded', ?, ?, '{}', ?, ?, ?
+        (event_id, actor_account_id, actor_external_identity_id, target_account_id,
+         target_invitation_id, action, result, request_id, created_at, details_json)
+       SELECT ?, ?, ?, ?, NULL, ?, 'succeeded', ?, ?, '{}'
        FROM cas_external_identities actor
        WHERE actor.external_identity_id = ? AND actor.account_id = ? AND actor.unlinked_at IS NULL
          AND EXISTS (SELECT 1 FROM cas_accounts target WHERE target.account_id = ?
            AND ((? = 1 AND target.blocked_at IS NULL) OR (? = 0 AND target.blocked_at IS NOT NULL)))`,
     ).bind(
       input.eventId,
-      input.blocked ? "platform_access.blocked" : "platform_access.restored",
-      input.requestId ?? null,
-      input.now,
       input.actorAccountId,
       input.actorExternalIdentityId,
       input.targetAccountId,
+      input.blocked ? "platform_access.blocked" : "platform_access.restored",
+      input.requestId ?? null,
+      input.now,
       input.actorExternalIdentityId,
       input.actorAccountId,
       input.targetAccountId,
@@ -1659,9 +1657,9 @@ export class D1AccountRepository implements AccountRepository {
     readonly actorAccountId: AccountId;
     readonly actorExternalIdentityId: string;
     readonly appId?: AppId;
-    readonly inspection?: { readonly stackId: string };
+    readonly inspection?: { readonly appId: AppId };
   }): D1PreparedStatement {
-    const appId = input.appId ?? input.inspection?.stackId;
+    const appId = input.appId ?? input.inspection?.appId;
     return this.db.prepare(
       `SELECT CASE WHEN EXISTS (SELECT 1 FROM cas_accounts WHERE account_id = ? AND blocked_at IS NULL)
         AND EXISTS (SELECT 1 FROM cas_external_identities
@@ -1685,13 +1683,13 @@ export class D1AccountRepository implements AccountRepository {
     readonly actorAccountId: AccountId;
     readonly actorExternalIdentityId: string;
     readonly appId?: AppId;
-    readonly inspection?: { readonly stackId: string };
+    readonly inspection?: { readonly appId: AppId };
   }): Promise<boolean> {
     const [account, identity] = await Promise.all([
       this.getAccount(input.actorAccountId),
       this.getIdentity(input.actorExternalIdentityId),
     ]);
-    const appId = input.appId ?? input.inspection?.stackId;
+    const appId = input.appId ?? input.inspection?.appId;
     return account !== null && account.blockedAt === null && identity !== null
       && identity.accountId === input.actorAccountId && identity.unlinkedAt === null
       && appId !== undefined && await this.hasAppMembership(input.actorAccountId, appId);
@@ -1709,18 +1707,18 @@ export class D1AccountRepository implements AccountRepository {
       readonly toolName?: string;
       readonly now: number;
       readonly appId?: AppId;
-      readonly inspection?: { readonly stackId: string };
+      readonly inspection?: { readonly appId: AppId };
     },
     action: string,
     target: string,
   ): D1PreparedStatement {
-    const appId = input.appId ?? input.inspection?.stackId;
+    const appId = input.appId ?? input.inspection?.appId;
     return this.db.prepare(
       `INSERT INTO cas_control_audit_events
-        (event_id, app_id, identity_issuer, subject, action, target, request_id,
+        (event_id, app_id, action, target, request_id,
          trace_id, caller_channel, oauth_client_handle, tool_name, created_at,
          original_account_id, external_identity_id, target_account_id)
-       SELECT ?, ?, issuer, subject, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL
        FROM cas_external_identities WHERE external_identity_id = ?
          AND account_id = ? AND unlinked_at IS NULL`,
     ).bind(
@@ -1974,10 +1972,10 @@ function platformAuditRecord(row: AccountAuditRow): PlatformAccountAuditRecord {
   };
 }
 
-function oauthIssuerInspectionRecord(row: OAuthIssuerInspectionRow): ControlOAuthIssuerInspectionRecord {
+function oauthIssuerInspectionRecord(row: OAuthIssuerInspectionRow): AccountOAuthIssuerInspectionRecord {
   return {
     inspectionId: row.inspection_id,
-    stackId: row.app_id,
+    appId: row.app_id,
     issuer: row.issuer,
     audience: row.audience,
     metadataUrl: row.metadata_url,

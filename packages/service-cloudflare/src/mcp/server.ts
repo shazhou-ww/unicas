@@ -3,8 +3,6 @@ import {
   AccountServiceError,
   PlatformAccessError,
   type AccountService,
-  type PlatformAccessService,
-  type PlatformAuditService,
   type PlatformInvitationService,
   type VerifiedEmailEvidence,
 } from "@unicas/service";
@@ -48,8 +46,6 @@ export interface ControlPlaneMcpServerOptions {
     authority: PlatformAuthority,
   ) => Promise<CasAdminErrorResponse | null>;
   readonly platformInvitations?: PlatformInvitationService;
-  readonly platformAudit?: PlatformAuditService;
-  readonly platformAccess?: PlatformAccessService;
   readonly accountService?: AccountService;
 }
 
@@ -327,10 +323,10 @@ export function createControlPlaneMcpServer(
       const authorizationError = await options.authorizePlatformOperation?.(grant, "platform.admin");
       if (authorizationError) return toolResult(authorizationError);
       if (!options.platformInvitations) return toolResult({ error: "SERVICE_UNAVAILABLE" });
-      return platformToolResult(() => options.platformInvitations!.list(
-        grantPrincipal(grant),
-        { query, status, limit, cursor },
-      ));
+      return platformToolResult(async () => {
+        const actor = await requireGrantAccount(grant, options);
+        return options.platformInvitations!.list(actor.account.accountId, { query, status, limit, cursor });
+      });
     },
   );
 
@@ -344,8 +340,12 @@ export function createControlPlaneMcpServer(
       if (authorizationError) return toolResult(authorizationError);
       if (!options.platformInvitations || !options.publicOrigin) return toolResult({ error: "SERVICE_UNAVAILABLE" });
       return platformToolResult(async () => {
+        const actor = await requireGrantAccount(grant, options);
         const created = await options.platformInvitations!.create(
-          grantPrincipal(grant),
+          {
+            accountId: actor.account.accountId,
+            externalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+          },
           { emailConstraint: email, authorities },
           idempotencyKey,
         );
@@ -369,7 +369,11 @@ export function createControlPlaneMcpServer(
       if (authorizationError) return toolResult(authorizationError);
       if (!options.platformInvitations) return toolResult({ error: "SERVICE_UNAVAILABLE" });
       return platformToolResult(async () => {
-        const revoked = await options.platformInvitations!.revoke(grantPrincipal(grant), invitationId, etag);
+        const actor = await requireGrantAccount(grant, options);
+        const revoked = await options.platformInvitations!.revoke({
+          accountId: actor.account.accountId,
+          externalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+        }, invitationId, etag);
         return { etag: formatCasAdminETag(revoked.revision) };
       });
     },
@@ -720,10 +724,6 @@ async function auditReaderValue(
       message: "Root Ref audit reader is unavailable",
     };
   }
-}
-
-function grantPrincipal(grant: ControlPlaneMcpGrantProps) {
-  return { issuer: grant.identityIssuer, subject: grant.subject };
 }
 
 async function platformToolResult(operation: () => Promise<object>) {

@@ -192,12 +192,8 @@ describe("D1 Account repository", () => {
     ).run();
     for (const member of [actor, target]) {
       await db.prepare(
-        "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES ('cas_app_a', ?, ?, 1, ?)",
-      ).bind(
-        member.authenticatedIdentity.issuer,
-        member.authenticatedIdentity.subject,
-        member.account.accountId,
-      ).run();
+        "INSERT INTO cas_app_members (app_id, account_id, joined_at) VALUES ('cas_app_a', ?, 1)",
+      ).bind(member.account.accountId).run();
     }
 
     await expect(service.listApps({ actorAccountId: actor.account.accountId })).resolves.toEqual({
@@ -303,8 +299,8 @@ describe("D1 Account repository", () => {
       "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES ('cas_app_edit', 'App', 'Before', 'active', 1, 1)",
     ).run();
     await db.prepare(
-      "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES ('cas_app_edit', ?, ?, 1, ?)",
-    ).bind(actor.authenticatedIdentity.issuer, actor.authenticatedIdentity.subject, actor.account.accountId).run();
+      "INSERT INTO cas_app_members (app_id, account_id, joined_at) VALUES ('cas_app_edit', ?, 1)",
+    ).bind(actor.account.accountId).run();
 
     await expect(service.getApp(actor.account.accountId, "cas_app_edit")).resolves.toMatchObject({
       appId: "cas_app_edit",
@@ -353,8 +349,8 @@ describe("D1 Account repository", () => {
       "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES ('cas_app_issuer', 'App', '', 'active', 1, 1)",
     ).run();
     await db.prepare(
-      "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES ('cas_app_issuer', ?, ?, 1, ?)",
-    ).bind(actor.authenticatedIdentity.issuer, actor.authenticatedIdentity.subject, actor.account.accountId).run();
+      "INSERT INTO cas_app_members (app_id, account_id, joined_at) VALUES ('cas_app_issuer', ?, 1)",
+    ).bind(actor.account.accountId).run();
     await db.prepare(
       `INSERT INTO cas_app_managed_issuers
         (app_id, issuer, audience, metadata_url, authorization_endpoint,
@@ -437,8 +433,8 @@ describe("D1 Account repository", () => {
       "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES ('cas_app_external', 'App', '', 'active', 1, 1)",
     ).run();
     await db.prepare(
-      "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES ('cas_app_external', ?, ?, 1, ?)",
-    ).bind(actor.authenticatedIdentity.issuer, actor.authenticatedIdentity.subject, actor.account.accountId).run();
+      "INSERT INTO cas_app_members (app_id, account_id, joined_at) VALUES ('cas_app_external', ?, 1)",
+    ).bind(actor.account.accountId).run();
 
     const inspection = await service.inspectAppOAuthIssuer({
       actorAccountId: actor.account.accountId,
@@ -493,8 +489,8 @@ describe("D1 Account repository", () => {
       "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES ('cas_app_invites', 'App', '', 'active', 1, 1)",
     ).run();
     await db.prepare(
-      "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES ('cas_app_invites', ?, ?, 1, ?)",
-    ).bind(actor.authenticatedIdentity.issuer, actor.authenticatedIdentity.subject, actor.account.accountId).run();
+      "INSERT INTO cas_app_members (app_id, account_id, joined_at) VALUES ('cas_app_invites', ?, 1)",
+    ).bind(actor.account.accountId).run();
     await db.prepare(
       `INSERT INTO cas_app_member_invitations
         (invitation_id, app_id, status, email_constraint, token_hash, expires_at, created_at, revision)
@@ -552,8 +548,8 @@ describe("D1 Account repository", () => {
       "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES ('cas_app_invite_create', 'App', '', 'active', 1, 1)",
     ).run();
     await db.prepare(
-      "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES ('cas_app_invite_create', ?, ?, 1, ?)",
-    ).bind(actor.authenticatedIdentity.issuer, actor.authenticatedIdentity.subject, actor.account.accountId).run();
+      "INSERT INTO cas_app_members (app_id, account_id, joined_at) VALUES ('cas_app_invite_create', ?, 1)",
+    ).bind(actor.account.accountId).run();
 
     const created = await service.createAppMemberInvitation({
       actorAccountId: actor.account.accountId,
@@ -654,8 +650,6 @@ describe("D1 Account repository", () => {
       primary_verified_email: "invitee@example.com",
       email_verification_source: "unicas-email-challenge",
     });
-    expect(await db.prepare("SELECT COUNT(*) AS count FROM cas_operator_identities").first()).toEqual({ count: 0 });
-    expect(await db.prepare("SELECT COUNT(*) AS count FROM cas_platform_principals").first()).toEqual({ count: 0 });
   });
 
   test("records session audit with stable Account and exact ExternalIdentity", async () => {
@@ -672,13 +666,17 @@ describe("D1 Account repository", () => {
       callerChannel: "admin-webui",
     });
     expect(await db.prepare(
-      `SELECT action, original_account_id, external_identity_id, identity_issuer, subject
-       FROM cas_control_audit_events WHERE action = 'session.login'`,
+      `SELECT event.action, event.original_account_id, event.external_identity_id,
+         identity.issuer, identity.subject
+       FROM cas_control_audit_events event
+       JOIN cas_external_identities identity
+         ON identity.external_identity_id = event.external_identity_id
+       WHERE event.action = 'session.login'`,
     ).first()).toEqual({
       action: "session.login",
       original_account_id: actor.account.accountId,
       external_identity_id: actor.authenticatedIdentity.externalIdentityId,
-      identity_issuer: "https://github.com",
+      issuer: "https://github.com",
       subject: "session-owner",
     });
   });
@@ -794,16 +792,14 @@ describe("D1 Account repository", () => {
       "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES ('cas_app_a', 'App', '', 'active', 1, 1)",
     ).run();
     await db.prepare(
-      "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES ('cas_app_a', ?, ?, 1, ?)",
-    ).bind(actor.authenticatedIdentity.issuer, actor.authenticatedIdentity.subject, actor.account.accountId).run();
+      "INSERT INTO cas_app_members (app_id, account_id, joined_at) VALUES ('cas_app_a', ?, 1)",
+    ).bind(actor.account.accountId).run();
     await db.prepare(
       `INSERT INTO cas_control_audit_events
-        (event_id, app_id, identity_issuer, subject, action, target, created_at,
+        (event_id, app_id, action, target, created_at,
          original_account_id, external_identity_id, target_account_id)
-       VALUES ('app-audit', 'cas_app_a', ?, ?, 'member.removed', ?, 10, ?, ?, ?)`,
+       VALUES ('app-audit', 'cas_app_a', 'member.removed', ?, 10, ?, ?, ?)`,
     ).bind(
-      actor.authenticatedIdentity.issuer,
-      actor.authenticatedIdentity.subject,
       target.account.accountId,
       actor.account.accountId,
       actor.authenticatedIdentity.externalIdentityId,
@@ -811,12 +807,10 @@ describe("D1 Account repository", () => {
     ).run();
     await db.prepare(
       `INSERT INTO cas_platform_audit_events
-        (event_id, actor_issuer, actor_subject, action, result, created_at,
-         actor_account_id, actor_external_identity_id, target_account_id)
-       VALUES ('platform-audit', ?, ?, 'platform_access.blocked', 'succeeded', 11, ?, ?, ?)`,
+        (event_id, action, result, created_at, actor_account_id,
+         actor_external_identity_id, target_account_id)
+       VALUES ('platform-audit', 'platform_access.blocked', 'succeeded', 11, ?, ?, ?)`,
     ).bind(
-      actor.authenticatedIdentity.issuer,
-      actor.authenticatedIdentity.subject,
       actor.account.accountId,
       actor.authenticatedIdentity.externalIdentityId,
       target.account.accountId,

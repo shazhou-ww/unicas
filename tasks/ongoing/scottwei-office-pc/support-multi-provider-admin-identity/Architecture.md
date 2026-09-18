@@ -398,7 +398,7 @@ login fails closed while authenticated session checks continue.
 - [Current control authentication client](/packages/control-auth/src/index.ts)
 - [Current administrator BFF](/packages/service-cloudflare/src/admin-bff/bff.ts)
 - [Current BFF configuration](/packages/service-cloudflare/src/admin-bff/config.ts)
-- [Current authenticated service context](/packages/service/src/control-plane.ts)
+- [Current authenticated Account service](/packages/service/src/account.ts)
 - [Current Cloudflare schema](/packages/service-cloudflare/src/control-schema.ts)
 - [Current MCP authorization](/packages/service-cloudflare/src/mcp/auth.ts)
 - [Cloudflare Email Service](https://developers.cloudflare.com/email-service/)

@@ -468,7 +468,7 @@ describe("standalone deployment plan", () => {
     }
     const catalog = queries.join("\n");
     for (const table of [
-      "cas_stacks",
+      "cas_apps",
       "cas_control_audit_events",
       "cas_nodes",
       "cas_direct_upload_sessions",
@@ -484,9 +484,10 @@ describe("standalone deployment plan", () => {
     expect(rendered).toContain("unicas-content/stacks/cas_smoke/tenants/deploy-smoke");
     expect(rendered).toContain("d1 execute unicas-control --remote");
     expect(rendered).toContain("d1 execute unicas-tenant --remote");
-    expect(rendered).toContain("DROP TABLE IF EXISTS cas_stacks");
+    expect(rendered).toContain("DROP TABLE IF EXISTS cas_apps");
+    expect(rendered).toContain("DROP TABLE IF EXISTS cas_accounts");
     expect(rendered).toContain("DROP TABLE IF EXISTS cas_nodes");
-    expect(rendered).not.toContain("DELETE FROM cas_stacks");
+    expect(rendered).not.toContain("cas_platform_principals");
     expect(rendered).toContain("--binding OAUTH_KV --remote");
     expect(rendered).not.toContain("unicas.shazhou.work");
     expect(rendered).not.toContain("unidocs-cas");

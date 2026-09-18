@@ -83,7 +83,7 @@ describe("AI tool connection", () => {
     const cliPrompt = await navigator.clipboard.readText();
     expect(cliPrompt).toContain("pnpm install --global ./packages/admin-cli");
     expect(cliPrompt).toContain("unicas login");
-    expect(cliPrompt).toContain("unicas principal");
+    expect(cliPrompt).toContain("unicas account");
     expect(cliPrompt).toContain("unicas apps list");
     expect(cliPrompt).not.toContain("unicas stacks list");
     expect(cliPrompt).toContain(`${window.location.origin}/admin/assets/skills/unicas-cli/SKILL.md`);
@@ -130,7 +130,7 @@ describe("AI tool connection", () => {
   });
 
   test("denies a direct Platform route in the client for a non-admin", async () => {
-    window.location.hash = "#/platform/principals";
+    window.location.hash = "#/platform/people";
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
       if (path === "/admin/me") return json({
@@ -152,7 +152,7 @@ describe("AI tool connection", () => {
   });
 
   test("supports keyboard Platform tab routing", async () => {
-    window.location.hash = "#/platform/principals";
+    window.location.hash = "#/platform/people";
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
       if (path === "/admin/me") return json({
@@ -163,7 +163,6 @@ describe("AI tool connection", () => {
         memberships: [],
       });
       if (path === "/admin/apps") return json({ items: [] });
-      if (path === "/admin/platform/access-summary") return json({ activePrincipalCount: 1, platformAdminCount: 1, appCreatorCount: 0, blockedPrincipalCount: 0, generatedAt: 1 });
       if (path.startsWith("/admin/platform/people")) return json({ items: [], nextCursor: null });
       if (path.startsWith("/admin/platform/audit-events")) return json({ items: [], nextCursor: null });
       return new Response(null, { status: 404 });
@@ -179,7 +178,7 @@ describe("AI tool connection", () => {
     expect(screen.getByRole("heading", { name: "Administration" })).toHaveClass("console-app-detail-title");
     expect(screen.getByRole("tablist", { name: "Administration sections" })).toHaveClass("console-app-tabs");
     expect(peopleTab.closest(".console-app-detail-header")).toContainElement(screen.getByRole("heading", { name: "Administration" }));
-    await waitFor(() => expect(window.location.hash).toBe("#/platform/people?filter=accounts"));
+    await waitFor(() => expect(window.location.hash).toBe("#/platform/people"));
     peopleTab.focus();
     await userEvent.setup().keyboard("{ArrowRight}");
     await waitFor(() => expect(window.location.hash).toBe("#/platform/audit"));

@@ -81,8 +81,8 @@ export function App() {
   useEffect(() => {
     if (appRoute?.section === "invitations") {
       window.location.replace(`#/apps/${encodeURIComponent(appRoute.appId)}/members?filter=pending`);
-    } else if (platformRoute?.section === "principals" || platformRoute?.section === "invitations") {
-      window.location.replace(`#/platform/people?filter=${platformRoute.section === "principals" ? "accounts" : "pending"}`);
+    } else if (platformRoute?.section === "invitations") {
+      window.location.replace("#/platform/people?filter=pending");
     }
   }, [route]);
 
@@ -187,7 +187,6 @@ export function App() {
       const renderPlatformSection = () => {
         switch (platformRoute.section) {
           case "people": return <PeopleView scope={{ platform: true }} initialFilter={platformRoute.peopleFilter} />;
-          case "principals":
           case "invitations": return null;
           case "audit": return <PlatformAuditView />;
           default: return null;

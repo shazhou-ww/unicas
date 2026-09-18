@@ -64,7 +64,7 @@ describe("App-scoped Space schema", () => {
 });
 
 describe("control schema", () => {
-  test("creates additive Account identity tables with constrained relationships", async () => {
+  test("creates fresh Account identity tables with constrained relationships", async () => {
     const database = await createDb();
     await migrateControlSchema(database);
     await migrateControlSchema(database);
@@ -86,6 +86,10 @@ describe("control schema", () => {
     for (const retired of [
       "cas_identity_migration_map",
       "cas_identity_migration_journal",
+      "cas_platform_principals",
+      "cas_operator_identities",
+      "cas_playground_file_roots",
+      "cas_control_idempotency",
     ]) expect(names.has(retired), `unexpected table ${retired}`).toBe(false);
 
     const authorityColumns = await database.prepare(
@@ -104,6 +108,16 @@ describe("control schema", () => {
       .map(column => column.name)).toEqual([
         "account_id", "method", "canonical_route", "idempotency_key",
       ]);
+    const membershipColumns = await database.prepare(
+      "PRAGMA table_info(cas_app_members)",
+    ).all<{ name: string; pk: number }>();
+    expect(membershipColumns.results!.map(column => column.name)).toEqual([
+      "app_id", "account_id", "joined_at",
+    ]);
+    expect(membershipColumns.results!
+      .filter(column => column.pk > 0)
+      .sort((left, right) => left.pk - right.pk)
+      .map(column => column.name)).toEqual(["app_id", "account_id"]);
 
     const firstAccountId = `acct_${"a".repeat(22)}`;
     const secondAccountId = `acct_${"b".repeat(22)}`;
@@ -140,37 +154,6 @@ describe("control schema", () => {
     ).first()).toEqual({ count: 2 });
   });
 
-  test("upgrades persisted stack-scoped tables before creating App indexes", async () => {
-    const database = await createDb();
-    await database.exec("CREATE TABLE cas_oauth_issuer_inspections (inspection_id TEXT PRIMARY KEY, stack_id TEXT NOT NULL, issuer TEXT NOT NULL, audience TEXT NOT NULL, metadata_url TEXT NOT NULL, metadata_type TEXT NOT NULL, authorization_endpoint TEXT NOT NULL, token_endpoint TEXT NOT NULL, jwks_uri TEXT NOT NULL, registration_endpoint TEXT, scopes_supported TEXT NOT NULL DEFAULT '[]', code_challenge_methods_supported TEXT NOT NULL DEFAULT '[]', metadata_digest TEXT NOT NULL, jwks_digest TEXT NOT NULL, challenge_hash TEXT NOT NULL, capability_max_lifetime_seconds INTEGER NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, used_at INTEGER, revision INTEGER NOT NULL DEFAULT 1)");
-    await database.exec("CREATE TABLE cas_control_audit_events (event_id TEXT PRIMARY KEY, stack_id TEXT, identity_issuer TEXT NOT NULL, subject TEXT NOT NULL, action TEXT NOT NULL, target TEXT NOT NULL, request_id TEXT, trace_id TEXT, caller_channel TEXT, oauth_client_handle TEXT, tool_name TEXT, created_at INTEGER NOT NULL)");
-    await database.prepare(
-      "INSERT INTO cas_oauth_issuer_inspections (inspection_id, stack_id, issuer, audience, metadata_url, metadata_type, authorization_endpoint, token_endpoint, jwks_uri, metadata_digest, jwks_digest, challenge_hash, capability_max_lifetime_seconds, created_at, expires_at) VALUES (?, ?, ?, ?, ?, 'oidc', ?, ?, ?, ?, ?, ?, 3600, 1, 2)",
-    ).bind("inspection-1", "cas_existing", "https://issuer.example", "audience", "https://issuer.example/metadata", "https://issuer.example/authorize", "https://issuer.example/token", "https://issuer.example/jwks", "metadata-digest", "jwks-digest", "challenge-hash").run();
-    await database.prepare(
-      "INSERT INTO cas_control_audit_events (event_id, stack_id, identity_issuer, subject, action, target, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    ).bind("event-1", "cas_existing", "https://issuer.example", "operator", "stack.created", "cas_existing", 1).run();
-
-    await migrateControlSchema(database);
-    await migrateControlSchema(database);
-
-    const columns = await database.prepare("PRAGMA table_info(cas_oauth_issuer_inspections)").all<{ name: string }>();
-    expect(columns.results!.map(column => column.name)).toContain("app_id");
-    expect(columns.results!.map(column => column.name)).not.toContain("stack_id");
-    expect(await database.prepare(
-      "SELECT inspection_id, app_id FROM cas_oauth_issuer_inspections",
-    ).first()).toEqual({ inspection_id: "inspection-1", app_id: "cas_existing" });
-    expect(await database.prepare(
-      "SELECT event_id, app_id FROM cas_control_audit_events",
-    ).first()).toEqual({ event_id: "event-1", app_id: "cas_existing" });
-    expect(await database.prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'cas_oauth_inspections_by_app'",
-    ).first()).toEqual({ name: "cas_oauth_inspections_by_app" });
-    expect(await database.prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'cas_control_audit_by_app'",
-    ).first()).toEqual({ name: "cas_control_audit_by_app" });
-  });
-
   test("creates App-scoped control tables idempotently", async () => {
     const database = await createDb();
     await migrateControlSchema(database);
@@ -186,7 +169,6 @@ describe("control schema", () => {
       "cas_app_member_invitations",
       "cas_app_oauth_issuers",
       "cas_app_managed_issuers",
-      "cas_playground_file_roots",
     ]) expect(names.has(expected), `missing table ${expected}`).toBe(true);
     for (const legacy of [
       "cas_stacks",
@@ -202,7 +184,6 @@ describe("control schema", () => {
       "cas_app_member_invitations",
       "cas_app_oauth_issuers",
       "cas_app_managed_issuers",
-      "cas_playground_file_roots",
       "cas_oauth_issuer_inspections",
       "cas_control_audit_events",
     ]) {

@@ -4,14 +4,12 @@ import { OAuthError, OAuthProvider } from "@cloudflare/workers-oauth-provider";
 import { createMcpHandler } from "agents/mcp/server";
 import {
   AccountService,
-  PlatformAccessService,
-  PlatformAuditService,
   PlatformInvitationService,
   type AccountManagedCapabilityIssuer,
   type OAuthDiscoveryPort,
 } from "@unicas/service";
 import { D1AccountRepository } from "../account-repository.js";
-import { D1PlatformAccessRepository } from "../platform-access-repository.js";
+import { D1PlatformInvitationRepository } from "../platform-invitation-repository.js";
 import { InvitationTokenCrypto, parseInvitationEncryptionKeys } from "../invitation-token-crypto.js";
 import { createOAuthAuthorizationHandler } from "./auth.js";
 import {
@@ -84,20 +82,18 @@ export function createControlPlaneMcpWorker(
           { error: "MCP_AUTH_CONTEXT_MISSING" },
           { status: 500 },
         );
-      const platformRepository = new D1PlatformAccessRepository(env.CAS_CONTROL_DB);
-      const platformAccess = new PlatformAccessService(platformRepository);
       const accountService = new AccountService(
         new D1AccountRepository(env.CAS_CONTROL_DB),
         Date.now,
         managedOAuthIssuer ?? null,
         { oauthDiscovery, oauthResourcePublicOrigin },
       );
+      const platformRepository = new D1PlatformInvitationRepository(env.CAS_CONTROL_DB);
       const platformInvitations = new PlatformInvitationService(
         platformRepository,
-        platformAccess,
+        accountService,
         new InvitationTokenCrypto(parseInvitationEncryptionKeys(env.SESSION_ENCRYPTION_KEYS)),
       );
-      const platformAudit = new PlatformAuditService(platformRepository, platformAccess);
       const accessError = await checkMcpAccountAccess(accountService, props);
       if (accessError) return accessError;
       attachVerifiedOAuthContext(request, ctx, props, requestConfig.resource);
@@ -109,8 +105,6 @@ export function createControlPlaneMcpWorker(
             publicOrigin: requestConfig.publicOrigin,
             mutationsEnabled: env.MCP_MUTATIONS_ENABLED === "true",
             platformInvitations,
-            platformAudit,
-            platformAccess,
             accountService,
             authorizePlatformOperation: async (grant, authority) => {
               const error = await checkMcpAccountAccess(accountService, grant, authority);

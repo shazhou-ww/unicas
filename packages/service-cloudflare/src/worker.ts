@@ -17,7 +17,6 @@ import {
   StackCapabilityVerifier,
   type BlobStore,
   type KeyedActorPort,
-  type ControlPlaneOperations,
   type ServicePlatform,
   type SqlDatabase,
 } from "@unicas/service";
@@ -29,9 +28,8 @@ import {
 } from "./audit-reads.js";
 import { AppAuthorityRepository, AuthorityRepository } from "./control-authority.js";
 import { migrateControlSchema } from "./control-schema.js";
-import { createControlPlaneOperations } from "./control-operations.js";
 import { ControlSessionStore } from "./control-sessions.js";
-import { D1PlatformAccessRepository } from "./platform-access-repository.js";
+import { D1PlatformInvitationRepository } from "./platform-invitation-repository.js";
 import { D1PeopleRepository } from "./people-repository.js";
 import { D1AccountRepository } from "./account-repository.js";
 import { D1EmailChallengeRepository } from "./email-challenge-repository.js";
@@ -381,21 +379,18 @@ function adminHandlerFor(env: Env): Promise<(request: Request) => Promise<Respon
       await ensureControlSchema(env);
       const config = configFromEnv(env);
       const now = config.now ?? (() => Date.now());
-      const platformRepository = new D1PlatformAccessRepository(env.CAS_CONTROL_DB);
       const accountRepository = new D1AccountRepository(env.CAS_CONTROL_DB);
+      const platformInvitationRepository = new D1PlatformInvitationRepository(env.CAS_CONTROL_DB);
       const managedOAuthIssuer = managedIssuerFor(env, now);
       const oauthDiscovery = new CloudflareOAuthDiscoveryPort({
         allowedOrigins: parseOriginAllowlist(env.CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS),
       });
       return createAdminBff({
         config,
-        controlPlane: controlPlaneFor(env, now, managedOAuthIssuer),
         sessionStore: new ControlSessionStore(env.CAS_CONTROL_DB, now),
         auditReader: localAuditReader(env),
         assets: uiAssets,
-        platformAccessRepository: platformRepository,
-        platformInvitationRepository: platformRepository,
-        platformAuditRepository: platformRepository,
+        platformInvitationRepository,
         peopleRepository: new D1PeopleRepository(env.CAS_CONTROL_DB),
         accountRepository,
         managedOAuthIssuer,
@@ -411,20 +406,6 @@ function adminHandlerFor(env: Env): Promise<(request: Request) => Promise<Respon
     void handler.catch(() => adminHandlers.delete(key));
   }
   return handler;
-}
-
-function controlPlaneFor(
-  env: Env,
-  now?: () => number,
-  managedOAuthIssuer = managedIssuerFor(env, now),
-): ControlPlaneOperations {
-  const allowedOrigins = parseOriginAllowlist(env.CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS);
-  return createControlPlaneOperations(env.CAS_CONTROL_DB, {
-    now,
-    oauthResourcePublicOrigin: env.CAS_PUBLIC_ORIGIN ?? env.PUBLIC_ORIGIN,
-    managedOAuthIssuer,
-    oauthDiscovery: new CloudflareOAuthDiscoveryPort({ allowedOrigins }),
-  });
 }
 
 function managedIssuerFor(env: Env, now?: () => number): CloudflareManagedIssuer | undefined {

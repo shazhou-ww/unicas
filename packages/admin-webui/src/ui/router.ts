@@ -62,20 +62,20 @@ export function parseAppRoute(path: string): AppRoute | null {
   return { appId, section: section as AppSection, ...(search ? { peopleFilter: new URLSearchParams(search).get("filter") ?? "current" } : {}) };
 }
 
-export type PlatformSection = "people" | "principals" | "invitations" | "audit";
+export type PlatformSection = "people" | "invitations" | "audit";
 
 export interface PlatformRoute {
   readonly section: PlatformSection;
   readonly peopleFilter?: string;
 }
 
-/** Parse a platform route like /platform/principals into section. */
+/** Parse a platform route into its current section. */
 export function parsePlatformRoute(path: string): PlatformRoute | null {
   const [pathname, search] = path.split("?");
   const segments = pathname!.split("/").filter(Boolean);
   if (segments.length < 1 || segments[0] !== "platform") return null;
   const section = segments[1] ?? "people";
-  const validSections: PlatformSection[] = ["people", "principals", "invitations", "audit"];
+  const validSections: PlatformSection[] = ["people", "invitations", "audit"];
   if (!validSections.includes(section as PlatformSection)) return null;
   return { section: section as PlatformSection, ...(search ? { peopleFilter: new URLSearchParams(search).get("filter") ?? "current" } : {}) };
 }

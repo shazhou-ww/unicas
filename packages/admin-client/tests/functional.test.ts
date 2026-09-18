@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { appAdminRoutes, casAdminRoutes } from "@unicas/admin-protocol";
+import { appAdminRoutes } from "@unicas/admin-protocol";
 import type { CasAdminPage } from "@unicas/admin-protocol";
 import { createAdminClient } from "../src/index.js";
 import type { AdminHttpFetcher, AdminClientSession } from "../src/index.js";
@@ -126,7 +126,7 @@ class MockAdminService {
       return new Response(null, { status: 204 });
     }
 
-    if (path === casAdminRoutes.me()) {
+    if (path === appAdminRoutes.me()) {
       if (this.appVocabulary) {
         return Response.json({
           account,
@@ -149,9 +149,6 @@ class MockAdminService {
     }
     if (path === appAdminRoutes.acceptMemberInvitation({ token: "invite-1" }) && request.method === "POST") {
       return Response.json({ appId: APP });
-    }
-    if (path === appAdminRoutes.accessSummary()) {
-      return Response.json({ activePrincipalCount: 1, platformAdminCount: 1, appCreatorCount: 1, blockedPrincipalCount: 0, generatedAt: 1 });
     }
     const platformAccount = {
       accountId: ACCOUNT,
@@ -176,53 +173,6 @@ class MockAdminService {
       || path === appAdminRoutes.platformAccountBlock({ accountId: ACCOUNT })) && request.method !== "GET") {
       return new Response(null, { status: 204 });
     }
-    if (path === appAdminRoutes.platformPrincipals() && request.method === "GET") {
-      return Response.json({
-        items: [{
-          principalRef: "principal-1",
-          principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-          profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
-          status: "active",
-          authorities: ["platform.admin", "apps.create"],
-          revision: 1,
-          createdAt: 1,
-          updatedAt: 1,
-          effectiveAccess: "active",
-          appMembershipCount: 1,
-          lastActiveAt: 1,
-        }], nextCursor: null
-      });
-    }
-    if (path === appAdminRoutes.platformPrincipal({ principalRef: "principal-1" })) {
-      return Response.json({
-        principalRef: "principal-1",
-        principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-        profile: { displayName: "Alice", emailForDisplay: "alice@example.com" },
-        status: "active",
-        authorities: ["platform.admin", "apps.create"],
-        revision: 1,
-        createdAt: 1,
-        updatedAt: 1,
-        effectiveAccess: "active",
-        appMembershipCount: 1,
-        lastActiveAt: 1,
-        memberships: [],
-      });
-    }
-    if (path === appAdminRoutes.platformPrincipalAccess({ principalRef: "principal-1" }) && request.method === "PATCH") {
-      return new Response(null, { status: 204, headers: { ETag: '"2"' } });
-    }
-    if (path === appAdminRoutes.platformPrincipalAccess({ principalRef: "principal-1" }) && request.method === "GET") {
-      return Response.json({
-        principalRef: "principal-1",
-        principal: { issuer: "https://accounts.google.com", subject: "sub-1" },
-        status: "active",
-        authorities: ["platform.admin", "apps.create"],
-        revision: 1,
-        createdAt: 1,
-        updatedAt: 1,
-      }, { headers: { ETag: '"1"' } });
-    }
     if (path === appAdminRoutes.platformInvitations() && request.method === "GET") {
       return Response.json({
         items: [{
@@ -232,7 +182,7 @@ class MockAdminService {
           status: "pending",
           expiresAt: 1000,
           createdAt: 1,
-          createdBy: { issuer: "https://accounts.google.com", subject: "sub-1" },
+          createdByAccountId: ACCOUNT,
           revision: 1,
         }], nextCursor: null
       });
@@ -413,66 +363,6 @@ class MockAdminService {
         nextAfter: 2,
       });
     }
-    if (path === casAdminRoutes.stacks() && request.method === "GET") {
-      const page: CasAdminPage<typeof this.stack> = { items: [this.stack], nextCursor: null };
-      return Response.json(page);
-    }
-    if (path === casAdminRoutes.stack({ stackId: STACK }) && request.method === "GET") {
-      return Response.json(this.stack, { headers: { ETag: `"rev-${this.stack.revision}"` } });
-    }
-    if (path === casAdminRoutes.stack({ stackId: STACK }) && request.method === "PATCH") {
-      this.stack.revision += 1;
-      return Response.json(this.stack, { headers: { ETag: `"rev-${this.stack.revision}"` } });
-    }
-    if (path === casAdminRoutes.oauthIssuer({ stackId: STACK }) && request.method === "GET") {
-      return Response.json({
-        stackId: STACK,
-        issuer: "https://issuer.example/oauth",
-        audience: "https://cas.example/stacks/cas_stack_a",
-        metadataUrl: "https://issuer.example/.well-known/oauth-authorization-server/oauth",
-        metadataType: "oauth",
-        authorizationEndpoint: "https://issuer.example/oauth/authorize",
-        tokenEndpoint: "https://issuer.example/oauth/token",
-        jwksUri: "https://issuer.example/oauth/jwks",
-        registrationEndpoint: "https://issuer.example/oauth/register",
-        scopesSupported: ["cas:read"],
-        codeChallengeMethodsSupported: ["S256"],
-        status: "active",
-        verifiedAt: 10,
-        lastRefreshAt: 11,
-        lastRefreshError: null,
-        jwksDigest: "sha256:test",
-        capabilityMaxLifetimeSeconds: 1800,
-        revision: 4,
-      }, { headers: { ETag: `"rev-4"` } });
-    }
-    if (path === casAdminRoutes.oauthIssuer({ stackId: STACK }) && request.method === "PUT") {
-      return Response.json({ stackId: STACK, status: "active", revision: 2 }, { headers: { ETag: `"rev-2"` } });
-    }
-    if (path === casAdminRoutes.oauthIssuerInspections({ stackId: STACK }) && request.method === "POST") {
-      const body = await request.json() as { issuer: string };
-      return Response.json({
-        inspectionId: "oinsp_test",
-        stackId: STACK,
-        ...body,
-        audience: `https://cas.example/stacks/${STACK}`,
-        metadataUrl: "https://issuer.example/.well-known/oauth-authorization-server/oauth",
-        metadataType: "oauth",
-        authorizationEndpoint: "https://issuer.example/oauth/authorize",
-        tokenEndpoint: "https://issuer.example/oauth/token",
-        jwksUri: "https://issuer.example/oauth/jwks",
-        registrationEndpoint: null,
-        scopesSupported: ["cas:read"],
-        codeChallengeMethodsSupported: ["S256"],
-        metadataDigest: "metadata",
-        jwksDigest: "jwks",
-        capabilityMaxLifetimeSeconds: 1800,
-        challenge: "challenge",
-        expiresAt: 1000,
-        keys: [],
-        revision: 1,
-      }, { headers: { ETag: `"rev-1"` } });
-    }
     return Response.json({ error: "NOT_FOUND" }, { status: 404 });
   };
 }
@@ -610,7 +500,6 @@ describe("functional admin client", () => {
   });
 
   it("transports platform access and invitation operations with minimal receipts", async () => {
-    expect(await client.getPlatformAccessSummary()).toMatchObject({ platformAdminCount: 1 });
     expect(await client.listPlatformInvitations({ status: "pending", limit: 10 })).toMatchObject({
       items: [{ invitationId: "platform-invite-1" }],
     });
@@ -713,48 +602,6 @@ describe("functional admin client", () => {
       status: 502,
       code: "ADMIN_CONTRACT_MISMATCH",
     });
-  });
-
-  it("returns ETag on etag-sensitive reads and sends it as If-Match on mutations", async () => {
-    const { value, etag } = await client.getStack({ stackId: STACK });
-    expect(value.revision).toBe(3);
-    expect(etag).toBe('"rev-3"');
-    expect(service.requests[0]!.cookie).toBe("cas_admin_session=abc");
-  });
-
-  it("reads discovered OAuth issuer state with its ETag", async () => {
-    const { value, etag } = await client.getOAuthIssuer({ stackId: STACK });
-    expect(value).toMatchObject({ metadataType: "oauth", status: "active", jwksUri: "https://issuer.example/oauth/jwks" });
-    expect(etag).toBe('"rev-4"');
-  });
-
-  it("posts OAuth issuer inspections with CSRF", async () => {
-    const result = await client.inspectOAuthIssuer(
-      { stackId: STACK },
-      { issuer: "https://issuer.example/oauth" },
-    );
-    expect(result).toMatchObject({ value: { inspectionId: "oinsp_test" }, etag: '"rev-1"' });
-    const request = service.requests.find((entry) => entry.path.endsWith("/oauth-issuer/inspections"))!;
-    expect(request).toMatchObject({ method: "POST", csrf: "csrf-1" });
-    expect(JSON.parse(request.body!)).toEqual({ issuer: "https://issuer.example/oauth" });
-  });
-
-  it("activates an OAuth issuer with CSRF and If-Match", async () => {
-    const result = await client.activateOAuthIssuer(
-      { stackId: STACK },
-      { inspectionId: "oinsp_test", activationProof: "proof" },
-      '"rev-1"',
-    );
-    expect(result).toMatchObject({ value: { status: "active", revision: 2 }, etag: '"rev-2"' });
-    const request = service.requests.find((entry) => entry.path.endsWith("/oauth-issuer") && entry.method === "PUT")!;
-    expect(request).toMatchObject({ method: "PUT", csrf: "csrf-1" });
-  });
-
-  it("attaches CSRF to mutations", async () => {
-    await client.patchStack({ stackId: STACK }, { description: "x" }, '"rev-3"');
-    const mutation = service.requests.find(r => r.method === "PATCH")!;
-    expect(mutation.csrf).toBe("csrf-1");
-    expect(mutation.path).toBe(casAdminRoutes.stack({ stackId: STACK }));
   });
 
   it("forces re-login after a 401 session failure", async () => {

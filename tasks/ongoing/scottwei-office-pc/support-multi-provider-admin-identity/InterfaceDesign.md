@@ -375,7 +375,7 @@ from already-consumed invitations or challenges.
 - [Business and data model](./BusinessDataModel.md)
 - [Architecture](./Architecture.md)
 - [Current protocol types](/packages/admin-protocol/src/types.ts)
-- [Current administrator contracts](/packages/admin-protocol/src/contract.ts)
+- [Current administrator contracts](/packages/admin-protocol/src/app-v2-contract.ts)
 - [Current administrator client](/packages/admin-client/src/client.ts)
 - [Current administrator BFF](/packages/service-cloudflare/src/admin-bff/bff.ts)
 - [Current CLI login](/packages/admin-cli/src/oauth/login.ts)

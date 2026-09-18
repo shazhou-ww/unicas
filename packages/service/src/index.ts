@@ -40,6 +40,9 @@ export type {
   AccountAppInvitationIdempotencyRecord,
   AccountAppInvitationRecord,
   AccountManagedCapabilityIssuer,
+  AccountManagedIssuerProvisioner,
+  AccountOAuthIssuerInspectionRecord,
+  AccountOAuthIssuerRecord,
   AccountPlatformViewRecord,
   AccountAuditActorRecord,
   AppAccountAuditRecord,
@@ -53,23 +56,16 @@ export type {
   AccountWithIdentityCreate,
   ExternalIdentityRecord,
 } from "./account.js";
-export { PlatformAccessService, PlatformAccessError } from "./platform-access.js";
-export type {
-  AppInvitationAdmission,
-  AppInvitationAdmissionRecord,
-  PlatformAccessRepository,
-  PlatformAuditRecord,
-} from "./platform-access.js";
+export { PlatformAccessError } from "./platform-access.js";
 export { PlatformInvitationService } from "./platform-invitations.js";
 export type {
+  PlatformInvitationActor,
   PlatformInvitationIdempotencyRecord,
   PlatformInvitationRepository,
   PlatformInvitationSecrets,
   PlatformInvitationServiceOptions,
   StoredPlatformInvitation,
 } from "./platform-invitations.js";
-export { PlatformAuditService } from "./platform-audit.js";
-export type { PlatformAuditRepository } from "./platform-audit.js";
 export {
   createUniCasService,
   matchUniCasServiceRoute,
@@ -241,6 +237,7 @@ export {
 } from "./control-possession.js";
 export {
   canonicalJson,
+  appOAuthResource,
   CONTROL_LIST_DEFAULT_LIMIT,
   CONTROL_LIST_MAX_LIMIT,
   OAUTH_CAPABILITY_MAX_LIFETIME_SECONDS,
@@ -279,42 +276,6 @@ export type {
   OAuthMetadataType,
 } from "./oauth-discovery.js";
 export type {
-  ControlPlaneCallContext,
-  ControlPlaneOperations,
   ControlSessionRepository,
-  ServiceMutationInput,
   StoredSession,
-} from "./control-plane.js";
-export { ControlPlaneAdminService } from "./control-admin.js";
-export type {
-  ControlActivateOAuthIssuerCommitResult,
-  ControlActivateOAuthIssuerPlan,
-  ControlAcceptMemberInvitationCommitResult,
-  ControlAcceptMemberInvitationPlan,
-  ControlAuditRecord,
-  ControlCreateMemberInvitationCommitResult,
-  ControlCreateMemberInvitationPlan,
-  ControlCreateStackCommitResult,
-  ControlCreateStackPlan,
-  ControlDeleteMemberCommitResult,
-  ControlDeleteMemberPlan,
-  ControlIdempotencyRecord,
-  ControlIdentityPlan,
-  ControlIdentityRecord,
-  ControlInspectOAuthIssuerCommitResult,
-  ControlInspectOAuthIssuerPlan,
-  ControlOAuthIssuerRecord,
-  ControlOAuthIssuerInspectionRecord,
-  ControlMembershipRecord,
-  ManagedCapabilityIssuer,
-  ManagedOAuthIssuerProvisioner,
-  ControlMemberInvitationRecord,
-  ControlMemberInvitationResponse,
-  ControlPatchStackCommitResult,
-  ControlPatchStackPlan,
-  ControlPatchManagedIssuerCommitResult,
-  ControlPatchManagedIssuerPlan,
-  ControlPlaneAdminRepository,
-  ControlPlaneAdminServiceOptions,
-  ControlStackRecord,
-} from "./control-admin.js";
+} from "./control-session.js";

@@ -68,8 +68,9 @@ it for credentials before sharing.
 
 ## Control-plane audit
 
-Control mutations append audit records containing the App, Principal actor, action,
-target, request identity, trace identity, caller channel, and timestamp. Read
+Control mutations append audit records containing the App, stable Account,
+exact authenticated External Identity, action, target, request identity, trace
+identity, caller channel, and timestamp. Read
 those records through authenticated control-plane surfaces:
 
 ```powershell

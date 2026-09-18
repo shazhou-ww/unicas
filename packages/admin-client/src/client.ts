@@ -1,8 +1,7 @@
 /**
  * `createAdminClient` — typed HTTP transport for the `/admin` control-plane
  * API (the BFF surface). One plain function per operation, paths built from
- * `casAdminRoutes`, request/response types straight from `@unicas/admin-protocol`
- * (the frozen contract — no tool-mirror duplication).
+ * `appAdminRoutes` and request/response types from `@unicas/admin-protocol`.
  *
  * The session provider yields the BFF session cookie + CSRF token; mutations
  * send `If-Match` (ETag preconditions) and `Idempotency-Key` where the
@@ -12,7 +11,6 @@
 import {
   appAdminRoutes,
   AppAdminMeResponseSchema,
-  casAdminRoutes,
   CasAdminETagHeader,
   CasAdminIdempotencyKeyHeader,
   CasAdminIfMatchHeader,
@@ -41,21 +39,7 @@ import type {
   AppOAuthIssuer,
   AppOAuthIssuerInspection,
   AppRefDomain,
-  CasControlAuditEvent,
-  CasMemberInvitation,
-  CasOperatorIdentity,
-  CasOperatorIdentityKey,
-  CasOAuthIssuerInspection,
-  CasRefDomain,
-  CasRootRefBalance,
-  CasRootRefEvent,
-  CasStack,
-  CasStackId,
-  CasStackMember,
-  CasStackOAuthIssuer,
-  CasManagedCapability,
   ManagedSpaceCapability,
-  PlatformAccessSummary,
   PlatformAccountDetail,
   PlatformAccountPage,
   PlatformAuditAction,
@@ -116,7 +100,6 @@ export interface AdminClient {
     path: { readonly appId: AppId; readonly invitationId: string },
     ifMatch: string,
   ): Promise<{ readonly etag: string }>;
-  getPlatformAccessSummary(): Promise<PlatformAccessSummary>;
   listPlatformAccounts(query?: {
     readonly query?: string;
     readonly effectiveAccess?: "active" | "blocked" | "no_access";
@@ -186,63 +169,6 @@ export interface AdminClient {
     path: { readonly appId: AppId; readonly refDomain: string },
     query?: { readonly spaceId?: string; readonly after?: number; readonly limit?: number },
   ): Promise<{ readonly events: readonly SpaceRootRefEvent[]; readonly latestRevision: number; readonly nextAfter: number }>;
-  listStacks(query?: CasAdminPageQuery): Promise<CasAdminPage<CasStack>>;
-  createStack(
-    body: { readonly displayName: string },
-    headers?: CasAdminCreateHeaders,
-  ): Promise<CasStack>;
-  getStack(path: { readonly stackId: CasStackId }): Promise<AdminClientRead<CasStack>>;
-  patchStack(
-    path: { readonly stackId: CasStackId },
-    body: { readonly displayName?: string; readonly description?: string },
-    ifMatch: string,
-  ): Promise<AdminClientRead<CasStack>>;
-  listMembers(
-    path: { readonly stackId: CasStackId },
-    query?: CasAdminPageQuery,
-  ): Promise<CasAdminPage<CasStackMember>>;
-  deleteMember(
-    path: { readonly stackId: CasStackId },
-    query: CasOperatorIdentityKey,
-    ifMatch: string,
-  ): Promise<{ readonly ok: true }>;
-  createMemberInvitation(
-    path: { readonly stackId: CasStackId },
-    body: { readonly emailConstraint?: string },
-    headers?: CasAdminCreateHeaders,
-  ): Promise<{ readonly invitation: CasMemberInvitation; readonly acceptUrl: string }>;
-  getOAuthIssuer(path: { readonly stackId: CasStackId }): Promise<AdminClientRead<CasStackOAuthIssuer>>;
-  getManagedOAuthIssuer(path: { readonly stackId: CasStackId }): Promise<AdminClientRead<CasStackOAuthIssuer>>;
-  patchManagedOAuthIssuer(
-    path: { readonly stackId: CasStackId },
-    body: { readonly enabled: boolean },
-    ifMatch: string,
-  ): Promise<AdminClientRead<CasStackOAuthIssuer>>;
-  mintManagedCapability(path: { readonly stackId: CasStackId }): Promise<CasManagedCapability>;
-  inspectOAuthIssuer(
-    path: { readonly stackId: CasStackId },
-    body: {
-      readonly issuer: string;
-    },
-  ): Promise<AdminClientRead<CasOAuthIssuerInspection>>;
-  activateOAuthIssuer(
-    path: { readonly stackId: CasStackId },
-    body: { readonly inspectionId: string; readonly activationProof: string },
-    ifMatch: string,
-  ): Promise<AdminClientRead<CasStackOAuthIssuer>>;
-  listRefDomains(path: { readonly stackId: CasStackId }): Promise<{ readonly domains: readonly CasRefDomain[] }>;
-  listControlAuditEvents(
-    path: { readonly stackId: CasStackId },
-    query?: CasAdminPageQuery,
-  ): Promise<CasAdminPage<CasControlAuditEvent>>;
-  listRootDomainRefs(
-    path: { readonly stackId: CasStackId; readonly refDomain: string },
-    query?: { readonly tenantId?: string; readonly limit?: number; readonly cursor?: string },
-  ): Promise<{ readonly revision: number; readonly refs: readonly CasRootRefBalance[]; readonly nextCursor: string | null }>;
-  listRootDomainEvents(
-    path: { readonly stackId: CasStackId; readonly refDomain: string },
-    query?: { readonly tenantId?: string; readonly after?: number; readonly limit?: number },
-  ): Promise<{ readonly events: readonly CasRootRefEvent[]; readonly latestRevision: number; readonly nextAfter: number }>;
 }
 
 export function createAdminClient(config: AdminClientConfig): AdminClient {
@@ -465,11 +391,6 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
       return response.json();
     },
 
-    async getPlatformAccessSummary() {
-      const response = await requireOk(await request(appAdminRoutes.accessSummary()), "getPlatformAccessSummary");
-      return response.json();
-    },
-
     async listPlatformAccounts(query) {
       const response = await requireOk(
         await request(`${appAdminRoutes.platformAccounts()}${queryString(query)}`),
@@ -638,168 +559,6 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
       return response.json();
     },
 
-    async listStacks(query) {
-      const response = await requireOk(
-        await request(`${casAdminRoutes.stacks()}${queryString(pageQuery(query))}`),
-        "listStacks",
-      );
-      return response.json();
-    },
-
-    async createStack(body, headers) {
-      const response = await requireOk(
-        await request(casAdminRoutes.stacks(), {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...mutationHeaders(headers),
-          },
-          body: JSON.stringify(body),
-        }),
-        "createStack",
-      );
-      return response.json();
-    },
-
-    async getStack(path) {
-      const response = await requireOk(await request(casAdminRoutes.stack(path)), "getStack");
-      return { value: await response.json(), etag: readEtag(response) };
-    },
-
-    async patchStack(path, body, ifMatch) {
-      const response = await requireOk(
-        await request(casAdminRoutes.stack(path), {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", ...ifMatchHeader(ifMatch) },
-          body: JSON.stringify(body),
-        }),
-        "patchStack",
-      );
-      return { value: await response.json(), etag: readEtag(response) };
-    },
-
-    async listMembers(path, query) {
-      const response = await requireOk(
-        await request(`${casAdminRoutes.members(path)}${queryString(pageQuery(query))}`),
-        "listMembers",
-      );
-      return response.json();
-    },
-
-    async deleteMember(path, query, ifMatch) {
-      const response = await requireOk(
-        await request(`${casAdminRoutes.members(path)}${queryString(query)}`, {
-          method: "DELETE",
-          headers: ifMatchHeader(ifMatch),
-        }),
-        "deleteMember",
-      );
-      return response.json();
-    },
-
-    async createMemberInvitation(path, body, headers) {
-      const response = await requireOk(
-        await request(casAdminRoutes.memberInvitations(path), {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...mutationHeaders(headers),
-          },
-          body: JSON.stringify(body),
-        }),
-        "createMemberInvitation",
-      );
-      return response.json();
-    },
-
-    async getOAuthIssuer(path) {
-      const response = await requireOk(
-        await request(casAdminRoutes.oauthIssuer(path)),
-        "getOAuthIssuer",
-      );
-      return { value: await response.json(), etag: readEtag(response) };
-    },
-
-    async getManagedOAuthIssuer(path) {
-      const response = await requireOk(
-        await request(casAdminRoutes.managedIssuer(path)),
-        "getManagedOAuthIssuer",
-      );
-      return { value: await response.json(), etag: readEtag(response) };
-    },
-
-    async patchManagedOAuthIssuer(path, body, ifMatch) {
-      const response = await requireOk(
-        await request(casAdminRoutes.managedIssuer(path), {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", ...ifMatchHeader(ifMatch) },
-          body: JSON.stringify(body),
-        }),
-        "patchManagedOAuthIssuer",
-      );
-      return { value: await response.json(), etag: readEtag(response) };
-    },
-
-    async mintManagedCapability(path) {
-      const response = await requireOk(
-        await request(casAdminRoutes.managedCapability(path), { method: "POST" }),
-        "mintManagedCapability",
-      );
-      return response.json();
-    },
-
-    async inspectOAuthIssuer(path, body) {
-      const response = await requireOk(
-        await request(casAdminRoutes.oauthIssuerInspections(path), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-        "inspectOAuthIssuer",
-      );
-      return { value: await response.json(), etag: readEtag(response) };
-    },
-
-    async activateOAuthIssuer(path, body, ifMatch) {
-      const response = await requireOk(
-        await request(casAdminRoutes.oauthIssuer(path), {
-          method: "PUT",
-          headers: { "Content-Type": "application/json", ...ifMatchHeader(ifMatch) },
-          body: JSON.stringify(body),
-        }),
-        "activateOAuthIssuer",
-      );
-      return { value: await response.json(), etag: readEtag(response) };
-    },
-
-    async listRefDomains(path) {
-      const response = await requireOk(await request(casAdminRoutes.refDomains(path)), "listRefDomains");
-      return response.json();
-    },
-
-    async listControlAuditEvents(path, query) {
-      const response = await requireOk(
-        await request(`${casAdminRoutes.controlAuditEvents(path)}${queryString(pageQuery(query))}`),
-        "listControlAuditEvents",
-      );
-      return response.json();
-    },
-
-    async listRootDomainRefs(path, query) {
-      const response = await requireOk(
-        await request(`${casAdminRoutes.rootDomainRefs(path)}${queryString(query)}`),
-        "listRootDomainRefs",
-      );
-      return response.json();
-    },
-
-    async listRootDomainEvents(path, query) {
-      const response = await requireOk(
-        await request(`${casAdminRoutes.rootDomainEvents(path)}${queryString(query)}`),
-        "listRootDomainEvents",
-      );
-      return response.json();
-    },
   };
 }
 

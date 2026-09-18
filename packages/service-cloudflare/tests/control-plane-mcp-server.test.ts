@@ -5,11 +5,11 @@ import type { D1Database } from "@cloudflare/workers-types";
 import { CLIENT_CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, PROTOCOL_VERSION_META_KEY } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { APP_ADMIN_MCP_TOOL_LIST } from "@unicas/admin-protocol";
-import { AccountService, PlatformAccessService, PlatformAuditService, PlatformInvitationService } from "@unicas/service";
+import { AccountService, PlatformInvitationService } from "@unicas/service";
 import { createControlPlaneMcpServer } from "../src/mcp/server.js";
 import type { ControlPlaneMcpGrantProps } from "../src/mcp/server.js";
 import { migrateControlSchema } from "../src/control-schema.js";
-import { D1PlatformAccessRepository } from "../src/platform-access-repository.js";
+import { D1PlatformInvitationRepository } from "../src/platform-invitation-repository.js";
 import { D1AccountRepository } from "../src/account-repository.js";
 
 let miniflare: Miniflare;
@@ -68,7 +68,7 @@ describe("adapter-hosted control-plane MCP server", () => {
     const { privateKey, publicKey } = await generateKeyPair("ES256", { extractable: true });
     const publicJwk = { ...(await exportJWK(publicKey)), kid: "issuer-key", alg: "ES256" };
     const issuerRecord = (appId: string) => ({
-      stackId: appId,
+      appId,
       mode: "managed" as const,
       issuer: `https://cas.example/managed-issuers/${appId}`,
       audience: `https://cas.example/stacks/${appId}`,
@@ -302,8 +302,8 @@ describe("adapter-hosted control-plane MCP server", () => {
       "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES (?, 'Invitations', '', 'active', 1, 1)",
     ).bind(appId).run();
     await db.prepare(
-      "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES (?, ?, ?, 1, ?)",
-    ).bind(appId, actor.authenticatedIdentity.issuer, actor.authenticatedIdentity.subject, actor.account.accountId).run();
+      "INSERT INTO cas_app_members (app_id, account_id, joined_at) VALUES (?, ?, 1)",
+    ).bind(appId, actor.account.accountId).run();
     const handler = createMcpHandler(
       () => createControlPlaneMcpServer({ mutationsEnabled: true, publicOrigin: "https://console.unicas.work", accountService }),
       { route: "/mcp", authContext: { props: grant(["control:security"]) } },
@@ -346,23 +346,16 @@ describe("adapter-hosted control-plane MCP server", () => {
     const target = await accountService.createForExternalIdentity({ provider: "google", issuer: "https://accounts.google.com", subject: "target-sub", displayName: "Target" });
     await db.prepare("INSERT INTO cas_account_platform_authorities (account_id, authority, granted_at) VALUES (?, 'platform.admin', 1)")
       .bind(alice.account.accountId).run();
-    await db.prepare("INSERT INTO cas_platform_principals (principal_ref, identity_issuer, subject, status, platform_admin, apps_create, revision, created_at, updated_at, account_id) VALUES ('alice-ref', ?, ?, 'active', 1, 0, 1, 1, 1, ?)")
-      .bind("https://accounts.google.com", "alice-sub", alice.account.accountId).run();
-    await db.prepare("INSERT INTO cas_platform_principals (principal_ref, identity_issuer, subject, status, platform_admin, apps_create, revision, created_at, updated_at, account_id) VALUES ('target-ref', ?, 'target-sub', 'active', 0, 0, 1, 1, 1, ?)")
-      .bind("https://accounts.google.com", target.account.accountId).run();
-    const repository = new D1PlatformAccessRepository(db);
-    const platformAccess = new PlatformAccessService(repository);
+    const repository = new D1PlatformInvitationRepository(db);
     const platformInvitations = new PlatformInvitationService(
       repository,
-      platformAccess,
+      accountService,
       { seal: async token => `sealed:${token}`, open: async sealed => sealed.slice(7) },
     );
     const handler = handlerFor(grant(["control:security"]), {
       mutationsEnabled: true,
       publicOrigin: "https://console.unicas.work",
       platformInvitations,
-      platformAudit: new PlatformAuditService(repository, platformAccess),
-      platformAccess,
       accountService,
     });
 
@@ -525,8 +518,8 @@ describe("adapter-hosted control-plane MCP server", () => {
       "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES (?, 'Audit App', '', 'active', 1, 1)",
     ).bind(appId).run();
     await db.prepare(
-      "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES (?, ?, ?, 1, ?)",
-    ).bind(appId, actor.authenticatedIdentity.issuer, actor.authenticatedIdentity.subject, actor.account.accountId).run();
+      "INSERT INTO cas_app_members (app_id, account_id, joined_at) VALUES (?, ?, 1)",
+    ).bind(appId, actor.account.accountId).run();
     const requests: URL[] = [];
     const auditReader = {
       fetch: async (input: RequestInfo | URL) => {

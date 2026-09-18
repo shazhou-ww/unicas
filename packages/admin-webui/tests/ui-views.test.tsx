@@ -11,7 +11,7 @@ import {
 } from "../src/ui/index.js";
 import { PlatformInvitationAcceptanceView } from "../src/ui/views/platform-invitation-acceptance.js";
 import { PlatformInvitationsView } from "../src/ui/views/platform/invitations.js";
-import { PlatformPrincipalsView } from "../src/ui/views/platform/principals.js";
+import { PeopleView } from "../src/ui/views/people.js";
 import { PlatformAuditView } from "../src/ui/views/platform/audit.js";
 import { toast } from "sonner";
 
@@ -79,13 +79,12 @@ describe("PlatformInvitationsView", () => {
       status: "pending",
       expiresAt: 4102444800000,
       createdAt: 1,
-      createdBy: { issuer: "https://accounts.example", subject: "admin" },
+      createdByAccountId: ACCOUNT_ID,
       revision: 1,
     };
     fetchMock.mockImplementation(async (input, init) => {
       if (init?.method === "POST") return json({ invitationId: invitation.invitationId, acceptUrl: "https://console.example/admin/platform-invitations/secret-token", expiresAt: invitation.expiresAt }, 201);
       if (init?.method === "DELETE") return new Response(null, { status: 204 });
-      if (String(input).endsWith("access-summary")) return json({ activePrincipalCount: 1, platformAdminCount: 1, appCreatorCount: 0, blockedPrincipalCount: 0, generatedAt: 1 });
       return json({ items: [{ kind: "invitation", invitation }], nextCursor: null });
     });
     const user = userEvent.setup();
@@ -111,7 +110,7 @@ describe("PlatformInvitationsView", () => {
   });
 });
 
-describe("PlatformPrincipalsView", () => {
+describe("Platform Accounts PeopleView", () => {
   test("uses cursor pagination and renders App memberships in Account detail", async () => {
     const account = {
       ...accountSummary("Developer", "developer@example.com"),
@@ -126,9 +125,6 @@ describe("PlatformPrincipalsView", () => {
     let page = 0;
     fetchMock.mockImplementation(async input => {
       const path = String(input);
-      if (path === "/admin/platform/access-summary") {
-        return json({ activePrincipalCount: 1, platformAdminCount: 1, appCreatorCount: 1, blockedPrincipalCount: 0, generatedAt: 1 });
-      }
       if (path.startsWith("/admin/platform/people?")) {
         page += 1;
         return page === 1
@@ -141,7 +137,7 @@ describe("PlatformPrincipalsView", () => {
       return new Response(null, { status: 404 });
     });
     const user = userEvent.setup();
-    render(<PlatformPrincipalsView />);
+    render(<PeopleView scope={{ platform: true }} />);
 
     const openAccount = await screen.findByRole("button", { name: "Open Account details for Developer" });
     openAccount.focus();
@@ -170,14 +166,13 @@ describe("PlatformPrincipalsView", () => {
     };
     fetchMock.mockImplementation(async (input, init) => {
       const path = String(input);
-      if (path === "/admin/platform/access-summary") return json({ activePrincipalCount: 1, platformAdminCount: 1, appCreatorCount: 1, blockedPrincipalCount: 0, generatedAt: 1 });
       if (path.startsWith("/admin/platform/people?")) return json({ items: [{ kind: "account", account }], nextCursor: null });
       if (path === `/admin/platform/accounts/${ACCOUNT_ID}` && !init?.method) return json(account);
       if (path === `/admin/platform/accounts/${ACCOUNT_ID}/authorities/apps.create` && init?.method === "DELETE") return new Response(null, { status: 204 });
       return new Response(null, { status: 404 });
     });
     const user = userEvent.setup();
-    render(<PlatformPrincipalsView />);
+    render(<PeopleView scope={{ platform: true }} />);
 
     await user.click(await screen.findByRole("button", { name: "Open Account details for Developer" }));
     await user.click(await screen.findByLabelText("apps.create"));

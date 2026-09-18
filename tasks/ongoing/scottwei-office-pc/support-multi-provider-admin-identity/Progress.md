@@ -1,6 +1,6 @@
 # Progress
 
-Updated: 2026-09-17
+Updated: 2026-09-18
 
 ## Checklist
 
@@ -23,6 +23,40 @@ repository task-reference updates are published by this dedicated ownership
 milestone. The user also reaffirmed that UniCAS remains in internal development:
 all existing data is disposable test data, so the target is fresh current-model
 initialization with no data migration or forward-compatibility behavior.
+
+The Account-only physical cleanup checkpoint is validated and ready to publish. The legacy
+Principal control services, D1 repository, Stack v1 administrator contract,
+client methods, OpenAPI document, route helpers, Playground persistence, email
+allowlist fallback, compatibility schema upgrades, and identity-keyed App
+membership columns are deleted. Platform invitation creation, listing,
+revocation, and acceptance now use stable Account actors and exact active
+ExternalIdentity audit evidence. Fresh control schema initialization creates
+only current Account/App tables; it performs no rename, synthesis, backfill, or
+compatibility read. Local bootstrap and the explicit smoke-reset plan use the
+same current schema. No remote database reset was selected or executed.
+
+Validation for this checkpoint:
+
+- full workspace typecheck: 13 packages passed;
+- full workspace package tests: 13 packages passed;
+- administrator protocol: 60 tests passed;
+- administrator client: 13 tests passed;
+- administrator WebUI: 70 passed, 7 skipped;
+- administrator CLI and stdio MCP: 49 tests passed;
+- Cloudflare full suite: 261 tests passed;
+- focused BFF: 48 tests passed;
+- real-D1 Account repository: 16 tests passed;
+- real-D1 platform invitations: 1 test passed;
+- remote/stdio MCP integration: 9 tests passed;
+- fresh control schema: 5 tests passed;
+- deployment/reset plan: 26 tests passed;
+- repository policy/docs/boundaries/OpenAPI: 113 tests passed;
+- clean sequential production builds passed for administrator protocol, client,
+  WebUI, cloud-neutral service, and Cloudflare adapter.
+
+Next: publish this checkpoint, then perform documented manual acceptance before
+requesting delivery approval. A development database reset remains a separate
+explicit operation requiring a selected binding.
 
 The third no-legacy cleanup checkpoint is published. `GET /admin/apps` now runs
 directly through `AccountService` and `D1AccountRepository`, pages Apps by stable
@@ -403,12 +437,10 @@ as `fa54fc2`. The repoledger upgrade to pinned version 0.4.1 is committed as
 neither local commit has been pushed. `repoledger doctor` now passes, and
 `repoledger status` confirms this task remains owned by `scottwei-office-pc`.
 
-Challenge browser and focused regression checks are now complete locally.
-The [local browser fixture](./ChallengeFixture.mts) exercises the real BFF,
-App compatibility adapter, D1 challenge and invitation transactions with a fake
-Microsoft provider and fake email sender. It listens only on loopback and sends
-no external email. Run it with `pnpm --filter @unicas/admin-protocol exec tsx
---conditions=development ../../tasks/ongoing/scottwei-office-pc/support-multi-provider-admin-identity/ChallengeFixture.mts`.
+Challenge browser and focused regression checks were completed during the
+provider implementation slice. The temporary migration-era browser fixture was
+removed with the no-legacy cleanup; current behavior is covered by the BFF and
+real-D1 invitation suites.
 
 The thirteenth implementation slice adds configured Google, Microsoft, and
 GitHub MCP login through the existing provider adapters. New grants bind Account,

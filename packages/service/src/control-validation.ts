@@ -45,6 +45,11 @@ export function stackOAuthResource(publicOrigin: string, stackId: string): strin
   return `${url.origin}/stacks/${encodeURIComponent(stackId)}`;
 }
 
+export function appOAuthResource(publicOrigin: string, appId: string): string {
+  const url = new URL(stackOAuthResource(publicOrigin, appId));
+  return `${url.origin}/v2/apps/${encodeURIComponent(appId)}`;
+}
+
 /** Email is display metadata; used only for invitation display constraints. */
 export function validateEmailConstraint(value: unknown): string | null {
   if (value === undefined || value === null) return null;

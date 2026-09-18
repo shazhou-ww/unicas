@@ -4,7 +4,7 @@ import type { AppPerson, PlatformAccountDetail, PlatformPerson, PeoplePage } fro
 import { api, ifMatch } from "../api.js";
 import { formatErrorSafe } from "./view-helpers.js";
 import { CopyBubble } from "../components/copy-bubble.js";
-import { PlatformAccountEditor } from "./platform/principal-editor.js";
+import { PlatformAccountEditor } from "./platform/account-editor.js";
 import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";
 import { Label } from "@/components/ui/label.js";
@@ -142,7 +142,7 @@ function PeoplePanel({ scope, initialFilter = "current" }: Props) {
 
   return <section ref={regionRef} tabIndex={-1} className="space-y-4" aria-label={platform ? "Platform people" : "App members"}>
     <form className="flex flex-wrap items-center gap-2" onSubmit={event => { event.preventDefault(); setFilters({ ...draft, query: draft.query.trim() }); }}>
-      <Input className="min-w-0 flex-[1_1_14rem]" aria-label="Search people" placeholder={`Search name, email or ${platform ? "Principal" : "Account"}`} value={draft.query} onChange={event => setDraft({ ...draft, query: event.target.value })} />
+      <Input className="min-w-0 flex-[1_1_14rem]" aria-label="Search people" placeholder="Search name, email or Account" value={draft.query} onChange={event => setDraft({ ...draft, query: event.target.value })} />
       <Select value={draft.filter} onValueChange={filter => setDraft({ ...draft, filter })}>
         <SelectTrigger className="w-44" aria-label="People filter"><SelectValue /></SelectTrigger>
         <SelectContent><SelectItem value="current">Current</SelectItem><SelectItem value={platform ? "accounts" : "members"}>{platform ? "Accounts" : "Members"}</SelectItem><SelectItem value="pending">Pending invitations</SelectItem><SelectItem value="history">Invitation history</SelectItem></SelectContent>

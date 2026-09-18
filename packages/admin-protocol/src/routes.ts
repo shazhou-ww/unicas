@@ -1,40 +1,3 @@
-export type CasAdminRoute =
-  | { operation: "me" }
-  | { operation: "listStacks" }
-  | { operation: "createStack" }
-  | { operation: "getStack"; stackId: string }
-  | { operation: "patchStack"; stackId: string }
-  | { operation: "listMembers"; stackId: string }
-  | { operation: "deleteMember"; stackId: string }
-  | { operation: "createMemberInvitation"; stackId: string }
-  | { operation: "acceptMemberInvitation"; token: string }
-  | { operation: "getOAuthIssuer"; stackId: string }
-  | { operation: "getManagedIssuer"; stackId: string }
-  | { operation: "patchManagedIssuer"; stackId: string }
-  | { operation: "mintManagedCapability"; stackId: string }
-  | { operation: "inspectOAuthIssuer"; stackId: string }
-  | { operation: "activateOAuthIssuer"; stackId: string }
-  | { operation: "listRefDomains"; stackId: string }
-  | { operation: "listControlAuditEvents"; stackId: string }
-  | { operation: "listRootDomainRefs"; stackId: string; refDomain: string }
-  | { operation: "listRootDomainEvents"; stackId: string; refDomain: string }
-  | { operation: "accessSummary" }
-  | { operation: "listPlatformPrincipals" }
-  | { operation: "getPlatformPrincipal"; principalRef: string }
-  | { operation: "getPlatformAccess"; principalRef: string }
-  | { operation: "patchPlatformAccess"; principalRef: string }
-  | { operation: "listPlatformAccounts" }
-  | { operation: "getPlatformAccount"; accountId: string }
-  | { operation: "grantPlatformAccountAuthority"; accountId: string; authority: "platform.admin" | "apps.create" }
-  | { operation: "revokePlatformAccountAuthority"; accountId: string; authority: "platform.admin" | "apps.create" }
-  | { operation: "blockPlatformAccount"; accountId: string }
-  | { operation: "restorePlatformAccount"; accountId: string }
-  | { operation: "listPlatformInvitations" }
-  | { operation: "createPlatformInvitation" }
-  | { operation: "revokePlatformInvitation"; invitationId: string }
-  | { operation: "acceptPlatformInvitation"; token: string }
-  | { operation: "listPlatformAuditEvents" };
-
 export type AppAdminRoute =
   | { operation: "listPeople"; appId: string }
   | { operation: "listPlatformPeople" }
@@ -62,11 +25,6 @@ export type AppAdminRoute =
   | { operation: "listControlAuditEvents"; appId: string }
   | { operation: "listRootDomainRefs"; appId: string; refDomain: string }
   | { operation: "listRootDomainEvents"; appId: string; refDomain: string }
-  | { operation: "accessSummary" }
-  | { operation: "listPlatformPrincipals" }
-  | { operation: "getPlatformPrincipal"; principalRef: string }
-  | { operation: "getPlatformAccess"; principalRef: string }
-  | { operation: "patchPlatformAccess"; principalRef: string }
   | { operation: "listPlatformAccounts" }
   | { operation: "getPlatformAccount"; accountId: string }
   | { operation: "grantPlatformAccountAuthority"; accountId: string; authority: "platform.admin" | "apps.create" }
@@ -90,54 +48,6 @@ function decodeSegment(value: string): string | null {
     return null;
   }
 }
-
-export const casAdminRoutes = {
-  me: () => "/admin/me",
-  stacks: () => "/admin/stacks",
-  stack: ({ stackId }: { stackId: string }) =>
-    `/admin/stacks/${segment(stackId)}`,
-  members: ({ stackId }: { stackId: string }) =>
-    `/admin/stacks/${segment(stackId)}/members`,
-  memberInvitations: ({ stackId }: { stackId: string }) =>
-    `/admin/stacks/${segment(stackId)}/member-invitations`,
-  acceptMemberInvitation: ({ token }: { token: string }) =>
-    `/admin/member-invitations/${segment(token)}/accept`,
-  oauthIssuer: ({ stackId }: { stackId: string }) =>
-    `/admin/stacks/${segment(stackId)}/oauth-issuer`,
-  managedCapability: ({ stackId }: { stackId: string }) =>
-    `/admin/stacks/${segment(stackId)}/managed-capabilities`,
-  managedIssuer: ({ stackId }: { stackId: string }) =>
-    `/admin/stacks/${segment(stackId)}/managed-issuer`,
-  oauthIssuerInspections: ({ stackId }: { stackId: string }) =>
-    `/admin/stacks/${segment(stackId)}/oauth-issuer/inspections`,
-  refDomains: ({ stackId }: { stackId: string }) =>
-    `/admin/stacks/${segment(stackId)}/ref-domains`,
-  controlAuditEvents: ({ stackId }: { stackId: string }) =>
-    `/admin/stacks/${segment(stackId)}/audit-events`,
-  rootDomainRefs: ({ stackId, refDomain }: { stackId: string; refDomain: string }) =>
-    `/admin/stacks/${segment(stackId)}/root-ref-domains/${segment(refDomain)}/refs`,
-  rootDomainEvents: ({ stackId, refDomain }: { stackId: string; refDomain: string }) =>
-    `/admin/stacks/${segment(stackId)}/root-ref-domains/${segment(refDomain)}/events`,
-  accessSummary: () => "/admin/platform/access-summary",
-  platformPrincipals: () => "/admin/platform/principals",
-  platformPrincipal: ({ principalRef }: { principalRef: string }) =>
-    `/admin/platform/principals/${segment(principalRef)}`,
-  platformPrincipalAccess: ({ principalRef }: { principalRef: string }) =>
-    `/admin/platform/principals/${segment(principalRef)}/access`,
-  platformAccounts: () => "/admin/platform/accounts",
-  platformAccount: ({ accountId }: { accountId: string }) =>
-    `/admin/platform/accounts/${segment(accountId)}`,
-  platformAccountAuthority: ({ accountId, authority }: { accountId: string; authority: string }) =>
-    `/admin/platform/accounts/${segment(accountId)}/authorities/${segment(authority)}`,
-  platformAccountBlock: ({ accountId }: { accountId: string }) =>
-    `/admin/platform/accounts/${segment(accountId)}/block`,
-  platformInvitations: () => "/admin/platform/invitations",
-  platformInvitation: ({ invitationId }: { invitationId: string }) =>
-    `/admin/platform/invitations/${segment(invitationId)}`,
-  acceptPlatformInvitation: ({ token }: { token: string }) =>
-    `/admin/platform-invitations/${segment(token)}/accept`,
-  platformAuditEvents: () => "/admin/platform/audit-events",
-} as const;
 
 export const appAdminRoutes = {
   people: ({ appId }: { appId: string }) => `/admin/apps/${segment(appId)}/people`,
@@ -173,12 +83,6 @@ export const appAdminRoutes = {
     `/admin/apps/${segment(appId)}/root-ref-domains/${segment(refDomain)}/refs`,
   rootDomainEvents: ({ appId, refDomain }: { appId: string; refDomain: string }) =>
     `/admin/apps/${segment(appId)}/root-ref-domains/${segment(refDomain)}/events`,
-  accessSummary: () => "/admin/platform/access-summary",
-  platformPrincipals: () => "/admin/platform/principals",
-  platformPrincipal: ({ principalRef }: { principalRef: string }) =>
-    `/admin/platform/principals/${segment(principalRef)}`,
-  platformPrincipalAccess: ({ principalRef }: { principalRef: string }) =>
-    `/admin/platform/principals/${segment(principalRef)}/access`,
   platformAccounts: () => "/admin/platform/accounts",
   platformAccount: ({ accountId }: { accountId: string }) =>
     `/admin/platform/accounts/${segment(accountId)}`,
@@ -193,123 +97,6 @@ export const appAdminRoutes = {
     `/admin/platform-invitations/${segment(token)}/accept`,
   platformAuditEvents: () => "/admin/platform/audit-events",
 } as const;
-
-/**
- * Matches only `/admin/...` control-plane resources.
- * Never returns a tenant data-plane operation.
- */
-export function matchCasAdminRoute(
-  method: string,
-  pathname: string,
-): CasAdminRoute | null {
-  const parts = pathname.split("/").filter(Boolean);
-  if (parts[0] !== "admin") return null;
-
-  if (parts[1] === "platform") {
-    const platformRoute = matchPlatformAdminRoute(method, pathname);
-    return platformRoute as CasAdminRoute | null;
-  }
-
-  if (
-    parts.length === 4
-    && parts[1] === "platform-invitations"
-    && parts[3] === "accept"
-    && method === "POST"
-  ) {
-    const token = decodeSegment(parts[2]!);
-    return token === null ? null : { operation: "acceptPlatformInvitation", token };
-  }
-
-  if (parts.length === 2 && parts[1] === "me" && method === "GET") {
-    return { operation: "me" };
-  }
-
-  if (parts.length === 2 && parts[1] === "stacks") {
-    if (method === "GET") return { operation: "listStacks" };
-    if (method === "POST") return { operation: "createStack" };
-    return null;
-  }
-
-  if (
-    parts.length === 4
-    && parts[1] === "member-invitations"
-    && parts[3] === "accept"
-    && method === "POST"
-  ) {
-    const token = decodeSegment(parts[2]!);
-    return token === null ? null : { operation: "acceptMemberInvitation", token };
-  }
-
-  if (parts[1] !== "stacks" || !parts[2]) return null;
-  const stackId = decodeSegment(parts[2]);
-  if (stackId === null) return null;
-
-  if (parts.length === 3) {
-    if (method === "GET") return { operation: "getStack", stackId };
-    if (method === "PATCH") return { operation: "patchStack", stackId };
-    return null;
-  }
-
-  if (parts.length === 4 && parts[3] === "members") {
-    if (method === "GET") return { operation: "listMembers", stackId };
-    if (method === "DELETE") return { operation: "deleteMember", stackId };
-    return null;
-  }
-
-  if (parts.length === 4 && parts[3] === "member-invitations" && method === "POST") {
-    return { operation: "createMemberInvitation", stackId };
-  }
-
-  if (parts.length === 4 && parts[3] === "oauth-issuer") {
-    if (method === "GET") return { operation: "getOAuthIssuer", stackId };
-    if (method === "PUT") return { operation: "activateOAuthIssuer", stackId };
-    return null;
-  }
-
-  if (parts.length === 4 && parts[3] === "managed-capabilities" && method === "POST") {
-    return { operation: "mintManagedCapability", stackId };
-  }
-
-  if (parts.length === 4 && parts[3] === "managed-issuer") {
-    if (method === "GET") return { operation: "getManagedIssuer", stackId };
-    if (method === "PATCH") return { operation: "patchManagedIssuer", stackId };
-    return null;
-  }
-
-  if (
-    parts.length === 5
-    && parts[3] === "oauth-issuer"
-    && parts[4] === "inspections"
-    && method === "POST"
-  ) {
-    return { operation: "inspectOAuthIssuer", stackId };
-  }
-
-  if (parts.length === 4 && parts[3] === "ref-domains") {
-    return method === "GET" ? { operation: "listRefDomains", stackId } : null;
-  }
-
-  if (parts.length === 4 && parts[3] === "audit-events" && method === "GET") {
-    return { operation: "listControlAuditEvents", stackId };
-  }
-
-  if (
-    parts.length === 6
-    && parts[3] === "root-ref-domains"
-    && parts[4]
-    && (parts[5] === "refs" || parts[5] === "events")
-    && method === "GET"
-  ) {
-    const refDomain = decodeSegment(parts[4]);
-    if (refDomain === null) return null;
-    if (parts[5] === "refs") {
-      return { operation: "listRootDomainRefs", stackId, refDomain };
-    }
-    return { operation: "listRootDomainEvents", stackId, refDomain };
-  }
-
-  return null;
-}
 
 export function matchAppAdminRoute(
   method: string,
@@ -449,10 +236,6 @@ export function matchPlatformAdminRoute(
 
   if (parts.length === 3 && parts[2] === "people" && method === "GET") return { operation: "listPlatformPeople" };
 
-  if (parts.length === 3 && parts[2] === "access-summary" && method === "GET") {
-    return { operation: "accessSummary" };
-  }
-
   if (parts.length === 3 && parts[2] === "accounts" && method === "GET") {
     return { operation: "listPlatformAccounts" };
   }
@@ -479,11 +262,6 @@ export function matchPlatformAdminRoute(
     return null;
   }
 
-  if (parts.length === 3 && parts[2] === "principals") {
-    if (method === "GET") return { operation: "listPlatformPrincipals" };
-    return null;
-  }
-
   if (parts.length === 3 && parts[2] === "invitations") {
     if (method === "GET") return { operation: "listPlatformInvitations" };
     if (method === "POST") return { operation: "createPlatformInvitation" };
@@ -497,25 +275,6 @@ export function matchPlatformAdminRoute(
   if (parts.length === 4 && parts[2] === "invitations" && method === "DELETE") {
     const invitationId = decodeSegment(parts[3]!);
     return invitationId === null ? null : { operation: "revokePlatformInvitation", invitationId };
-  }
-
-  if (parts.length === 4 && parts[2] === "principals" && parts[3]) {
-    const principalRef = decodeSegment(parts[3]!);
-    if (principalRef === null) return null;
-    if (method === "GET") return { operation: "getPlatformPrincipal", principalRef };
-    return null;
-  }
-
-  if (
-    parts.length === 5
-    && parts[2] === "principals"
-    && parts[3]
-    && parts[4] === "access"
-  ) {
-    const principalRef = decodeSegment(parts[3]!);
-    if (principalRef === null) return null;
-    if (method === "GET") return { operation: "getPlatformAccess", principalRef };
-    if (method === "PATCH") return { operation: "patchPlatformAccess", principalRef };
   }
 
   return null;
