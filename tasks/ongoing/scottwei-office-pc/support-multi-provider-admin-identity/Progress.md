@@ -9,7 +9,7 @@ Updated: 2026-09-18
 - [x] Complete each applicable interface, business and data model, and
       architecture approval before the affected implementation.
 - [x] Commit and publish substantive work at meaningful checkpoints.
-- [ ] Publish implementation completion while the task is still ongoing.
+- [x] Publish implementation completion while the task is still ongoing.
 - [ ] Complete documented manual user acceptance, if required.
 - [ ] Obtain and publish delivery approval.
 - [ ] Archive and publish the task as its final action.
@@ -54,9 +54,9 @@ Validation for this checkpoint:
 - clean sequential production builds passed for administrator protocol, client,
   WebUI, cloud-neutral service, and Cloudflare adapter.
 
-Next: publish this checkpoint, then perform documented manual acceptance before
-requesting delivery approval. A development database reset remains a separate
-explicit operation requiring a selected binding.
+Next: perform documented manual acceptance before requesting delivery approval.
+A development database reset remains a separate explicit operation requiring a
+selected binding.
 
 The third no-legacy cleanup checkpoint is published. `GET /admin/apps` now runs
 directly through `AccountService` and `D1AccountRepository`, pages Apps by stable
@@ -603,7 +603,7 @@ cutover markers. Then complete the current-model and real-provider/email tests.
 | Ownership transfer to `scottwei-office-pc` | `origin/main` commit `8a58b31971d3d6b4ea47eca8bc6dbf1c5eac2dc2`, coordinated from `copilot-unicas-standalone` to `scottwei-office-pc`. | Published |
 | Ownership transfer to `scottwei-home-pc` | User-authorized cross-machine continuation from `scottwei-office-pc`, published by this dedicated ownership-transfer commit. | Published |
 | Ownership transfer to `scottwei-office-pc` (2026-09-18) | User-authorized continuation from `scottwei-home-pc`, published by this dedicated ownership-transfer commit. | Published |
-| Implementation complete | Pending. | Pending |
+| Implementation complete | `origin/main` commit `ac8f4628f3b50c316ddc0ee79797430f909bbd90` removes legacy administrator compatibility and passes the complete automated validation matrix. | Published |
 | Archive | Pending. | Pending |
 
 ## Validation
@@ -997,11 +997,10 @@ cutover markers. Then complete the current-model and real-provider/email tests.
   and editor diagnostics were clean.
 - Legacy Stack route retirement passed 8 cloud-neutral actor tests and 15
   Worker routing tests. Both affected package typechecks passed.
-- This no-legacy cleanup checkpoint and the production OAuth provisioning guide
-  are published on the shared primary branch. The next implementation action is
-  to replace the internal Principal-keyed App control-plane repository and then
-  remove its compatibility adapter and tables; split Console and MCP GitHub
-  OAuth credentials before real-provider enablement.
+- The Account-only implementation and production OAuth provisioning guide are
+  published on the shared primary branch. No legacy administrator repository,
+  compatibility adapter, Principal table, Stack v1 contract, or Playground
+  persistence remains in current source or generated package artifacts.
 
 ## Blockers
 
@@ -1015,10 +1014,12 @@ The architecture decision is resolved by [RolloutReview](./RolloutReview.md).
 The earlier unrelated ledger publication blocker has been resolved and verified
 by successful repository-wide `repoledger doctor` and `pnpm check:tasks` runs.
 
-Production provider registration, sender-domain onboarding, and real email
-delivery remain unverified. No production deployment was performed. The task
-remains ongoing until the remaining migration/rollout work and acceptance pass.
+Production provider registration, sender-domain onboarding, real email delivery,
+and cross-provider manual acceptance remain unverified. No production deployment
+or remote D1 reset was performed. The task remains ongoing until manual evidence
+and requesting-user Delivery acceptance are published.
 
 ## Outcome
 
-Pending.
+Implementation complete and published; awaiting manual acceptance and Delivery
+approval.
