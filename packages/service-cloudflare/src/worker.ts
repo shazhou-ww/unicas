@@ -596,7 +596,6 @@ async function fetchMcp(
   await ensureControlSchema(env);
   const worker = createControlPlaneMcpWorker(
     mcpConfigFromEnv(env),
-    () => controlPlaneFor(env),
     env.CAS_CONTROL_DB,
     managedIssuerFor(env),
     new CloudflareOAuthDiscoveryPort({

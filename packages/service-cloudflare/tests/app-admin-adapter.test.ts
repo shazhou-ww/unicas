@@ -116,17 +116,11 @@ describe("App admin physical compatibility adapter", () => {
     });
   });
 
-  test("maps shared invitation acceptance to only the target App identifier", async () => {
+  test("forwards Account-native invitation acceptance unchanged", async () => {
     const { response, legacyHandler } = await invoke(
       { operation: "acceptMemberInvitation", token: "invite-1" },
       "/admin/member-invitations/invite-1/accept",
-      {
-        stackId: "app-1",
-        identityIssuer: "https://accounts.example",
-        subject: "alice",
-        displayName: "Alice",
-        emailForDisplay: "alice@example.com",
-      },
+      { appId: "app-1" },
     );
     expect(legacyHandler).toHaveBeenCalledWith(expect.objectContaining({
       url: "https://console.unicas.work/admin/member-invitations/invite-1/accept",

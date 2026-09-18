@@ -6,8 +6,6 @@ import {
   type PlatformAccessService,
   type PlatformAuditService,
   type PlatformInvitationService,
-  type ControlPlaneCallContext,
-  type ControlPlaneOperations,
   type VerifiedEmailEvidence,
 } from "@unicas/service";
 import {
@@ -56,7 +54,6 @@ export interface ControlPlaneMcpServerOptions {
 }
 
 export function createControlPlaneMcpServer(
-  controlPlane: ControlPlaneOperations,
   options: ControlPlaneMcpServerOptions = {},
 ): McpServer {
   const server = new McpServer({
@@ -657,30 +654,6 @@ function isGrantProps(value: Record<string, unknown> | undefined): value is Cont
     && typeof value.oauthClientId === "string"
     && typeof value.oauthClientHandle === "string"
     && value.oauthClientHandle.length > 0;
-}
-
-function serviceContext(grant: ControlPlaneMcpGrantProps, toolName: string): ControlPlaneCallContext {
-  return {
-    account: grant.accountId && grant.externalIdentityId && grant.credentialVersion !== undefined
-      ? { accountId: grant.accountId, externalIdentityId: grant.externalIdentityId, credentialVersion: grant.credentialVersion }
-      : undefined,
-    identity: {
-      identityIssuer: grant.identityIssuer,
-      subject: grant.subject,
-    },
-    profile: {
-      displayName: grant.displayName,
-      emailForDisplay: grant.emailForDisplay,
-    },
-    verifiedEmailEvidence: grant.verifiedEmailEvidence,
-    requestId: crypto.randomUUID(),
-    traceId: crypto.randomUUID(),
-    caller: {
-      channel: "mcp",
-      oauthClientHandle: grant.oauthClientHandle,
-      toolName,
-    },
-  };
 }
 
 function toolResult(value: object) {

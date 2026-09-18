@@ -1,47 +1,14 @@
-import { formatCasAdminETag, type AppAdminRoute } from "@unicas/admin-protocol";
+import type { AppAdminRoute } from "@unicas/admin-protocol";
 
 type AdminHandler = (request: Request) => Promise<Response>;
 type JsonRecord = Record<string, unknown>;
 
 export async function handleAppAdminCompatibilityRequest(
   request: Request,
-  route: AppAdminRoute,
+  _route: AppAdminRoute,
   legacyHandler: AdminHandler,
 ): Promise<Response> {
-  const pathname = new URL(request.url).pathname;
-  if (route.operation === "me") return legacyHandler(request);
-  if (pathname.startsWith("/admin/platform/") || pathname.startsWith("/admin/platform-invitations/")) {
-    return legacyHandler(request);
-  }
-  if (route.operation === "listApps" || route.operation === "createApp" || route.operation === "getApp") {
-    return legacyHandler(request);
-  }
-  if (route.operation === "listMembers" || route.operation === "deleteMember") {
-    return legacyHandler(request);
-  }
-  if (route.operation === "listControlAuditEvents") return legacyHandler(request);
-  if (route.operation === "listRefDomains" || route.operation === "listRootDomainRefs"
-    || route.operation === "listRootDomainEvents") return legacyHandler(request);
-  if (route.operation === "listPeople" || route.operation === "mintManagedCapability" || route.operation === "patchApp"
-    || route.operation === "getOAuthIssuer" || route.operation === "getManagedIssuer" || route.operation === "patchManagedIssuer"
-    || route.operation === "createMemberInvitation" || route.operation === "listMemberInvitations" || route.operation === "revokeMemberInvitation"
-    || route.operation === "inspectOAuthIssuer" || route.operation === "activateOAuthIssuer") {
-    return legacyHandler(request);
-  }
-
-  const legacyResponse = await legacyHandler(rewriteRequest(request, route));
-  if (!legacyResponse.headers.get("Content-Type")?.includes("application/json")) {
-    return legacyResponse;
-  }
-  const body = await legacyResponse.json();
-  if (isRecord(body) && typeof body.error === "string") {
-    return copyJsonResponse(legacyResponse, transformAppAdminError(body));
-  }
-  return copyJsonResponse(
-    legacyResponse,
-    transformAppAdminResponse(route, body),
-    undefined,
-  );
+  return legacyHandler(request);
 }
 
 export function transformAppAdminError(value: JsonRecord): JsonRecord {
@@ -52,21 +19,6 @@ export function transformAppAdminError(value: JsonRecord): JsonRecord {
       ? { message: value.message.replace(/\bstack\b/gi, "App") }
       : {}),
   };
-}
-
-function rewriteRequest(request: Request, route: AppAdminRoute): Request {
-  const url = new URL(request.url);
-  if (url.pathname.startsWith("/admin/apps")) {
-    url.pathname = url.pathname.replace(/^\/admin\/apps/, "/admin/stacks");
-  }
-  if (route.operation === "deleteMember") {
-    const issuer = url.searchParams.get("issuer");
-    if (issuer !== null) {
-      url.searchParams.delete("issuer");
-      url.searchParams.set("identityIssuer", issuer);
-    }
-  }
-  return new Request(url, request);
 }
 
 export function transformAppAdminResponse(route: AppAdminRoute, body: unknown): unknown {

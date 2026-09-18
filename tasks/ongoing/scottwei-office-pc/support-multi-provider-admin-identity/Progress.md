@@ -132,7 +132,7 @@ an empty primary verified contact. It writes no operator identity or platform
 Principal row. Browser acceptance retains token-bound sessions and rotates to a
 full session; every legacy invitation operation fails if called.
 
-The fifteenth no-legacy cleanup checkpoint is ready to publish. Remote MCP App
+The fifteenth no-legacy cleanup checkpoint is published as `e64d48d`. Remote MCP App
 list, get, create, and update now run through `AccountService`, stable Account
 membership, `apps.create`, Account-scoped idempotency, current ETags, and exact
 Account/ExternalIdentity audit attribution. Real-D1 tests make the legacy Stack
@@ -140,9 +140,18 @@ list/get/create and App patch methods fail if called. All current App HTTP, MCP,
 CLI/stdio-client, invitation, issuer, membership, capability, People, and audit
 paths are now Account-native.
 
-Next: remove now-unused App-specific legacy service bridges and compatibility
-response mappings, then replace the remaining legacy Principal repository and
-fresh schema tables/columns without data migration.
+The sixteenth no-legacy cleanup checkpoint is ready to publish. Remote MCP no
+longer receives or constructs the legacy `ControlPlaneOperations` service; all
+tools depend only on Account, platform, invitation, and audit ports. The App
+adapter is now transparent and performs no App-to-Stack request rewrite or
+response compatibility conversion. Authenticated browser/CLI session login and
+logout audit now resolves the stable Account and exact ExternalIdentity through
+`AccountService`; unauthenticated callback failures emit only redacted telemetry
+instead of durable pseudo-Principal rows.
+
+Next: reject and remove the legacy `/admin/stacks` HTTP contracts and dispatcher,
+then delete the Principal repository and fresh-schema tables/columns without
+data migration.
 
 On 2026-09-17, the requesting user directed this worktree to claim and continue
 the task. `repoledger doctor` resolved the worktree identity as
@@ -943,6 +952,10 @@ cutover markers. Then complete the current-model and real-provider/email tests.
   20-second allowance after correcting the test's missing `apps.create`
   authority. Both affected package typechecks passed and editor diagnostics
   were clean.
+- Compatibility dependency cleanup passed 26 cloud-neutral Account tests, 63
+  BFF tests, 16 transparent-adapter tests, 16 D1 Account repository tests, and
+  the complete 9-test remote MCP suite. Both affected package typechecks passed
+  and editor diagnostics were clean.
 - This no-legacy cleanup checkpoint and the production OAuth provisioning guide
   are published on the shared primary branch. The next implementation action is
   to replace the internal Principal-keyed App control-plane repository and then

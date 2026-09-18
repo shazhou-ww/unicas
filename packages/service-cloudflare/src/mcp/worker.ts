@@ -8,7 +8,6 @@ import {
   PlatformAuditService,
   PlatformInvitationService,
   type AccountManagedCapabilityIssuer,
-  type ControlPlaneOperations,
   type OAuthDiscoveryPort,
 } from "@unicas/service";
 import { D1AccountRepository } from "../account-repository.js";
@@ -32,10 +31,6 @@ export interface Env extends ControlPlaneMcpEnvConfig {
   CAS_CONTROL_DB: D1Database;
   CAS_TENANT_AUDIT_READER?: Fetcher;
 }
-
-export type ControlPlaneOperationsFactory = (
-  env: Env,
-) => ControlPlaneOperations;
 
 type ExecutionContextWithProps = ExecutionContext & {
   props?: ControlPlaneMcpGrantProps;
@@ -71,7 +66,6 @@ function attachVerifiedOAuthContext(
 
 export function createControlPlaneMcpWorker(
   config: ReturnType<typeof mcpConfigFromEnv>,
-  operationsForEnv: ControlPlaneOperationsFactory,
   database: D1Database,
   managedOAuthIssuer?: AccountManagedCapabilityIssuer,
   oauthDiscovery?: OAuthDiscoveryPort,
@@ -109,7 +103,7 @@ export function createControlPlaneMcpWorker(
       attachVerifiedOAuthContext(request, ctx, props, requestConfig.resource);
       const handler = createMcpHandler(
         () =>
-          createControlPlaneMcpServer(operationsForEnv(env), {
+          createControlPlaneMcpServer({
             auditReader: env.CAS_TENANT_AUDIT_READER,
             auditReaderKey: env.CAS_AUDIT_READER_KEY,
             publicOrigin: requestConfig.publicOrigin,

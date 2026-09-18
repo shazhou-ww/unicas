@@ -268,6 +268,16 @@ export interface AccountRepository {
     readonly toolName?: string;
     readonly now: number;
   }): Promise<"accepted" | "account-unavailable" | "invitation-unavailable">;
+  appendAccountSessionAudit(input: {
+    readonly accountId: AccountId;
+    readonly externalIdentityId: string;
+    readonly eventId: string;
+    readonly action: "session.login" | "session.logout";
+    readonly requestId?: string;
+    readonly traceId?: string;
+    readonly callerChannel?: string;
+    readonly now: number;
+  }): Promise<"recorded" | "account-unavailable">;
   getManagedOAuthIssuer(appId: AppId): Promise<ControlOAuthIssuerRecord | null>;
   commitPatchAccountManagedOAuthIssuer(input: {
     readonly actorAccountId: AccountId;
@@ -1091,6 +1101,30 @@ export class AccountService {
     if (result === "account-unavailable") throw new AccountServiceError("ACCOUNT_NOT_FOUND");
     if (result === "invitation-unavailable") throw new AccountServiceError("NOT_FOUND");
     return invitation.appId;
+  }
+
+  async recordSessionAudit(input: {
+    readonly accountId: AccountId;
+    readonly externalIdentityId: string;
+    readonly action: "session.login" | "session.logout";
+    readonly requestId?: string;
+    readonly traceId?: string;
+    readonly callerChannel?: string;
+  }): Promise<void> {
+    const account = await this.#resolveCanonicalAccount(input.accountId);
+    this.#requireUsableAccount(account);
+    await this.requireActiveIdentity(account.accountId, input.externalIdentityId);
+    const result = await this.repository.appendAccountSessionAudit({
+      accountId: account.accountId,
+      externalIdentityId: input.externalIdentityId,
+      eventId: generateEventId(),
+      action: input.action,
+      requestId: input.requestId,
+      traceId: input.traceId,
+      callerChannel: input.callerChannel,
+      now: this.now(),
+    });
+    if (result !== "recorded") throw new AccountServiceError("ACCOUNT_NOT_FOUND");
   }
 
   async revokeAppMemberInvitation(input: {

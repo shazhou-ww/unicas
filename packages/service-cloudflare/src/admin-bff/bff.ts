@@ -877,12 +877,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     const authenticatedId = generateSessionId();
     await persistSession(authenticatedId, authenticatedPayload, sessionTtlMs);
     if (previousSessionId) await sessionStore.delete(previousSessionId);
-    await controlPlane.recordSessionAudit(
-      serviceContext(authenticatedPayload, request),
-      "session.login",
-      `${authenticatedPayload.identityIssuer}:${authenticatedPayload.subject}`,
-      null,
-    );
+    await recordAccountSessionAudit(authenticatedPayload, request, "session.login");
     return authenticatedId;
   }
 
@@ -1177,12 +1172,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     if (sessionId) {
       const payload = await readSession(sessionId);
       if (payload) {
-        await controlPlane.recordSessionAudit(
-          serviceContext(payload, request),
-          "session.logout",
-          `${payload.identityIssuer}:${payload.subject}`,
-          null,
-        );
+        await recordAccountSessionAudit(payload, request, "session.logout");
       }
       await sessionStore.delete(sessionId);
     }
@@ -1599,12 +1589,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     };
     const sessionId = generateSessionId();
     await persistSession(sessionId, authenticatedPayload, sessionTtlMs);
-    await controlPlane.recordSessionAudit(
-      serviceContext(authenticatedPayload, request),
-      "session.login",
-      `${authenticatedPayload.identityIssuer}:${authenticatedPayload.subject}`,
-      null,
-    );
+    await recordAccountSessionAudit(authenticatedPayload, request, "session.login");
     return Response.json(
       {
         csrfToken: authenticatedPayload.csrfToken,
@@ -2769,25 +2754,24 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       caller: { channel: "admin-webui" },
     };
   }
+  async function recordAccountSessionAudit(
+    payload: AdminSessionPayload,
+    request: Request,
+    action: "session.login" | "session.logout",
+  ): Promise<void> {
+    if (!accountService || !payload.accountId || !payload.externalIdentityId) return;
+    await accountService.recordSessionAudit({
+      accountId: payload.accountId,
+      externalIdentityId: payload.externalIdentityId,
+      action,
+      requestId: request.headers.get("X-Request-Id") ?? generateRequestId(),
+      traceId: generateRequestId(),
+      callerChannel: "admin-webui",
+    });
+  }
 
   async function auditLoginFailure(state: string): Promise<void> {
-    try {
-      await controlPlane.recordSessionAudit(
-        {
-          identity: {
-            identityIssuer: config.oidcIssuer ?? "https://accounts.google.com",
-            subject: "unauthenticated",
-          },
-          requestId: generateRequestId(),
-          traceId: generateRequestId(),
-        },
-        "session.login_failed",
-        state.length > 0 ? state : "oidc-callback",
-        null,
-      );
-    } catch {
-      // Auditing must never break the login flow.
-    }
+    console.error(JSON.stringify({ event: "admin_oidc_login_failed", statePresent: state.length > 0 }));
   }
 
   function isEmailAllowed(email: string | null, emailVerified: boolean): boolean {

@@ -658,6 +658,31 @@ describe("D1 Account repository", () => {
     expect(await db.prepare("SELECT COUNT(*) AS count FROM cas_platform_principals").first()).toEqual({ count: 0 });
   });
 
+  test("records session audit with stable Account and exact ExternalIdentity", async () => {
+    const { db, service } = await fixture();
+    const actor = await service.createForExternalIdentity({
+      provider: "github",
+      issuer: "https://github.com",
+      subject: "session-owner",
+    });
+    await service.recordSessionAudit({
+      accountId: actor.account.accountId,
+      externalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      action: "session.login",
+      callerChannel: "admin-webui",
+    });
+    expect(await db.prepare(
+      `SELECT action, original_account_id, external_identity_id, identity_issuer, subject
+       FROM cas_control_audit_events WHERE action = 'session.login'`,
+    ).first()).toEqual({
+      action: "session.login",
+      original_account_id: actor.account.accountId,
+      external_identity_id: actor.authenticatedIdentity.externalIdentityId,
+      identity_issuer: "https://github.com",
+      subject: "session-owner",
+    });
+  });
+
   test("manages platform authorities and block state by Account ID", async () => {
     const { db, service } = await fixture();
     const actor = await service.createForExternalIdentity({

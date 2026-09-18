@@ -9,7 +9,6 @@ import { AccountService, PlatformAccessService, PlatformAuditService, PlatformIn
 import { createControlPlaneMcpServer } from "../src/mcp/server.js";
 import type { ControlPlaneMcpGrantProps } from "../src/mcp/server.js";
 import { migrateControlSchema } from "../src/control-schema.js";
-import { createControlPlaneOperations } from "../src/control-operations.js";
 import { D1PlatformAccessRepository } from "../src/platform-access-repository.js";
 import { D1AccountRepository } from "../src/account-repository.js";
 
@@ -137,37 +136,8 @@ describe("adapter-hosted control-plane MCP server", () => {
       actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
       displayName: "Managed",
     });
-    const legacyMint = vi.fn(async () => {
-      throw new Error("legacy managed capability path must not be called");
-    });
-    const legacyGet = vi.fn(async () => {
-      throw new Error("legacy managed issuer read must not be called");
-    });
-    const legacyExternalGet = vi.fn(async () => {
-      throw new Error("legacy external issuer read must not be called");
-    });
-    const legacyPatch = vi.fn(async () => {
-      throw new Error("legacy managed issuer update must not be called");
-    });
-    const legacyInspect = vi.fn(async () => {
-      throw new Error("legacy external issuer inspection must not be called");
-    });
-    const legacyActivate = vi.fn(async () => {
-      throw new Error("legacy external issuer activation must not be called");
-    });
     const handler = createMcpHandler(
-      () => createControlPlaneMcpServer(
-        {
-          ...createControlPlaneOperations(db),
-          getOAuthIssuer: legacyExternalGet,
-          getManagedOAuthIssuer: legacyGet,
-          patchManagedOAuthIssuer: legacyPatch,
-          mintManagedSpaceCapability: legacyMint,
-          inspectAppOAuthIssuer: legacyInspect,
-          activateAppOAuthIssuer: legacyActivate,
-        },
-        { mutationsEnabled: true, accountService },
-      ),
+      () => createControlPlaneMcpServer({ mutationsEnabled: true, accountService }),
       { route: "/mcp", authContext: { props: grant(["control:read", "control:security"]) } },
     );
 
@@ -222,12 +192,6 @@ describe("adapter-hosted control-plane MCP server", () => {
       oauth_client_handle: "a".repeat(64),
       tool_name: "update_app_managed_issuer",
     });
-    expect(legacyGet).not.toHaveBeenCalled();
-    expect(legacyExternalGet).not.toHaveBeenCalled();
-    expect(legacyInspect).not.toHaveBeenCalled();
-    expect(legacyActivate).not.toHaveBeenCalled();
-    expect(legacyPatch).not.toHaveBeenCalled();
-    expect(legacyMint).not.toHaveBeenCalled();
   });
 
   test("requires apps.create authority in addition to the delegated write scope", async () => {
@@ -266,18 +230,8 @@ describe("adapter-hosted control-plane MCP server", () => {
     await db.prepare(
       "INSERT INTO cas_account_platform_authorities (account_id, authority, granted_at) VALUES (?, 'apps.create', 1)",
     ).bind(actorAccount.account.accountId).run();
-    const legacyList = vi.fn(async () => { throw new Error("legacy App list must not be called"); });
-    const legacyGet = vi.fn(async () => { throw new Error("legacy App get must not be called"); });
-    const legacyCreate = vi.fn(async () => { throw new Error("legacy App create must not be called"); });
-    const legacyPatch = vi.fn(async () => { throw new Error("legacy App patch must not be called"); });
     const handler = createMcpHandler(
-      () => createControlPlaneMcpServer({
-        ...createControlPlaneOperations(db),
-        listStacks: legacyList,
-        getStack: legacyGet,
-        createStack: legacyCreate,
-        patchApp: legacyPatch,
-      }, { mutationsEnabled: true, accountService }),
+      () => createControlPlaneMcpServer({ mutationsEnabled: true, accountService }),
       { route: "/mcp", authContext: { props: grant(["control:read", "control:write", "control:security"]) } },
     );
     const created = await callTool(handler, "create_app", {
@@ -333,10 +287,6 @@ describe("adapter-hosted control-plane MCP server", () => {
       }),
     ]));
     expect(events.every((event) => !("stackId" in event))).toBe(true);
-    expect(legacyList).not.toHaveBeenCalled();
-    expect(legacyGet).not.toHaveBeenCalled();
-    expect(legacyCreate).not.toHaveBeenCalled();
-    expect(legacyPatch).not.toHaveBeenCalled();
   });
 
   test("lists and revokes App invitations with security scope and exact confirmation", async () => {
@@ -354,18 +304,8 @@ describe("adapter-hosted control-plane MCP server", () => {
     await db.prepare(
       "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES (?, ?, ?, 1, ?)",
     ).bind(appId, actor.authenticatedIdentity.issuer, actor.authenticatedIdentity.subject, actor.account.accountId).run();
-    const legacyCreate = vi.fn(async () => { throw new Error("legacy invitation create must not be called"); });
-    const legacyList = vi.fn(async () => { throw new Error("legacy invitation list must not be called"); });
-    const legacyRevoke = vi.fn(async () => { throw new Error("legacy invitation revoke must not be called"); });
-    const legacyAccept = vi.fn(async () => { throw new Error("legacy invitation accept must not be called"); });
     const handler = createMcpHandler(
-      () => createControlPlaneMcpServer({
-        ...createControlPlaneOperations(db),
-        createMemberInvitation: legacyCreate,
-        listAppMemberInvitations: legacyList,
-        revokeAppMemberInvitation: legacyRevoke,
-        acceptMemberInvitation: legacyAccept,
-      }, { mutationsEnabled: true, publicOrigin: "https://console.unicas.work", accountService }),
+      () => createControlPlaneMcpServer({ mutationsEnabled: true, publicOrigin: "https://console.unicas.work", accountService }),
       { route: "/mcp", authContext: { props: grant(["control:security"]) } },
     );
     const invitation = await callTool(handler, "invite_app_member", {
@@ -398,10 +338,6 @@ describe("adapter-hosted control-plane MCP server", () => {
     const acceptedToken = new URL(String(acceptedInvitation.structuredContent.acceptUrl)).pathname.split("/").at(-1)!;
     expect((await callTool(handler, "accept_app_member_invitation", { token: acceptedToken })).structuredContent)
       .toEqual({ appId });
-    expect(legacyCreate).not.toHaveBeenCalled();
-    expect(legacyList).not.toHaveBeenCalled();
-    expect(legacyRevoke).not.toHaveBeenCalled();
-    expect(legacyAccept).not.toHaveBeenCalled();
   });
 
   test("creates, lists, and revokes platform invitations with current platform authority", async () => {
@@ -660,9 +596,9 @@ function emailEvidence(normalizedEmail: string, authenticationEventId: string) {
     authenticationEventId,
   };
 }
-function handlerFor(props: ControlPlaneMcpGrantProps, options: Parameters<typeof createControlPlaneMcpServer>[1] = {}) {
+function handlerFor(props: ControlPlaneMcpGrantProps, options: Parameters<typeof createControlPlaneMcpServer>[0] = {}) {
   return createMcpHandler(
-    () => createControlPlaneMcpServer(createControlPlaneOperations(db), options),
+    () => createControlPlaneMcpServer(options),
     { route: "/mcp", authContext: { props } },
   );
 }

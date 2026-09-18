@@ -808,6 +808,35 @@ export class D1AccountRepository implements AccountRepository {
     }
   }
 
+  async appendAccountSessionAudit(
+    input: Parameters<AccountRepository["appendAccountSessionAudit"]>[0],
+  ): Promise<"recorded" | "account-unavailable"> {
+    const result = await this.db.prepare(
+      `INSERT INTO cas_control_audit_events
+        (event_id, app_id, identity_issuer, subject, action, target, request_id,
+         trace_id, caller_channel, oauth_client_handle, tool_name, created_at,
+         original_account_id, external_identity_id, target_account_id)
+       SELECT ?, NULL, issuer, subject, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, NULL
+       FROM cas_external_identities
+       WHERE external_identity_id = ? AND account_id = ? AND unlinked_at IS NULL
+         AND EXISTS (SELECT 1 FROM cas_accounts WHERE account_id = ? AND blocked_at IS NULL)`,
+    ).bind(
+      input.eventId,
+      input.action,
+      input.accountId,
+      input.requestId ?? null,
+      input.traceId ?? null,
+      input.callerChannel ?? null,
+      input.now,
+      input.accountId,
+      input.externalIdentityId,
+      input.externalIdentityId,
+      input.accountId,
+      input.accountId,
+    ).run();
+    return (result.meta.changes ?? 0) === 1 ? "recorded" : "account-unavailable";
+  }
+
   async commitPatchAccountManagedOAuthIssuer(
     input: Parameters<AccountRepository["commitPatchAccountManagedOAuthIssuer"]>[0],
   ): Promise<"updated" | "actor-not-member" | "not-found" | "revision-mismatch"> {

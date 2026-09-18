@@ -837,6 +837,12 @@ function memoryAccountRepository(
       platform.grantViaMembership(identity.issuer, identity.subject);
       return "accepted";
     },
+    appendAccountSessionAudit: async input => {
+      const identity = identities.get(input.externalIdentityId);
+      return identity?.accountId === input.accountId && identity.unlinkedAt === null
+        ? "recorded"
+        : "account-unavailable";
+    },
     getManagedOAuthIssuer: async appId => {
       if (!fakeStacks.has(appId)) return null;
       const state = managedIssuerStates.get(appId) ?? { status: "active" as const, revision: 1 };
@@ -1542,6 +1548,7 @@ describe("cas-admin-webui BFF", () => {
       }] : []),
       getAccountAppIdempotency: vi.fn(async () => null),
       commitCreateAccountApp: vi.fn(async () => "created"),
+      appendAccountSessionAudit: vi.fn(async () => "recorded"),
       createAccountWithIdentity: async () => "identity-conflict",
     };
     const adapter = (kind: "google" | "github"): ProviderAdapter => ({

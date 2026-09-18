@@ -64,6 +64,7 @@ function fixture() {
     commitCreateAccountAppInvitation: vi.fn(async () => "created"),
     getAccountAppInvitationByTokenHash: vi.fn(async () => null),
     commitAcceptAccountAppInvitation: vi.fn(async () => "accepted"),
+    appendAccountSessionAudit: vi.fn(async () => "recorded"),
     getManagedOAuthIssuer: vi.fn(async () => null),
     commitPatchAccountManagedOAuthIssuer: vi.fn(async () => "updated"),
     commitPatchAccountApp: vi.fn(async () => "updated"),
@@ -645,6 +646,22 @@ describe("Account service", () => {
         authenticationEventId: "other-auth",
       }],
     })).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  test("records authenticated session audit against Account and ExternalIdentity", async () => {
+    const { repository, service } = fixture();
+    await service.recordSessionAudit({
+      accountId,
+      externalIdentityId: identity.externalIdentityId,
+      action: "session.login",
+      callerChannel: "admin-webui",
+    });
+    expect(repository.appendAccountSessionAudit).toHaveBeenCalledWith(expect.objectContaining({
+      accountId,
+      externalIdentityId: identity.externalIdentityId,
+      action: "session.login",
+      callerChannel: "admin-webui",
+    }));
   });
 
   test("creates an App with Account authority and Account-scoped idempotency", async () => {
