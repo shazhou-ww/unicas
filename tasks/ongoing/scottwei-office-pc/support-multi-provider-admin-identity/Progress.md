@@ -63,7 +63,8 @@ and verifies exact table sets and count-only outcomes. The read-only production
 preview passes and prints no email or subject. The GitHub `Production`
 Environment now requires `shazhou-ww` approval with self-review permitted, so a
 validated release can wait before deployment while the cutover runs. No reset,
-maintenance deployment, release merge, or production deployment has occurred.
+maintenance deployment, release merge, or production deployment had occurred
+at that checkpoint.
 The maintenance Worker directly enumerates physical R2 and KV state, rejects
 pending upload sessions and out-of-bound object prefixes, and verifies both
 bindings are empty after deletion. Inventory hashing is order-independent.
@@ -75,6 +76,22 @@ The driver rejects configured direct-upload signing secrets until the
 underlying R2 API token is revoked, closing the presigned-URL race. A live
 name-only Worker-secret check confirmed production has neither direct-upload
 signing secret configured.
+
+The production cutover subsequently completed on 2026-09-18. PR #6 merged the
+validated implementation into `release`; the workflow stopped at the required
+Production review. The authorized no-backup cutover cleared the bounded test
+R2 state, rebuilt the exact current control and tenant schemas, retained the
+Smoke App and external issuer, and bootstrapped one Google-linked Account with
+`platform.admin`, `apps.create`, App membership, and audit evidence. Resumable
+verification reported `resetVerified` and `bootstrapVerified` with all tenant
+tables empty. Runtime recovery fixed one local function-name shadow and split
+remote D1 verification into Cloudflare-safe query groups. Release workflow
+attempt #2 then passed validation, deployment, canonical smoke, public-origin
+checks, and production tagging for merge commit `664ac15`. Post-deploy checks
+returned API health HTTP 200 and Console HTTP 302 to `/admin/`; maintenance is
+no longer active. Deletion of the retired Worker secrets
+`GOOGLE_OIDC_CLIENT_SECRET` and `ADMIN_EMAIL_ALLOWLIST` was explicitly canceled
+and remains optional follow-up work.
 
 The production provisioning guide now contains portal-level application steps
 for Google, Microsoft personal accounts, one current GitHub OAuth App with two

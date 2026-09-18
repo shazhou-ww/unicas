@@ -640,18 +640,7 @@ function verifyBootstrap(bootstrap, expectedStackId) {
   }
   const control = query(
     CONTROL_DATABASE,
-    `SELECT
-      (SELECT COUNT(*) FROM cas_accounts) AS accounts,
-      (SELECT COUNT(*) FROM cas_account_profiles) AS profiles,
-      (SELECT COUNT(*) FROM cas_external_identities WHERE unlinked_at IS NULL) AS active_identities,
-      (SELECT COUNT(*) FROM cas_account_platform_authorities) AS authorities,
-      (SELECT COUNT(*) FROM cas_apps WHERE app_id = '${expectedStackId}' AND display_name = '${EXPECTED_STACK_NAME}') AS smoke_apps,
-      (SELECT COUNT(*) FROM cas_app_members WHERE app_id = '${expectedStackId}' AND account_id = '${bootstrap.accountId}') AS memberships,
-      (SELECT COUNT(*) FROM cas_app_oauth_issuers WHERE app_id = '${expectedStackId}' AND status = 'active') AS issuers,
-      (SELECT COUNT(*) FROM cas_platform_audit_events) AS platform_audit,
-      (SELECT COUNT(*) FROM cas_control_audit_events) AS control_audit,
-      (SELECT COUNT(*) FROM cas_admin_sessions) AS sessions,
-      (SELECT COUNT(*) FROM cas_control_meta WHERE key = 'snapshot' AND value = 1) AS snapshots`,
+    `SELECT (SELECT COUNT(*) FROM cas_accounts) AS accounts, (SELECT COUNT(*) FROM cas_account_profiles) AS profiles, (SELECT COUNT(*) FROM cas_external_identities WHERE unlinked_at IS NULL) AS active_identities, (SELECT COUNT(*) FROM cas_account_platform_authorities) AS authorities, (SELECT COUNT(*) FROM cas_apps WHERE app_id = '${expectedStackId}' AND display_name = '${EXPECTED_STACK_NAME}') AS smoke_apps, (SELECT COUNT(*) FROM cas_app_members WHERE app_id = '${expectedStackId}' AND account_id = '${bootstrap.accountId}') AS memberships, (SELECT COUNT(*) FROM cas_app_oauth_issuers WHERE app_id = '${expectedStackId}' AND status = 'active') AS issuers, (SELECT COUNT(*) FROM cas_platform_audit_events) AS platform_audit, (SELECT COUNT(*) FROM cas_control_audit_events) AS control_audit, (SELECT COUNT(*) FROM cas_admin_sessions) AS sessions, (SELECT COUNT(*) FROM cas_control_meta WHERE key = 'snapshot' AND value = 1) AS snapshots`,
   )[0];
   const expected = {
     accounts: 1,
@@ -669,10 +658,15 @@ function verifyBootstrap(bootstrap, expectedStackId) {
   if (JSON.stringify(control) !== JSON.stringify(expected)) {
     throw new Error("current control-schema bootstrap verification failed");
   }
-  const tenantCounts = query(
-    TENANT_DATABASE,
-    TENANT_TABLES.map((table) => `SELECT '${table}' AS table_name, COUNT(*) AS count FROM ${table}`).join(" UNION ALL "),
-  );
+  const tenantCounts = [];
+  for (let offset = 0; offset < TENANT_TABLES.length; offset += 4) {
+    tenantCounts.push(...query(
+      TENANT_DATABASE,
+      TENANT_TABLES.slice(offset, offset + 4)
+        .map((table) => `SELECT '${table}' AS table_name, COUNT(*) AS count FROM ${table}`)
+        .join(" UNION ALL "),
+    ));
+  }
   if (tenantCounts.length !== TENANT_TABLES.length || tenantCounts.some((row) => row.count !== 0)) {
     throw new Error("current tenant schema is not empty after reset");
   }
@@ -712,9 +706,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       const maintenanceNonce = publishMaintenance();
       const physicalInventory = await verifyMaintenance(maintenanceNonce);
       validatePhysicalInventory(physicalInventory, options.expectedStackId, inventory.oauthKeys);
-      const maintenanceInventory = remoteInventory();
-      validateResetInventory(maintenanceInventory, options.expectedStackId);
-      if (inventoryDigest(maintenanceInventory) !== inventoryDigest(inventory)) {
+      const maintainedInventory = remoteInventory();
+      validateResetInventory(maintainedInventory, options.expectedStackId);
+      if (inventoryDigest(maintainedInventory) !== inventoryDigest(inventory)) {
         throw new Error("production inventory changed after maintenance activation");
       }
       if (options.backupDir) {
