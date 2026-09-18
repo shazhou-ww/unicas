@@ -95,7 +95,7 @@ retain the current `null` behavior, configured responses expose only App-shaped
 fields and ETags, and the compatibility adapter no longer rewrites the App URL.
 Focused tests make the legacy external issuer getter fail if called.
 
-The twelfth no-legacy cleanup checkpoint is ready to publish. External App
+The twelfth no-legacy cleanup checkpoint is published as `2b5084d`. External App
 issuer inspection and activation in HTTP and remote MCP now run through
 `AccountService`. Discovery remains behind the pinned platform port; challenge,
 expiry, JWK, compact-JWS proof, global issuer uniqueness, and ETag rules are
@@ -105,8 +105,10 @@ writing Account/identity audit evidence, and advancing the snapshot. Real ES256
 proof tests cover first activation and replacement, and legacy App-specific
 inspect/activate methods fail if called.
 
-Next: migrate App invitation create/list/revoke/accept operations. After their
-consumers move, delete legacy HTTP contracts,
+Next: migrate App invitation list/revoke operations through Account membership
+and exact ExternalIdentity audit, then migrate create/accept with Account-scoped
+idempotency, verified-email evidence, challenge consumption, and stable Account
+membership. After their consumers move, delete legacy HTTP contracts,
 identity-keyed columns/tables (including the retired Playground table), dual
 writes, and startup identity migration rather than adding compatibility flags.
 
