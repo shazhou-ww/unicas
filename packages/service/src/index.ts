@@ -76,7 +76,6 @@ export {
 } from "./actor.js";
 export type {
   AppAdminRequestContext,
-  AdminRequestContext,
   AuthorizedSpaceCall,
   AuthorizedTenantCall,
   HttpActor,

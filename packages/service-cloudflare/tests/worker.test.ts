@@ -131,7 +131,7 @@ describe("service-cloudflare public routing", () => {
   test.each([undefined, "", "   "])("enables discovery without a domain restriction (%s)", async (restriction) => {
     const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response('{"keys":[]}'));
     try {
-      await worker.fetch(new Request("https://cas.example/admin/stacks"), { ...env, CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS: restriction }, ctx);
+      await worker.fetch(new Request("https://cas.example/admin/apps"), { ...env, CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS: restriction }, ctx);
       const options = vi.mocked(createControlPlaneOperations).mock.calls.at(-1)![1]!;
       expect(options.oauthDiscovery).toBeDefined();
       const discovery = options.oauthDiscovery!;
@@ -144,7 +144,7 @@ describe("service-cloudflare public routing", () => {
   test("applies an operator's optional origin restriction before fetching", async () => {
     const fetcher = vi.spyOn(globalThis, "fetch");
     try {
-      await worker.fetch(new Request("https://cas.example/admin/stacks"), { ...env, CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS: "https://approved.example" }, ctx);
+      await worker.fetch(new Request("https://cas.example/admin/apps"), { ...env, CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS: "https://approved.example" }, ctx);
       const options = vi.mocked(createControlPlaneOperations).mock.calls.at(-1)![1]!;
       await expect(options.oauthDiscovery!.inspectIssuer({ issuer: "https://independent.example/oauth" })).rejects.toThrow("not allowlisted");
       expect(fetcher).not.toHaveBeenCalled();
@@ -158,6 +158,12 @@ describe("service-cloudflare public routing", () => {
     for (const path of ["/other", "/_internal/audit/refs", "/mcp/other"]) {
       expect((await worker.fetch(new Request(`https://cas.example${path}`), env, ctx)).status)
         .toBe(404);
+    }
+  });
+
+  test("rejects retired administrator Stack routes before service composition", async () => {
+    for (const path of ["/admin/stacks", "/admin/stacks/cas_legacy", "/admin/stacks/cas_legacy/members"]) {
+      expect((await worker.fetch(new Request(`https://cas.example${path}`), env, ctx)).status).toBe(404);
     }
   });
 

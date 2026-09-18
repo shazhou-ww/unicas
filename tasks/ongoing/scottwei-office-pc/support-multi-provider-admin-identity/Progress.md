@@ -140,7 +140,7 @@ list/get/create and App patch methods fail if called. All current App HTTP, MCP,
 CLI/stdio-client, invitation, issuer, membership, capability, People, and audit
 paths are now Account-native.
 
-The sixteenth no-legacy cleanup checkpoint is ready to publish. Remote MCP no
+The sixteenth no-legacy cleanup checkpoint is published as `bc5ec97`. Remote MCP no
 longer receives or constructs the legacy `ControlPlaneOperations` service; all
 tools depend only on Account, platform, invitation, and audit ports. The App
 adapter is now transparent and performs no App-to-Stack request rewrite or
@@ -149,9 +149,16 @@ logout audit now resolves the stable Account and exact ExternalIdentity through
 `AccountService`; unauthenticated callback failures emit only redacted telemetry
 instead of durable pseudo-Principal rows.
 
-Next: reject and remove the legacy `/admin/stacks` HTTP contracts and dispatcher,
-then delete the Principal repository and fresh-schema tables/columns without
-data migration.
+The seventeenth no-legacy cleanup checkpoint is ready to publish. The public
+Worker rejects `/admin/stacks` and every descendant with 404 before service
+composition. The cloud-neutral actor no longer imports, matches, exposes, or
+dispatches a legacy administrator plane; only tenant, Space, and current App
+admin routes remain. Current discovery composition tests use `/admin/apps`, and
+focused route tests prove retired Stack administrator paths are unclaimed.
+
+Next: remove the legacy Stack contracts and BFF dispatcher internals, then
+delete the Principal repository and fresh-schema tables/columns without data
+migration.
 
 On 2026-09-17, the requesting user directed this worktree to claim and continue
 the task. `repoledger doctor` resolved the worktree identity as
@@ -956,6 +963,8 @@ cutover markers. Then complete the current-model and real-provider/email tests.
   BFF tests, 16 transparent-adapter tests, 16 D1 Account repository tests, and
   the complete 9-test remote MCP suite. Both affected package typechecks passed
   and editor diagnostics were clean.
+- Legacy Stack route retirement passed 8 cloud-neutral actor tests and 15
+  Worker routing tests. Both affected package typechecks passed.
 - This no-legacy cleanup checkpoint and the production OAuth provisioning guide
   are published on the shared primary branch. The next implementation action is
   to replace the internal Principal-keyed App control-plane repository and then

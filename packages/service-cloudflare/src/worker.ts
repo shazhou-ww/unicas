@@ -116,6 +116,9 @@ export default {
     if (request.method === "GET" && pathname === "/health") {
       return Response.json({ ok: true, service: "unicas" });
     }
+    if (isPrefixed(pathname, "/admin/stacks")) {
+      return new Response("Not Found", { status: 404 });
+    }
     const protectedResourceStackId = matchStackProtectedResourcePath(pathname);
     if (protectedResourceStackId !== null) {
       if (request.method !== "GET") return new Response("Method Not Allowed", { status: 405, headers: { Allow: "GET" } });
@@ -148,8 +151,6 @@ export default {
           throw error;
         }
       },
-      handleAdminRequest: async ({ request: adminRequest }) =>
-        (await adminHandlerFor(env))(stripAdminHeaders(adminRequest)),
       handleAppAdminRequest: async ({ request: adminRequest, route }) =>
         handleAppAdminCompatibilityRequest(
           stripAdminHeaders(adminRequest),
