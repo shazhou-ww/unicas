@@ -484,11 +484,22 @@ describe("standalone deployment plan", () => {
       execute: false,
       expectedStackId: undefined,
       backupDir: undefined,
+      confirmation: undefined,
     });
     expect(() => parseResetArgs(["--execute"]))
       .toThrow("--execute requires --expected-stack-id");
     expect(() => parseResetArgs(["--execute", "--expected-stack-id", "cas_smoke"]))
-      .toThrow("--execute requires --backup-dir");
+      .toThrow("backup-free execution requires --confirm DELETE-ALL-TEST-DATA-NO-BACKUP");
+    expect(parseResetArgs([
+      "--execute",
+      "--expected-stack-id", "cas_smoke",
+      "--confirm", "DELETE-ALL-TEST-DATA-NO-BACKUP",
+    ])).toEqual({
+      execute: true,
+      expectedStackId: "cas_smoke",
+      backupDir: undefined,
+      confirmation: "DELETE-ALL-TEST-DATA-NO-BACKUP",
+    });
 
     const result = spawnSync(
       process.execPath,

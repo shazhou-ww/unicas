@@ -14,6 +14,7 @@ const CONTROL_DATABASE = "unicas-control";
 const TENANT_DATABASE = "unicas-tenant";
 const CONTENT_BUCKET = "unicas-content";
 const OAUTH_BINDING = "OAUTH_KV";
+const NO_BACKUP_CONFIRMATION = "DELETE-ALL-TEST-DATA-NO-BACKUP";
 
 const CONTROL_TABLES = [
   "cas_oauth_issuer_inspection_keys",
@@ -78,19 +79,25 @@ export const SCOPED_INVENTORY_QUERIES = {
 };
 
 export function parseResetArgs(argv) {
-  const options = { execute: false, expectedStackId: undefined, backupDir: undefined };
+  const options = {
+    execute: false,
+    expectedStackId: undefined,
+    backupDir: undefined,
+    confirmation: undefined,
+  };
   for (let index = 0; index < argv.length; index++) {
     const argument = argv[index];
     if (argument === "--execute") options.execute = true;
     else if (argument === "--expected-stack-id") options.expectedStackId = argv[++index];
     else if (argument === "--backup-dir") options.backupDir = argv[++index];
+    else if (argument === "--confirm") options.confirmation = argv[++index];
     else throw new Error(`Unknown argument: ${argument}`);
   }
   if (options.execute && !options.expectedStackId) {
     throw new Error("--execute requires --expected-stack-id");
   }
-  if (options.execute && !options.backupDir) {
-    throw new Error("--execute requires --backup-dir");
+  if (options.execute && !options.backupDir && options.confirmation !== NO_BACKUP_CONFIRMATION) {
+    throw new Error(`backup-free execution requires --confirm ${NO_BACKUP_CONFIRMATION}`);
   }
   return options;
 }
@@ -336,9 +343,11 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const commands = resetPlan(inventory);
     printPlan([...backupCommands, ...commands]);
     if (options.execute) {
-      const d1 = validateD1Backups(options.backupDir);
-      const r2 = executeR2Backups(inventory, options.backupDir);
-      writeFileSync(resolve(options.backupDir, "backup-manifest.json"), `${JSON.stringify({ d1, r2 }, null, 2)}\n`, { flag: "wx" });
+      if (options.backupDir) {
+        const d1 = validateD1Backups(options.backupDir);
+        const r2 = executeR2Backups(inventory, options.backupDir);
+        writeFileSync(resolve(options.backupDir, "backup-manifest.json"), `${JSON.stringify({ d1, r2 }, null, 2)}\n`, { flag: "wx" });
+      }
       for (const command of commands) run(command);
     }
   } catch (error) {

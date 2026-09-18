@@ -46,6 +46,14 @@ printed. Reset must be coordinated with a maintenance cutover, current Worker
 deployment, and atomic first-Account bootstrap so the old Worker cannot recreate
 the retired schema between deletion and release.
 
+The requesting user explicitly confirmed that all existing production state is
+disposable internal-development test data, so D1 and R2 backups are not a
+release prerequisite. Backup-free reset execution requires the exact
+`DELETE-ALL-TEST-DATA-NO-BACKUP` confirmation while retaining the exact App ID,
+bounded inventory, known-table, issuer, Space, R2-prefix, and KV-key guards.
+Backup mode remains available but optional. CI `validate` passed for the latest
+published `main` revision before this follow-up.
+
 The production provisioning guide now contains portal-level application steps
 for Google, Microsoft personal accounts, one current GitHub OAuth App with two
 exact callback URLs, Cloudflare Email Sending onboarding, GitHub Environment
