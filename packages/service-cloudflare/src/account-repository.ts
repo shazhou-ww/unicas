@@ -911,10 +911,11 @@ export class D1AccountRepository implements AccountRepository {
         (event_id, app_id, identity_issuer, subject, action, target, request_id,
          trace_id, caller_channel, oauth_client_handle, tool_name, created_at,
          original_account_id, external_identity_id, target_account_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, NULL)`,
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
     ).bind(input.eventId, input.app.appId, identity.issuer, identity.subject, input.action,
       input.app.appId, input.requestId ?? null, input.traceId ?? null,
-      input.callerChannel ?? null, input.now, input.actorAccountId, input.actorExternalIdentityId);
+      input.callerChannel ?? null, input.oauthClientHandle ?? null, input.toolName ?? null,
+      input.now, input.actorAccountId, input.actorExternalIdentityId);
     try {
       await this.db.batch([
         requireCurrent,
@@ -984,9 +985,10 @@ export class D1AccountRepository implements AccountRepository {
           (event_id, app_id, identity_issuer, subject, action, target, request_id,
            trace_id, caller_channel, oauth_client_handle, tool_name, created_at,
            original_account_id, external_identity_id, target_account_id)
-         VALUES (?, ?, ?, ?, 'app.created', ?, ?, ?, ?, NULL, NULL, ?, ?, ?, NULL)`,
+         VALUES (?, ?, ?, ?, 'app.created', ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
       ).bind(input.eventId, input.app.appId, identity.issuer, identity.subject, input.app.appId,
         input.requestId ?? null, input.traceId ?? null, input.callerChannel ?? null,
+        input.oauthClientHandle ?? null, input.toolName ?? null,
         input.app.createdAt, input.actorAccountId, input.actorExternalIdentityId),
     ];
     if (input.managedIssuer) {

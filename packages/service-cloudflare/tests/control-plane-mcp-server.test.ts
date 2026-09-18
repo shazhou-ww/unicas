@@ -263,9 +263,22 @@ describe("adapter-hosted control-plane MCP server", () => {
       subject: "alice-sub",
       displayName: "Alice",
     });
-    const handler = handlerFor(
-      grant(["control:read", "control:write", "control:security"]),
-      { mutationsEnabled: true, accountService },
+    await db.prepare(
+      "INSERT INTO cas_account_platform_authorities (account_id, authority, granted_at) VALUES (?, 'apps.create', 1)",
+    ).bind(actorAccount.account.accountId).run();
+    const legacyList = vi.fn(async () => { throw new Error("legacy App list must not be called"); });
+    const legacyGet = vi.fn(async () => { throw new Error("legacy App get must not be called"); });
+    const legacyCreate = vi.fn(async () => { throw new Error("legacy App create must not be called"); });
+    const legacyPatch = vi.fn(async () => { throw new Error("legacy App patch must not be called"); });
+    const handler = createMcpHandler(
+      () => createControlPlaneMcpServer({
+        ...createControlPlaneOperations(db),
+        listStacks: legacyList,
+        getStack: legacyGet,
+        createStack: legacyCreate,
+        patchApp: legacyPatch,
+      }, { mutationsEnabled: true, accountService }),
+      { route: "/mcp", authContext: { props: grant(["control:read", "control:write", "control:security"]) } },
     );
     const created = await callTool(handler, "create_app", {
       displayName: "Documents",
@@ -320,6 +333,10 @@ describe("adapter-hosted control-plane MCP server", () => {
       }),
     ]));
     expect(events.every((event) => !("stackId" in event))).toBe(true);
+    expect(legacyList).not.toHaveBeenCalled();
+    expect(legacyGet).not.toHaveBeenCalled();
+    expect(legacyCreate).not.toHaveBeenCalled();
+    expect(legacyPatch).not.toHaveBeenCalled();
   });
 
   test("lists and revokes App invitations with security scope and exact confirmation", async () => {
@@ -490,6 +507,9 @@ describe("adapter-hosted control-plane MCP server", () => {
       subject: "alice-sub",
       displayName: "Alice",
     });
+    await db.prepare(
+      "INSERT INTO cas_account_platform_authorities (account_id, authority, granted_at) VALUES (?, 'apps.create', 1)",
+    ).bind(aliceAccount.account.accountId).run();
     const aliceHandler = handlerFor(
       grant(["control:read", "control:write", "control:security"]),
       { mutationsEnabled: true, publicOrigin: "https://console.unicas.work", accountService },

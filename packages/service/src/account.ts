@@ -294,6 +294,8 @@ export interface AccountRepository {
     readonly requestId?: string;
     readonly traceId?: string;
     readonly callerChannel?: string;
+    readonly oauthClientHandle?: string;
+    readonly toolName?: string;
     readonly now: number;
   }): Promise<"updated" | "actor-not-member" | "not-found" | "revision-mismatch">;
   getAccountAppIdempotency(input: {
@@ -311,6 +313,8 @@ export interface AccountRepository {
     readonly requestId?: string;
     readonly traceId?: string;
     readonly callerChannel?: string;
+    readonly oauthClientHandle?: string;
+    readonly toolName?: string;
   }): Promise<"created" | "actor-forbidden" | { readonly idempotencyRace: AccountAppIdempotencyRecord }>;
   listAppMemberships(input: {
     readonly appId: AppId;
@@ -1212,6 +1216,8 @@ export class AccountService {
     readonly requestId?: string;
     readonly traceId?: string;
     readonly callerChannel?: string;
+    readonly oauthClientHandle?: string;
+    readonly toolName?: string;
   }): Promise<number> {
     const expectedRevision = input.ifMatch === undefined ? null : parseCasAdminETag(input.ifMatch);
     if (input.ifMatch === undefined || input.ifMatch.trim().length === 0) {
@@ -1255,6 +1261,8 @@ export class AccountService {
       requestId: input.requestId,
       traceId: input.traceId,
       callerChannel: input.callerChannel,
+      oauthClientHandle: input.oauthClientHandle,
+      toolName: input.toolName,
       now: this.now(),
     });
     if (result === "actor-not-member") throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
@@ -1271,6 +1279,8 @@ export class AccountService {
     readonly requestId?: string;
     readonly traceId?: string;
     readonly callerChannel?: string;
+    readonly oauthClientHandle?: string;
+    readonly toolName?: string;
   }): Promise<App> {
     if (validateDisplayName(input.displayName)) throw new AccountServiceError("INVALID_REQUEST");
     if (input.idempotencyKey !== undefined
@@ -1308,6 +1318,7 @@ export class AccountService {
       actorExternalIdentityId: input.actorExternalIdentityId,
       app, managedIssuer, idempotency, eventId: generateEventId(),
       requestId: input.requestId, traceId: input.traceId, callerChannel: input.callerChannel,
+      oauthClientHandle: input.oauthClientHandle, toolName: input.toolName,
     });
     if (result === "actor-forbidden") throw new AccountServiceError("APP_CREATION_AUTHORITY_REQUIRED");
     if (typeof result === "object") return this.#resolveAppIdempotency(result.idempotencyRace, payloadHash);

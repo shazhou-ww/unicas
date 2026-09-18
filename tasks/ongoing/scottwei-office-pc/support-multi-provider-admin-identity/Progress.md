@@ -121,7 +121,7 @@ membership, invitation state, revision, and time bound before updating the
 invitation, writing exact Account/identity audit evidence, and advancing the
 snapshot. Legacy list/revoke methods fail if called.
 
-The fourteenth no-legacy cleanup checkpoint is ready to publish. App invitation
+The fourteenth no-legacy cleanup checkpoint is published as `b9cec6c`. App invitation
 create and accept now run through `AccountService` in HTTP and remote MCP.
 Creation uses a new Account/App-scoped idempotency table on fresh schema and
 atomically writes the invitation, Account/identity audit, receipt, and snapshot.
@@ -131,6 +131,14 @@ claims the invitation, grants stable Account membership, and initializes only
 an empty primary verified contact. It writes no operator identity or platform
 Principal row. Browser acceptance retains token-bound sessions and rotates to a
 full session; every legacy invitation operation fails if called.
+
+The fifteenth no-legacy cleanup checkpoint is ready to publish. Remote MCP App
+list, get, create, and update now run through `AccountService`, stable Account
+membership, `apps.create`, Account-scoped idempotency, current ETags, and exact
+Account/ExternalIdentity audit attribution. Real-D1 tests make the legacy Stack
+list/get/create and App patch methods fail if called. All current App HTTP, MCP,
+CLI/stdio-client, invitation, issuer, membership, capability, People, and audit
+paths are now Account-native.
 
 Next: remove now-unused App-specific legacy service bridges and compatibility
 response mappings, then replace the remaining legacy Principal repository and
@@ -929,6 +937,12 @@ cutover markers. Then complete the current-model and real-provider/email tests.
   adapter, D1, and remote MCP suites. The Miniflare-heavy run used the
   command-local 15-second allowance. Both affected package typechecks passed
   and editor diagnostics were clean.
+- Account-native remote MCP App CRUD passed the focused real-D1 CRUD/audit and
+  complete Account membership workflows with legacy operations configured to
+  fail. The complete 9-test remote MCP suite passed with the command-local
+  20-second allowance after correcting the test's missing `apps.create`
+  authority. Both affected package typechecks passed and editor diagnostics
+  were clean.
 - This no-legacy cleanup checkpoint and the production OAuth provisioning guide
   are published on the shared primary branch. The next implementation action is
   to replace the internal Principal-keyed App control-plane repository and then

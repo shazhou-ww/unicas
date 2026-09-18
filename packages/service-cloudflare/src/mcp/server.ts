@@ -100,10 +100,14 @@ export function createControlPlaneMcpServer(
     APP_ADMIN_MCP_TOOLS.list_apps.registration,
     async ({ limit, cursor }) => {
       const grant = requireGrantScope("control:read");
-      const result = await controlPlane.listStacks(serviceContext(grant, "list_apps"), {
-        query: { limit, cursor },
+      return accountToolResult(async () => {
+        const actor = await requireGrantAccount(grant, options);
+        return options.accountService!.listApps({
+          actorAccountId: actor.account.accountId,
+          limit,
+          cursor,
+        });
       });
-      return appToolResult({ operation: "listApps" }, result);
     },
   );
 
@@ -112,11 +116,10 @@ export function createControlPlaneMcpServer(
     APP_ADMIN_MCP_TOOLS.get_app.registration,
     async ({ appId }) => {
       const grant = requireGrantScope("control:read");
-      const result = await controlPlane.getStack(
-        serviceContext(grant, "get_app"),
-        { path: { stackId: appId } },
-      );
-      return appToolResult({ operation: "getApp", appId }, withEtag(result));
+      return accountToolResult(async () => {
+        const actor = await requireGrantAccount(grant, options);
+        return withEtag(await options.accountService!.getApp(actor.account.accountId, appId));
+      });
     },
   );
 
@@ -237,12 +240,19 @@ export function createControlPlaneMcpServer(
       const grant = requireMutation("control:write", options);
       const authorizationError = await options.authorizePlatformOperation?.(grant, "apps.create");
       if (authorizationError) return toolResult(authorizationError);
-      const result = await controlPlane.createStack(
-        serviceContext(grant, "create_app"),
-        { body: { displayName } },
-        { idempotencyKey },
-      );
-      return appToolResult({ operation: "createApp" }, withEtag(result));
+      return accountToolResult(async () => {
+        const actor = await requireGrantAccount(grant, options);
+        const app = await options.accountService!.createApp({
+          actorAccountId: actor.account.accountId,
+          actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+          displayName,
+          idempotencyKey,
+          callerChannel: "mcp",
+          oauthClientHandle: grant.oauthClientHandle,
+          toolName: "create_app",
+        });
+        return { appId: app.appId, etag: formatCasAdminETag(app.revision) };
+      });
     },
   );
 
@@ -435,15 +445,20 @@ export function createControlPlaneMcpServer(
     APP_ADMIN_MCP_TOOLS.update_app.registration,
     async ({ appId, displayName, description, status, etag }) => {
       const grant = requireMutation("control:write", options);
-      const result = await controlPlane.patchApp(
-        serviceContext(grant, "update_app"),
-        appId,
-        { displayName, description, status },
-        { ifMatch: etag },
-      );
-      return appToolResult({ operation: "patchApp", appId }, "error" in result
-        ? result
-        : { etag: formatCasAdminETag(result.revision) });
+      return accountToolResult(async () => {
+        const actor = await requireGrantAccount(grant, options);
+        const revision = await options.accountService!.patchApp({
+          actorAccountId: actor.account.accountId,
+          actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+          appId,
+          patch: { displayName, description, status },
+          ifMatch: etag,
+          callerChannel: "mcp",
+          oauthClientHandle: grant.oauthClientHandle,
+          toolName: "update_app",
+        });
+        return { etag: formatCasAdminETag(revision) };
+      });
     },
   );
 
