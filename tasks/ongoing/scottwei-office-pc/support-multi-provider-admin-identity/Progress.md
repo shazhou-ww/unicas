@@ -35,6 +35,16 @@ only current Account/App tables; it performs no rename, synthesis, backfill, or
 compatibility read. Local bootstrap and the explicit smoke-reset plan use the
 same current schema. No remote database reset was selected or executed.
 
+The production provisioning guide now contains portal-level application steps
+for Google, Microsoft personal accounts, one current GitHub OAuth App with two
+exact callback URLs, Cloudflare Email Sending onboarding, GitHub Environment
+storage, interactive Worker secret materialization, encryption-key generation,
+and the manual acceptance matrix. It records that the current Worker uses
+Cloudflare `send_email`, not Resend, and that the deployment workflow does not
+yet synchronize OAuth Environment values. Credential issuance, Email Sending
+account enablement, provider registration, and real-provider acceptance are now
+the external next actions; no secret or remote configuration was changed.
+
 Validation for this checkpoint:
 
 - full workspace typecheck: 13 packages passed;
