@@ -1942,22 +1942,50 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
   async function handleAppInvitations(request: Request, appId: string, invitationId?: string): Promise<Response> {
     const auth = await requireAuthenticated(request);
     if (auth instanceof Response) return auth;
-    const context = serviceContext(auth.payload, request);
-    if (invitationId !== undefined) {
-      if (!(await passCsrf(request, auth.payload))) return csrfRejected();
-      const result = await controlPlane.revokeAppMemberInvitation(context, appId, invitationId, {
-        ifMatch: request.headers.get("If-Match") ?? undefined,
-      });
-      if ("error" in result) return json(transformAppAdminError({ ...result }), result.error === "INVITATION_NOT_PENDING" ? 409 : casAdminErrorHttpStatus[result.error]);
-      return new Response(null, { status: 204, headers: { ETag: formatCasAdminETag(result.revision), "Cache-Control": REVISION_CACHE_CONTROL } });
+    if (!accountService || !auth.payload.accountId || !auth.payload.externalIdentityId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
     }
-    const params = queryFromUrl(new URL(request.url));
-    const parsed = AppInvitationQuerySchema.safeParse({ ...params, ...(params.limit === undefined ? {} : { limit: Number(params.limit) }) });
-    if (!parsed.success) return invalidRequest("Invalid invitation filters or pagination");
-    const result = await controlPlane.listAppMemberInvitations(context, appId, parsed.data);
-    return "error" in result
-      ? json(transformAppAdminError({ ...result }), casAdminErrorHttpStatus[result.error])
-      : json(result, 200);
+    try {
+      if (invitationId !== undefined) {
+        if (!(await passCsrf(request, auth.payload))) return csrfRejected();
+        const revision = await accountService.revokeAppMemberInvitation({
+          actorAccountId: auth.payload.accountId,
+          actorExternalIdentityId: auth.payload.externalIdentityId,
+          appId,
+          invitationId,
+          ifMatch: request.headers.get("If-Match") ?? undefined,
+          requestId: request.headers.get("X-Request-Id") ?? undefined,
+          traceId: request.headers.get("X-Trace-Id") ?? undefined,
+          callerChannel: "admin-webui",
+        });
+        return new Response(null, { status: 204, headers: { ETag: formatCasAdminETag(revision), "Cache-Control": REVISION_CACHE_CONTROL } });
+      }
+      const params = queryFromUrl(new URL(request.url));
+      const parsed = AppInvitationQuerySchema.safeParse({
+        ...params,
+        ...(params.limit === undefined ? {} : { limit: Number(params.limit) }),
+      });
+      if (!parsed.success) return invalidRequest("Invalid invitation filters or pagination");
+      return json(await accountService.listAppMemberInvitations({
+        actorAccountId: auth.payload.accountId,
+        actorExternalIdentityId: auth.payload.externalIdentityId,
+        appId,
+        ...parsed.data,
+        callerChannel: "admin-webui",
+      }), 200);
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "APP_MEMBERSHIP_REQUIRED" || error.code === "ACCOUNT_BLOCKED" ? 403
+          : error.code === "PRECONDITION_REQUIRED" ? 428
+            : error.code === "REVISION_MISMATCH" ? 412
+              : error.code === "INVITATION_NOT_PENDING" ? 409
+                : error.code === "NOT_FOUND" ? 404
+                  : error.code === "INVALID_CURSOR" || error.code === "INVALID_REQUEST" ? 400
+                    : 401;
+        return json({ error: error.code }, status);
+      }
+      throw error;
+    }
   }
 
   async function handleMemberInvitationAcceptance(request: Request, token: string): Promise<Response> {

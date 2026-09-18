@@ -323,11 +323,36 @@ describe("adapter-hosted control-plane MCP server", () => {
   });
 
   test("lists and revokes App invitations with security scope and exact confirmation", async () => {
-    const handler = handlerFor(grant(["control:read", "control:write", "control:security"]), { mutationsEnabled: true });
-    const created = await callTool(handler, "create_app", { displayName: "Invitations", idempotencyKey: "inv-app-create" });
-    const appId = String(created.structuredContent.appId);
-    const invitation = await callTool(handler, "invite_app_member", { appId, email: "synthetic@example.test", confirmEmail: "synthetic@example.test", idempotencyKey: "inv-create" });
-    const invitationId = String(invitation.structuredContent.invitationId);
+    const accountService = new AccountService(new D1AccountRepository(db), () => 1000);
+    const actor = await accountService.createForExternalIdentity({
+      provider: "google",
+      issuer: "https://accounts.google.com",
+      subject: "alice-sub",
+      displayName: "Alice",
+    });
+    const appId = "cas_app_invitations";
+    const invitationId = "inv-current";
+    await db.prepare(
+      "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES (?, 'Invitations', '', 'active', 1, 1)",
+    ).bind(appId).run();
+    await db.prepare(
+      "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES (?, ?, ?, 1, ?)",
+    ).bind(appId, actor.authenticatedIdentity.issuer, actor.authenticatedIdentity.subject, actor.account.accountId).run();
+    await db.prepare(
+      `INSERT INTO cas_app_member_invitations
+        (invitation_id, app_id, status, email_constraint, token_hash, expires_at, created_at, revision)
+       VALUES (?, ?, 'pending', 'synthetic@example.test', 'invite-hash', 2000, 1, 1)`,
+    ).bind(invitationId, appId).run();
+    const legacyList = vi.fn(async () => { throw new Error("legacy invitation list must not be called"); });
+    const legacyRevoke = vi.fn(async () => { throw new Error("legacy invitation revoke must not be called"); });
+    const handler = createMcpHandler(
+      () => createControlPlaneMcpServer({
+        ...createControlPlaneOperations(db),
+        listAppMemberInvitations: legacyList,
+        revokeAppMemberInvitation: legacyRevoke,
+      }, { mutationsEnabled: true, accountService }),
+      { route: "/mcp", authContext: { props: grant(["control:security"]) } },
+    );
     const list = await callTool(handler, "list_app_member_invitations", { appId, status: "pending" });
     expect(list.structuredContent).toMatchObject({ items: [{ invitationId, status: "pending" }] });
     expect(JSON.stringify(list.structuredContent)).not.toMatch(/tokenHash|acceptUrl/);
@@ -335,6 +360,8 @@ describe("adapter-hosted control-plane MCP server", () => {
     expect((await callTool(handler, "revoke_app_member_invitation", { appId, invitationId, confirmInvitationId: "wrong", etag: '"1"' })).isError).toBe(true);
     expect((await callTool(handler, "revoke_app_member_invitation", { appId, invitationId, confirmInvitationId: invitationId, etag: '"1"' })).structuredContent).toEqual({ etag: '"2"' });
     expect((await callTool(handler, "list_app_member_invitations", { appId, status: "revoked" })).structuredContent).toMatchObject({ items: [{ invitationId, status: "revoked" }] });
+    expect(legacyList).not.toHaveBeenCalled();
+    expect(legacyRevoke).not.toHaveBeenCalled();
   });
 
   test("creates, lists, and revokes platform invitations with current platform authority", async () => {

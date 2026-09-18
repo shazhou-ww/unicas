@@ -112,6 +112,19 @@ membership. After their consumers move, delete legacy HTTP contracts,
 identity-keyed columns/tables (including the retired Playground table), dual
 writes, and startup identity migration rather than adding compatibility flags.
 
+The thirteenth no-legacy cleanup checkpoint is ready to publish. App invitation
+list, expiry reconciliation, and conditional revoke now run through
+`AccountService` in HTTP and remote MCP. Snapshot-bound cursors, status filters,
+revoked idempotence, expiry rules, CSRF, exact confirmation, and ETags are
+preserved. D1 atomically verifies the Account, active ExternalIdentity, App
+membership, invitation state, revision, and time bound before updating the
+invitation, writing exact Account/identity audit evidence, and advancing the
+snapshot. Legacy list/revoke methods fail if called.
+
+Next: migrate App invitation create/accept with Account-scoped idempotency,
+verified-email evidence, challenge consumption, and stable Account membership;
+then remove the legacy contracts, repository, and fresh-schema leftovers.
+
 On 2026-09-17, the requesting user directed this worktree to claim and continue
 the task. `repoledger doctor` resolved the worktree identity as
 `scottwei-home-pc`; the CLI-validated transfer from `scottwei-office-pc` is
@@ -892,6 +905,11 @@ cutover markers. Then complete the current-model and real-provider/email tests.
   clean.
 - Account-native external issuer mutation validation passed 22 cloud-neutral
   Account tests and 96 affected Cloudflare tests across BFF, adapter, D1, and
+  remote MCP suites. The Miniflare-heavy run used the command-local 15-second
+  allowance. Both affected package typechecks passed and editor diagnostics
+  were clean.
+- Account-native App invitation list/revoke validation passed 23 cloud-neutral
+  Account tests and 99 affected Cloudflare tests across BFF, adapter, D1, and
   remote MCP suites. The Miniflare-heavy run used the command-local 15-second
   allowance. Both affected package typechecks passed and editor diagnostics
   were clean.

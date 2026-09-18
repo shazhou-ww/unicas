@@ -390,9 +390,20 @@ export function createControlPlaneMcpServer(
     APP_ADMIN_MCP_TOOLS.list_app_member_invitations.registration,
     async ({ appId, status, limit, cursor }) => {
       const grant = requireGrantScope("control:security");
-      return appToolResult({ operation: "listMemberInvitations", appId }, await controlPlane.listAppMemberInvitations(
-        serviceContext(grant, "list_app_member_invitations"), appId, { status, limit, cursor },
-      ));
+      return accountToolResult(async () => {
+        const actor = await requireGrantAccount(grant, options);
+        return options.accountService!.listAppMemberInvitations({
+          actorAccountId: actor.account.accountId,
+          actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+          appId,
+          status,
+          limit,
+          cursor,
+          callerChannel: "mcp",
+          oauthClientHandle: grant.oauthClientHandle,
+          toolName: "list_app_member_invitations",
+        });
+      });
     },
   );
 
@@ -402,8 +413,20 @@ export function createControlPlaneMcpServer(
     async ({ appId, invitationId, confirmInvitationId, etag }) => {
       const grant = requireMutation("control:security", options);
       if (invitationId !== confirmInvitationId) return confirmationError("confirmInvitationId must exactly match invitationId");
-      const result = await controlPlane.revokeAppMemberInvitation(serviceContext(grant, "revoke_app_member_invitation"), appId, invitationId, { ifMatch: etag });
-      return appToolResult({ operation: "revokeMemberInvitation", appId, invitationId }, "error" in result ? result : { etag: formatCasAdminETag(result.revision) });
+      return accountToolResult(async () => {
+        const actor = await requireGrantAccount(grant, options);
+        const revision = await options.accountService!.revokeAppMemberInvitation({
+          actorAccountId: actor.account.accountId,
+          actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+          appId,
+          invitationId,
+          ifMatch: etag,
+          callerChannel: "mcp",
+          oauthClientHandle: grant.oauthClientHandle,
+          toolName: "revoke_app_member_invitation",
+        });
+        return { etag: formatCasAdminETag(revision) };
+      });
     },
   );
 

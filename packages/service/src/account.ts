@@ -5,6 +5,7 @@ import type {
   App,
   AppControlAuditEvent,
   AppId,
+  AppMemberInvitation,
   AppMembership,
   AppOAuthIssuer,
   AppOAuthIssuerInspection,
@@ -185,6 +186,29 @@ export interface AccountRepository {
     readonly toolName?: string;
     readonly now: number;
   }): Promise<"activated" | "actor-not-member" | "unavailable" | "revision-mismatch" | "issuer-conflict">;
+  getAppMemberInvitation(appId: AppId, invitationId: string): Promise<AppMemberInvitation | null>;
+  listAppMemberInvitations(input: {
+    readonly appId: AppId;
+    readonly status?: AppMemberInvitation["status"];
+    readonly expiresAtOrBefore?: number;
+    readonly afterInvitationId: string;
+    readonly limit: number;
+  }): Promise<readonly AppMemberInvitation[]>;
+  commitAccountAppInvitationTransition(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly appId: AppId;
+    readonly invitationId: string;
+    readonly expectedRevision: number;
+    readonly status: "revoked" | "expired";
+    readonly eventId: string;
+    readonly requestId?: string;
+    readonly traceId?: string;
+    readonly callerChannel?: string;
+    readonly oauthClientHandle?: string;
+    readonly toolName?: string;
+    readonly now: number;
+  }): Promise<"updated" | "actor-not-member" | "unavailable">;
   getManagedOAuthIssuer(appId: AppId): Promise<ControlOAuthIssuerRecord | null>;
   commitPatchAccountManagedOAuthIssuer(input: {
     readonly actorAccountId: AccountId;
@@ -344,6 +368,7 @@ export type AccountServiceErrorCode =
   | "APP_CREATION_AUTHORITY_REQUIRED"
   | "NOT_FOUND"
   | "ISSUER_CONFLICT"
+  | "INVITATION_NOT_PENDING"
   | "PRECONDITION_REQUIRED"
   | "REVISION_MISMATCH"
   | "IDEMPOTENCY_CONFLICT"
@@ -771,6 +796,142 @@ export class AccountService {
     if (result === "revision-mismatch") throw new AccountServiceError("REVISION_MISMATCH");
     if (result === "issuer-conflict") throw new AccountServiceError("ISSUER_CONFLICT");
     return issuer.revision;
+  }
+
+  async listAppMemberInvitations(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly appId: AppId;
+    readonly status?: AppMemberInvitation["status"];
+    readonly limit?: number;
+    readonly cursor?: string;
+    readonly requestId?: string;
+    readonly traceId?: string;
+    readonly callerChannel?: string;
+    readonly oauthClientHandle?: string;
+    readonly toolName?: string;
+  }): Promise<{ readonly items: readonly AppMemberInvitation[]; readonly nextCursor: string | null }> {
+    const actor = await this.#resolveCanonicalAccount(input.actorAccountId);
+    this.#requireUsableAccount(actor);
+    await this.requireActiveIdentity(actor.accountId, input.actorExternalIdentityId);
+    if (!await this.repository.hasAppMembership(actor.accountId, input.appId)) {
+      throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
+    }
+    if (input.status !== undefined && !["pending", "accepted", "expired", "revoked"].includes(input.status)) {
+      throw new AccountServiceError("INVALID_REQUEST");
+    }
+    const limit = input.limit ?? 50;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 1000) throw new AccountServiceError("INVALID_REQUEST");
+    const cursor = input.cursor === undefined ? null : decodeControlListCursor(input.cursor);
+    if (input.cursor !== undefined && !cursor) throw new AccountServiceError("INVALID_CURSOR");
+    let afterInvitationId = "";
+    if (cursor) {
+      let binding: unknown;
+      try { binding = JSON.parse(cursor.last); } catch { binding = null; }
+      if (!Array.isArray(binding) || binding.length !== 3 || binding[0] !== input.appId
+        || binding[1] !== (input.status ?? null) || typeof binding[2] !== "string" || binding[2].length === 0) {
+        throw new AccountServiceError("INVALID_CURSOR");
+      }
+      afterInvitationId = binding[2];
+    }
+    const now = this.now();
+    let expiredAfter = "";
+    while (true) {
+      const expired = await this.repository.listAppMemberInvitations({
+        appId: input.appId,
+        status: "pending",
+        expiresAtOrBefore: now,
+        afterInvitationId: expiredAfter,
+        limit: 100,
+      });
+      for (const invitation of expired) {
+        await this.#transitionAppInvitation(input, invitation, "expired", now);
+      }
+      if (expired.length < 100) break;
+      expiredAfter = expired.at(-1)!.invitationId;
+    }
+    const snapshot = await this.repository.readControlSnapshot();
+    if (cursor && cursor.snapshot !== snapshot) throw new AccountServiceError("INVALID_CURSOR");
+    const rows = await this.repository.listAppMemberInvitations({
+      appId: input.appId,
+      status: input.status,
+      afterInvitationId,
+      limit: limit + 1,
+    });
+    if (await this.repository.readControlSnapshot() !== snapshot) throw new AccountServiceError("INVALID_CURSOR");
+    const items = rows.slice(0, limit);
+    return {
+      items,
+      nextCursor: rows.length > limit
+        ? encodeControlListCursor({
+          version: 1,
+          snapshot,
+          last: JSON.stringify([input.appId, input.status ?? null, items.at(-1)!.invitationId]),
+        })
+        : null,
+    };
+  }
+
+  async revokeAppMemberInvitation(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly appId: AppId;
+    readonly invitationId: string;
+    readonly ifMatch?: string;
+    readonly requestId?: string;
+    readonly traceId?: string;
+    readonly callerChannel?: string;
+    readonly oauthClientHandle?: string;
+    readonly toolName?: string;
+  }): Promise<number> {
+    if (input.ifMatch === undefined || input.ifMatch.trim().length === 0) {
+      throw new AccountServiceError("PRECONDITION_REQUIRED");
+    }
+    const expectedRevision = parseCasAdminETag(input.ifMatch);
+    if (expectedRevision === null) throw new AccountServiceError("REVISION_MISMATCH");
+    const actor = await this.#resolveCanonicalAccount(input.actorAccountId);
+    this.#requireUsableAccount(actor);
+    await this.requireActiveIdentity(actor.accountId, input.actorExternalIdentityId);
+    if (!await this.repository.hasAppMembership(actor.accountId, input.appId)) {
+      throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
+    }
+    const invitation = await this.repository.getAppMemberInvitation(input.appId, input.invitationId);
+    if (!invitation) throw new AccountServiceError("NOT_FOUND");
+    if (invitation.revision !== expectedRevision) throw new AccountServiceError("REVISION_MISMATCH");
+    if (invitation.status === "revoked") return invitation.revision;
+    const now = this.now();
+    if (invitation.status !== "pending" || invitation.expiresAt <= now) {
+      if (invitation.status === "pending") await this.#transitionAppInvitation(input, invitation, "expired", now);
+      throw new AccountServiceError("INVITATION_NOT_PENDING");
+    }
+    const result = await this.#transitionAppInvitation(input, invitation, "revoked", now);
+    if (result !== "updated") throw new AccountServiceError("REVISION_MISMATCH");
+    return invitation.revision + 1;
+  }
+
+  async #transitionAppInvitation(
+    actor: {
+      readonly actorAccountId: AccountId;
+      readonly actorExternalIdentityId: string;
+      readonly appId: AppId;
+      readonly requestId?: string;
+      readonly traceId?: string;
+      readonly callerChannel?: string;
+      readonly oauthClientHandle?: string;
+      readonly toolName?: string;
+    },
+    invitation: AppMemberInvitation,
+    status: "revoked" | "expired",
+    now: number,
+  ): Promise<"updated" | "actor-not-member" | "unavailable"> {
+    return this.repository.commitAccountAppInvitationTransition({
+      ...actor,
+      invitationId: invitation.invitationId,
+      expectedRevision: invitation.revision,
+      status,
+      eventId: generateEventId(),
+      now,
+    });
   }
 
   async patchManagedOAuthIssuer(input: {

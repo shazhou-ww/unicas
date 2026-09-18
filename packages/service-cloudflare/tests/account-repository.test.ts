@@ -482,6 +482,63 @@ describe("D1 Account repository", () => {
     ).first()).toEqual({ revision: 1 });
   });
 
+  test("lists, expires, and revokes App invitations for an Account member", async () => {
+    const { db, service } = await fixture();
+    const actor = await service.createForExternalIdentity({
+      provider: "google",
+      issuer: "https://accounts.google.com",
+      subject: "invitation-owner",
+    });
+    await db.prepare(
+      "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES ('cas_app_invites', 'App', '', 'active', 1, 1)",
+    ).run();
+    await db.prepare(
+      "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES ('cas_app_invites', ?, ?, 1, ?)",
+    ).bind(actor.authenticatedIdentity.issuer, actor.authenticatedIdentity.subject, actor.account.accountId).run();
+    await db.prepare(
+      `INSERT INTO cas_app_member_invitations
+        (invitation_id, app_id, status, email_constraint, token_hash, expires_at, created_at, revision)
+       VALUES ('inv-expired', 'cas_app_invites', 'pending', 'old@example.com', 'old-hash', 999, 1, 1),
+         ('inv-pending', 'cas_app_invites', 'pending', 'new@example.com', 'new-hash', 2000, 1, 3)`,
+    ).run();
+
+    await expect(service.listAppMemberInvitations({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      appId: "cas_app_invites",
+      status: "pending",
+      callerChannel: "admin-webui",
+    })).resolves.toMatchObject({ items: [{ invitationId: "inv-pending", revision: 3 }] });
+    expect(await db.prepare(
+      "SELECT status, revision FROM cas_app_member_invitations WHERE invitation_id = 'inv-expired'",
+    ).first()).toEqual({ status: "expired", revision: 2 });
+    expect(await service.revokeAppMemberInvitation({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      appId: "cas_app_invites",
+      invitationId: "inv-pending",
+      ifMatch: '"3"',
+      callerChannel: "admin-webui",
+    })).toBe(4);
+    expect(await db.prepare(
+      "SELECT status, revision FROM cas_app_member_invitations WHERE invitation_id = 'inv-pending'",
+    ).first()).toEqual({ status: "revoked", revision: 4 });
+    expect(await db.prepare(
+      `SELECT action, original_account_id, external_identity_id
+       FROM cas_control_audit_events WHERE target IN ('inv-expired', 'inv-pending') ORDER BY action`,
+    ).all()).toMatchObject({ results: [
+      { action: "member.invitation.expired", original_account_id: actor.account.accountId, external_identity_id: actor.authenticatedIdentity.externalIdentityId },
+      { action: "member.invitation.revoked", original_account_id: actor.account.accountId, external_identity_id: actor.authenticatedIdentity.externalIdentityId },
+    ] });
+    await expect(service.revokeAppMemberInvitation({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      appId: "cas_app_invites",
+      invitationId: "inv-pending",
+      ifMatch: '"3"',
+    })).rejects.toMatchObject({ code: "REVISION_MISMATCH" });
+  });
+
   test("manages platform authorities and block state by Account ID", async () => {
     const { db, service } = await fixture();
     const actor = await service.createForExternalIdentity({

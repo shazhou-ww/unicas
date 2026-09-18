@@ -57,6 +57,9 @@ function fixture() {
     getAppOAuthIssuerInspection: vi.fn(async () => null),
     listAppOAuthIssuerInspectionKeys: vi.fn(async () => []),
     commitActivateAccountOAuthIssuer: vi.fn(async () => "activated"),
+    getAppMemberInvitation: vi.fn(async () => null),
+    listAppMemberInvitations: vi.fn(async () => []),
+    commitAccountAppInvitationTransition: vi.fn(async () => "updated"),
     getManagedOAuthIssuer: vi.fn(async () => null),
     commitPatchAccountManagedOAuthIssuer: vi.fn(async () => "updated"),
     commitPatchAccountApp: vi.fn(async () => "updated"),
@@ -485,6 +488,70 @@ describe("Account service", () => {
       inspectionId: inspection.inspectionId,
       activationProof: validProof,
     })).rejects.toMatchObject({ code: "PRECONDITION_REQUIRED" });
+  });
+
+  test("lists, expires, and revokes App invitations through Account membership", async () => {
+    const { repository, service } = fixture();
+    const pending = {
+      appId: "cas_app_a",
+      invitationId: "inv-a",
+      status: "pending" as const,
+      emailConstraint: "alice@example.com",
+      expiresAt: 2000,
+      createdAt: 1,
+      revision: 4,
+    };
+    const expired = { ...pending, invitationId: "inv-expired", expiresAt: 999, revision: 2 };
+    vi.mocked(repository.hasAppMembership).mockResolvedValue(true);
+    vi.mocked(repository.listAppMemberInvitations)
+      .mockResolvedValueOnce([expired])
+      .mockResolvedValueOnce([pending]);
+
+    await expect(service.listAppMemberInvitations({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      appId: pending.appId,
+      status: "pending",
+    })).resolves.toEqual({ items: [pending], nextCursor: null });
+    expect(repository.commitAccountAppInvitationTransition).toHaveBeenCalledWith(expect.objectContaining({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      invitationId: expired.invitationId,
+      status: "expired",
+      expectedRevision: 2,
+    }));
+
+    vi.mocked(repository.getAppMemberInvitation).mockResolvedValue(pending);
+    await expect(service.revokeAppMemberInvitation({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      appId: pending.appId,
+      invitationId: pending.invitationId,
+      ifMatch: '"4"',
+    })).resolves.toBe(5);
+    expect(repository.commitAccountAppInvitationTransition).toHaveBeenLastCalledWith(expect.objectContaining({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      invitationId: pending.invitationId,
+      status: "revoked",
+      expectedRevision: 4,
+    }));
+
+    vi.mocked(repository.getAppMemberInvitation).mockResolvedValue({ ...pending, status: "revoked", revision: 5 });
+    await expect(service.revokeAppMemberInvitation({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      appId: pending.appId,
+      invitationId: pending.invitationId,
+      ifMatch: '"5"',
+    })).resolves.toBe(5);
+    await expect(service.revokeAppMemberInvitation({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      appId: pending.appId,
+      invitationId: pending.invitationId,
+      ifMatch: '"4"',
+    })).rejects.toMatchObject({ code: "REVISION_MISMATCH" });
   });
 
   test("creates an App with Account authority and Account-scoped idempotency", async () => {

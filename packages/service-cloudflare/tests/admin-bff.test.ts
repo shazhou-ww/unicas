@@ -639,6 +639,10 @@ function memoryAccountRepository(
   const externalIssuers = new Map<string, Awaited<ReturnType<AccountRepository["getAppOAuthIssuer"]>>>();
   const issuerInspections = new Map<string, Parameters<AccountRepository["commitInspectAccountOAuthIssuer"]>[0]["inspection"]>();
   const issuerInspectionKeys = new Map<string, Parameters<AccountRepository["commitInspectAccountOAuthIssuer"]>[0]["keys"]>();
+  const appInvitations = new Map<string, {
+    status: "pending" | "accepted" | "expired" | "revoked";
+    revision: number;
+  }>();
   function add(
     account: AccountRecord,
     profile: { accountId: string; displayName: string | null; avatarUrl: string | null; displayNameSource: string | null; avatarSource: string | null; updatedAt: number },
@@ -713,6 +717,45 @@ function memoryAccountRepository(
       issuerInspections.set(input.inspectionId, { ...inspection, usedAt: input.now, revision: inspection.revision + 1 });
       externalIssuers.set(input.appId, input.issuer);
       return "activated";
+    },
+    getAppMemberInvitation: async (appId, invitationId) => {
+      if (!fakeStacks.has(appId) || invitationId !== "inv-test") return null;
+      const state = appInvitations.get(appId) ?? { status: "pending" as const, revision: 7 };
+      return {
+        appId,
+        invitationId,
+        status: state.status,
+        emailConstraint: null,
+        expiresAt: 4102444800000,
+        createdAt: 1,
+        revision: state.revision,
+      };
+    },
+    listAppMemberInvitations: async input => {
+      if (!fakeStacks.has(input.appId) || input.afterInvitationId >= "inv-test") return [];
+      const state = appInvitations.get(input.appId) ?? { status: "pending" as const, revision: 7 };
+      if (input.status !== undefined && input.status !== state.status) return [];
+      if (input.expiresAtOrBefore !== undefined && 4102444800000 > input.expiresAtOrBefore) return [];
+      return [{
+        appId: input.appId,
+        invitationId: "inv-test",
+        status: state.status,
+        emailConstraint: null,
+        expiresAt: 4102444800000,
+        createdAt: 1,
+        revision: state.revision,
+      }];
+    },
+    commitAccountAppInvitationTransition: async input => {
+      const identity = identities.get(input.actorExternalIdentityId);
+      const app = fakeStacks.get(input.appId);
+      if (!identity || identity.accountId !== input.actorAccountId
+        || !app?.members.has(`${identity.issuer}\n${identity.subject}`)) return "actor-not-member";
+      const state = appInvitations.get(input.appId) ?? { status: "pending" as const, revision: 7 };
+      if (input.invitationId !== "inv-test" || state.status !== "pending"
+        || state.revision !== input.expectedRevision) return "unavailable";
+      appInvitations.set(input.appId, { status: input.status, revision: state.revision + 1 });
+      return "updated";
     },
     getManagedOAuthIssuer: async appId => {
       if (!fakeStacks.has(appId)) return null;
@@ -2243,7 +2286,26 @@ describe("cas-admin-webui BFF", () => {
 
   test("App invitation list and revoke use strict filters, CSRF, and invitation ETags", async () => {
     const provider = await createMockProvider();
-    const bff = await createBff(provider);
+    const platform = new MemoryPlatformAccessRepository();
+    platform.grant(ISSUER, "google-user-123");
+    const accounts = memoryAccountRepository(platform, "google-user-123");
+    const legacyList = vi.fn(async () => { throw new Error("legacy invitation list must not be called"); });
+    const legacyRevoke = vi.fn(async () => { throw new Error("legacy invitation revoke must not be called"); });
+    const bff = await createBff(
+      provider,
+      undefined,
+      {},
+      platform,
+      {
+        ...fakeControlPlane(),
+        listAppMemberInvitations: legacyList,
+        revokeAppMemberInvitation: legacyRevoke,
+      },
+      undefined,
+      undefined,
+      undefined,
+      accounts,
+    );
     const { cookie, csrf } = await signIn(bff, provider);
     const appId = await createStack(bff, cookie, csrf, "App");
     const path = `/admin/apps/${appId}/member-invitations`;
@@ -2256,6 +2318,8 @@ describe("cas-admin-webui BFF", () => {
     expect(revoked.status).toBe(204);
     expect(revoked.headers.get("ETag")).toBe('"8"');
     expect(await revoked.text()).toBe("");
+    expect(legacyList).not.toHaveBeenCalled();
+    expect(legacyRevoke).not.toHaveBeenCalled();
   });
 
   test("App status mutations enforce CSRF, strict input, and minimal responses", async () => {

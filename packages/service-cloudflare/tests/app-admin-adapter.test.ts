@@ -61,11 +61,15 @@ describe("App admin physical compatibility adapter", () => {
     ["getOAuthIssuer", "GET", "/admin/apps/app-1/oauth-issuer"],
     ["getManagedIssuer", "GET", "/admin/apps/app-1/managed-issuer"],
     ["patchManagedIssuer", "PATCH", "/admin/apps/app-1/managed-issuer"],
+    ["listMemberInvitations", "GET", "/admin/apps/app-1/member-invitations"],
+    ["revokeMemberInvitation", "DELETE", "/admin/apps/app-1/member-invitations/inv-1"],
   ] as const)("forwards %s through the Account-native App path", async (operation, method, path) => {
     const handler = vi.fn(async () => Response.json({ appId: "app-1", mode: "managed" }));
     await handleAppAdminCompatibilityRequest(
       request(path, { method }),
-      { operation, appId: "app-1" },
+      operation === "revokeMemberInvitation"
+        ? { operation, appId: "app-1", invitationId: "inv-1" }
+        : { operation, appId: "app-1" },
       handler,
     );
     expect(handler).toHaveBeenCalledWith(expect.objectContaining({

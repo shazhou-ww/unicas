@@ -1,5 +1,5 @@
 import type { D1Database, D1PreparedStatement } from "@cloudflare/workers-types";
-import type { AccountId, App, AppId, PlatformAuthority, PrimaryVerifiedEmail } from "@unicas/admin-protocol";
+import type { AccountId, App, AppId, AppMemberInvitation, PlatformAuthority, PrimaryVerifiedEmail } from "@unicas/admin-protocol";
 import type {
   AccountAppMembershipRecord,
   AccountAppIdempotencyRecord,
@@ -546,6 +546,70 @@ export class D1AccountRepository implements AccountRepository {
       const inspection = await this.getAppOAuthIssuerInspection(input.inspectionId);
       return !inspection || inspection.usedAt !== null || inspection.expiresAt <= input.now
         ? "unavailable" : "revision-mismatch";
+    }
+  }
+
+  async getAppMemberInvitation(appId: AppId, invitationId: string): Promise<AppMemberInvitation | null> {
+    return this.db.prepare(
+      `SELECT invitation_id AS invitationId, app_id AS appId, status,
+        email_constraint AS emailConstraint, expires_at AS expiresAt,
+        created_at AS createdAt, revision
+       FROM cas_app_member_invitations WHERE app_id = ? AND invitation_id = ?`,
+    ).bind(appId, invitationId).first<AppMemberInvitation>();
+  }
+
+  async listAppMemberInvitations(
+    input: Parameters<AccountRepository["listAppMemberInvitations"]>[0],
+  ): Promise<readonly AppMemberInvitation[]> {
+    const result = await this.db.prepare(
+      `SELECT invitation_id AS invitationId, app_id AS appId, status,
+        email_constraint AS emailConstraint, expires_at AS expiresAt,
+        created_at AS createdAt, revision
+       FROM cas_app_member_invitations
+       WHERE app_id = ? AND invitation_id > ? AND (? IS NULL OR status = ?)
+         AND (? IS NULL OR expires_at <= ?)
+       ORDER BY invitation_id LIMIT ?`,
+    ).bind(
+      input.appId,
+      input.afterInvitationId,
+      input.status ?? null,
+      input.status ?? null,
+      input.expiresAtOrBefore ?? null,
+      input.expiresAtOrBefore ?? null,
+      input.limit,
+    ).all<AppMemberInvitation>();
+    return result.results ?? [];
+  }
+
+  async commitAccountAppInvitationTransition(
+    input: Parameters<AccountRepository["commitAccountAppInvitationTransition"]>[0],
+  ): Promise<"updated" | "actor-not-member" | "unavailable"> {
+    const action = input.status === "revoked" ? "member.invitation.revoked" : "member.invitation.expired";
+    try {
+      await this.db.batch([
+        this.#requireAppActor(input),
+        this.db.prepare(
+          `UPDATE cas_app_member_invitations SET status = ?, revision = revision + 1
+           WHERE app_id = ? AND invitation_id = ? AND revision = ? AND status = 'pending'
+             AND ((? = 'expired' AND expires_at <= ?) OR (? = 'revoked' AND expires_at > ?))`,
+        ).bind(
+          input.status,
+          input.appId,
+          input.invitationId,
+          input.expectedRevision,
+          input.status,
+          input.now,
+          input.status,
+          input.now,
+        ),
+        this.db.prepare("SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('invalid', '$') END AS changed"),
+        this.#appAuditStatement(input, action, input.invitationId),
+        ...this.#controlSnapshotStatements(),
+      ]);
+      return "updated";
+    } catch (error) {
+      if (!isJsonFailure(error)) throw error;
+      return await this.#isUsableAppActor(input) ? "unavailable" : "actor-not-member";
     }
   }
 
