@@ -512,12 +512,15 @@ describe("standalone deployment plan", () => {
         { source: "cas_nodes", stack_id: stackId, tenant_id: "deploy-smoke" },
         { source: "cas_root_domain_revisions", stack_id: stackId, tenant_id: null },
       ],
-      objectKeys: [`stacks/${stackId}/tenants/deploy-smoke/nodes-v2/${"a".repeat(64)}`],
+      objectKeys: [`apps/${stackId}/spaces/deploy-smoke/nodes-v2/${"a".repeat(64)}`],
       oauthKeys: ["client:example_1"],
-      managedIssuers: [{
+      controlTables: ["cas_apps", "cas_platform_principals"],
+      tenantTables: ["cas_nodes"],
+      externalIssuers: [{
         stack_id: stackId,
-        issuer: `https://api.unicas.work/managed-issuers/${stackId}`,
+        issuer: "https://unicas.work/deploy-smoke",
         audience: `https://api.unicas.work/stacks/${stackId}`,
+        status: "active",
       }],
     };
     expect(() => validateResetInventory(inventory, stackId)).not.toThrow();
@@ -541,6 +544,10 @@ describe("standalone deployment plan", () => {
       ...inventory,
       oauthKeys: ["client:ok;remove-legacy"],
     }, stackId)).toThrow("unsafe key name");
+    expect(() => validateResetInventory({
+      ...inventory,
+      controlTables: [...inventory.controlTables, "customer_records"],
+    }, stackId)).toThrow("unknown tables: customer_records");
     expect(() => validateResetInventory(inventory, "cas_bad/id"))
       .toThrow("not a canonical UniCAS stack id");
   });
@@ -562,17 +569,22 @@ describe("standalone deployment plan", () => {
 
   test("the smoke reset plan targets only isolated resources", () => {
     const commands = resetPlan({
-      objectKeys: [`stacks/cas_smoke/tenants/deploy-smoke/nodes-v2/${"a".repeat(64)}`],
+      objectKeys: [`apps/cas_smoke/spaces/deploy-smoke/nodes-v2/${"a".repeat(64)}`],
       oauthKeys: ["client:example"],
     });
     const rendered = commands.map((command) => command.join(" ")).join("\n");
-    expect(rendered).toContain("unicas-content/stacks/cas_smoke/tenants/deploy-smoke");
+    expect(rendered).toContain("unicas-content/apps/cas_smoke/spaces/deploy-smoke");
     expect(rendered).toContain("d1 execute unicas-control --remote");
     expect(rendered).toContain("d1 execute unicas-tenant --remote");
     expect(rendered).toContain("DROP TABLE IF EXISTS cas_apps");
     expect(rendered).toContain("DROP TABLE IF EXISTS cas_accounts");
     expect(rendered).toContain("DROP TABLE IF EXISTS cas_nodes");
-    expect(rendered).not.toContain("cas_platform_principals");
+    for (const retired of [
+      "cas_platform_principals",
+      "cas_operator_identities",
+      "cas_playground_file_roots",
+      "cas_control_idempotency",
+    ]) expect(rendered).toContain(`DROP TABLE IF EXISTS ${retired}`);
     expect(rendered).toContain("--binding OAUTH_KV --remote");
     expect(rendered).not.toContain("unicas.shazhou.work");
     expect(rendered).not.toContain("unidocs-cas");

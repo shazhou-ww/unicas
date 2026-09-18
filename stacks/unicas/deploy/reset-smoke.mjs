@@ -9,6 +9,7 @@ const SERVICE_PACKAGE = "@unicas/service-cloudflare";
 const EXPECTED_STACK_NAME = "Production Smoke";
 const EXPECTED_TENANT_ID = "deploy-smoke";
 const EXPECTED_API_ORIGIN = "https://api.unicas.work";
+const EXPECTED_SMOKE_ISSUER = "https://unicas.work/deploy-smoke";
 const CONTROL_DATABASE = "unicas-control";
 const TENANT_DATABASE = "unicas-tenant";
 const CONTENT_BUCKET = "unicas-content";
@@ -19,10 +20,12 @@ const CONTROL_TABLES = [
   "cas_oauth_issuer_inspections",
   "cas_app_managed_issuers",
   "cas_app_oauth_issuers",
+  "cas_playground_file_roots",
   "cas_app_member_invitations",
   "cas_app_members",
   "cas_account_app_invitation_idempotency",
   "cas_account_app_idempotency",
+  "cas_control_idempotency",
   "cas_platform_invitation_idempotency",
   "cas_platform_invitations",
   "cas_control_audit_events",
@@ -30,9 +33,11 @@ const CONTROL_TABLES = [
   "cas_admin_sessions",
   "cas_email_challenges",
   "cas_account_platform_authorities",
+  "cas_platform_principals",
   "cas_external_identities",
   "cas_account_profiles",
   "cas_account_aliases",
+  "cas_operator_identities",
   "cas_apps",
   "cas_accounts",
   "cas_control_meta",
@@ -61,14 +66,14 @@ export const SCOPED_INVENTORY_QUERIES = {
      UNION ALL SELECT 'cas_control_audit_events', app_id FROM cas_control_audit_events WHERE app_id IS NOT NULL GROUP BY app_id`,
   ],
   data: [
-    `SELECT 'cas_nodes' AS source, stack_id, tenant_id FROM cas_nodes GROUP BY stack_id, tenant_id
-     UNION ALL SELECT 'cas_edges', stack_id, tenant_id FROM cas_edges GROUP BY stack_id, tenant_id
-     UNION ALL SELECT 'cas_root_ref_requests', stack_id, tenant_id FROM cas_root_ref_requests GROUP BY stack_id, tenant_id
-     UNION ALL SELECT 'cas_root_domain_events', stack_id, tenant_id FROM cas_root_domain_events GROUP BY stack_id, tenant_id`,
-    `SELECT 'cas_root_domain_refs' AS source, stack_id, tenant_id FROM cas_root_domain_refs GROUP BY stack_id, tenant_id
-     UNION ALL SELECT 'cas_root_domain_revisions', stack_id, NULL FROM cas_root_domain_revisions GROUP BY stack_id
-     UNION ALL SELECT 'cas_upload_reservations', stack_id, tenant_id FROM cas_upload_reservations GROUP BY stack_id, tenant_id
-     UNION ALL SELECT 'cas_direct_upload_sessions', stack_id, tenant_id FROM cas_direct_upload_sessions GROUP BY stack_id, tenant_id`,
+    `SELECT 'cas_nodes' AS source, app_id AS stack_id, space_id AS tenant_id FROM cas_nodes GROUP BY app_id, space_id
+     UNION ALL SELECT 'cas_edges', app_id, space_id FROM cas_edges GROUP BY app_id, space_id
+     UNION ALL SELECT 'cas_root_ref_requests', app_id, space_id FROM cas_root_ref_requests GROUP BY app_id, space_id
+     UNION ALL SELECT 'cas_root_domain_events', app_id, space_id FROM cas_root_domain_events GROUP BY app_id, space_id`,
+    `SELECT 'cas_root_domain_refs' AS source, app_id AS stack_id, space_id AS tenant_id FROM cas_root_domain_refs GROUP BY app_id, space_id
+     UNION ALL SELECT 'cas_root_domain_revisions', app_id, NULL FROM cas_root_domain_revisions GROUP BY app_id
+     UNION ALL SELECT 'cas_upload_reservations', app_id, space_id FROM cas_upload_reservations GROUP BY app_id, space_id
+     UNION ALL SELECT 'cas_direct_upload_sessions', app_id, space_id FROM cas_direct_upload_sessions GROUP BY app_id, space_id`,
   ],
 };
 
@@ -109,6 +114,16 @@ export function validateResetInventory(inventory, expectedStackId) {
   if (!Array.isArray(inventory.controlScopes) || !Array.isArray(inventory.dataScopes)) {
     throw new Error("remote scoped-table inventory is incomplete");
   }
+  if (!Array.isArray(inventory.controlTables) || !Array.isArray(inventory.tenantTables)) {
+    throw new Error("remote schema inventory is incomplete");
+  }
+  const unknownTables = [
+    ...inventory.controlTables.filter((table) => !CONTROL_TABLES.includes(table)),
+    ...inventory.tenantTables.filter((table) => !TENANT_TABLES.includes(table)),
+  ];
+  if (unknownTables.length > 0) {
+    throw new Error(`remote schema contains unknown tables: ${unknownTables.join(", ")}`);
+  }
   if (inventory.controlScopes.some((row) => row.stack_id !== expectedStackId)) {
     throw new Error("remote control data contains a stack outside the smoke target");
   }
@@ -119,7 +134,7 @@ export function validateResetInventory(inventory, expectedStackId) {
     throw new Error("remote tenant data contains a partition outside the smoke target");
   }
   const objectPattern = new RegExp(
-    `^stacks/${expectedStackId}/tenants/${EXPECTED_TENANT_ID}/nodes-v2/[a-f0-9]{64}$`,
+    `^apps/${expectedStackId}/spaces/${EXPECTED_TENANT_ID}/nodes-v2/[a-f0-9]{64}$`,
   );
   if (inventory.objectKeys.some((key) => !objectPattern.test(key))) {
     throw new Error("remote object inventory contains a key outside the smoke prefix");
@@ -127,16 +142,17 @@ export function validateResetInventory(inventory, expectedStackId) {
   if (inventory.oauthKeys.some((key) => !/^[A-Za-z0-9:_-]+$/.test(key))) {
     throw new Error("remote OAuth inventory contains an unsafe key name");
   }
-  if (inventory.managedIssuers.length !== 1) {
-    throw new Error("expected exactly one managed smoke issuer");
+  if (inventory.externalIssuers.length !== 1) {
+    throw new Error("expected exactly one external smoke issuer");
   }
-  const issuer = inventory.managedIssuers[0];
+  const issuer = inventory.externalIssuers[0];
   if (
     issuer.stack_id !== expectedStackId
-    || issuer.issuer !== `${EXPECTED_API_ORIGIN}/managed-issuers/${expectedStackId}`
+    || issuer.issuer !== EXPECTED_SMOKE_ISSUER
     || issuer.audience !== `${EXPECTED_API_ORIGIN}/stacks/${expectedStackId}`
+    || issuer.status !== "active"
   ) {
-    throw new Error("managed smoke issuer is not bound to the expected API origin");
+    throw new Error("external smoke issuer does not match the expected production binding");
   }
 }
 
@@ -267,26 +283,40 @@ function query(database, sql) {
 }
 
 function remoteInventory() {
-  const stacks = query(CONTROL_DATABASE, "SELECT stack_id, display_name FROM cas_stacks ORDER BY stack_id");
-  const managedIssuers = query(
+  const stacks = query(CONTROL_DATABASE, "SELECT app_id AS stack_id, display_name FROM cas_apps ORDER BY app_id");
+  const externalIssuers = query(
     CONTROL_DATABASE,
-    "SELECT stack_id, issuer, audience FROM cas_stack_managed_issuers ORDER BY stack_id",
+    "SELECT app_id AS stack_id, issuer, audience, status FROM cas_app_oauth_issuers ORDER BY app_id",
   );
   const tenants = query(
     TENANT_DATABASE,
-    "SELECT DISTINCT stack_id, tenant_id FROM cas_nodes ORDER BY stack_id, tenant_id",
+    "SELECT DISTINCT app_id AS stack_id, space_id AS tenant_id FROM cas_nodes ORDER BY app_id, space_id",
   );
   const controlScopes = SCOPED_INVENTORY_QUERIES.control.flatMap((sql) => query(CONTROL_DATABASE, sql));
   const dataScopes = SCOPED_INVENTORY_QUERIES.data.flatMap((sql) => query(TENANT_DATABASE, sql));
   const objectKeys = query(
     TENANT_DATABASE,
-    "SELECT 'stacks/' || stack_id || '/tenants/' || tenant_id || '/nodes-v2/' || hash AS object_key FROM cas_nodes ORDER BY stack_id, tenant_id, hash",
+    "SELECT 'apps/' || app_id || '/spaces/' || space_id || '/nodes-v2/' || hash AS object_key FROM cas_nodes ORDER BY app_id, space_id, hash",
   ).map((row) => row.object_key);
   const oauthKeys = JSON.parse(run(
     wrangler("kv", "key", "list", "--binding", OAUTH_BINDING, "--remote"),
     true,
   )).map((entry) => entry.name);
-  return { stacks, managedIssuers, tenants, controlScopes, dataScopes, objectKeys, oauthKeys };
+  const tableNames = (database) => query(
+    database,
+    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name",
+  ).map((row) => row.name);
+  return {
+    stacks,
+    externalIssuers,
+    tenants,
+    controlScopes,
+    dataScopes,
+    objectKeys,
+    oauthKeys,
+    controlTables: tableNames(CONTROL_DATABASE),
+    tenantTables: tableNames(TENANT_DATABASE),
+  };
 }
 
 function printPlan(commands) {

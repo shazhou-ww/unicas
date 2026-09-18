@@ -35,6 +35,17 @@ only current Account/App tables; it performs no rename, synthesis, backfill, or
 compatibility read. Local bootstrap and the explicit smoke-reset plan use the
 same current schema. No remote database reset was selected or executed.
 
+The production reset plan now inventories the App/Space schema actually
+deployed on `release`, rejects unknown D1 tables, and drops the complete union
+of deployed legacy and current Account/App tables. A read-only remote preview
+passed against the single `Production Smoke` App, its `deploy-smoke` Space,
+three canonical R2 objects, zero OAuth KV keys, and the active external smoke
+issuer. No remote data was changed. A count-only query also confirmed exactly
+one existing Google identity for `shazhou.ww@gmail.com`; its subject was not
+printed. Reset must be coordinated with a maintenance cutover, current Worker
+deployment, and atomic first-Account bootstrap so the old Worker cannot recreate
+the retired schema between deletion and release.
+
 The production provisioning guide now contains portal-level application steps
 for Google, Microsoft personal accounts, one current GitHub OAuth App with two
 exact callback URLs, Cloudflare Email Sending onboarding, GitHub Environment
