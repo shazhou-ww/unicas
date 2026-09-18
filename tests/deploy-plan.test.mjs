@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { describe, expect, test } from "vitest";
 import {
   deploymentPlan,
@@ -14,6 +15,8 @@ import {
   parseSecretNames,
 } from "../stacks/unicas/deploy/ensure-encryption-secrets.mjs";
 import {
+  bootstrapStatements,
+  inventoryDigest,
   parseResetArgs,
   r2BackupPlan,
   resetPlan,
@@ -21,6 +24,7 @@ import {
   validateR2BackupFiles,
   validateResetInventory,
 } from "../stacks/unicas/deploy/reset-smoke.mjs";
+import { CONTROL_SCHEMA_MIGRATIONS } from "../packages/service-cloudflare/src/control-schema.ts";
 import { normalizeSmokeBaseUrl } from "../scripts/smoke-target.mjs";
 import {
   fetchWorkflowCreatedAt,
@@ -479,15 +483,16 @@ describe("standalone deployment plan", () => {
     expect(packageJson.scripts["smoke:v1"]).toContain("cas-middleware-smoke.mjs");
   });
 
-  test("the smoke reset requires an explicit target and backup directory", () => {
+  test("the smoke reset requires an explicit target and backup or waiver", () => {
     expect(parseResetArgs([])).toEqual({
       execute: false,
+      verifyCurrent: false,
       expectedStackId: undefined,
       backupDir: undefined,
       confirmation: undefined,
     });
     expect(() => parseResetArgs(["--execute"]))
-      .toThrow("--execute requires --expected-stack-id");
+      .toThrow("--execute and --verify-current require --expected-stack-id");
     expect(() => parseResetArgs(["--execute", "--expected-stack-id", "cas_smoke"]))
       .toThrow("backup-free execution requires --confirm DELETE-ALL-TEST-DATA-NO-BACKUP");
     expect(parseResetArgs([
@@ -496,10 +501,24 @@ describe("standalone deployment plan", () => {
       "--confirm", "DELETE-ALL-TEST-DATA-NO-BACKUP",
     ])).toEqual({
       execute: true,
+      verifyCurrent: false,
       expectedStackId: "cas_smoke",
       backupDir: undefined,
       confirmation: "DELETE-ALL-TEST-DATA-NO-BACKUP",
     });
+    expect(parseResetArgs([
+      "--verify-current",
+      "--expected-stack-id", "cas_smoke",
+    ])).toEqual({
+      execute: false,
+      verifyCurrent: true,
+      expectedStackId: "cas_smoke",
+      backupDir: undefined,
+      confirmation: undefined,
+    });
+    expect(() => parseResetArgs([
+      "--execute", "--verify-current", "--expected-stack-id", "cas_smoke",
+    ])).toThrow("cannot be combined");
 
     const result = spawnSync(
       process.execPath,
@@ -515,6 +534,7 @@ describe("standalone deployment plan", () => {
     const inventory = {
       stacks: [{ stack_id: stackId, display_name: "Production Smoke" }],
       tenants: [{ stack_id: stackId, tenant_id: "deploy-smoke" }],
+      pendingUploads: 0,
       controlScopes: [
         { source: "cas_stacks", stack_id: stackId },
         { source: "cas_stack_members", stack_id: stackId },
@@ -525,13 +545,36 @@ describe("standalone deployment plan", () => {
       ],
       objectKeys: [`apps/${stackId}/spaces/deploy-smoke/nodes-v2/${"a".repeat(64)}`],
       oauthKeys: ["client:example_1"],
+      workerSecrets: ["SESSION_ENCRYPTION_KEYS"],
       controlTables: ["cas_apps", "cas_platform_principals"],
       tenantTables: ["cas_nodes"],
       externalIssuers: [{
         stack_id: stackId,
+        mode: "external",
         issuer: "https://unicas.work/deploy-smoke",
         audience: `https://api.unicas.work/stacks/${stackId}`,
+        metadata_url: "https://unicas.work/.well-known/oauth-authorization-server/deploy-smoke",
+        metadata_type: "oauth",
+        authorization_endpoint: "https://unicas.work/deploy-smoke/authorize",
+        token_endpoint: "https://unicas.work/deploy-smoke/token",
+        jwks_uri: "https://unicas.work/deploy-smoke/jwks.json",
+        registration_endpoint: null,
+        scopes_supported: "[]",
+        code_challenge_methods_supported: '["S256"]',
         status: "active",
+        verified_at: 1,
+        last_refresh_at: 1,
+        last_refresh_error: null,
+        jwks_digest: "digest",
+        capability_max_lifetime_seconds: 3600,
+        revision: 1,
+      }],
+      bootstrapIdentities: [{
+        identity_issuer: "https://accounts.google.com",
+        subject: "google's-subject",
+        display_name: "Scott",
+        app_id: stackId,
+        joined_at: 1,
       }],
     };
     expect(() => validateResetInventory(inventory, stackId)).not.toThrow();
@@ -557,10 +600,21 @@ describe("standalone deployment plan", () => {
     }, stackId)).toThrow("unsafe key name");
     expect(() => validateResetInventory({
       ...inventory,
+      pendingUploads: 1,
+    }, stackId)).toThrow("pending direct uploads");
+    expect(() => validateResetInventory({
+      ...inventory,
+      workerSecrets: [...inventory.workerSecrets, "CAS_R2_SECRET_ACCESS_KEY"],
+    }, stackId)).toThrow("signing credentials must be revoked");
+    expect(() => validateResetInventory({
+      ...inventory,
       controlTables: [...inventory.controlTables, "customer_records"],
     }, stackId)).toThrow("unknown tables: customer_records");
     expect(() => validateResetInventory(inventory, "cas_bad/id"))
       .toThrow("not a canonical UniCAS stack id");
+
+    expect(inventoryDigest({ ...inventory, controlScopes: [...inventory.controlScopes].reverse() }))
+      .toBe(inventoryDigest(inventory));
   });
 
   test("the smoke reset bounds compound inventory queries for remote D1", () => {
@@ -601,6 +655,90 @@ describe("standalone deployment plan", () => {
     expect(rendered).not.toContain("unidocs-cas");
   });
 
+  test("bootstraps the current Account model and preserves the smoke App issuer", () => {
+    const inventory = {
+      stacks: [{
+        stack_id: "cas_smoke",
+        display_name: "Production Smoke",
+        description: "Canonical deployment smoke",
+        status: "active",
+        created_at: 1,
+        revision: 2,
+      }],
+      bootstrapIdentities: [{
+        identity_issuer: "https://accounts.google.com",
+        subject: "google's-subject",
+        display_name: "Scott",
+        app_id: "cas_smoke",
+        joined_at: 2,
+      }],
+      externalIssuers: [{
+        stack_id: "cas_smoke",
+        mode: "external",
+        issuer: "https://unicas.work/deploy-smoke",
+        audience: "https://api.unicas.work/stacks/cas_smoke",
+        metadata_url: "https://unicas.work/.well-known/oauth-authorization-server/deploy-smoke",
+        metadata_type: "oauth",
+        authorization_endpoint: "https://unicas.work/deploy-smoke/authorize",
+        token_endpoint: "https://unicas.work/deploy-smoke/token",
+        jwks_uri: "https://unicas.work/deploy-smoke/jwks.json",
+        registration_endpoint: null,
+        scopes_supported: "[]",
+        code_challenge_methods_supported: '["S256"]',
+        status: "active",
+        verified_at: 3,
+        last_refresh_at: 4,
+        last_refresh_error: null,
+        jwks_digest: "digest",
+        capability_max_lifetime_seconds: 3600,
+        revision: 1,
+      }],
+    };
+    let fill = 1;
+    const bootstrap = bootstrapStatements(inventory, {
+      now: 5,
+      random: (length) => Buffer.alloc(length, fill++),
+    });
+    expect([...bootstrap.captureStatements, ...bootstrap.statements].join("\n"))
+      .not.toContain("google's-subject");
+    const database = new DatabaseSync(":memory:");
+    try {
+      database.exec("CREATE TABLE cas_operator_identities (identity_issuer TEXT NOT NULL, subject TEXT NOT NULL, display_name TEXT, email_for_display TEXT, created_at INTEGER NOT NULL)");
+      database.exec("CREATE TABLE cas_platform_principals (identity_issuer TEXT NOT NULL, subject TEXT NOT NULL, status TEXT NOT NULL, platform_admin INTEGER NOT NULL, apps_create INTEGER NOT NULL)");
+      database.exec("CREATE TABLE cas_app_members (app_id TEXT NOT NULL, identity_issuer TEXT NOT NULL, subject TEXT NOT NULL, joined_at INTEGER NOT NULL)");
+      database.exec("INSERT INTO cas_operator_identities VALUES ('https://accounts.google.com', 'google''s-subject', 'Scott', 'shazhou.ww@gmail.com', 1)");
+      database.exec("INSERT INTO cas_platform_principals VALUES ('https://accounts.google.com', 'google''s-subject', 'active', 1, 1)");
+      database.exec("INSERT INTO cas_app_members VALUES ('cas_smoke', 'https://accounts.google.com', 'google''s-subject', 2)");
+      for (const statement of bootstrap.captureStatements) database.exec(statement);
+      database.exec("DROP TABLE cas_operator_identities");
+      database.exec("DROP TABLE cas_platform_principals");
+      database.exec("DROP TABLE cas_app_members");
+      for (const migration of CONTROL_SCHEMA_MIGRATIONS) database.exec(migration);
+      for (const statement of bootstrap.statements) database.exec(statement);
+      expect(bootstrap.accountId).toMatch(/^acct_[A-Za-z0-9_-]{22}$/);
+      expect(bootstrap.externalIdentityId).toMatch(/^ext_[A-Za-z0-9_-]{22}$/);
+      expect(database.prepare("SELECT subject FROM cas_external_identities").get()).toEqual({
+        subject: "google's-subject",
+      });
+      expect(database.prepare("SELECT COUNT(*) AS count FROM cas_account_platform_authorities").get()).toEqual({ count: 2 });
+      expect(database.prepare("SELECT account_id FROM cas_app_members WHERE app_id='cas_smoke'").get()).toEqual({
+        account_id: bootstrap.accountId,
+      });
+      expect(database.prepare("SELECT issuer, audience, status FROM cas_app_oauth_issuers").get()).toEqual({
+        issuer: "https://unicas.work/deploy-smoke",
+        audience: "https://api.unicas.work/stacks/cas_smoke",
+        status: "active",
+      });
+      expect(database.prepare("SELECT COUNT(*) AS count FROM cas_platform_audit_events").get()).toEqual({ count: 2 });
+      expect(database.prepare("SELECT COUNT(*) AS count FROM cas_control_audit_events").get()).toEqual({ count: 1 });
+      expect(database.prepare(
+        "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='cas_cutover_identity'",
+      ).get()).toEqual({ count: 0 });
+    } finally {
+      database.close();
+    }
+  });
+
   test("the smoke reset backs up and verifies every R2 object before deletion", () => {
     const backupDir = mkdtempSync(join(tmpdir(), "unicas-reset-backup-"));
     try {
@@ -625,6 +763,16 @@ describe("standalone deployment plan", () => {
       writeFileSync(join(backupDir, "r2", `${hash}.bin`), "corrupt");
       expect(() => validateR2BackupFiles([objectKey], backupDir))
         .toThrow("R2 backup digest does not match its canonical key");
+
+      const uploadKey = "_uploads/v1/upload-1";
+      const uploadName = `${createHash("sha256").update(uploadKey).digest("hex")}.bin`;
+      writeFileSync(join(backupDir, "r2", uploadName), "temporary upload");
+      expect(validateR2BackupFiles([uploadKey], backupDir)).toEqual([{
+        objectKey: uploadKey,
+        file: `r2/${uploadName}`,
+        bytes: Buffer.byteLength("temporary upload"),
+        sha256: createHash("sha256").update("temporary upload").digest("hex"),
+      }]);
     } finally {
       rmSync(backupDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }

@@ -54,6 +54,28 @@ bounded inventory, known-table, issuer, Space, R2-prefix, and KV-key guards.
 Backup mode remains available but optional. CI `validate` passed for the latest
 published `main` revision before this follow-up.
 
+The cutover driver now deploys and verifies maintenance on both production
+origins, rechecks an unchanged bounded inventory, keeps the legacy Google
+subject entirely inside a transient D1 table, creates the exact current control
+and tenant schemas, bootstraps one Account with `platform.admin` and
+`apps.create`, preserves the Production Smoke App and active external issuer,
+and verifies exact table sets and count-only outcomes. The read-only production
+preview passes and prints no email or subject. The GitHub `Production`
+Environment now requires `shazhou-ww` approval with self-review permitted, so a
+validated release can wait before deployment while the cutover runs. No reset,
+maintenance deployment, release merge, or production deployment has occurred.
+The maintenance Worker directly enumerates physical R2 and KV state, rejects
+pending upload sessions and out-of-bound object prefixes, and verifies both
+bindings are empty after deletion. Inventory hashing is order-independent.
+Optional backup mode now creates fresh D1 exports after maintenance rather than
+accepting preexisting files. `--verify-current` provides a non-destructive
+resume path when schema/bootstrap commit succeeded but final verification was
+interrupted.
+The driver rejects configured direct-upload signing secrets until the
+underlying R2 API token is revoked, closing the presigned-URL race. A live
+name-only Worker-secret check confirmed production has neither direct-upload
+signing secret configured.
+
 The production provisioning guide now contains portal-level application steps
 for Google, Microsoft personal accounts, one current GitHub OAuth App with two
 exact callback URLs, Cloudflare Email Sending onboarding, GitHub Environment
@@ -97,8 +119,8 @@ Validation for this checkpoint:
 - real-D1 platform invitations: 1 test passed;
 - remote/stdio MCP integration: 9 tests passed;
 - fresh control schema: 5 tests passed;
-- deployment/reset plan: 29 tests passed;
-- repository policy/docs/boundaries/OpenAPI: 116 tests passed;
+- deployment/reset plan: 30 tests passed;
+- repository policy/docs/boundaries/OpenAPI: 117 tests passed;
 - clean sequential production builds passed for administrator protocol, client,
   WebUI, cloud-neutral service, and Cloudflare adapter.
 

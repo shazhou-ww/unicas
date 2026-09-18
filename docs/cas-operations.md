@@ -193,10 +193,25 @@ stored only on External Identity and retained with audit evidence.
 
 Fresh control-schema initialization creates only the current Account/App model.
 It does not inspect, synthesize, backfill, or upgrade legacy administrator data.
-For an internal development reset, first select the exact development D1
-binding, export it if evidence is needed, drop the control tables through the
-explicit reset plan, and restart the current Worker to initialize the schema.
-Never infer a remote binding from the worktree or environment name.
+For the authorized internal-development production cutover, use
+`stacks/unicas/deploy/reset-smoke.mjs` from the exact release candidate. Its
+preview inventories the fixed production bindings and refuses unknown tables,
+Apps, Spaces, issuer configuration, R2 prefixes, or KV key formats. Execution
+requires the exact Smoke App ID and either a reviewed backup directory or the
+explicit `DELETE-ALL-TEST-DATA-NO-BACKUP` confirmation.
+
+Execution first deploys and verifies a maintenance Worker on both service
+origins, directly enumerates the dedicated R2 and KV bindings, then repeats the
+D1 inventory and rejects any change. Pending direct-upload sessions or physical
+objects outside the Smoke node and temporary-upload prefixes stop the reset. It
+captures the authorized Google issuer/subject entirely inside D1, clears the
+bounded test state, creates exactly the current Account/App and App/Space schemas, and
+bootstraps the Account, two platform authorities, Smoke App membership,
+external issuer, and audit evidence. The subject is never returned through
+Wrangler or written to a local file. Any failure leaves maintenance active;
+only the held release workflow restores the normal Worker. If schema creation
+completed but final verification was interrupted, rerun with `--verify-current`
+and the exact App ID instead of attempting the destructive path again.
 
 Bootstrap the first Account through the local bootstrap or a restricted,
 environment-specific initialization procedure that atomically creates:
@@ -306,13 +321,12 @@ not a durable one). R2 content is referenced by node hashes in the physical
 `unicas-tenant` D1
 backup; a restore re-verifies blobs through the canonical read path.
 
-For the split-origin smoke-only cutover, review the live reset plan after both
-exports complete:
+For the split-origin smoke-only cutover, review the live reset plan without
+executing it:
 
 ```powershell
 node stacks/unicas/deploy/reset-smoke.mjs `
-   --expected-stack-id <current-smoke-stack-id> `
-   --backup-dir <off-machine-cutover-directory>
+   --expected-stack-id <current-smoke-stack-id>
 ```
 
 This is a physical pre-cutover tool: its Stack/Tenant flags and output match the
@@ -323,24 +337,30 @@ unexpected object-key shape, or a managed issuer not bound to
 they do not merely delete rows, because retained `stack_id`/`tenant_id` columns
 would block the new Worker from creating the clean App/Space schema.
 
-With `--backup-dir`, the rendered plan downloads every D1-derived canonical R2
-object before showing its delete. Execution verifies each downloaded object's
-SHA-256 against its canonical key and writes `backup-manifest.json` containing
-the D1 and R2 sizes and hashes. A missing, empty, stale, or mismatched backup
-aborts before any R2 delete or D1 drop.
+With `--backup-dir`, pass a fresh empty directory. After maintenance is active,
+the script creates both D1 exports itself, downloads every physically
+enumerated R2 object, verifies each canonical object's SHA-256, and writes
+`backup-manifest.json` with D1 and R2 sizes and hashes. Existing export or
+manifest files abort the operation so stale backups cannot satisfy the guard.
 
 Run the destructive command only inside the approved maintenance window, then
 deploy the new Worker immediately so it can create the `app_id`/`space_id`
 tables. Do not reuse this one-time pre-cutover tool after the physical cutover.
-After reviewing the printed R2, OAuth KV, and D1 commands, execute only with
-the same explicit physical Stack ID and the directory containing both
-non-empty exports:
+After reviewing the printed R2, OAuth KV, and D1 commands, execute with the
+same explicit physical Stack ID and either a fresh backup directory:
 
 ```powershell
 node stacks/unicas/deploy/reset-smoke.mjs --execute `
    --expected-stack-id <current-smoke-stack-id> `
    --backup-dir <off-machine-cutover-directory>
 ```
+
+or, only when test-data disposal is explicitly approved, omit the directory
+and add `--confirm DELETE-ALL-TEST-DATA-NO-BACKUP`.
+
+The operation also refuses to start while either direct-upload signing secret
+is configured. Revoke the underlying R2 API token first; deleting only the
+Worker binding does not invalidate already signed URLs.
 
 This tool targets only the isolated `unicas-*` resources committed in this
 repository. It has no legacy Worker, route, database, bucket, or namespace

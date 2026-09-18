@@ -346,6 +346,34 @@ Initial provisioning is an explicit bootstrap operation:
    approved operator credential store until rotation or recovery no longer
    requires it.
 
+For the one-time Account-model production cutover, configure a required
+reviewer on the `Production` Environment before merging the promotion pull
+request. Let the release revision pass `validate` and stop at that environment
+approval. From a checkout of the exact release SHA:
+
+1. Preview the bounded inventory with
+   `node stacks/unicas/deploy/reset-smoke.mjs --expected-stack-id <app-id>`.
+2. Execute the authorized no-backup reset with `--execute`, the same App ID,
+   and `--confirm DELETE-ALL-TEST-DATA-NO-BACKUP`.
+3. Require the script to report `resetVerified`, `bootstrapVerified`, and
+   `maintenanceActive` without printing provider identity data.
+4. Approve the held Production deployment. The workflow replaces maintenance,
+   materializes missing internal encryption keys, and runs canonical smoke.
+
+The maintenance Worker physically enumerates the dedicated R2 bucket and OAuth
+KV namespace after traffic is stopped. A pending direct upload, an unexpected
+object prefix, a changed KV inventory, or a non-empty post-delete inventory
+fails closed. The reset also refuses any configured direct-upload signing
+credential because an already signed R2 URL bypasses Worker maintenance; the
+underlying R2 API token must be revoked first. If only final count verification is interrupted after the schema
+commit, run the same script with `--verify-current --expected-stack-id <app-id>`;
+that mode verifies the current schema and bootstrap without reading retired
+tables or repeating deletion.
+
+Do not approve first: the old Worker could recreate retired tables between the
+reset and deployment. Do not run reset before the release job is waiting for
+approval: validation failure would leave an unnecessary maintenance window.
+
 Use `main` for normal development integration and keep `release` as a promotion
 branch, not a second development line. Protect `release`, require the **CI**
 validation job before merge, and disable force pushes and branch deletion.
