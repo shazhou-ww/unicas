@@ -79,7 +79,7 @@ refDomain instead of the retired `playground:` namespace. Focused tests make the
 legacy control-plane mint method fail if called. Stdio MCP inherits the same
 Account-native HTTP path through the administrator client.
 
-The tenth no-legacy cleanup checkpoint is ready to publish. Managed issuer
+The tenth no-legacy cleanup checkpoint is published as `c6cadaf`. Managed issuer
 reads and conditional enable/disable updates in HTTP and remote MCP now run
 through `AccountService` and stable Account membership. The D1 update atomically
 checks the unblocked Account, active ExternalIdentity, App membership, and
@@ -88,8 +88,15 @@ Account/ExternalIdentity audit attribution with MCP caller evidence when
 applicable. The App compatibility adapter no longer rewrites these URLs to
 `/admin/stacks`; focused tests make the legacy get/update methods fail if called.
 
-Next: migrate external App issuer read, inspection, and activation, then App
-invitation operations. After their consumers move, delete legacy HTTP contracts,
+The eleventh no-legacy cleanup checkpoint is ready to publish. External App
+issuer reads in HTTP and remote MCP now authorize through stable Account
+membership and read directly from `D1AccountRepository`. Optional HTTP reads
+retain the current `null` behavior, configured responses expose only App-shaped
+fields and ETags, and the compatibility adapter no longer rewrites the App URL.
+Focused tests make the legacy external issuer getter fail if called.
+
+Next: migrate external App issuer inspection and activation, then App invitation
+operations. After their consumers move, delete legacy HTTP contracts,
 identity-keyed columns/tables (including the retired Playground table), dual
 writes, and startup identity migration rather than adding compatibility flags.
 
@@ -867,6 +874,10 @@ cutover markers. Then complete the current-model and real-provider/email tests.
   remote MCP tests, and 4 managed-issuer tests. Miniflare-heavy suites used the
   same command-local 15-second allowance. Both affected package typechecks
   passed and editor diagnostics were clean.
+- Account-native external issuer read validation passed 21 cloud-neutral
+  Account tests, 62 BFF tests, 13 App adapter tests, and the focused real-D1 MCP
+  test. Both affected package typechecks passed and editor diagnostics were
+  clean.
 - This no-legacy cleanup checkpoint and the production OAuth provisioning guide
   are published on the shared primary branch. The next implementation action is
   to replace the internal Principal-keyed App control-plane repository and then

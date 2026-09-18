@@ -120,6 +120,9 @@ describe("adapter-hosted control-plane MCP server", () => {
     const legacyGet = vi.fn(async () => {
       throw new Error("legacy managed issuer read must not be called");
     });
+    const legacyExternalGet = vi.fn(async () => {
+      throw new Error("legacy external issuer read must not be called");
+    });
     const legacyPatch = vi.fn(async () => {
       throw new Error("legacy managed issuer update must not be called");
     });
@@ -127,6 +130,7 @@ describe("adapter-hosted control-plane MCP server", () => {
       () => createControlPlaneMcpServer(
         {
           ...createControlPlaneOperations(db),
+          getOAuthIssuer: legacyExternalGet,
           getManagedOAuthIssuer: legacyGet,
           patchManagedOAuthIssuer: legacyPatch,
           mintManagedSpaceCapability: legacyMint,
@@ -148,6 +152,20 @@ describe("adapter-hosted control-plane MCP server", () => {
     }));
     expect((await callTool(handler, "get_app_managed_issuer", { appId: app.appId })).structuredContent)
       .toMatchObject({ appId: app.appId, status: "active", etag: '"1"' });
+    await db.prepare(
+      `INSERT INTO cas_app_oauth_issuers
+        (app_id, mode, issuer, audience, metadata_url, metadata_type,
+         authorization_endpoint, token_endpoint, jwks_uri, scopes_supported,
+         code_challenge_methods_supported, status, verified_at, last_refresh_at,
+         jwks_digest, capability_max_lifetime_seconds, revision)
+       VALUES (?, 'external', 'https://issuer.example', 'https://api.example/app',
+         'https://issuer.example/.well-known/openid-configuration', 'oidc',
+         'https://issuer.example/authorize', 'https://issuer.example/token',
+         'https://issuer.example/jwks', '["openid"]', '["S256"]', 'active',
+         1000, 1000, 'digest', 3600, 3)`,
+    ).bind(app.appId).run();
+    expect((await callTool(handler, "get_app_oauth_issuer", { appId: app.appId })).structuredContent)
+      .toMatchObject({ appId: app.appId, issuer: "https://issuer.example", etag: '"3"' });
     expect((await callTool(handler, "update_app_managed_issuer", {
       appId: app.appId,
       enabled: false,
@@ -161,6 +179,7 @@ describe("adapter-hosted control-plane MCP server", () => {
       tool_name: "update_app_managed_issuer",
     });
     expect(legacyGet).not.toHaveBeenCalled();
+    expect(legacyExternalGet).not.toHaveBeenCalled();
     expect(legacyPatch).not.toHaveBeenCalled();
     expect(legacyMint).not.toHaveBeenCalled();
   });

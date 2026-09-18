@@ -150,6 +150,7 @@ export interface AccountRepository {
     readonly limit: number;
   }): Promise<readonly App[]>;
   getAccountApp(accountId: AccountId, appId: AppId): Promise<App | null>;
+  getAppOAuthIssuer(appId: AppId): Promise<ControlOAuthIssuerRecord | null>;
   getManagedOAuthIssuer(appId: AppId): Promise<ControlOAuthIssuerRecord | null>;
   commitPatchAccountManagedOAuthIssuer(input: {
     readonly actorAccountId: AccountId;
@@ -533,6 +534,20 @@ export class AccountService {
     const issuer = await this.repository.getManagedOAuthIssuer(appId);
     if (!issuer) throw new AccountServiceError("NOT_FOUND");
     return projectAppOAuthIssuer(issuer);
+  }
+
+  async getAppOAuthIssuer(actorAccountId: AccountId, appId: AppId): Promise<AppOAuthIssuer>;
+  async getAppOAuthIssuer(actorAccountId: AccountId, appId: AppId, optional: true): Promise<AppOAuthIssuer | null>;
+  async getAppOAuthIssuer(actorAccountId: AccountId, appId: AppId, optional: boolean): Promise<AppOAuthIssuer | null>;
+  async getAppOAuthIssuer(
+    actorAccountId: AccountId,
+    appId: AppId,
+    optional = false,
+  ): Promise<AppOAuthIssuer | null> {
+    await this.requireAppMembership(actorAccountId, appId);
+    const issuer = await this.repository.getAppOAuthIssuer(appId);
+    if (!issuer && !optional) throw new AccountServiceError("NOT_FOUND");
+    return issuer ? projectAppOAuthIssuer(issuer) : null;
   }
 
   async patchManagedOAuthIssuer(input: {

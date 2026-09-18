@@ -50,6 +50,7 @@ function fixture() {
     readControlSnapshot: vi.fn(async () => 1),
     listAccountApps: vi.fn(async () => []),
     getAccountApp: vi.fn(async () => null),
+    getAppOAuthIssuer: vi.fn(async () => null),
     getManagedOAuthIssuer: vi.fn(async () => null),
     commitPatchAccountManagedOAuthIssuer: vi.fn(async () => "updated"),
     commitPatchAccountApp: vi.fn(async () => "updated"),
@@ -368,6 +369,42 @@ describe("Account service", () => {
       enabled: true,
       ifMatch: '"4"',
     })).rejects.toMatchObject({ code: "INVALID_REQUEST" });
+  });
+
+  test("reads an external issuer only through Account App membership", async () => {
+    const { repository, service } = fixture();
+    vi.mocked(repository.hasAppMembership).mockResolvedValue(true);
+    vi.mocked(repository.getAppOAuthIssuer).mockResolvedValue({
+      stackId: "cas_app_a",
+      mode: "external",
+      issuer: "https://issuer.example",
+      audience: "https://api.example/app",
+      metadataUrl: "https://issuer.example/.well-known/openid-configuration",
+      metadataType: "oidc",
+      authorizationEndpoint: "https://issuer.example/authorize",
+      tokenEndpoint: "https://issuer.example/token",
+      jwksUri: "https://issuer.example/jwks",
+      registrationEndpoint: null,
+      scopesSupported: ["openid"],
+      codeChallengeMethodsSupported: ["S256"],
+      status: "active",
+      verifiedAt: 1,
+      lastRefreshAt: 1,
+      lastRefreshError: null,
+      jwksDigest: "digest",
+      capabilityMaxLifetimeSeconds: 3600,
+      revision: 3,
+    });
+
+    await expect(service.getAppOAuthIssuer(accountId, "cas_app_a")).resolves.toMatchObject({
+      appId: "cas_app_a",
+      issuer: "https://issuer.example",
+      revision: 3,
+    });
+    vi.mocked(repository.getAppOAuthIssuer).mockResolvedValue(null);
+    await expect(service.getAppOAuthIssuer(accountId, "cas_app_a", true)).resolves.toBeNull();
+    await expect(service.getAppOAuthIssuer(accountId, "cas_app_a"))
+      .rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 
   test("creates an App with Account authority and Account-scoped idempotency", async () => {

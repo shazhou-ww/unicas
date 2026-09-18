@@ -56,6 +56,13 @@ interface ManagedOAuthIssuerRow {
   readonly revision: number;
 }
 
+interface AppOAuthIssuerRow extends ManagedOAuthIssuerRow {
+  readonly metadata_type: ControlOAuthIssuerRecord["metadataType"];
+  readonly registration_endpoint: string | null;
+  readonly last_refresh_at: number | null;
+  readonly last_refresh_error: string | null;
+}
+
 interface AccountMembershipRow extends AccountRow {
   app_id: AppId;
   joined_at: number;
@@ -348,6 +355,38 @@ export class D1AccountRepository implements AccountRepository {
       verifiedAt: row.verified_at,
       lastRefreshAt: row.verified_at,
       lastRefreshError: null,
+      jwksDigest: row.jwks_digest,
+      capabilityMaxLifetimeSeconds: row.capability_max_lifetime_seconds,
+      revision: row.revision,
+    } : null;
+  }
+
+  async getAppOAuthIssuer(appId: AppId): Promise<ControlOAuthIssuerRecord | null> {
+    const row = await this.db.prepare(
+      `SELECT app_id, issuer, audience, metadata_url, metadata_type,
+        authorization_endpoint, token_endpoint, jwks_uri, registration_endpoint,
+        scopes_supported, code_challenge_methods_supported, status, verified_at,
+        last_refresh_at, last_refresh_error, jwks_digest,
+        capability_max_lifetime_seconds, revision
+       FROM cas_app_oauth_issuers WHERE app_id = ?`,
+    ).bind(appId).first<AppOAuthIssuerRow>();
+    return row ? {
+      stackId: row.app_id,
+      mode: "external",
+      issuer: row.issuer,
+      audience: row.audience,
+      metadataUrl: row.metadata_url,
+      metadataType: row.metadata_type,
+      authorizationEndpoint: row.authorization_endpoint,
+      tokenEndpoint: row.token_endpoint,
+      jwksUri: row.jwks_uri,
+      registrationEndpoint: row.registration_endpoint,
+      scopesSupported: JSON.parse(row.scopes_supported) as string[],
+      codeChallengeMethodsSupported: JSON.parse(row.code_challenge_methods_supported) as string[],
+      status: row.status,
+      verifiedAt: row.verified_at,
+      lastRefreshAt: row.last_refresh_at,
+      lastRefreshError: row.last_refresh_error,
       jwksDigest: row.jwks_digest,
       capabilityMaxLifetimeSeconds: row.capability_max_lifetime_seconds,
       revision: row.revision,

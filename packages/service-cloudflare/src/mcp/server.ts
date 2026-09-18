@@ -144,12 +144,10 @@ export function createControlPlaneMcpServer(
     APP_ADMIN_MCP_TOOLS.get_app_oauth_issuer.registration,
     async ({ appId }) => {
       const grant = requireGrantScope("control:read");
-      const result = await controlPlane.getOAuthIssuer(
-        serviceContext(grant, "get_app_oauth_issuer"),
-        { path: { stackId: appId } },
-      );
-      if (result === null) return toolResult({ error: "NOT_FOUND", message: "OAuth issuer is not configured" });
-      return appToolResult({ operation: "getOAuthIssuer", appId }, withEtag(result));
+      return accountToolResult(async () => {
+        const actor = await requireGrantAccount(grant, options);
+        return withEtag(await options.accountService!.getAppOAuthIssuer(actor.account.accountId, appId));
+      });
     },
   );
 

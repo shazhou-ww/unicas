@@ -685,6 +685,7 @@ function memoryAccountRepository(
       const { members: _members, stackId, ...record } = app;
       return { appId: stackId, ...record };
     },
+    getAppOAuthIssuer: async () => null,
     getManagedOAuthIssuer: async appId => {
       if (!fakeStacks.has(appId)) return null;
       const state = managedIssuerStates.get(appId) ?? { status: "active" as const, revision: 1 };
@@ -2086,6 +2087,60 @@ describe("cas-admin-webui BFF", () => {
     expect(await updated.json()).toMatchObject({ appId, status: "disabled", revision: 2 });
     expect(legacyGet).not.toHaveBeenCalled();
     expect(legacyPatch).not.toHaveBeenCalled();
+  });
+
+  test("external App issuer reads use Account membership", async () => {
+    const provider = await createMockProvider();
+    const platform = new MemoryPlatformAccessRepository();
+    platform.grant(ISSUER, "google-user-123");
+    const accounts = memoryAccountRepository(platform, "google-user-123");
+    const accountIssuer = vi.spyOn(accounts, "getAppOAuthIssuer").mockResolvedValue(null);
+    const legacyGet = vi.fn(async () => {
+      throw new Error("legacy external issuer read must not be called");
+    });
+    const bff = await createBff(
+      provider,
+      undefined,
+      {},
+      platform,
+      { ...fakeControlPlane(), getOAuthIssuer: legacyGet },
+      undefined,
+      undefined,
+      undefined,
+      accounts,
+    );
+    const { cookie, csrf } = await signIn(bff, provider);
+    const appId = await createStack(bff, cookie, csrf, "External Issuer App");
+    const path = `/admin/apps/${appId}/oauth-issuer`;
+
+    expect(await (await authRequest(bff, `${path}?optional=true`, cookie)).json()).toBeNull();
+    expect((await authRequest(bff, path, cookie)).status).toBe(404);
+    accountIssuer.mockResolvedValue({
+      stackId: appId,
+      mode: "external",
+      issuer: "https://issuer.example",
+      audience: "https://api.example/app",
+      metadataUrl: "https://issuer.example/.well-known/openid-configuration",
+      metadataType: "oidc",
+      authorizationEndpoint: "https://issuer.example/authorize",
+      tokenEndpoint: "https://issuer.example/token",
+      jwksUri: "https://issuer.example/jwks",
+      registrationEndpoint: null,
+      scopesSupported: ["openid"],
+      codeChallengeMethodsSupported: ["S256"],
+      status: "active",
+      verifiedAt: 1,
+      lastRefreshAt: 1,
+      lastRefreshError: null,
+      jwksDigest: "digest",
+      capabilityMaxLifetimeSeconds: 3600,
+      revision: 3,
+    });
+    const current = await authRequest(bff, path, cookie);
+    expect(current.status).toBe(200);
+    expect(current.headers.get("ETag")).toBe('"3"');
+    expect(await current.json()).toMatchObject({ appId, issuer: "https://issuer.example", revision: 3 });
+    expect(legacyGet).not.toHaveBeenCalled();
   });
 
   test("App issuer mutations preserve minimal receipts and both conditional activation modes", async () => {

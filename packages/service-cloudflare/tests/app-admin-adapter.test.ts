@@ -58,17 +58,18 @@ describe("App admin physical compatibility adapter", () => {
   });
 
   test.each([
-    ["getManagedIssuer", "GET"],
-    ["patchManagedIssuer", "PATCH"],
-  ] as const)("forwards %s through the Account-native App path", async (operation, method) => {
+    ["getOAuthIssuer", "GET", "/admin/apps/app-1/oauth-issuer"],
+    ["getManagedIssuer", "GET", "/admin/apps/app-1/managed-issuer"],
+    ["patchManagedIssuer", "PATCH", "/admin/apps/app-1/managed-issuer"],
+  ] as const)("forwards %s through the Account-native App path", async (operation, method, path) => {
     const handler = vi.fn(async () => Response.json({ appId: "app-1", mode: "managed" }));
     await handleAppAdminCompatibilityRequest(
-      request("/admin/apps/app-1/managed-issuer", { method }),
+      request(path, { method }),
       { operation, appId: "app-1" },
       handler,
     );
     expect(handler).toHaveBeenCalledWith(expect.objectContaining({
-      url: "https://console.unicas.work/admin/apps/app-1/managed-issuer",
+      url: `https://console.unicas.work${path}`,
     }));
   });
 

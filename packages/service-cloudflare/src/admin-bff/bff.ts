@@ -324,6 +324,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     if (appRoute?.operation === "getManagedIssuer" || appRoute?.operation === "patchManagedIssuer") {
       return handleAccountManagedIssuer(request, appRoute.appId, appRoute.operation);
     }
+    if (appRoute?.operation === "getOAuthIssuer") {
+      return handleAccountOAuthIssuer(request, url, appRoute.appId);
+    }
     if (appRoute?.operation === "inspectOAuthIssuer" || appRoute?.operation === "activateOAuthIssuer") {
       return handleAppIssuerMutation(request, appRoute.appId, appRoute.operation);
     }
@@ -2284,6 +2287,34 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
               : error.code === "INVALID_REQUEST" ? 400
                 : error.code === "NOT_FOUND" ? 404
                   : 401;
+        return json({ error: error.code }, status);
+      }
+      throw error;
+    }
+  }
+
+  async function handleAccountOAuthIssuer(request: Request, url: URL, appId: string): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!accountService || !auth.payload.accountId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
+    }
+    const optionalValue = url.searchParams.get("optional");
+    if (optionalValue !== null && optionalValue !== "true" && optionalValue !== "false") {
+      return invalidRequest("optional must be true or false");
+    }
+    try {
+      const result = await accountService.getAppOAuthIssuer(
+        auth.payload.accountId,
+        appId,
+        optionalValue === "true",
+      );
+      return result === null ? json(null, 200) : jsonWithEtag(result);
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "APP_MEMBERSHIP_REQUIRED" || error.code === "ACCOUNT_BLOCKED" ? 403
+          : error.code === "NOT_FOUND" ? 404
+            : 401;
         return json({ error: error.code }, status);
       }
       throw error;
