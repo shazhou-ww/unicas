@@ -107,7 +107,7 @@ jobs:
       - name: Verify validated revision
         run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
 
-      - name: Synchronize production OAuth secrets
+      - name: Synchronize production provider secrets
         shell: bash
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -115,11 +115,9 @@ jobs:
           OAUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.OAUTH_GOOGLE_CLIENT_SECRET }}
           OAUTH_MICROSOFT_CLIENT_SECRET: ${{ secrets.OAUTH_MICROSOFT_CLIENT_SECRET }}
           OAUTH_GITHUB_CLIENT_SECRET: ${{ secrets.OAUTH_GITHUB_CLIENT_SECRET }}
-          SESSION_ENCRYPTION_KEYS: ${{ secrets.SESSION_ENCRYPTION_KEYS }}
-          OAUTH_STATE_ENCRYPTION_KEY: ${{ secrets.OAUTH_STATE_ENCRYPTION_KEY }}
         run: |
           set -euo pipefail
-          for name in OAUTH_GOOGLE_CLIENT_SECRET OAUTH_MICROSOFT_CLIENT_SECRET OAUTH_GITHUB_CLIENT_SECRET SESSION_ENCRYPTION_KEYS OAUTH_STATE_ENCRYPTION_KEY; do
+          for name in OAUTH_GOOGLE_CLIENT_SECRET OAUTH_MICROSOFT_CLIENT_SECRET OAUTH_GITHUB_CLIENT_SECRET; do
             if [[ -z "${!name:-}" ]]; then
               echo "::error::$name is not configured in the Production environment"
               exit 1

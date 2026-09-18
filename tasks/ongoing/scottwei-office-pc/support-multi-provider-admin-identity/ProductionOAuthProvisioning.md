@@ -29,11 +29,12 @@ The person doing this work needs:
 Production login must not be enabled until these requirements are met:
 
 1. The GitHub `Production` Environment contains all three new client ID
-   variables and all five Worker secrets listed below. Names using the retired
+   variables and all three provider client secrets listed below. Names using the retired
    `GOOGLE_OIDC_*`, `MICROSOFT_OIDC_*`, or `GITHUB_OAUTH_*` contract are ignored.
-2. The release deployment synchronizes Worker secrets before deployment and
-   injects all three client IDs as Wrangler variables. Missing values fail the
-   deployment closed.
+2. The release deployment synchronizes provider secrets, injects all three
+   client IDs as Wrangler variables, and creates missing internal encryption
+   keys directly in Cloudflare. Missing provider values fail the deployment
+   closed.
 3. Cloudflare email delivery to a mailbox that was not pre-verified in the
    account must pass before Microsoft invitation login is accepted for
    production. Binding existence alone is insufficient evidence.
@@ -56,8 +57,10 @@ Production login must not be enabled until these requirements are met:
 | `OAUTH_GOOGLE_CLIENT_SECRET` | Google Web OAuth client secret |
 | `OAUTH_MICROSOFT_CLIENT_SECRET` | Microsoft client secret **Value**, not its Secret ID |
 | `OAUTH_GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret |
-| `SESSION_ENCRYPTION_KEYS` | Versioned JSON map of key ID to base64url 32-byte AES key |
-| `OAUTH_STATE_ENCRYPTION_KEY` | A different base64url 32-byte AES key |
+
+The production deployment creates `SESSION_ENCRYPTION_KEYS` and
+`OAUTH_STATE_ENCRYPTION_KEY` directly as Cloudflare Worker secrets when either
+name is absent. They are not GitHub Environment secrets.
 
 Never put a secret in tracked files, repository variables, commit messages,
 issues, task documents, chat, or command arguments. Provider portals often show
@@ -238,23 +241,18 @@ adapter, domain verification, `RESEND_API_KEY` secret handling, failure
 semantics, and tests. A Resend key alone cannot be consumed by the current
 Worker.
 
-## Generate UniCAS encryption keys
+## UniCAS encryption keys
 
-Generate two different random 32-byte base64url values on a trusted machine.
-For example, run this command twice and do not reuse either output:
-
-```powershell
-node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
-```
-
-- Put one value into a versioned JSON keyring, for example
-  `{"2026-09":"<first-value>"}`, and store the entire JSON value as
-  `SESSION_ENCRYPTION_KEYS`.
-- Store the second value directly as `OAUTH_STATE_ENCRYPTION_KEY`.
+`pnpm deploy:production` lists the existing Worker secret names before
+deployment. If `SESSION_ENCRYPTION_KEYS` or `OAUTH_STATE_ENCRYPTION_KEY` is
+absent, it generates an independent random 32-byte base64url key and writes it
+directly to Cloudflare through Wrangler standard input. An existing value is
+never read or overwritten.
 
 Keep old session-key entries during rotation until browser sessions and pending
-platform-invitation replay receipts sealed with them have expired. Never reuse
-the OAuth-state key as a session key.
+platform-invitation replay receipts sealed with them have expired. Rotation is
+an explicit operator action; ordinary deployment only bootstraps missing keys.
+Never reuse the OAuth-state key as a session key.
 
 ## Store values in GitHub
 
@@ -264,12 +262,13 @@ the OAuth-state key as a session key.
    appropriate for the repository.
 4. Under **Environment variables**, add the four non-secret runtime values from
    the inventory above.
-5. Under **Environment secrets**, add the five secret runtime values.
+5. Under **Environment secrets**, add the three provider client secrets.
 
 GitHub Environment values are available only to jobs that declare
-`environment: Production`. The release deploy job synchronizes the five
-secrets through Wrangler standard input and injects the three client IDs with
-`--var`; ordinary CI cannot read them.
+`environment: Production`. The release deploy job synchronizes the three
+provider secrets through Wrangler standard input, injects the three client IDs
+with `--var`, and creates missing internal encryption keys directly in
+Cloudflare; ordinary CI cannot read them.
 
 ## Materialize Worker configuration manually
 
@@ -284,14 +283,12 @@ only for an explicitly approved emergency rotation or pre-deployment setup:
    pnpm --filter @unicas/service-cloudflare exec wrangler secret put OAUTH_GOOGLE_CLIENT_SECRET
    pnpm --filter @unicas/service-cloudflare exec wrangler secret put OAUTH_MICROSOFT_CLIENT_SECRET
    pnpm --filter @unicas/service-cloudflare exec wrangler secret put OAUTH_GITHUB_CLIENT_SECRET
-   pnpm --filter @unicas/service-cloudflare exec wrangler secret put SESSION_ENCRYPTION_KEYS
-   pnpm --filter @unicas/service-cloudflare exec wrangler secret put OAUTH_STATE_ENCRYPTION_KEY
    ```
 
    Type or paste exactly one value at each Wrangler prompt. Do not pipe a
    secret from a tracked file.
-2. Verify the deployed Worker has these secret names without reading their
-   values back:
+2. After the first production deployment, verify the Worker has these secret
+   names without reading their values back:
 
    ```text
    OAUTH_GOOGLE_CLIENT_SECRET

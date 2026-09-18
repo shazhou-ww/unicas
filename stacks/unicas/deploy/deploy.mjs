@@ -52,10 +52,13 @@ export function deploymentPlan({ dryRun = false, env, production = false, skipSm
   const workerVars = OAUTH_VARIABLE_KEYS.flatMap(key => environment[key]
     ? ["--var", `${key}:${environment[key]}`]
     : []);
-  const commands = [
+  const commands = production
+    ? [["node", "stacks/unicas/deploy/ensure-encryption-secrets.mjs"]]
+    : [];
+  commands.push(
     ["pnpm", "--filter", SERVICE_PACKAGE, "build"],
     ["pnpm", "--filter", SERVICE_PACKAGE, "exec", "wrangler", "deploy", ...envArgs, ...workerVars],
-  ];
+  );
   if (!skipSmoke) {
     commands.push(["pnpm", "--filter", "@unicas/codec", "build"]);
     commands.push(["pnpm", "--filter", "@unicas/tenant-protocol", "build"]);

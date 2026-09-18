@@ -51,16 +51,18 @@ names that are now retired; GitHub Actions additionally forbids Environment
 variables beginning with `GITHUB_`. The runtime and operational contract now
 uses `OAUTH_GOOGLE_CLIENT_ID/SECRET`,
 `OAUTH_MICROSOFT_CLIENT_ID/SECRET`, and
-`OAUTH_GITHUB_CLIENT_ID/SECRET`. The production workflow synchronizes the five
-Worker secrets before deployment and injects all three client IDs through
+`OAUTH_GITHUB_CLIENT_ID/SECRET`. The production workflow synchronizes the three
+provider secrets before deployment and injects all three client IDs through
 Wrangler `--var`; missing values fail closed. All six provider entries are now
 configured under the current names. The superseded
 `GOOGLE_OIDC_CLIENT_SECRET` and `MICROSOFT_OIDC_CLIENT_SECRET` Environment
 secrets were deleted after repository-wide reference checks; every remaining
 Environment variable is used by deployment or smoke validation. GitHub secret
-values were never read or emitted. `SESSION_ENCRYPTION_KEYS` and
-`OAUTH_STATE_ENCRYPTION_KEY` still need to be generated and added before the
-first release deployment.
+values were never read or emitted. The production deployment now lists remote
+Worker secret names and creates `SESSION_ENCRYPTION_KEYS` and
+`OAUTH_STATE_ENCRYPTION_KEY` directly in Cloudflare only when absent. Existing
+keys are never read or overwritten, so ordinary releases preserve sessions and
+in-flight OAuth transactions; explicit rotation remains separate.
 
 Validation for this checkpoint:
 
@@ -76,8 +78,8 @@ Validation for this checkpoint:
 - real-D1 platform invitations: 1 test passed;
 - remote/stdio MCP integration: 9 tests passed;
 - fresh control schema: 5 tests passed;
-- deployment/reset plan: 27 tests passed;
-- repository policy/docs/boundaries/OpenAPI: 113 tests passed;
+- deployment/reset plan: 29 tests passed;
+- repository policy/docs/boundaries/OpenAPI: 116 tests passed;
 - clean sequential production builds passed for administrator protocol, client,
   WebUI, cloud-neutral service, and Cloudflare adapter.
 

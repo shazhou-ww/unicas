@@ -10,6 +10,10 @@ import {
   validateDeploymentEnvironment,
 } from "../stacks/unicas/deploy/deploy.mjs";
 import {
+  ensureEncryptionSecrets,
+  parseSecretNames,
+} from "../stacks/unicas/deploy/ensure-encryption-secrets.mjs";
+import {
   parseResetArgs,
   r2BackupPlan,
   resetPlan,
@@ -268,12 +272,66 @@ describe("standalone deployment plan", () => {
       "OAUTH_GOOGLE_CLIENT_SECRET",
       "OAUTH_MICROSOFT_CLIENT_SECRET",
       "OAUTH_GITHUB_CLIENT_SECRET",
-      "SESSION_ENCRYPTION_KEYS",
-      "OAUTH_STATE_ENCRYPTION_KEY",
     ]) {
       expect(job).toContain(`${secret}: $` + `{{ secrets.${secret} }}`);
     }
+    expect(job).not.toContain("secrets.SESSION_ENCRYPTION_KEYS");
+    expect(job).not.toContain("secrets.OAUTH_STATE_ENCRYPTION_KEY");
     expect(job).toContain('wrangler secret put "$name"');
+  });
+
+  test("creates missing encryption secrets before a production deployment", () => {
+    const plan = deploymentPlan({ production: true });
+    expect(plan[0]).toEqual(["node", "stacks/unicas/deploy/ensure-encryption-secrets.mjs"]);
+    expect(plan[1]).toEqual(["pnpm", "--filter", "@unicas/service-cloudflare", "build"]);
+
+    const calls = [];
+    const created = ensureEncryptionSecrets({
+      execute(args, input) {
+        calls.push({ args, input });
+        return args[1] === "list" ? '[{"name":"OAUTH_STATE_ENCRYPTION_KEY"}]' : "";
+      },
+      now: new Date("2026-09-18T00:00:00Z"),
+      random: () => Buffer.alloc(32, 7),
+    });
+    expect(created).toEqual(["SESSION_ENCRYPTION_KEYS"]);
+    expect(calls).toEqual([
+      { args: ["secret", "list", "--format", "json"], input: undefined },
+      {
+        args: ["secret", "put", "SESSION_ENCRYPTION_KEYS"],
+        input: JSON.stringify({ "2026-09": Buffer.alloc(32, 7).toString("base64url") }),
+      },
+    ]);
+  });
+
+  test("preserves existing encryption secrets and generates valid independent values", () => {
+    expect(parseSecretNames('[{"name":"SESSION_ENCRYPTION_KEYS"}]')).toEqual(
+      new Set(["SESSION_ENCRYPTION_KEYS"]),
+    );
+    const calls = [];
+    expect(ensureEncryptionSecrets({
+      execute(args, input) {
+        calls.push({ args, input });
+        return '[{"name":"SESSION_ENCRYPTION_KEYS"},{"name":"OAUTH_STATE_ENCRYPTION_KEY"}]';
+      },
+    })).toEqual([]);
+    expect(calls).toHaveLength(1);
+
+    let fill = 10;
+    const createdCalls = [];
+    expect(ensureEncryptionSecrets({
+      execute(args, input) {
+        createdCalls.push({ args, input });
+        return args[1] === "list" ? "[]" : "";
+      },
+      now: new Date("2026-09-18T00:00:00Z"),
+      random: () => Buffer.alloc(32, fill++),
+    })).toEqual(["SESSION_ENCRYPTION_KEYS", "OAUTH_STATE_ENCRYPTION_KEY"]);
+    const sessionKey = JSON.parse(createdCalls[1].input)["2026-09"];
+    const oauthStateKey = createdCalls[2].input;
+    expect(Buffer.from(sessionKey, "base64url")).toHaveLength(32);
+    expect(Buffer.from(oauthStateKey, "base64url")).toHaveLength(32);
+    expect(sessionKey).not.toBe(oauthStateKey);
   });
 
   test("restricts the ephemeral smoke key and removes it after every outcome", () => {

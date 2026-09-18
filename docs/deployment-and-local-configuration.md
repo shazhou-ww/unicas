@@ -123,9 +123,13 @@ Provision secrets with Wrangler so values never appear in shell history:
 pnpm --filter @unicas/service-cloudflare exec wrangler secret put OAUTH_GOOGLE_CLIENT_SECRET
 pnpm --filter @unicas/service-cloudflare exec wrangler secret put OAUTH_MICROSOFT_CLIENT_SECRET
 pnpm --filter @unicas/service-cloudflare exec wrangler secret put OAUTH_GITHUB_CLIENT_SECRET
-pnpm --filter @unicas/service-cloudflare exec wrangler secret put SESSION_ENCRYPTION_KEYS
-pnpm --filter @unicas/service-cloudflare exec wrangler secret put OAUTH_STATE_ENCRYPTION_KEY
 ```
+
+The production deployment checks Cloudflare for `SESSION_ENCRYPTION_KEYS` and
+`OAUTH_STATE_ENCRYPTION_KEY` before publishing the Worker. It generates each
+missing value directly into a Worker secret with 32 bytes of cryptographic
+randomness and never overwrites an existing value. These internal encryption
+keys do not pass through GitHub. Key rotation remains an explicit operation.
 
 `SESSION_ENCRYPTION_KEYS` is a non-empty JSON object mapping key IDs to
 base64url keys, for example `{"2026-09":"<base64url-32-byte-key>"}`. Keep old
@@ -286,6 +290,12 @@ secrets:
 | --- | --- | --- |
 | Variable | `CLOUDFLARE_ACCOUNT_ID` | ID of the one production Cloudflare account |
 | Secret | `CLOUDFLARE_API_TOKEN` | Dedicated **Edit Cloudflare Workers** token scoped to that account and the `unicas.work` zone |
+| Variable | `OAUTH_GOOGLE_CLIENT_ID` | Google Web OAuth client ID |
+| Secret | `OAUTH_GOOGLE_CLIENT_SECRET` | Google Web OAuth client secret |
+| Variable | `OAUTH_MICROSOFT_CLIENT_ID` | Microsoft Application (client) ID |
+| Secret | `OAUTH_MICROSOFT_CLIENT_SECRET` | Microsoft client secret value |
+| Variable | `OAUTH_GITHUB_CLIENT_ID` | GitHub OAuth App client ID |
+| Secret | `OAUTH_GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret |
 | Variable | `UNICAS_SMOKE_APP_ID` | Provisioned production smoke App ID |
 | Variable | `UNICAS_SMOKE_ISSUER` | Issuer registered for the smoke App |
 | Variable | `UNICAS_SMOKE_AUDIENCE` | Audience registered for the smoke App |
@@ -301,11 +311,12 @@ when that step fails. It does not set `UNICAS_SMOKE_ALLOW_OTHER_ORIGIN` or
 `UNICAS_SMOKE_ENABLE_CONCURRENCY`; production smoke remains pinned to
 `https://api.unicas.work` with the Cloudflare-safe concurrency behavior.
 
-Worker runtime secrets remain provisioned only in Cloudflare. Do not copy
-`OAUTH_GOOGLE_CLIENT_SECRET`, session or OAuth encryption keys, R2 credentials,
-managed-issuer keys, the audit-reader key, or any future Worker runtime secret
-into GitHub for routine deployment. Wrangler preserves those secrets when it
-publishes a new version.
+The release workflow copies the three provider client secrets from the
+protected GitHub Environment into Cloudflare. Internal session and OAuth-state
+encryption keys remain provisioned only in Cloudflare: the production deploy
+creates them when absent and preserves them on later releases. Do not copy R2
+credentials, managed-issuer keys, the audit-reader key, or other Worker runtime
+secrets into GitHub for routine deployment.
 
 The production smoke App uses the dedicated external issuer
 `https://unicas.work/deploy-smoke`. The product-site Worker serves its OAuth
