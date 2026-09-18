@@ -36,6 +36,9 @@ export { AccountService, AccountServiceError, projectAccountSummary } from "./ac
 export type {
   AccountAppMembershipRecord,
   AccountAppIdempotencyRecord,
+  AccountAppInvitationCreateResponse,
+  AccountAppInvitationIdempotencyRecord,
+  AccountAppInvitationRecord,
   AccountManagedCapabilityIssuer,
   AccountPlatformViewRecord,
   AccountAuditActorRecord,

@@ -80,6 +80,7 @@ describe("control schema", () => {
       "cas_account_platform_authorities",
       "cas_account_aliases",
       "cas_account_app_idempotency",
+      "cas_account_app_invitation_idempotency",
       "cas_email_challenges",
     ]) expect(names.has(expected), `missing table ${expected}`).toBe(true);
     for (const retired of [

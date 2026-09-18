@@ -453,20 +453,25 @@ export function createControlPlaneMcpServer(
     async ({ appId, email, confirmEmail, idempotencyKey }) => {
       const grant = requireMutation("control:security", options);
       if (email !== confirmEmail) return confirmationError("confirmEmail must exactly match the invited email");
-      const result = await controlPlane.createMemberInvitation(
-        serviceContext(grant, "invite_app_member"),
-        { path: { stackId: appId }, body: { emailConstraint: email } },
-        { idempotencyKey },
-      );
-      const response = "error" in result || !options.publicOrigin
-        ? result
-        : { ...result, acceptUrl: new URL(result.acceptUrl, options.publicOrigin).toString() };
-      if ("error" in response) return appToolResult({ operation: "createMemberInvitation", appId }, response);
-      return toolResult({
-        invitationId: response.invitation.invitationId,
-        acceptUrl: response.acceptUrl,
-        expiresAt: response.invitation.expiresAt,
-        etag: formatCasAdminETag(response.invitation.revision),
+      return accountToolResult(async () => {
+        if (!options.publicOrigin) throw new Error("Public origin unavailable");
+        const actor = await requireGrantAccount(grant, options);
+        const response = await options.accountService!.createAppMemberInvitation({
+          actorAccountId: actor.account.accountId,
+          actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+          appId,
+          emailConstraint: email,
+          idempotencyKey,
+          callerChannel: "mcp",
+          oauthClientHandle: grant.oauthClientHandle,
+          toolName: "invite_app_member",
+        });
+        return {
+          invitationId: response.invitationId,
+          acceptUrl: new URL(response.acceptUrl, options.publicOrigin).toString(),
+          expiresAt: response.expiresAt,
+          etag: formatCasAdminETag(response.revision),
+        };
       });
     },
   );
@@ -476,11 +481,19 @@ export function createControlPlaneMcpServer(
     APP_ADMIN_MCP_TOOLS.accept_app_member_invitation.registration,
     async ({ token }) => {
       const grant = requireMutation("control:security", options);
-      const result = await controlPlane.acceptMemberInvitation(
-        serviceContext(grant, "accept_app_member_invitation"),
-        { path: { token } },
-      );
-      return appToolResult({ operation: "acceptMemberInvitation", token }, result);
+      return accountToolResult(async () => {
+        const actor = await requireGrantAccount(grant, options);
+        const appId = await options.accountService!.acceptAppMemberInvitation({
+          accountId: actor.account.accountId,
+          externalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+          token,
+          verifiedEmailEvidence: grant.verifiedEmailEvidence,
+          callerChannel: "mcp",
+          oauthClientHandle: grant.oauthClientHandle,
+          toolName: "accept_app_member_invitation",
+        });
+        return { appId };
+      });
     },
   );
 

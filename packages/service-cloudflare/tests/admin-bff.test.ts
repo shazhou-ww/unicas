@@ -640,9 +640,14 @@ function memoryAccountRepository(
   const issuerInspections = new Map<string, Parameters<AccountRepository["commitInspectAccountOAuthIssuer"]>[0]["inspection"]>();
   const issuerInspectionKeys = new Map<string, Parameters<AccountRepository["commitInspectAccountOAuthIssuer"]>[0]["keys"]>();
   const appInvitations = new Map<string, {
+    invitationId?: string;
     status: "pending" | "accepted" | "expired" | "revoked";
     revision: number;
+    emailConstraint?: string | null;
+    expiresAt?: number;
   }>();
+  const invitationIdempotency = new Map<string, Parameters<AccountRepository["commitCreateAccountAppInvitation"]>[0]["idempotency"]>();
+  const invitationTokens = new Map<string, { appId: string; invitationId: string }>();
   function add(
     account: AccountRecord,
     profile: { accountId: string; displayName: string | null; avatarUrl: string | null; displayNameSource: string | null; avatarSource: string | null; updatedAt: number },
@@ -682,10 +687,21 @@ function memoryAccountRepository(
       if (appId !== undefined && fakeStacks.has(appId)) {
         return fakeStacks.get(appId)!.members.has(`${identity.issuer}\n${identity.subject}`);
       }
-      return platform.hasMembership({ issuer: identity.issuer, subject: identity.subject });
+      return [...fakeStacks.values()].some(app => app.members.has(`${identity.issuer}\n${identity.subject}`))
+        || platform.hasMembership({ issuer: identity.issuer, subject: identity.subject });
     },
     listAccountMembershipAppIds: async () => [],
     readControlSnapshot: () => platform.readSnapshot(),
+    listAccountApps: async ({ accountId: requested, afterAppId, limit }) => {
+      const identity = identityForAccount(requested);
+      if (!identity) return [];
+      return [...fakeStacks.values()]
+        .filter(app => app.stackId > afterAppId
+          && app.members.has(`${identity.issuer}\n${identity.subject}`))
+        .sort((left, right) => left.stackId.localeCompare(right.stackId))
+        .slice(0, limit)
+        .map(({ members: _members, stackId, ...app }) => ({ appId: stackId, ...app }));
+    },
     getAccountApp: async (requested, appId) => {
       const identity = identityForAccount(requested);
       const app = fakeStacks.get(appId);
@@ -719,29 +735,34 @@ function memoryAccountRepository(
       return "activated";
     },
     getAppMemberInvitation: async (appId, invitationId) => {
-      if (!fakeStacks.has(appId) || invitationId !== "inv-test") return null;
+      if (!fakeStacks.has(appId)) return null;
       const state = appInvitations.get(appId) ?? { status: "pending" as const, revision: 7 };
+      const currentInvitationId = state.invitationId ?? "inv-test";
+      if (invitationId !== currentInvitationId) return null;
       return {
         appId,
-        invitationId,
+        invitationId: currentInvitationId,
         status: state.status,
-        emailConstraint: null,
-        expiresAt: 4102444800000,
+        emailConstraint: state.emailConstraint ?? null,
+        expiresAt: state.expiresAt ?? 4102444800000,
         createdAt: 1,
         revision: state.revision,
       };
     },
     listAppMemberInvitations: async input => {
-      if (!fakeStacks.has(input.appId) || input.afterInvitationId >= "inv-test") return [];
+      if (!fakeStacks.has(input.appId)) return [];
       const state = appInvitations.get(input.appId) ?? { status: "pending" as const, revision: 7 };
+      const invitationId = state.invitationId ?? "inv-test";
+      const expiresAt = state.expiresAt ?? 4102444800000;
+      if (input.afterInvitationId >= invitationId) return [];
       if (input.status !== undefined && input.status !== state.status) return [];
-      if (input.expiresAtOrBefore !== undefined && 4102444800000 > input.expiresAtOrBefore) return [];
+      if (input.expiresAtOrBefore !== undefined && expiresAt > input.expiresAtOrBefore) return [];
       return [{
         appId: input.appId,
-        invitationId: "inv-test",
+        invitationId,
         status: state.status,
-        emailConstraint: null,
-        expiresAt: 4102444800000,
+        emailConstraint: state.emailConstraint ?? null,
+        expiresAt,
         createdAt: 1,
         revision: state.revision,
       }];
@@ -752,10 +773,69 @@ function memoryAccountRepository(
       if (!identity || identity.accountId !== input.actorAccountId
         || !app?.members.has(`${identity.issuer}\n${identity.subject}`)) return "actor-not-member";
       const state = appInvitations.get(input.appId) ?? { status: "pending" as const, revision: 7 };
-      if (input.invitationId !== "inv-test" || state.status !== "pending"
+      if (input.invitationId !== (state.invitationId ?? "inv-test") || state.status !== "pending"
         || state.revision !== input.expectedRevision) return "unavailable";
-      appInvitations.set(input.appId, { status: input.status, revision: state.revision + 1 });
+      appInvitations.set(input.appId, { ...state, status: input.status, revision: state.revision + 1 });
       return "updated";
+    },
+    getAccountAppInvitationIdempotency: async input => invitationIdempotency.get(
+      `${input.accountId}\0${input.appId}\0${input.key}`,
+    ) ?? null,
+    commitCreateAccountAppInvitation: async input => {
+      const identity = identities.get(input.actorExternalIdentityId);
+      const app = fakeStacks.get(input.invitation.appId);
+      if (!identity || identity.accountId !== input.actorAccountId
+        || !app?.members.has(`${identity.issuer}\n${identity.subject}`)) return "actor-not-member";
+      appInvitations.set(input.invitation.appId, {
+        invitationId: input.invitation.invitationId,
+        status: "pending",
+        revision: 1,
+        emailConstraint: input.invitation.emailConstraint,
+        expiresAt: input.invitation.expiresAt,
+      });
+      invitationTokens.set(input.invitation.tokenHash, {
+        appId: input.invitation.appId,
+        invitationId: input.invitation.invitationId,
+      });
+      if (input.idempotency) invitationIdempotency.set(
+        `${input.idempotency.accountId}\0${input.idempotency.appId}\0${input.idempotency.key}`,
+        input.idempotency,
+      );
+      return "created";
+    },
+    getAccountAppInvitationByTokenHash: async tokenHash => {
+      const target = invitationTokens.get(tokenHash);
+      if (!target) return null;
+      const state = appInvitations.get(target.appId);
+      if (!state) return null;
+      return {
+        appId: target.appId,
+        invitationId: target.invitationId,
+        status: state.status,
+        emailConstraint: state.emailConstraint ?? null,
+        tokenHash,
+        expiresAt: state.expiresAt ?? 4102444800000,
+        createdAt: 1,
+        revision: state.revision,
+      };
+    },
+    commitAcceptAccountAppInvitation: async input => {
+      const identity = identities.get(input.externalIdentityId);
+      if (!identity || identity.accountId !== input.accountId || identity.unlinkedAt !== null) {
+        return "account-unavailable";
+      }
+      const state = appInvitations.get(input.invitation.appId);
+      if (!state || state.status !== "pending" || state.expiresAt !== undefined && state.expiresAt <= input.now) {
+        return "invitation-unavailable";
+      }
+      state.status = "accepted";
+      state.revision += 1;
+      fakeStacks.get(input.invitation.appId)?.members.set(
+        `${identity.issuer}\n${identity.subject}`,
+        { identity: { identityIssuer: identity.issuer, subject: identity.subject } },
+      );
+      platform.grantViaMembership(identity.issuer, identity.subject);
+      return "accepted";
     },
     getManagedOAuthIssuer: async appId => {
       if (!fakeStacks.has(appId)) return null;
@@ -2322,6 +2402,49 @@ describe("cas-admin-webui BFF", () => {
     expect(legacyRevoke).not.toHaveBeenCalled();
   });
 
+  test("App invitation creation uses Account-scoped idempotency", async () => {
+    const provider = await createMockProvider();
+    const platform = new MemoryPlatformAccessRepository();
+    platform.grant(ISSUER, "google-user-123");
+    const accounts = memoryAccountRepository(platform, "google-user-123");
+    const legacyCreate = vi.fn(async () => { throw new Error("legacy invitation create must not be called"); });
+    const bff = await createBff(
+      provider,
+      undefined,
+      {},
+      platform,
+      { ...fakeControlPlane(), createMemberInvitation: legacyCreate },
+      undefined,
+      undefined,
+      undefined,
+      accounts,
+    );
+    const { cookie, csrf } = await signIn(bff, provider);
+    const appId = await createStack(bff, cookie, csrf, "Invitation Create App");
+    const path = `/admin/apps/${appId}/member-invitations`;
+    const init = {
+      method: "POST",
+      headers: {
+        "X-CSRF-Token": csrf,
+        "Content-Type": "application/json",
+        "Idempotency-Key": "invite-once",
+      },
+      body: JSON.stringify({ emailConstraint: " Invitee@Example.com " }),
+    };
+    const created = await authRequest(bff, path, cookie, init);
+    expect(created.status).toBe(201);
+    expect(created.headers.get("ETag")).toBe('"1"');
+    const receipt = await created.json() as Record<string, unknown>;
+    expect(receipt).toMatchObject({
+      invitationId: expect.any(String),
+      acceptUrl: expect.stringMatching(/^https:\/\/cas\.example\/admin\/invitations\//),
+      expiresAt: expect.any(Number),
+    });
+    const replayed = await authRequest(bff, path, cookie, init);
+    expect(await replayed.json()).toEqual(receipt);
+    expect(legacyCreate).not.toHaveBeenCalled();
+  });
+
   test("App status mutations enforce CSRF, strict input, and minimal responses", async () => {
     const provider = await createMockProvider();
     const platform = new MemoryPlatformAccessRepository();
@@ -2538,26 +2661,52 @@ describe("cas-admin-webui BFF", () => {
     const repo = new MemoryPlatformAccessRepository();
     const token = "i".repeat(32);
     await repo.addInvitation(token, "outside@example.com");
-    const baseControlPlane = fakeControlPlane();
-    const controlPlane: ControlPlaneOperations = {
-      ...baseControlPlane,
-      acceptMemberInvitation: async (ctx, request) => {
-        expect(request.path.token).toBe(token);
-        repo.grantViaMembership(ctx.identity.identityIssuer, ctx.identity.subject);
-        return {
-          stackId: "app-invited",
-          ...ctx.identity,
-          displayName: ctx.profile?.displayName ?? null,
-          emailForDisplay: ctx.profile?.emailForDisplay ?? null,
-        };
+    const accounts = memoryAccountRepository(repo, "seed-admin");
+    fakeStacks.set("app-invited", {
+      stackId: "app-invited",
+      displayName: "Invited App",
+      description: "",
+      status: "active",
+      createdAt: 1,
+      revision: 1,
+      members: new Map([[`${ISSUER}\nseed-admin`, {
+        identity: { identityIssuer: ISSUER, subject: "seed-admin" },
+      }]]),
+    });
+    await accounts.commitCreateAccountAppInvitation({
+      actorAccountId: testAccountId("seed-admin"),
+      actorExternalIdentityId: "ext-seed-admin",
+      invitation: {
+        appId: "app-invited",
+        invitationId: "inv-account",
+        status: "pending",
+        emailConstraint: "outside@example.com",
+        tokenHash: await sha256Hex(token),
+        expiresAt: 4102444800000,
+        createdAt: 1,
+        revision: 1,
       },
-    };
+      response: {
+        invitationId: "inv-account",
+        acceptUrl: `/admin/invitations/${token}`,
+        expiresAt: 4102444800000,
+        revision: 1,
+      },
+      idempotency: null,
+      eventId: "event-invite",
+      now: 1,
+    });
+    const legacyAccept = vi.fn(async () => { throw new Error("legacy invitation acceptance must not be called"); });
     const bff = await createBff(
       provider,
       undefined,
       { emailAllowlist: ["internal@example.com"] },
       repo,
-      controlPlane,
+      { ...fakeControlPlane(), acceptMemberInvitation: legacyAccept },
+      undefined,
+      undefined,
+      undefined,
+      accounts,
     );
 
     const page = await bff(new Request(`${PUBLIC_ORIGIN}/admin/invitations/${token}`));
@@ -2603,13 +2752,14 @@ describe("cas-admin-webui BFF", () => {
       headers: { "X-CSRF-Token": csrf },
     });
     expect(accepted.status).toBe(200);
-    expect(await accepted.json()).toMatchObject({ stackId: "app-invited" });
+    expect(await accepted.json()).toEqual({ appId: "app-invited" });
+    expect(legacyAccept).not.toHaveBeenCalled();
     const fullCookie = cookieFrom(accepted)!;
     expect(fullCookie).not.toBe(limitedCookie);
 
     const staleSession = await authRequest(bff, "/admin/me", limitedCookie);
     expect(staleSession.status).toBe(401);
-    const admitted = await authRequest(bff, "/admin/stacks", fullCookie);
+    const admitted = await authRequest(bff, "/admin/apps", fullCookie);
     expect(admitted.status).toBe(200);
   }, 10_000);
 

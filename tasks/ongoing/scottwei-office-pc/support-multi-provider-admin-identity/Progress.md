@@ -112,7 +112,7 @@ membership. After their consumers move, delete legacy HTTP contracts,
 identity-keyed columns/tables (including the retired Playground table), dual
 writes, and startup identity migration rather than adding compatibility flags.
 
-The thirteenth no-legacy cleanup checkpoint is ready to publish. App invitation
+The thirteenth no-legacy cleanup checkpoint is published as `d30e5dc`. App invitation
 list, expiry reconciliation, and conditional revoke now run through
 `AccountService` in HTTP and remote MCP. Snapshot-bound cursors, status filters,
 revoked idempotence, expiry rules, CSRF, exact confirmation, and ETags are
@@ -121,9 +121,20 @@ membership, invitation state, revision, and time bound before updating the
 invitation, writing exact Account/identity audit evidence, and advancing the
 snapshot. Legacy list/revoke methods fail if called.
 
-Next: migrate App invitation create/accept with Account-scoped idempotency,
-verified-email evidence, challenge consumption, and stable Account membership;
-then remove the legacy contracts, repository, and fresh-schema leftovers.
+The fourteenth no-legacy cleanup checkpoint is ready to publish. App invitation
+create and accept now run through `AccountService` in HTTP and remote MCP.
+Creation uses a new Account/App-scoped idempotency table on fresh schema and
+atomically writes the invitation, Account/identity audit, receipt, and snapshot.
+Acceptance requires the current Account and active ExternalIdentity, consumes
+fresh verified-email evidence and an optional Microsoft challenge atomically,
+claims the invitation, grants stable Account membership, and initializes only
+an empty primary verified contact. It writes no operator identity or platform
+Principal row. Browser acceptance retains token-bound sessions and rotates to a
+full session; every legacy invitation operation fails if called.
+
+Next: remove now-unused App-specific legacy service bridges and compatibility
+response mappings, then replace the remaining legacy Principal repository and
+fresh schema tables/columns without data migration.
 
 On 2026-09-17, the requesting user directed this worktree to claim and continue
 the task. `repoledger doctor` resolved the worktree identity as
@@ -913,6 +924,11 @@ cutover markers. Then complete the current-model and real-provider/email tests.
   remote MCP suites. The Miniflare-heavy run used the command-local 15-second
   allowance. Both affected package typechecks passed and editor diagnostics
   were clean.
+- Account-native App invitation create/accept validation passed 25 cloud-neutral
+  Account tests and 109 affected Cloudflare tests across fresh schema, BFF,
+  adapter, D1, and remote MCP suites. The Miniflare-heavy run used the
+  command-local 15-second allowance. Both affected package typechecks passed
+  and editor diagnostics were clean.
 - This no-legacy cleanup checkpoint and the production OAuth provisioning guide
   are published on the shared primary branch. The next implementation action is
   to replace the internal Principal-keyed App control-plane repository and then

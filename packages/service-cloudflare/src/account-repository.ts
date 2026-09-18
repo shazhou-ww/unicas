@@ -3,6 +3,8 @@ import type { AccountId, App, AppId, AppMemberInvitation, PlatformAuthority, Pri
 import type {
   AccountAppMembershipRecord,
   AccountAppIdempotencyRecord,
+  AccountAppInvitationIdempotencyRecord,
+  AccountAppInvitationRecord,
   AppAccountAuditRecord,
   AccountProfileRecord,
   AccountPlatformViewRecord,
@@ -610,6 +612,199 @@ export class D1AccountRepository implements AccountRepository {
     } catch (error) {
       if (!isJsonFailure(error)) throw error;
       return await this.#isUsableAppActor(input) ? "unavailable" : "actor-not-member";
+    }
+  }
+
+  async getAccountAppInvitationIdempotency(input: {
+    readonly accountId: AccountId;
+    readonly appId: AppId;
+    readonly key: string;
+    readonly now: number;
+  }): Promise<AccountAppInvitationIdempotencyRecord | null> {
+    const row = await this.db.prepare(
+      `SELECT account_id, app_id, idempotency_key, payload_hash, response_json,
+        created_at, expires_at
+       FROM cas_account_app_invitation_idempotency
+       WHERE account_id = ? AND app_id = ? AND idempotency_key = ? AND expires_at > ?`,
+    ).bind(input.accountId, input.appId, input.key, input.now).first<{
+      account_id: AccountId;
+      app_id: AppId;
+      idempotency_key: string;
+      payload_hash: string;
+      response_json: string;
+      created_at: number;
+      expires_at: number;
+    }>();
+    return row ? {
+      accountId: row.account_id,
+      appId: row.app_id,
+      key: row.idempotency_key,
+      payloadHash: row.payload_hash,
+      response: JSON.parse(row.response_json) as AccountAppInvitationIdempotencyRecord["response"],
+      createdAt: row.created_at,
+      expiresAt: row.expires_at,
+    } : null;
+  }
+
+  async commitCreateAccountAppInvitation(
+    input: Parameters<AccountRepository["commitCreateAccountAppInvitation"]>[0],
+  ): Promise<"created" | "actor-not-member" | { readonly idempotencyRace: AccountAppInvitationIdempotencyRecord }> {
+    const statements: D1PreparedStatement[] = [
+      this.#requireAppActor({ ...input, appId: input.invitation.appId }),
+      this.db.prepare(
+        `INSERT INTO cas_app_member_invitations
+          (invitation_id, app_id, status, email_constraint, token_hash,
+           expires_at, created_at, revision)
+         VALUES (?, ?, 'pending', ?, ?, ?, ?, 1)`,
+      ).bind(
+        input.invitation.invitationId,
+        input.invitation.appId,
+        input.invitation.emailConstraint,
+        input.invitation.tokenHash,
+        input.invitation.expiresAt,
+        input.invitation.createdAt,
+      ),
+      this.#appAuditStatement({ ...input, appId: input.invitation.appId }, "member.invited", input.invitation.invitationId),
+      ...this.#controlSnapshotStatements(),
+    ];
+    if (input.idempotency) {
+      statements.push(this.db.prepare(
+        `INSERT INTO cas_account_app_invitation_idempotency
+          (account_id, app_id, idempotency_key, payload_hash, response_json,
+           created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        input.idempotency.accountId,
+        input.idempotency.appId,
+        input.idempotency.key,
+        input.idempotency.payloadHash,
+        JSON.stringify(input.idempotency.response),
+        input.idempotency.createdAt,
+        input.idempotency.expiresAt,
+      ));
+    }
+    try {
+      await this.db.batch(statements);
+      return "created";
+    } catch (error) {
+      if (input.idempotency && isUniqueFailure(error)) {
+        const existing = await this.getAccountAppInvitationIdempotency({
+          accountId: input.idempotency.accountId,
+          appId: input.idempotency.appId,
+          key: input.idempotency.key,
+          now: input.now,
+        });
+        if (existing) return { idempotencyRace: existing };
+      }
+      if (isJsonFailure(error) && !await this.#isUsableAppActor({ ...input, appId: input.invitation.appId })) {
+        return "actor-not-member";
+      }
+      throw error;
+    }
+  }
+
+  async getAccountAppInvitationByTokenHash(tokenHash: string): Promise<AccountAppInvitationRecord | null> {
+    return this.db.prepare(
+      `SELECT invitation_id AS invitationId, app_id AS appId, status,
+        email_constraint AS emailConstraint, token_hash AS tokenHash,
+        expires_at AS expiresAt, created_at AS createdAt, revision
+       FROM cas_app_member_invitations WHERE token_hash = ?`,
+    ).bind(tokenHash).first<AccountAppInvitationRecord>();
+  }
+
+  async commitAcceptAccountAppInvitation(
+    input: Parameters<AccountRepository["commitAcceptAccountAppInvitation"]>[0],
+  ): Promise<"accepted" | "account-unavailable" | "invitation-unavailable"> {
+    const consumeChallenge = input.emailChallenge && input.primaryVerifiedEmail
+      ? [
+        this.db.prepare(
+          `UPDATE cas_email_challenges SET consumed_at = ?
+           WHERE challenge_id = ? AND invitation_kind = 'app' AND invitation_id = ?
+             AND invitation_token_hash = ?
+             AND identity_issuer = (SELECT issuer FROM cas_external_identities
+               WHERE external_identity_id = ? AND account_id = ? AND unlinked_at IS NULL)
+             AND subject = (SELECT subject FROM cas_external_identities
+               WHERE external_identity_id = ? AND account_id = ? AND unlinked_at IS NULL)
+             AND authentication_event_id = ? AND normalized_email = ?
+             AND verified_at IS NOT NULL AND consumed_at IS NULL
+             AND invalidated_at IS NULL AND expires_at > ?`,
+        ).bind(
+          input.now,
+          input.emailChallenge.challengeId,
+          input.invitation.invitationId,
+          input.invitation.tokenHash,
+          input.externalIdentityId,
+          input.accountId,
+          input.externalIdentityId,
+          input.accountId,
+          input.emailChallenge.authenticationEventId,
+          input.primaryVerifiedEmail.normalizedEmail,
+          input.now,
+        ),
+        this.db.prepare("SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('invalid', '$') END AS consumed"),
+      ]
+      : [];
+    const actorInput = {
+      actorAccountId: input.accountId,
+      actorExternalIdentityId: input.externalIdentityId,
+      appId: input.invitation.appId,
+      eventId: input.eventId,
+      requestId: input.requestId,
+      traceId: input.traceId,
+      callerChannel: input.callerChannel,
+      oauthClientHandle: input.oauthClientHandle,
+      toolName: input.toolName,
+      now: input.now,
+    };
+    const initializePrimaryContact = input.primaryVerifiedEmail
+      ? [this.db.prepare(
+        `UPDATE cas_accounts SET primary_verified_email = ?, email_verification_source = ?,
+           email_verified_at = ?, updated_at = MAX(updated_at, ?)
+         WHERE account_id = ? AND primary_verified_email IS NULL`,
+      ).bind(
+        input.primaryVerifiedEmail.normalizedEmail,
+        input.primaryVerifiedEmail.source,
+        input.primaryVerifiedEmail.verifiedAt,
+        input.now,
+        input.accountId,
+      )]
+      : [];
+    try {
+      await this.db.batch([
+        this.#requireAccountActor(input.accountId, input.externalIdentityId),
+        ...consumeChallenge,
+        this.db.prepare(
+          `UPDATE cas_app_member_invitations SET status = 'accepted', revision = revision + 1
+           WHERE invitation_id = ? AND app_id = ? AND token_hash = ?
+             AND status = 'pending' AND expires_at > ?`,
+        ).bind(
+          input.invitation.invitationId,
+          input.invitation.appId,
+          input.invitation.tokenHash,
+          input.now,
+        ),
+        this.db.prepare("SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('invalid', '$') END AS claimed"),
+        this.db.prepare(
+          `INSERT OR IGNORE INTO cas_app_members
+            (app_id, identity_issuer, subject, joined_at, account_id)
+           SELECT ?, issuer, subject, ?, account_id FROM cas_external_identities
+           WHERE external_identity_id = ? AND account_id = ? AND unlinked_at IS NULL`,
+        ).bind(input.invitation.appId, input.now, input.externalIdentityId, input.accountId),
+        ...initializePrimaryContact,
+        this.#appAuditStatement(actorInput, "member.invitation.accepted", input.invitation.invitationId),
+        ...this.#controlSnapshotStatements(),
+      ]);
+      return "accepted";
+    } catch (error) {
+      if (!isJsonFailure(error)) throw error;
+      const [account, identity] = await Promise.all([
+        this.getAccount(input.accountId),
+        this.getIdentity(input.externalIdentityId),
+      ]);
+      if (!account || account.blockedAt !== null || !identity
+        || identity.accountId !== input.accountId || identity.unlinkedAt !== null) {
+        return "account-unavailable";
+      }
+      return "invitation-unavailable";
     }
   }
 
@@ -1443,6 +1638,16 @@ export class D1AccountRepository implements AccountRepository {
         AND EXISTS (SELECT 1 FROM cas_app_members WHERE app_id = ? AND account_id = ?)
        THEN 1 ELSE json_extract('invalid', '$') END AS allowed`,
     ).bind(input.actorAccountId, input.actorExternalIdentityId, input.actorAccountId, appId, input.actorAccountId);
+  }
+
+  #requireAccountActor(accountId: AccountId, externalIdentityId: string): D1PreparedStatement {
+    return this.db.prepare(
+      `SELECT CASE WHEN EXISTS (SELECT 1 FROM cas_accounts
+          WHERE account_id = ? AND blocked_at IS NULL)
+        AND EXISTS (SELECT 1 FROM cas_external_identities
+          WHERE external_identity_id = ? AND account_id = ? AND unlinked_at IS NULL)
+       THEN 1 ELSE json_extract('invalid', '$') END AS allowed`,
+    ).bind(accountId, externalIdentityId, accountId);
   }
 
   async #isUsableAppActor(input: {

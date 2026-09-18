@@ -21,13 +21,13 @@ import type {
   ProviderKind,
 } from "@unicas/admin-protocol";
 import { AppAccountAuditQuerySchema, CAS_ADMIN_IDEMPOTENCY_RETENTION_MS, parseCasAdminETag, PlatformAccountAuditQuerySchema, PlatformPrincipalQuerySchema } from "@unicas/admin-protocol";
-import { generateAccountId, generateEventId, generateExternalIdentityId, generateNonce, generateOAuthInspectionId, generateStackId } from "./control-ids.js";
+import { generateAccountId, generateEventId, generateExternalIdentityId, generateInvitationId, generateInvitationToken, generateNonce, generateOAuthInspectionId, generateStackId } from "./control-ids.js";
 import { decodeControlListCursor, encodeControlListCursor } from "./control-cursor.js";
 import type { ControlOAuthIssuerInspectionRecord, ControlOAuthIssuerRecord, ManagedOAuthIssuerProvisioner } from "./control-admin.js";
 import { extractJwsPayload, extractJwsProtectedHeader, verifyCompactJwsProof } from "./control-possession.js";
 import { buildOAuthIssuerInspectionChallenge, canonicalizeOAuthIssuer, OAUTH_ISSUER_INSPECTION_TTL_MS, parseOAuthIssuerInspectionChallenge, type DiscoveredOAuthJwk, type OAuthDiscoveryPort } from "./oauth-discovery.js";
-import { canonicalJson, OAUTH_CAPABILITY_MAX_LIFETIME_SECONDS, sha256Hex, stackOAuthResource, validateDisplayName } from "./control-validation.js";
-import type { AuthenticatedProviderResult } from "./authentication.js";
+import { canonicalJson, INVITATION_TTL_MS, normalizeEmailConstraint, OAUTH_CAPABILITY_MAX_LIFETIME_SECONDS, sha256Hex, stackOAuthResource, validateDisplayName, validateEmailConstraint, validateInvitationToken } from "./control-validation.js";
+import { requireInvitationEmailEvidence, type AuthenticatedProviderResult, type VerifiedEmailEvidence } from "./authentication.js";
 import { AUTHENTICATION_FLOW_TTL_MS } from "./authentication.js";
 
 const MAX_ALIAS_DEPTH = 8;
@@ -86,6 +86,27 @@ export interface AccountAppIdempotencyRecord {
   readonly response: App;
   readonly createdAt: number;
   readonly expiresAt: number;
+}
+
+export interface AccountAppInvitationCreateResponse {
+  readonly invitationId: string;
+  readonly acceptUrl: string;
+  readonly expiresAt: number;
+  readonly revision: number;
+}
+
+export interface AccountAppInvitationIdempotencyRecord {
+  readonly accountId: AccountId;
+  readonly appId: AppId;
+  readonly key: string;
+  readonly payloadHash: string;
+  readonly response: AccountAppInvitationCreateResponse;
+  readonly createdAt: number;
+  readonly expiresAt: number;
+}
+
+export interface AccountAppInvitationRecord extends AppMemberInvitation {
+  readonly tokenHash: string;
 }
 
 export interface AccountPlatformViewRecord {
@@ -209,6 +230,44 @@ export interface AccountRepository {
     readonly toolName?: string;
     readonly now: number;
   }): Promise<"updated" | "actor-not-member" | "unavailable">;
+  getAccountAppInvitationIdempotency(input: {
+    readonly accountId: AccountId;
+    readonly appId: AppId;
+    readonly key: string;
+    readonly now: number;
+  }): Promise<AccountAppInvitationIdempotencyRecord | null>;
+  commitCreateAccountAppInvitation(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly invitation: AppMemberInvitation & { readonly tokenHash: string };
+    readonly response: AccountAppInvitationCreateResponse;
+    readonly idempotency: AccountAppInvitationIdempotencyRecord | null;
+    readonly eventId: string;
+    readonly requestId?: string;
+    readonly traceId?: string;
+    readonly callerChannel?: string;
+    readonly oauthClientHandle?: string;
+    readonly toolName?: string;
+    readonly now: number;
+  }): Promise<"created" | "actor-not-member" | { readonly idempotencyRace: AccountAppInvitationIdempotencyRecord }>;
+  getAccountAppInvitationByTokenHash(tokenHash: string): Promise<AccountAppInvitationRecord | null>;
+  commitAcceptAccountAppInvitation(input: {
+    readonly accountId: AccountId;
+    readonly externalIdentityId: string;
+    readonly invitation: AccountAppInvitationRecord;
+    readonly primaryVerifiedEmail: PrimaryVerifiedEmail | null;
+    readonly emailChallenge: {
+      readonly challengeId: string;
+      readonly authenticationEventId: string;
+    } | null;
+    readonly eventId: string;
+    readonly requestId?: string;
+    readonly traceId?: string;
+    readonly callerChannel?: string;
+    readonly oauthClientHandle?: string;
+    readonly toolName?: string;
+    readonly now: number;
+  }): Promise<"accepted" | "account-unavailable" | "invitation-unavailable">;
   getManagedOAuthIssuer(appId: AppId): Promise<ControlOAuthIssuerRecord | null>;
   commitPatchAccountManagedOAuthIssuer(input: {
     readonly actorAccountId: AccountId;
@@ -870,6 +929,164 @@ export class AccountService {
         })
         : null,
     };
+  }
+
+  async createAppMemberInvitation(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly appId: AppId;
+    readonly emailConstraint?: string;
+    readonly idempotencyKey?: string;
+    readonly requestId?: string;
+    readonly traceId?: string;
+    readonly callerChannel?: string;
+    readonly oauthClientHandle?: string;
+    readonly toolName?: string;
+  }): Promise<AccountAppInvitationCreateResponse> {
+    if (validateEmailConstraint(input.emailConstraint)) throw new AccountServiceError("INVALID_REQUEST");
+    if (input.idempotencyKey !== undefined
+      && (input.idempotencyKey.length === 0 || input.idempotencyKey.length > 128)) {
+      throw new AccountServiceError("INVALID_REQUEST");
+    }
+    const actor = await this.#resolveCanonicalAccount(input.actorAccountId);
+    this.#requireUsableAccount(actor);
+    await this.requireActiveIdentity(actor.accountId, input.actorExternalIdentityId);
+    if (!await this.repository.hasAppMembership(actor.accountId, input.appId)) {
+      throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
+    }
+    const emailConstraint = normalizeEmailConstraint(input.emailConstraint);
+    const now = this.now();
+    const payloadHash = await sha256Hex(canonicalJson({ emailConstraint }));
+    if (input.idempotencyKey !== undefined) {
+      const existing = await this.repository.getAccountAppInvitationIdempotency({
+        accountId: actor.accountId,
+        appId: input.appId,
+        key: input.idempotencyKey,
+        now,
+      });
+      if (existing) return this.#resolveInvitationIdempotency(existing, payloadHash);
+    }
+    const token = generateInvitationToken();
+    const invitation = {
+      appId: input.appId,
+      invitationId: generateInvitationId(),
+      status: "pending" as const,
+      emailConstraint,
+      tokenHash: await sha256Hex(token),
+      expiresAt: now + INVITATION_TTL_MS,
+      createdAt: now,
+      revision: 1,
+    };
+    const response: AccountAppInvitationCreateResponse = {
+      invitationId: invitation.invitationId,
+      acceptUrl: `/admin/invitations/${token}`,
+      expiresAt: invitation.expiresAt,
+      revision: invitation.revision,
+    };
+    const idempotency: AccountAppInvitationIdempotencyRecord | null = input.idempotencyKey === undefined ? null : {
+      accountId: actor.accountId,
+      appId: input.appId,
+      key: input.idempotencyKey,
+      payloadHash,
+      response,
+      createdAt: now,
+      expiresAt: now + CAS_ADMIN_IDEMPOTENCY_RETENTION_MS,
+    };
+    const result = await this.repository.commitCreateAccountAppInvitation({
+      actorAccountId: actor.accountId,
+      actorExternalIdentityId: input.actorExternalIdentityId,
+      invitation,
+      response,
+      idempotency,
+      eventId: generateEventId(),
+      requestId: input.requestId,
+      traceId: input.traceId,
+      callerChannel: input.callerChannel,
+      oauthClientHandle: input.oauthClientHandle,
+      toolName: input.toolName,
+      now,
+    });
+    if (result === "actor-not-member") throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
+    return result === "created"
+      ? response
+      : this.#resolveInvitationIdempotency(result.idempotencyRace, payloadHash);
+  }
+
+  #resolveInvitationIdempotency(
+    record: AccountAppInvitationIdempotencyRecord,
+    payloadHash: string,
+  ): AccountAppInvitationCreateResponse {
+    if (record.payloadHash !== payloadHash) throw new AccountServiceError("IDEMPOTENCY_CONFLICT");
+    return record.response;
+  }
+
+  async acceptAppMemberInvitation(input: {
+    readonly accountId: AccountId;
+    readonly externalIdentityId: string;
+    readonly token: string;
+    readonly verifiedEmailEvidence?: readonly VerifiedEmailEvidence[];
+    readonly requestId?: string;
+    readonly traceId?: string;
+    readonly callerChannel?: string;
+    readonly oauthClientHandle?: string;
+    readonly toolName?: string;
+  }): Promise<AppId> {
+    if (validateInvitationToken(input.token)) throw new AccountServiceError("INVALID_REQUEST");
+    const account = await this.#resolveCanonicalAccount(input.accountId);
+    this.#requireUsableAccount(account);
+    await this.requireActiveIdentity(account.accountId, input.externalIdentityId);
+    const invitation = await this.repository.getAccountAppInvitationByTokenHash(
+      await sha256Hex(input.token),
+    );
+    const now = this.now();
+    if (!invitation || invitation.status !== "pending" || invitation.expiresAt <= now) {
+      throw new AccountServiceError("NOT_FOUND");
+    }
+    let primaryVerifiedEmail: PrimaryVerifiedEmail | null = null;
+    let emailChallenge: {
+      readonly challengeId: string;
+      readonly authenticationEventId: string;
+    } | null = null;
+    if (invitation.emailConstraint !== null) {
+      let evidence: VerifiedEmailEvidence;
+      try {
+        evidence = requireInvitationEmailEvidence(
+          input.verifiedEmailEvidence ?? [],
+          invitation.emailConstraint,
+          now,
+        );
+      } catch {
+        throw new AccountServiceError("NOT_FOUND");
+      }
+      primaryVerifiedEmail = {
+        normalizedEmail: evidence.normalizedEmail,
+        source: evidence.source,
+        verifiedAt: evidence.verifiedAt,
+      };
+      if (evidence.source === "unicas-email-challenge") {
+        emailChallenge = {
+          challengeId: evidence.challengeId!,
+          authenticationEventId: evidence.authenticationEventId,
+        };
+      }
+    }
+    const result = await this.repository.commitAcceptAccountAppInvitation({
+      accountId: account.accountId,
+      externalIdentityId: input.externalIdentityId,
+      invitation,
+      primaryVerifiedEmail,
+      emailChallenge,
+      eventId: generateEventId(),
+      requestId: input.requestId,
+      traceId: input.traceId,
+      callerChannel: input.callerChannel,
+      oauthClientHandle: input.oauthClientHandle,
+      toolName: input.toolName,
+      now,
+    });
+    if (result === "account-unavailable") throw new AccountServiceError("ACCOUNT_NOT_FOUND");
+    if (result === "invitation-unavailable") throw new AccountServiceError("NOT_FOUND");
+    return invitation.appId;
   }
 
   async revokeAppMemberInvitation(input: {

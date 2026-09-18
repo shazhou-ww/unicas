@@ -24,7 +24,7 @@ export async function handleAppAdminCompatibilityRequest(
     || route.operation === "listRootDomainEvents") return legacyHandler(request);
   if (route.operation === "listPeople" || route.operation === "mintManagedCapability" || route.operation === "patchApp"
     || route.operation === "getOAuthIssuer" || route.operation === "getManagedIssuer" || route.operation === "patchManagedIssuer"
-    || route.operation === "listMemberInvitations" || route.operation === "revokeMemberInvitation"
+    || route.operation === "createMemberInvitation" || route.operation === "listMemberInvitations" || route.operation === "revokeMemberInvitation"
     || route.operation === "inspectOAuthIssuer" || route.operation === "activateOAuthIssuer") {
     return legacyHandler(request);
   }
@@ -36,13 +36,6 @@ export async function handleAppAdminCompatibilityRequest(
   const body = await legacyResponse.json();
   if (isRecord(body) && typeof body.error === "string") {
     return copyJsonResponse(legacyResponse, transformAppAdminError(body));
-  }
-  if (route.operation === "createMemberInvitation" && isRecord(body) && isRecord(body.invitation)
-    && typeof body.invitation.revision === "number") {
-    const response = copyJsonResponse(legacyResponse, mapInvitationResponse(body), 201);
-    response.headers.set("ETag", formatCasAdminETag(body.invitation.revision));
-    response.headers.set("Cache-Control", "no-store, no-transform");
-    return response;
   }
   return copyJsonResponse(
     legacyResponse,

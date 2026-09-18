@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { CompactSign, exportJWK, generateKeyPair } from "jose";
-import { AccountService } from "@unicas/service";
+import { AccountService, sha256Hex } from "@unicas/service";
 import { D1AccountRepository } from "../src/account-repository.js";
 import { migrateControlSchema } from "../src/control-schema.js";
 
@@ -526,10 +526,12 @@ describe("D1 Account repository", () => {
     expect(await db.prepare(
       `SELECT action, original_account_id, external_identity_id
        FROM cas_control_audit_events WHERE target IN ('inv-expired', 'inv-pending') ORDER BY action`,
-    ).all()).toMatchObject({ results: [
-      { action: "member.invitation.expired", original_account_id: actor.account.accountId, external_identity_id: actor.authenticatedIdentity.externalIdentityId },
-      { action: "member.invitation.revoked", original_account_id: actor.account.accountId, external_identity_id: actor.authenticatedIdentity.externalIdentityId },
-    ] });
+    ).all()).toMatchObject({
+      results: [
+        { action: "member.invitation.expired", original_account_id: actor.account.accountId, external_identity_id: actor.authenticatedIdentity.externalIdentityId },
+        { action: "member.invitation.revoked", original_account_id: actor.account.accountId, external_identity_id: actor.authenticatedIdentity.externalIdentityId },
+      ]
+    });
     await expect(service.revokeAppMemberInvitation({
       actorAccountId: actor.account.accountId,
       actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
@@ -537,6 +539,123 @@ describe("D1 Account repository", () => {
       invitationId: "inv-pending",
       ifMatch: '"3"',
     })).rejects.toMatchObject({ code: "REVISION_MISMATCH" });
+  });
+
+  test("creates App invitations with Account-scoped D1 idempotency", async () => {
+    const { db, service } = await fixture();
+    const actor = await service.createForExternalIdentity({
+      provider: "github",
+      issuer: "https://github.com",
+      subject: "invitation-creator",
+    });
+    await db.prepare(
+      "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES ('cas_app_invite_create', 'App', '', 'active', 1, 1)",
+    ).run();
+    await db.prepare(
+      "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES ('cas_app_invite_create', ?, ?, 1, ?)",
+    ).bind(actor.authenticatedIdentity.issuer, actor.authenticatedIdentity.subject, actor.account.accountId).run();
+
+    const created = await service.createAppMemberInvitation({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      appId: "cas_app_invite_create",
+      emailConstraint: " Invitee@Example.com ",
+      idempotencyKey: "invite-once",
+      callerChannel: "admin-webui",
+    });
+    const replayed = await service.createAppMemberInvitation({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      appId: "cas_app_invite_create",
+      emailConstraint: "invitee@example.com",
+      idempotencyKey: "invite-once",
+    });
+    expect(replayed).toEqual(created);
+    expect(await db.prepare(
+      "SELECT COUNT(*) AS count FROM cas_app_member_invitations WHERE app_id = 'cas_app_invite_create'",
+    ).first()).toEqual({ count: 1 });
+    expect(await db.prepare(
+      `SELECT account_id, app_id, idempotency_key
+       FROM cas_account_app_invitation_idempotency`,
+    ).first()).toEqual({
+      account_id: actor.account.accountId,
+      app_id: "cas_app_invite_create",
+      idempotency_key: "invite-once",
+    });
+    expect(await db.prepare(
+      "SELECT email_constraint FROM cas_app_member_invitations WHERE app_id = 'cas_app_invite_create'",
+    ).first()).toEqual({ email_constraint: "invitee@example.com" });
+    await expect(service.createAppMemberInvitation({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      appId: "cas_app_invite_create",
+      emailConstraint: "other@example.com",
+      idempotencyKey: "invite-once",
+    })).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+  });
+
+  test("accepts an App invitation into stable Account membership without Principal writes", async () => {
+    const { db, service } = await fixture();
+    const actor = await service.createForExternalIdentity({
+      provider: "microsoft",
+      issuer: "https://login.microsoftonline.com/consumers/v2.0",
+      subject: "pairwise-invitee",
+    });
+    const token = "m".repeat(32);
+    const tokenHash = await sha256Hex(token);
+    await db.prepare(
+      "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES ('cas_app_accept', 'App', '', 'active', 1, 1)",
+    ).run();
+    await db.prepare(
+      `INSERT INTO cas_app_member_invitations
+        (invitation_id, app_id, status, email_constraint, token_hash, expires_at, created_at, revision)
+       VALUES ('inv-accept', 'cas_app_accept', 'pending', 'invitee@example.com', ?, 2000, 1, 1)`,
+    ).bind(tokenHash).run();
+    await db.prepare(
+      `INSERT INTO cas_email_challenges
+        (challenge_id, invitation_kind, invitation_id, invitation_token_hash,
+         identity_issuer, subject, authentication_event_id, normalized_email,
+         code_hash, expires_at, max_attempts, last_sent_at, verified_at, created_at)
+       VALUES ('challenge-accept', 'app', 'inv-accept', ?, ?, ?, 'auth-event',
+         'invitee@example.com', ?, 1500, 5, 900, 950, 900)`,
+    ).bind(
+      tokenHash,
+      actor.authenticatedIdentity.issuer,
+      actor.authenticatedIdentity.subject,
+      "a".repeat(64),
+    ).run();
+
+    await expect(service.acceptAppMemberInvitation({
+      accountId: actor.account.accountId,
+      externalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      token,
+      verifiedEmailEvidence: [{
+        normalizedEmail: "invitee@example.com",
+        source: "unicas-email-challenge",
+        verifiedAt: 950,
+        expiresAt: 1500,
+        authenticationEventId: "auth-event",
+        challengeId: "challenge-accept",
+      }],
+      callerChannel: "admin-webui",
+    })).resolves.toBe("cas_app_accept");
+    expect(await db.prepare(
+      "SELECT account_id FROM cas_app_members WHERE app_id = 'cas_app_accept'",
+    ).first()).toEqual({ account_id: actor.account.accountId });
+    expect(await db.prepare(
+      "SELECT status, revision FROM cas_app_member_invitations WHERE invitation_id = 'inv-accept'",
+    ).first()).toEqual({ status: "accepted", revision: 2 });
+    expect(await db.prepare(
+      "SELECT consumed_at FROM cas_email_challenges WHERE challenge_id = 'challenge-accept'",
+    ).first()).toEqual({ consumed_at: 1000 });
+    expect(await db.prepare(
+      "SELECT primary_verified_email, email_verification_source FROM cas_accounts WHERE account_id = ?",
+    ).bind(actor.account.accountId).first()).toEqual({
+      primary_verified_email: "invitee@example.com",
+      email_verification_source: "unicas-email-challenge",
+    });
+    expect(await db.prepare("SELECT COUNT(*) AS count FROM cas_operator_identities").first()).toEqual({ count: 0 });
+    expect(await db.prepare("SELECT COUNT(*) AS count FROM cas_platform_principals").first()).toEqual({ count: 0 });
   });
 
   test("manages platform authorities and block state by Account ID", async () => {

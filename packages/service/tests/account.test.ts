@@ -60,6 +60,10 @@ function fixture() {
     getAppMemberInvitation: vi.fn(async () => null),
     listAppMemberInvitations: vi.fn(async () => []),
     commitAccountAppInvitationTransition: vi.fn(async () => "updated"),
+    getAccountAppInvitationIdempotency: vi.fn(async () => null),
+    commitCreateAccountAppInvitation: vi.fn(async () => "created"),
+    getAccountAppInvitationByTokenHash: vi.fn(async () => null),
+    commitAcceptAccountAppInvitation: vi.fn(async () => "accepted"),
     getManagedOAuthIssuer: vi.fn(async () => null),
     commitPatchAccountManagedOAuthIssuer: vi.fn(async () => "updated"),
     commitPatchAccountApp: vi.fn(async () => "updated"),
@@ -552,6 +556,95 @@ describe("Account service", () => {
       invitationId: pending.invitationId,
       ifMatch: '"4"',
     })).rejects.toMatchObject({ code: "REVISION_MISMATCH" });
+  });
+
+  test("creates App invitations with Account-scoped idempotency", async () => {
+    const { repository, service } = fixture();
+    vi.mocked(repository.hasAppMembership).mockResolvedValue(true);
+    const created = await service.createAppMemberInvitation({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      appId: "cas_app_a",
+      emailConstraint: " Alice@Example.COM ",
+      idempotencyKey: "invite-alice",
+    });
+    expect(created).toMatchObject({ invitationId: expect.any(String), revision: 1 });
+    expect(created.acceptUrl).toMatch(/^\/admin\/invitations\//);
+    const commit = vi.mocked(repository.commitCreateAccountAppInvitation).mock.calls[0]![0];
+    expect(commit).toMatchObject({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      invitation: { appId: "cas_app_a", emailConstraint: "alice@example.com" },
+      idempotency: { accountId, appId: "cas_app_a", key: "invite-alice" },
+    });
+
+    vi.mocked(repository.getAccountAppInvitationIdempotency).mockResolvedValue(commit.idempotency);
+    await expect(service.createAppMemberInvitation({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      appId: "cas_app_a",
+      emailConstraint: "alice@example.com",
+      idempotencyKey: "invite-alice",
+    })).resolves.toEqual(created);
+    await expect(service.createAppMemberInvitation({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      appId: "cas_app_a",
+      emailConstraint: "other@example.com",
+      idempotencyKey: "invite-alice",
+    })).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+  });
+
+  test("accepts App invitations for the stable Account using fresh email evidence", async () => {
+    const { repository, service } = fixture();
+    const token = "i".repeat(32);
+    vi.mocked(repository.getAccountAppInvitationByTokenHash).mockResolvedValue({
+      appId: "cas_app_a",
+      invitationId: "inv-a",
+      status: "pending",
+      emailConstraint: "alice@example.com",
+      tokenHash: "token-hash",
+      expiresAt: 2000,
+      createdAt: 1,
+      revision: 1,
+    });
+    await expect(service.acceptAppMemberInvitation({
+      accountId,
+      externalIdentityId: identity.externalIdentityId,
+      token,
+      verifiedEmailEvidence: [{
+        normalizedEmail: "alice@example.com",
+        source: "unicas-email-challenge",
+        verifiedAt: 900,
+        expiresAt: 1100,
+        authenticationEventId: "auth-event",
+        challengeId: "challenge-1",
+      }],
+    })).resolves.toBe("cas_app_a");
+    expect(repository.commitAcceptAccountAppInvitation).toHaveBeenCalledWith(expect.objectContaining({
+      accountId,
+      externalIdentityId: identity.externalIdentityId,
+      invitation: expect.objectContaining({ invitationId: "inv-a" }),
+      primaryVerifiedEmail: {
+        normalizedEmail: "alice@example.com",
+        source: "unicas-email-challenge",
+        verifiedAt: 900,
+      },
+      emailChallenge: { challengeId: "challenge-1", authenticationEventId: "auth-event" },
+    }));
+
+    await expect(service.acceptAppMemberInvitation({
+      accountId,
+      externalIdentityId: identity.externalIdentityId,
+      token,
+      verifiedEmailEvidence: [{
+        normalizedEmail: "other@example.com",
+        source: "google-oidc",
+        verifiedAt: 900,
+        expiresAt: 1100,
+        authenticationEventId: "other-auth",
+      }],
+    })).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 
   test("creates an App with Account authority and Account-scoped idempotency", async () => {

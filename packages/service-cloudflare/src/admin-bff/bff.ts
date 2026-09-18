@@ -339,6 +339,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     if (appRoute?.operation === "listMemberInvitations" || appRoute?.operation === "revokeMemberInvitation") {
       return handleAppInvitations(request, appRoute.appId, appRoute.operation === "revokeMemberInvitation" ? appRoute.invitationId : undefined);
     }
+    if (appRoute?.operation === "createMemberInvitation") {
+      return handleCreateAppInvitation(request, appRoute.appId);
+    }
     return json({ error: "Not Found" }, 404);
   };
 
@@ -1988,6 +1991,50 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     }
   }
 
+  async function handleCreateAppInvitation(request: Request, appId: string): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!(await passCsrf(request, auth.payload))) return csrfRejected();
+    if (!accountService || !auth.payload.accountId || !auth.payload.externalIdentityId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
+    }
+    const body = await readJsonBody<{ emailConstraint?: unknown }>(request);
+    if (body !== null && (Array.isArray(body)
+      || Object.keys(body).some(key => key !== "emailConstraint")
+      || body.emailConstraint !== undefined && typeof body.emailConstraint !== "string")) {
+      return invalidRequest("A valid invitation body is required");
+    }
+    try {
+      const result = await accountService.createAppMemberInvitation({
+        actorAccountId: auth.payload.accountId,
+        actorExternalIdentityId: auth.payload.externalIdentityId,
+        appId,
+        emailConstraint: body?.emailConstraint as string | undefined,
+        idempotencyKey: request.headers.get("Idempotency-Key") ?? undefined,
+        requestId: request.headers.get("X-Request-Id") ?? undefined,
+        traceId: request.headers.get("X-Trace-Id") ?? undefined,
+        callerChannel: "admin-webui",
+      });
+      return Response.json({
+        invitationId: result.invitationId,
+        acceptUrl: absolutize(result.acceptUrl),
+        expiresAt: result.expiresAt,
+      }, {
+        status: 201,
+        headers: { ETag: formatCasAdminETag(result.revision), "Cache-Control": REVISION_CACHE_CONTROL },
+      });
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "APP_MEMBERSHIP_REQUIRED" || error.code === "ACCOUNT_BLOCKED" ? 403
+          : error.code === "IDEMPOTENCY_CONFLICT" ? 409
+            : error.code === "INVALID_REQUEST" ? 400
+              : 401;
+        return json({ error: error.code }, status);
+      }
+      throw error;
+    }
+  }
+
   async function handleMemberInvitationAcceptance(request: Request, token: string): Promise<Response> {
     const sessionId = readSessionId(request);
     if (!sessionId) return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED, "login required");
@@ -2014,12 +2061,30 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       if (auth instanceof Response) return auth;
     }
     if (!(await passCsrf(request, payload))) return csrfRejected();
-
-    const result = await controlPlane.acceptMemberInvitation(
-      serviceContext(payload, request),
-      { path: { token } },
-    );
-    if ("error" in result) return json(result, casAdminErrorHttpStatus[result.error]);
+    if (!accountService || !payload.accountId || !payload.externalIdentityId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
+    }
+    let appId: string;
+    try {
+      appId = await accountService.acceptAppMemberInvitation({
+        accountId: payload.accountId,
+        externalIdentityId: payload.externalIdentityId,
+        token,
+        verifiedEmailEvidence: payload.verifiedEmailEvidence,
+        requestId: request.headers.get("X-Request-Id") ?? undefined,
+        traceId: request.headers.get("X-Trace-Id") ?? undefined,
+        callerChannel: "admin-webui",
+      });
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "ACCOUNT_BLOCKED" ? 403
+          : error.code === "INVALID_REQUEST" ? 400
+            : error.code === "NOT_FOUND" ? 404
+              : 401;
+        return json({ error: error.code }, status);
+      }
+      throw error;
+    }
 
     const nextPayload: AdminSessionPayload = {
       v: 1,
@@ -2041,7 +2106,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     const nextSessionId = generateSessionId();
     await persistSession(nextSessionId, nextPayload, sessionTtlMs);
     await sessionStore.delete(sessionId);
-    const response = json(result, 200);
+    const response = json({ appId }, 200);
     response.headers.set("Set-Cookie", sessionCookieHeader(cookieOptions, nextSessionId));
     response.headers.set("X-CSRF-Token", nextPayload.csrfToken);
     return response;

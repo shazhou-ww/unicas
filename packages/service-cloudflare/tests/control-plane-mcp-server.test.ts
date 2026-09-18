@@ -331,37 +331,60 @@ describe("adapter-hosted control-plane MCP server", () => {
       displayName: "Alice",
     });
     const appId = "cas_app_invitations";
-    const invitationId = "inv-current";
     await db.prepare(
       "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES (?, 'Invitations', '', 'active', 1, 1)",
     ).bind(appId).run();
     await db.prepare(
       "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES (?, ?, ?, 1, ?)",
     ).bind(appId, actor.authenticatedIdentity.issuer, actor.authenticatedIdentity.subject, actor.account.accountId).run();
-    await db.prepare(
-      `INSERT INTO cas_app_member_invitations
-        (invitation_id, app_id, status, email_constraint, token_hash, expires_at, created_at, revision)
-       VALUES (?, ?, 'pending', 'synthetic@example.test', 'invite-hash', 2000, 1, 1)`,
-    ).bind(invitationId, appId).run();
+    const legacyCreate = vi.fn(async () => { throw new Error("legacy invitation create must not be called"); });
     const legacyList = vi.fn(async () => { throw new Error("legacy invitation list must not be called"); });
     const legacyRevoke = vi.fn(async () => { throw new Error("legacy invitation revoke must not be called"); });
+    const legacyAccept = vi.fn(async () => { throw new Error("legacy invitation accept must not be called"); });
     const handler = createMcpHandler(
       () => createControlPlaneMcpServer({
         ...createControlPlaneOperations(db),
+        createMemberInvitation: legacyCreate,
         listAppMemberInvitations: legacyList,
         revokeAppMemberInvitation: legacyRevoke,
-      }, { mutationsEnabled: true, accountService }),
+        acceptMemberInvitation: legacyAccept,
+      }, { mutationsEnabled: true, publicOrigin: "https://console.unicas.work", accountService }),
       { route: "/mcp", authContext: { props: grant(["control:security"]) } },
     );
+    const invitation = await callTool(handler, "invite_app_member", {
+      appId,
+      email: "synthetic@example.test",
+      confirmEmail: "synthetic@example.test",
+      idempotencyKey: "inv-create",
+    });
+    const createdInvitationId = String(invitation.structuredContent.invitationId);
+    expect(createdInvitationId).toBeTruthy();
+    expect((await callTool(handler, "invite_app_member", {
+      appId,
+      email: "synthetic@example.test",
+      confirmEmail: "synthetic@example.test",
+      idempotencyKey: "inv-create",
+    })).structuredContent).toEqual(invitation.structuredContent);
     const list = await callTool(handler, "list_app_member_invitations", { appId, status: "pending" });
-    expect(list.structuredContent).toMatchObject({ items: [{ invitationId, status: "pending" }] });
+    expect(list.structuredContent).toMatchObject({ items: [{ invitationId: createdInvitationId, status: "pending" }] });
     expect(JSON.stringify(list.structuredContent)).not.toMatch(/tokenHash|acceptUrl/);
     expect((await callTool(handlerFor(grant(["control:read"])), "list_app_member_invitations", { appId })).content[0]?.text).toContain("control:security");
-    expect((await callTool(handler, "revoke_app_member_invitation", { appId, invitationId, confirmInvitationId: "wrong", etag: '"1"' })).isError).toBe(true);
-    expect((await callTool(handler, "revoke_app_member_invitation", { appId, invitationId, confirmInvitationId: invitationId, etag: '"1"' })).structuredContent).toEqual({ etag: '"2"' });
-    expect((await callTool(handler, "list_app_member_invitations", { appId, status: "revoked" })).structuredContent).toMatchObject({ items: [{ invitationId, status: "revoked" }] });
+    expect((await callTool(handler, "revoke_app_member_invitation", { appId, invitationId: createdInvitationId, confirmInvitationId: "wrong", etag: '"1"' })).isError).toBe(true);
+    expect((await callTool(handler, "revoke_app_member_invitation", { appId, invitationId: createdInvitationId, confirmInvitationId: createdInvitationId, etag: '"1"' })).structuredContent).toEqual({ etag: '"2"' });
+    expect((await callTool(handler, "list_app_member_invitations", { appId, status: "revoked" })).structuredContent).toMatchObject({ items: [{ invitationId: createdInvitationId, status: "revoked" }] });
+    const acceptedInvitation = await callTool(handler, "invite_app_member", {
+      appId,
+      email: "alice@example.com",
+      confirmEmail: "alice@example.com",
+      idempotencyKey: "inv-accept",
+    });
+    const acceptedToken = new URL(String(acceptedInvitation.structuredContent.acceptUrl)).pathname.split("/").at(-1)!;
+    expect((await callTool(handler, "accept_app_member_invitation", { token: acceptedToken })).structuredContent)
+      .toEqual({ appId });
+    expect(legacyCreate).not.toHaveBeenCalled();
     expect(legacyList).not.toHaveBeenCalled();
     expect(legacyRevoke).not.toHaveBeenCalled();
+    expect(legacyAccept).not.toHaveBeenCalled();
   });
 
   test("creates, lists, and revokes platform invitations with current platform authority", async () => {

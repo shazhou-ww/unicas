@@ -61,6 +61,7 @@ describe("App admin physical compatibility adapter", () => {
     ["getOAuthIssuer", "GET", "/admin/apps/app-1/oauth-issuer"],
     ["getManagedIssuer", "GET", "/admin/apps/app-1/managed-issuer"],
     ["patchManagedIssuer", "PATCH", "/admin/apps/app-1/managed-issuer"],
+    ["createMemberInvitation", "POST", "/admin/apps/app-1/member-invitations"],
     ["listMemberInvitations", "GET", "/admin/apps/app-1/member-invitations"],
     ["revokeMemberInvitation", "DELETE", "/admin/apps/app-1/member-invitations/inv-1"],
   ] as const)("forwards %s through the Account-native App path", async (operation, method, path) => {
