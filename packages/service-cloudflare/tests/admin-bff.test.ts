@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { exportJWK, generateKeyPair, SignJWT } from "jose";
+import { CompactSign, exportJWK, generateKeyPair, SignJWT } from "jose";
 import { s256Challenge } from "@unicas/control-auth";
 import { effectivePlatformAccess } from "@unicas/admin-protocol";
 import type {
@@ -19,6 +19,7 @@ import type {
   AccountManagedCapabilityIssuer,
   AccountRecord,
   AccountRepository,
+  OAuthDiscoveryPort,
   ExternalIdentityRecord,
   PeopleRepository,
   PlatformAccessRepository,
@@ -635,6 +636,9 @@ function memoryAccountRepository(
   const identities = new Map<string, ExternalIdentityRecord>();
   const identityKeys = new Map<string, ExternalIdentityRecord>();
   const managedIssuerStates = new Map<string, { status: "active" | "disabled"; revision: number }>();
+  const externalIssuers = new Map<string, Awaited<ReturnType<AccountRepository["getAppOAuthIssuer"]>>>();
+  const issuerInspections = new Map<string, Parameters<AccountRepository["commitInspectAccountOAuthIssuer"]>[0]["inspection"]>();
+  const issuerInspectionKeys = new Map<string, Parameters<AccountRepository["commitInspectAccountOAuthIssuer"]>[0]["keys"]>();
   function add(
     account: AccountRecord,
     profile: { accountId: string; displayName: string | null; avatarUrl: string | null; displayNameSource: string | null; avatarSource: string | null; updatedAt: number },
@@ -685,7 +689,31 @@ function memoryAccountRepository(
       const { members: _members, stackId, ...record } = app;
       return { appId: stackId, ...record };
     },
-    getAppOAuthIssuer: async () => null,
+    getAppOAuthIssuer: async appId => externalIssuers.get(appId) ?? null,
+    hasAppOAuthIssuerElsewhere: async (issuer, appId) => [...externalIssuers.entries()]
+      .some(([candidateAppId, candidate]) => candidateAppId !== appId && candidate?.issuer === issuer),
+    commitInspectAccountOAuthIssuer: async input => {
+      issuerInspections.set(input.inspection.inspectionId, input.inspection);
+      issuerInspectionKeys.set(input.inspection.inspectionId, input.keys);
+      return "created";
+    },
+    getAppOAuthIssuerInspection: async inspectionId => issuerInspections.get(inspectionId) ?? null,
+    listAppOAuthIssuerInspectionKeys: async inspectionId => issuerInspectionKeys.get(inspectionId) ?? [],
+    commitActivateAccountOAuthIssuer: async input => {
+      const identity = identities.get(input.actorExternalIdentityId);
+      const app = fakeStacks.get(input.appId);
+      if (!identity || identity.accountId !== input.actorAccountId
+        || !app?.members.has(`${identity.issuer}\n${identity.subject}`)) return "actor-not-member";
+      const current = externalIssuers.get(input.appId) ?? null;
+      if (input.expectedIssuerRevision === null
+        ? current !== null
+        : current?.revision !== input.expectedIssuerRevision) return "revision-mismatch";
+      const inspection = issuerInspections.get(input.inspectionId);
+      if (!inspection || inspection.usedAt !== null || inspection.expiresAt <= input.now) return "unavailable";
+      issuerInspections.set(input.inspectionId, { ...inspection, usedAt: input.now, revision: inspection.revision + 1 });
+      externalIssuers.set(input.appId, input.issuer);
+      return "activated";
+    },
     getManagedOAuthIssuer: async appId => {
       if (!fakeStacks.has(appId)) return null;
       const state = managedIssuerStates.get(appId) ?? { status: "active" as const, revision: 1 };
@@ -809,6 +837,7 @@ async function createBff(
   peopleRepository?: PeopleRepository,
   accountRepository?: AccountRepository,
   managedOAuthIssuer?: AccountManagedCapabilityIssuer,
+  oauthDiscovery?: OAuthDiscoveryPort,
 ): Promise<(request: Request) => Promise<Response>> {
   const providerFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? new URL(input) : input instanceof URL ? input : new URL(input.url);
@@ -865,6 +894,7 @@ async function createBff(
     peopleRepository,
     accountRepository,
     managedOAuthIssuer,
+    oauthDiscovery,
   });
 }
 
@@ -2145,7 +2175,44 @@ describe("cas-admin-webui BFF", () => {
 
   test("App issuer mutations preserve minimal receipts and both conditional activation modes", async () => {
     const provider = await createMockProvider();
-    const bff = await createBff(provider);
+    const platform = new MemoryPlatformAccessRepository();
+    platform.grant(ISSUER, "google-user-123");
+    const accounts = memoryAccountRepository(platform, "google-user-123");
+    const { privateKey, publicKey } = await generateKeyPair("ES256", { extractable: true });
+    const publicJwk = { ...(await exportJWK(publicKey)), kid: "issuer-key", alg: "ES256" };
+    const oauthDiscovery: OAuthDiscoveryPort = {
+      inspectIssuer: async ({ issuer }) => ({
+        metadata: {
+          issuer,
+          metadataUrl: `${issuer}/metadata`,
+          metadataType: "oauth",
+          authorizationEndpoint: `${issuer}/authorize`,
+          tokenEndpoint: `${issuer}/token`,
+          jwksUri: `${issuer}/jwks`,
+          registrationEndpoint: null,
+          scopesSupported: ["openid"],
+          codeChallengeMethodsSupported: ["S256"],
+        },
+        metadataDigest: `metadata-${issuer}`,
+        jwksDigest: `jwks-${issuer}`,
+        keys: [{ kid: "issuer-key", algorithm: "ES256", publicJwk }],
+      }),
+    };
+    const legacyInspect = vi.fn(async () => { throw new Error("legacy inspection must not be called"); });
+    const legacyActivate = vi.fn(async () => { throw new Error("legacy activation must not be called"); });
+    const bff = await createBff(
+      provider,
+      undefined,
+      {},
+      platform,
+      { ...fakeControlPlane(), inspectAppOAuthIssuer: legacyInspect, activateAppOAuthIssuer: legacyActivate },
+      undefined,
+      undefined,
+      undefined,
+      accounts,
+      undefined,
+      oauthDiscovery,
+    );
     const { cookie, csrf } = await signIn(bff, provider);
     const appId = await createStack(bff, cookie, csrf, "App");
     const path = `/admin/apps/${appId}/oauth-issuer`;
@@ -2153,15 +2220,25 @@ describe("cas-admin-webui BFF", () => {
     const inspection = await authRequest(bff, `${path}/inspections`, cookie, { method: "POST", headers, body: JSON.stringify({ issuer: "https://candidate.example" }) });
     expect(inspection.status).toBe(201);
     expect(inspection.headers.has("ETag")).toBe(false);
-    expect(await inspection.json()).toEqual({ inspectionId: "candidate", metadataUrl: "https://candidate.example/metadata", jwksUri: "https://candidate.example/jwks", challenge: "synthetic", expiresAt: 4102444800000, keys: [{ kid: "key", algorithm: "ES256" }] });
-    const body = JSON.stringify({ inspectionId: "candidate", activationProof: "synthetic-proof" });
+    const inspected = await inspection.json() as { inspectionId: string; challenge: string };
+    const initialProof = await new CompactSign(new TextEncoder().encode(inspected.challenge))
+      .setProtectedHeader({ alg: "ES256", kid: "issuer-key" }).sign(privateKey);
+    const body = JSON.stringify({ inspectionId: inspected.inspectionId, activationProof: initialProof });
     const initial = await authRequest(bff, path, cookie, { method: "PUT", headers: { ...headers, "If-None-Match": "*" }, body });
     expect(initial.status).toBe(204);
     expect(initial.headers.get("ETag")).toBe('"1"');
     expect(await initial.text()).toBe("");
-    const replacement = await authRequest(bff, path, cookie, { method: "PUT", headers: { ...headers, "If-Match": '"9"' }, body });
+    const secondInspection = await authRequest(bff, `${path}/inspections`, cookie, { method: "POST", headers, body: JSON.stringify({ issuer: "https://replacement.example" }) });
+    const second = await secondInspection.json() as { inspectionId: string; challenge: string };
+    const replacementProof = await new CompactSign(new TextEncoder().encode(second.challenge))
+      .setProtectedHeader({ alg: "ES256", kid: "issuer-key" }).sign(privateKey);
+    const replacementBody = JSON.stringify({ inspectionId: second.inspectionId, activationProof: replacementProof });
+    expect((await authRequest(bff, path, cookie, { method: "PUT", headers: { ...headers, "If-Match": '"9"' }, body: replacementBody })).status).toBe(412);
+    const replacement = await authRequest(bff, path, cookie, { method: "PUT", headers: { ...headers, "If-Match": '"1"' }, body: replacementBody });
     expect(replacement.status).toBe(204);
-    expect(replacement.headers.get("ETag")).toBe('"10"');
+    expect(replacement.headers.get("ETag")).toBe('"2"');
+    expect(legacyInspect).not.toHaveBeenCalled();
+    expect(legacyActivate).not.toHaveBeenCalled();
   });
 
   test("App invitation list and revoke use strict filters, CSRF, and invitation ETags", async () => {

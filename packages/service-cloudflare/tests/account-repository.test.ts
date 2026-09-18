@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
+import { CompactSign, exportJWK, generateKeyPair } from "jose";
 import { AccountService } from "@unicas/service";
 import { D1AccountRepository } from "../src/account-repository.js";
 import { migrateControlSchema } from "../src/control-schema.js";
@@ -398,6 +399,87 @@ describe("D1 Account repository", () => {
     expect(await db.prepare(
       "SELECT status, revision FROM cas_app_managed_issuers WHERE app_id = 'cas_app_issuer'",
     ).first()).toEqual({ status: "disabled", revision: 5 });
+  });
+
+  test("atomically inspects and activates an external issuer for an Account member", async () => {
+    const { db, repository } = await fixture();
+    const { privateKey, publicKey } = await generateKeyPair("ES256", { extractable: true });
+    const publicJwk = { ...(await exportJWK(publicKey)), kid: "issuer-key", alg: "ES256" };
+    const service = new AccountService(repository, () => 1000, null, {
+      oauthResourcePublicOrigin: "https://cas.example",
+      generateOAuthInspectionId: () => "inspection-account",
+      generateNonce: () => "nonce-account",
+      oauthDiscovery: {
+        inspectIssuer: async () => ({
+          metadata: {
+            issuer: "https://issuer.example",
+            metadataUrl: "https://issuer.example/.well-known/openid-configuration",
+            metadataType: "oidc" as const,
+            authorizationEndpoint: "https://issuer.example/authorize",
+            tokenEndpoint: "https://issuer.example/token",
+            jwksUri: "https://issuer.example/jwks",
+            registrationEndpoint: null,
+            scopesSupported: ["openid"],
+            codeChallengeMethodsSupported: ["S256"],
+          },
+          metadataDigest: "metadata-digest",
+          jwksDigest: "jwks-digest",
+          keys: [{ kid: "issuer-key", algorithm: "ES256" as const, publicJwk }],
+        }),
+      },
+    });
+    const actor = await service.createForExternalIdentity({
+      provider: "google",
+      issuer: "https://accounts.google.com",
+      subject: "issuer-owner",
+    });
+    await db.prepare(
+      "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES ('cas_app_external', 'App', '', 'active', 1, 1)",
+    ).run();
+    await db.prepare(
+      "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES ('cas_app_external', ?, ?, 1, ?)",
+    ).bind(actor.authenticatedIdentity.issuer, actor.authenticatedIdentity.subject, actor.account.accountId).run();
+
+    const inspection = await service.inspectAppOAuthIssuer({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      appId: "cas_app_external",
+      issuer: "https://issuer.example",
+      callerChannel: "admin-webui",
+    });
+    const proof = await new CompactSign(new TextEncoder().encode(inspection.challenge))
+      .setProtectedHeader({ alg: "ES256", kid: "issuer-key" })
+      .sign(privateKey);
+    await expect(service.activateAppOAuthIssuer({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      appId: "cas_app_external",
+      inspectionId: inspection.inspectionId,
+      activationProof: proof,
+      ifNoneMatch: "*",
+      callerChannel: "admin-webui",
+    })).resolves.toBe(1);
+    expect(await db.prepare(
+      "SELECT issuer, status, revision FROM cas_app_oauth_issuers WHERE app_id = 'cas_app_external'",
+    ).first()).toEqual({ issuer: "https://issuer.example", status: "active", revision: 1 });
+    expect(await db.prepare(
+      "SELECT action, original_account_id, external_identity_id FROM cas_control_audit_events WHERE action = 'oauth_issuer.activated'",
+    ).first()).toEqual({
+      action: "oauth_issuer.activated",
+      original_account_id: actor.account.accountId,
+      external_identity_id: actor.authenticatedIdentity.externalIdentityId,
+    });
+    await expect(service.activateAppOAuthIssuer({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      appId: "cas_app_external",
+      inspectionId: inspection.inspectionId,
+      activationProof: proof,
+      ifMatch: '"1"',
+    })).rejects.toMatchObject({ code: "INVALID_REQUEST" });
+    expect(await db.prepare(
+      "SELECT revision FROM cas_app_oauth_issuers WHERE app_id = 'cas_app_external'",
+    ).first()).toEqual({ revision: 1 });
   });
 
   test("manages platform authorities and block state by Account ID", async () => {

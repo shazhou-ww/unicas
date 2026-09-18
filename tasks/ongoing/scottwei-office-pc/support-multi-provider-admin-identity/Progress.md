@@ -88,15 +88,25 @@ Account/ExternalIdentity audit attribution with MCP caller evidence when
 applicable. The App compatibility adapter no longer rewrites these URLs to
 `/admin/stacks`; focused tests make the legacy get/update methods fail if called.
 
-The eleventh no-legacy cleanup checkpoint is ready to publish. External App
+The eleventh no-legacy cleanup checkpoint is published as `3e870a0`. External App
 issuer reads in HTTP and remote MCP now authorize through stable Account
 membership and read directly from `D1AccountRepository`. Optional HTTP reads
 retain the current `null` behavior, configured responses expose only App-shaped
 fields and ETags, and the compatibility adapter no longer rewrites the App URL.
 Focused tests make the legacy external issuer getter fail if called.
 
-Next: migrate external App issuer inspection and activation, then App invitation
-operations. After their consumers move, delete legacy HTTP contracts,
+The twelfth no-legacy cleanup checkpoint is ready to publish. External App
+issuer inspection and activation in HTTP and remote MCP now run through
+`AccountService`. Discovery remains behind the pinned platform port; challenge,
+expiry, JWK, compact-JWS proof, global issuer uniqueness, and ETag rules are
+unchanged. D1 atomically validates the Account, active ExternalIdentity, App
+membership, precondition, and one-time inspection before replacing the issuer,
+writing Account/identity audit evidence, and advancing the snapshot. Real ES256
+proof tests cover first activation and replacement, and legacy App-specific
+inspect/activate methods fail if called.
+
+Next: migrate App invitation create/list/revoke/accept operations. After their
+consumers move, delete legacy HTTP contracts,
 identity-keyed columns/tables (including the retired Playground table), dual
 writes, and startup identity migration rather than adding compatibility flags.
 
@@ -878,6 +888,11 @@ cutover markers. Then complete the current-model and real-provider/email tests.
   Account tests, 62 BFF tests, 13 App adapter tests, and the focused real-D1 MCP
   test. Both affected package typechecks passed and editor diagnostics were
   clean.
+- Account-native external issuer mutation validation passed 22 cloud-neutral
+  Account tests and 96 affected Cloudflare tests across BFF, adapter, D1, and
+  remote MCP suites. The Miniflare-heavy run used the command-local 15-second
+  allowance. Both affected package typechecks passed and editor diagnostics
+  were clean.
 - This no-legacy cleanup checkpoint and the production OAuth provisioning guide
   are published on the shared primary branch. The next implementation action is
   to replace the internal Principal-keyed App control-plane repository and then

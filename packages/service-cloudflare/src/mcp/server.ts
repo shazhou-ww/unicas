@@ -488,11 +488,18 @@ export function createControlPlaneMcpServer(
     APP_ADMIN_MCP_TOOLS.inspect_app_oauth_issuer.registration,
     async ({ appId, issuer }) => {
       const grant = requireMutation("control:security", options);
-      const result = await controlPlane.inspectAppOAuthIssuer(
-        serviceContext(grant, "inspect_app_oauth_issuer"),
-        appId, issuer,
-      );
-      return "error" in result ? toolResult(transformAppAdminError({ ...result })) : toolResult(result);
+      return accountToolResult(async () => {
+        const actor = await requireGrantAccount(grant, options);
+        return options.accountService!.inspectAppOAuthIssuer({
+          actorAccountId: actor.account.accountId,
+          actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+          appId,
+          issuer,
+          callerChannel: "mcp",
+          oauthClientHandle: grant.oauthClientHandle,
+          toolName: "inspect_app_oauth_issuer",
+        });
+      });
     },
   );
 
@@ -501,22 +508,27 @@ export function createControlPlaneMcpServer(
     APP_ADMIN_MCP_TOOLS.activate_app_oauth_issuer.registration,
     async ({ appId, inspectionId, activationProof, etag, ifNoneMatch }) => {
       const grant = requireMutation("control:security", options);
-      let currentEtag = etag;
-      if (!currentEtag && ifNoneMatch !== "*") {
-        const current = await controlPlane.getOAuthIssuer(
-          serviceContext(grant, "activate_app_oauth_issuer"),
-          { path: { stackId: appId } },
-        );
-        if (!current) return toolResult({ error: "NOT_FOUND", message: "OAuth issuer is not configured" });
-        if ("error" in current) return toolResult(current);
-        currentEtag = formatCasAdminETag(current.revision);
-      }
-      const result = await controlPlane.activateAppOAuthIssuer(
-        serviceContext(grant, "activate_app_oauth_issuer"),
-        appId, { inspectionId, activationProof },
-        { ifMatch: currentEtag, ifNoneMatch },
-      );
-      return "error" in result ? toolResult(transformAppAdminError({ ...result })) : toolResult({ etag: formatCasAdminETag(result.revision) });
+      return accountToolResult(async () => {
+        const actor = await requireGrantAccount(grant, options);
+        let currentEtag = etag;
+        if (!currentEtag && ifNoneMatch !== "*") {
+          const current = await options.accountService!.getAppOAuthIssuer(actor.account.accountId, appId);
+          currentEtag = formatCasAdminETag(current.revision);
+        }
+        const revision = await options.accountService!.activateAppOAuthIssuer({
+          actorAccountId: actor.account.accountId,
+          actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+          appId,
+          inspectionId,
+          activationProof,
+          ifMatch: currentEtag,
+          ifNoneMatch,
+          callerChannel: "mcp",
+          oauthClientHandle: grant.oauthClientHandle,
+          toolName: "activate_app_oauth_issuer",
+        });
+        return { etag: formatCasAdminETag(revision) };
+      });
     },
   );
 

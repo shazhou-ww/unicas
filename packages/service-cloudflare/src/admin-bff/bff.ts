@@ -34,6 +34,7 @@ import type {
   ControlSessionRepository,
   AccountRepository,
   AccountManagedCapabilityIssuer,
+  OAuthDiscoveryPort,
   EmailChallengeRepository,
   PlatformAccessRepository,
   PlatformAuditRepository,
@@ -103,6 +104,8 @@ export interface CreateAdminBffOptions {
   readonly providerRegistry?: ProviderRegistry;
   readonly accountRepository?: AccountRepository;
   readonly managedOAuthIssuer?: AccountManagedCapabilityIssuer;
+  readonly oauthDiscovery?: OAuthDiscoveryPort;
+  readonly oauthResourcePublicOrigin?: string;
   readonly emailChallengeRepository?: EmailChallengeRepository;
   readonly emailChallengeSender?: EmailChallengeSender;
 }
@@ -149,7 +152,10 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
   const sessionStore = options.sessionStore;
   const sessionCrypto = new SessionCrypto(config.sessionEncryptionKeys);
   const accountService = options.accountRepository
-    ? new AccountService(options.accountRepository, now, options.managedOAuthIssuer ?? null)
+    ? new AccountService(options.accountRepository, now, options.managedOAuthIssuer ?? null, {
+      oauthDiscovery: options.oauthDiscovery,
+      oauthResourcePublicOrigin: options.oauthResourcePublicOrigin ?? config.publicOrigin,
+    })
     : null;
   const emailChallenges = options.emailChallengeRepository
     ? new EmailChallengeService(options.emailChallengeRepository, { now })
@@ -1620,22 +1626,50 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     const auth = await requireAuthenticated(request);
     if (auth instanceof Response) return auth;
     if (!(await passCsrf(request, auth.payload))) return csrfRejected();
-    const context = serviceContext(auth.payload, request);
-    const body = await readJsonBody(request);
-    if (operation === "inspectOAuthIssuer") {
-      const parsed = InspectAppIssuerRequestSchema.safeParse(body);
-      if (!parsed.success) return invalidRequest("A valid issuer URL is required");
-      const result = await controlPlane.inspectAppOAuthIssuer(context, appId, parsed.data.issuer);
-      return "error" in result ? json(transformAppAdminError({ ...result }), casAdminErrorHttpStatus[result.error]) : json(result, 201);
+    if (!accountService || !auth.payload.accountId || !auth.payload.externalIdentityId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
     }
-    const parsed = ActivateAppIssuerRequestSchema.safeParse(body);
-    if (!parsed.success) return invalidRequest("A candidate inspection and activation proof are required");
-    const result = await controlPlane.activateAppOAuthIssuer(context, appId, parsed.data, {
-      ifMatch: request.headers.get("If-Match") ?? undefined,
-      ifNoneMatch: request.headers.get("If-None-Match") ?? undefined,
-    });
-    return "error" in result ? json(transformAppAdminError({ ...result }), casAdminErrorHttpStatus[result.error])
-      : new Response(null, { status: 204, headers: { ETag: formatCasAdminETag(result.revision), "Cache-Control": REVISION_CACHE_CONTROL } });
+    const body = await readJsonBody(request);
+    try {
+      if (operation === "inspectOAuthIssuer") {
+        const parsed = InspectAppIssuerRequestSchema.safeParse(body);
+        if (!parsed.success) return invalidRequest("A valid issuer URL is required");
+        return json(await accountService.inspectAppOAuthIssuer({
+          actorAccountId: auth.payload.accountId,
+          actorExternalIdentityId: auth.payload.externalIdentityId,
+          appId,
+          issuer: parsed.data.issuer,
+          requestId: request.headers.get("X-Request-Id") ?? undefined,
+          traceId: request.headers.get("X-Trace-Id") ?? undefined,
+          callerChannel: "admin-webui",
+        }), 201);
+      }
+      const parsed = ActivateAppIssuerRequestSchema.safeParse(body);
+      if (!parsed.success) return invalidRequest("A candidate inspection and activation proof are required");
+      const revision = await accountService.activateAppOAuthIssuer({
+        actorAccountId: auth.payload.accountId,
+        actorExternalIdentityId: auth.payload.externalIdentityId,
+        appId,
+        ...parsed.data,
+        ifMatch: request.headers.get("If-Match") ?? undefined,
+        ifNoneMatch: request.headers.get("If-None-Match") ?? undefined,
+        requestId: request.headers.get("X-Request-Id") ?? undefined,
+        traceId: request.headers.get("X-Trace-Id") ?? undefined,
+        callerChannel: "admin-webui",
+      });
+      return new Response(null, { status: 204, headers: { ETag: formatCasAdminETag(revision), "Cache-Control": REVISION_CACHE_CONTROL } });
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "APP_MEMBERSHIP_REQUIRED" || error.code === "ACCOUNT_BLOCKED" ? 403
+          : error.code === "PRECONDITION_REQUIRED" ? 428
+            : error.code === "REVISION_MISMATCH" ? 412
+              : error.code === "ISSUER_CONFLICT" ? 409
+                : error.code === "SERVICE_UNAVAILABLE" ? 503
+                  : 400;
+        return json({ error: error.code }, status);
+      }
+      throw error;
+    }
   }
 
   async function handleAccountApi(

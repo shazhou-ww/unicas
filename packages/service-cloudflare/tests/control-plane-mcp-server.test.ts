@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
+import { CompactSign, exportJWK, generateKeyPair } from "jose";
 import type { D1Database } from "@cloudflare/workers-types";
 import { CLIENT_CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, PROTOCOL_VERSION_META_KEY } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
@@ -65,6 +66,8 @@ describe("adapter-hosted control-plane MCP server", () => {
 
   test("mints managed Space capabilities for the stable Account through MCP", async () => {
     const repository = new D1AccountRepository(db);
+    const { privateKey, publicKey } = await generateKeyPair("ES256", { extractable: true });
+    const publicJwk = { ...(await exportJWK(publicKey)), kid: "issuer-key", alg: "ES256" };
     const issuerRecord = (appId: string) => ({
       stackId: appId,
       mode: "managed" as const,
@@ -99,6 +102,26 @@ describe("adapter-hosted control-plane MCP server", () => {
     const accountService = new AccountService(repository, () => 1000, {
       provision: async appId => issuerRecord(appId),
       issueAccountSpace,
+    }, {
+      oauthResourcePublicOrigin: "https://cas.example",
+      oauthDiscovery: {
+        inspectIssuer: async ({ issuer }) => ({
+          metadata: {
+            issuer,
+            metadataUrl: `${issuer}/metadata`,
+            metadataType: "oauth" as const,
+            authorizationEndpoint: `${issuer}/authorize`,
+            tokenEndpoint: `${issuer}/token`,
+            jwksUri: `${issuer}/jwks`,
+            registrationEndpoint: null,
+            scopesSupported: ["openid"],
+            codeChallengeMethodsSupported: ["S256"],
+          },
+          metadataDigest: "replacement-metadata",
+          jwksDigest: "replacement-jwks",
+          keys: [{ kid: "issuer-key", algorithm: "ES256" as const, publicJwk }],
+        }),
+      },
     });
     const actor = await accountService.createForExternalIdentity({
       provider: "google",
@@ -126,6 +149,12 @@ describe("adapter-hosted control-plane MCP server", () => {
     const legacyPatch = vi.fn(async () => {
       throw new Error("legacy managed issuer update must not be called");
     });
+    const legacyInspect = vi.fn(async () => {
+      throw new Error("legacy external issuer inspection must not be called");
+    });
+    const legacyActivate = vi.fn(async () => {
+      throw new Error("legacy external issuer activation must not be called");
+    });
     const handler = createMcpHandler(
       () => createControlPlaneMcpServer(
         {
@@ -134,6 +163,8 @@ describe("adapter-hosted control-plane MCP server", () => {
           getManagedOAuthIssuer: legacyGet,
           patchManagedOAuthIssuer: legacyPatch,
           mintManagedSpaceCapability: legacyMint,
+          inspectAppOAuthIssuer: legacyInspect,
+          activateAppOAuthIssuer: legacyActivate,
         },
         { mutationsEnabled: true, accountService },
       ),
@@ -166,6 +197,19 @@ describe("adapter-hosted control-plane MCP server", () => {
     ).bind(app.appId).run();
     expect((await callTool(handler, "get_app_oauth_issuer", { appId: app.appId })).structuredContent)
       .toMatchObject({ appId: app.appId, issuer: "https://issuer.example", etag: '"3"' });
+    const inspected = await callTool(handler, "inspect_app_oauth_issuer", {
+      appId: app.appId,
+      issuer: "https://replacement.example",
+    });
+    const challenge = String(inspected.structuredContent.challenge);
+    const proof = await new CompactSign(new TextEncoder().encode(challenge))
+      .setProtectedHeader({ alg: "ES256", kid: "issuer-key" }).sign(privateKey);
+    expect((await callTool(handler, "activate_app_oauth_issuer", {
+      appId: app.appId,
+      inspectionId: inspected.structuredContent.inspectionId,
+      activationProof: proof,
+      etag: '"3"',
+    })).structuredContent).toEqual({ etag: '"4"' });
     expect((await callTool(handler, "update_app_managed_issuer", {
       appId: app.appId,
       enabled: false,
@@ -180,6 +224,8 @@ describe("adapter-hosted control-plane MCP server", () => {
     });
     expect(legacyGet).not.toHaveBeenCalled();
     expect(legacyExternalGet).not.toHaveBeenCalled();
+    expect(legacyInspect).not.toHaveBeenCalled();
+    expect(legacyActivate).not.toHaveBeenCalled();
     expect(legacyPatch).not.toHaveBeenCalled();
     expect(legacyMint).not.toHaveBeenCalled();
   });

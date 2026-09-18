@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
+import { CompactSign, exportJWK, generateKeyPair } from "jose";
 import {
   AccountService,
   type AccountRecord,
@@ -51,6 +52,11 @@ function fixture() {
     listAccountApps: vi.fn(async () => []),
     getAccountApp: vi.fn(async () => null),
     getAppOAuthIssuer: vi.fn(async () => null),
+    hasAppOAuthIssuerElsewhere: vi.fn(async () => false),
+    commitInspectAccountOAuthIssuer: vi.fn(async () => "created"),
+    getAppOAuthIssuerInspection: vi.fn(async () => null),
+    listAppOAuthIssuerInspectionKeys: vi.fn(async () => []),
+    commitActivateAccountOAuthIssuer: vi.fn(async () => "activated"),
     getManagedOAuthIssuer: vi.fn(async () => null),
     commitPatchAccountManagedOAuthIssuer: vi.fn(async () => "updated"),
     commitPatchAccountApp: vi.fn(async () => "updated"),
@@ -405,6 +411,80 @@ describe("Account service", () => {
     await expect(service.getAppOAuthIssuer(accountId, "cas_app_a", true)).resolves.toBeNull();
     await expect(service.getAppOAuthIssuer(accountId, "cas_app_a"))
       .rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  test("inspects and activates an external issuer through Account membership", async () => {
+    const { repository } = fixture();
+    const { privateKey, publicKey } = await generateKeyPair("ES256", { extractable: true });
+    const publicJwk = { ...(await exportJWK(publicKey)), kid: "issuer-key", alg: "ES256" };
+    let storedInspection: Parameters<typeof repository.commitInspectAccountOAuthIssuer>[0]["inspection"] | null = null;
+    vi.mocked(repository.hasAppMembership).mockResolvedValue(true);
+    vi.mocked(repository.commitInspectAccountOAuthIssuer).mockImplementation(async input => {
+      storedInspection = input.inspection;
+      return "created";
+    });
+    vi.mocked(repository.getAppOAuthIssuerInspection).mockImplementation(async () => storedInspection);
+    vi.mocked(repository.listAppOAuthIssuerInspectionKeys).mockResolvedValue([{
+      kid: "issuer-key",
+      algorithm: "ES256",
+      publicJwk,
+    }]);
+    const service = new AccountService(repository, () => 1000, null, {
+      oauthResourcePublicOrigin: "https://cas.example",
+      generateOAuthInspectionId: () => "inspection-1",
+      generateNonce: () => "nonce-1",
+      oauthDiscovery: {
+        inspectIssuer: vi.fn(async () => ({
+          metadata: {
+            issuer: "https://issuer.example",
+            metadataUrl: "https://issuer.example/.well-known/openid-configuration",
+            metadataType: "oidc" as const,
+            authorizationEndpoint: "https://issuer.example/authorize",
+            tokenEndpoint: "https://issuer.example/token",
+            jwksUri: "https://issuer.example/jwks",
+            registrationEndpoint: null,
+            scopesSupported: ["openid"],
+            codeChallengeMethodsSupported: ["S256"],
+          },
+          metadataDigest: "metadata-digest",
+          jwksDigest: "jwks-digest",
+          keys: [{ kid: "issuer-key", algorithm: "ES256" as const, publicJwk }],
+        })),
+      },
+    });
+
+    const inspection = await service.inspectAppOAuthIssuer({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      appId: "cas_app_a",
+      issuer: "https://issuer.example",
+    });
+    const validProof = await new CompactSign(new TextEncoder().encode(inspection.challenge))
+      .setProtectedHeader({ alg: "ES256", kid: "issuer-key" })
+      .sign(privateKey);
+
+    await expect(service.activateAppOAuthIssuer({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      appId: "cas_app_a",
+      inspectionId: inspection.inspectionId,
+      activationProof: validProof,
+      ifNoneMatch: "*",
+    })).resolves.toBe(1);
+    expect(repository.commitActivateAccountOAuthIssuer).toHaveBeenCalledWith(expect.objectContaining({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      appId: "cas_app_a",
+      expectedIssuerRevision: null,
+      issuer: expect.objectContaining({ issuer: "https://issuer.example", status: "active", revision: 1 }),
+    }));
+    await expect(service.activateAppOAuthIssuer({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      appId: "cas_app_a",
+      inspectionId: inspection.inspectionId,
+      activationProof: validProof,
+    })).rejects.toMatchObject({ code: "PRECONDITION_REQUIRED" });
   });
 
   test("creates an App with Account authority and Account-scoped idempotency", async () => {

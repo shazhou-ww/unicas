@@ -9,6 +9,7 @@ import {
   PlatformInvitationService,
   type AccountManagedCapabilityIssuer,
   type ControlPlaneOperations,
+  type OAuthDiscoveryPort,
 } from "@unicas/service";
 import { D1AccountRepository } from "../account-repository.js";
 import { D1PlatformAccessRepository } from "../platform-access-repository.js";
@@ -73,6 +74,8 @@ export function createControlPlaneMcpWorker(
   operationsForEnv: ControlPlaneOperationsFactory,
   database: D1Database,
   managedOAuthIssuer?: AccountManagedCapabilityIssuer,
+  oauthDiscovery?: OAuthDiscoveryPort,
+  oauthResourcePublicOrigin?: string,
 ) {
   const mcpApiHandler = {
     async fetch(
@@ -93,6 +96,7 @@ export function createControlPlaneMcpWorker(
         new D1AccountRepository(env.CAS_CONTROL_DB),
         Date.now,
         managedOAuthIssuer ?? null,
+        { oauthDiscovery, oauthResourcePublicOrigin },
       );
       const platformInvitations = new PlatformInvitationService(
         platformRepository,

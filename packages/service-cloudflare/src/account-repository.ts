@@ -9,7 +9,9 @@ import type {
   AccountRecord,
   AccountRepository,
   AccountWithIdentityCreate,
+  ControlOAuthIssuerInspectionRecord,
   ControlOAuthIssuerRecord,
+  DiscoveredOAuthJwk,
   ExternalIdentityRecord,
   PlatformAccountAuditRecord,
 } from "@unicas/service";
@@ -61,6 +63,29 @@ interface AppOAuthIssuerRow extends ManagedOAuthIssuerRow {
   readonly registration_endpoint: string | null;
   readonly last_refresh_at: number | null;
   readonly last_refresh_error: string | null;
+}
+
+interface OAuthIssuerInspectionRow {
+  readonly inspection_id: string;
+  readonly app_id: string;
+  readonly issuer: string;
+  readonly audience: string;
+  readonly metadata_url: string;
+  readonly metadata_type: ControlOAuthIssuerRecord["metadataType"];
+  readonly authorization_endpoint: string;
+  readonly token_endpoint: string;
+  readonly jwks_uri: string;
+  readonly registration_endpoint: string | null;
+  readonly scopes_supported: string;
+  readonly code_challenge_methods_supported: string;
+  readonly metadata_digest: string;
+  readonly jwks_digest: string;
+  readonly challenge_hash: string;
+  readonly capability_max_lifetime_seconds: number;
+  readonly created_at: number;
+  readonly expires_at: number;
+  readonly used_at: number | null;
+  readonly revision: number;
 }
 
 interface AccountMembershipRow extends AccountRow {
@@ -391,6 +416,137 @@ export class D1AccountRepository implements AccountRepository {
       capabilityMaxLifetimeSeconds: row.capability_max_lifetime_seconds,
       revision: row.revision,
     } : null;
+  }
+
+  async hasAppOAuthIssuerElsewhere(issuer: string, appId: AppId): Promise<boolean> {
+    return await this.db.prepare(
+      "SELECT 1 AS ok FROM cas_app_oauth_issuers WHERE issuer = ? AND app_id != ?",
+    ).bind(issuer, appId).first<{ ok: number }>() !== null;
+  }
+
+  async commitInspectAccountOAuthIssuer(
+    input: Parameters<AccountRepository["commitInspectAccountOAuthIssuer"]>[0],
+  ): Promise<"created" | "actor-not-member" | "issuer-conflict"> {
+    const inspection = input.inspection;
+    try {
+      await this.db.batch([
+        this.#requireAppActor(input),
+        this.db.prepare(
+          "SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM cas_app_oauth_issuers WHERE issuer = ? AND app_id != ?) THEN 1 ELSE json_extract('invalid', '$') END AS available",
+        ).bind(inspection.issuer, inspection.stackId),
+        this.db.prepare(
+          `INSERT INTO cas_oauth_issuer_inspections
+            (inspection_id, app_id, issuer, audience, metadata_url, metadata_type,
+             authorization_endpoint, token_endpoint, jwks_uri, registration_endpoint,
+             scopes_supported, code_challenge_methods_supported, metadata_digest,
+             jwks_digest, challenge_hash, capability_max_lifetime_seconds,
+             created_at, expires_at, used_at, revision)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)`,
+        ).bind(
+          inspection.inspectionId, inspection.stackId, inspection.issuer,
+          inspection.audience, inspection.metadataUrl, inspection.metadataType,
+          inspection.authorizationEndpoint, inspection.tokenEndpoint,
+          inspection.jwksUri, inspection.registrationEndpoint,
+          JSON.stringify(inspection.scopesSupported),
+          JSON.stringify(inspection.codeChallengeMethodsSupported),
+          inspection.metadataDigest, inspection.jwksDigest, inspection.challengeHash,
+          inspection.capabilityMaxLifetimeSeconds, inspection.createdAt, inspection.expiresAt,
+        ),
+        ...input.keys.map(key => this.db.prepare(
+          "INSERT INTO cas_oauth_issuer_inspection_keys (inspection_id, kid, algorithm, public_jwk) VALUES (?, ?, ?, ?)",
+        ).bind(inspection.inspectionId, key.kid, key.algorithm, JSON.stringify(key.publicJwk))),
+        this.#appAuditStatement(input, "oauth_issuer.inspected", inspection.issuer),
+        ...this.#controlSnapshotStatements(),
+      ]);
+      return "created";
+    } catch (error) {
+      if (!isJsonFailure(error) && !isUniqueFailure(error)) throw error;
+      return await this.#isUsableAppActor(input) ? "issuer-conflict" : "actor-not-member";
+    }
+  }
+
+  async getAppOAuthIssuerInspection(inspectionId: string): Promise<ControlOAuthIssuerInspectionRecord | null> {
+    const row = await this.db.prepare(
+      "SELECT * FROM cas_oauth_issuer_inspections WHERE inspection_id = ?",
+    ).bind(inspectionId).first<OAuthIssuerInspectionRow>();
+    return row ? oauthIssuerInspectionRecord(row) : null;
+  }
+
+  async listAppOAuthIssuerInspectionKeys(inspectionId: string): Promise<readonly DiscoveredOAuthJwk[]> {
+    const rows = await this.db.prepare(
+      "SELECT kid, algorithm, public_jwk FROM cas_oauth_issuer_inspection_keys WHERE inspection_id = ? ORDER BY kid",
+    ).bind(inspectionId).all<{ kid: string; algorithm: DiscoveredOAuthJwk["algorithm"]; public_jwk: string }>();
+    return (rows.results ?? []).map(row => ({
+      kid: row.kid,
+      algorithm: row.algorithm,
+      publicJwk: JSON.parse(row.public_jwk) as Record<string, unknown>,
+    }));
+  }
+
+  async commitActivateAccountOAuthIssuer(
+    input: Parameters<AccountRepository["commitActivateAccountOAuthIssuer"]>[0],
+  ): Promise<"activated" | "actor-not-member" | "unavailable" | "revision-mismatch" | "issuer-conflict"> {
+    const issuer = input.issuer;
+    const precondition = input.expectedIssuerRevision === null
+      ? this.db.prepare(
+        "SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM cas_app_oauth_issuers WHERE app_id = ?) THEN 1 ELSE json_extract('invalid', '$') END AS allowed",
+      ).bind(input.appId)
+      : this.db.prepare(
+        "SELECT CASE WHEN EXISTS (SELECT 1 FROM cas_app_oauth_issuers WHERE app_id = ? AND revision = ?) THEN 1 ELSE json_extract('invalid', '$') END AS allowed",
+      ).bind(input.appId, input.expectedIssuerRevision);
+    try {
+      await this.db.batch([
+        this.#requireAppActor(input),
+        precondition,
+        this.db.prepare(
+          `UPDATE cas_oauth_issuer_inspections SET used_at = ?, revision = revision + 1
+           WHERE inspection_id = ? AND app_id = ? AND used_at IS NULL AND expires_at > ?`,
+        ).bind(input.now, input.inspectionId, input.appId, input.now),
+        this.db.prepare("SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('invalid', '$') END AS consumed"),
+        this.db.prepare(
+          `INSERT INTO cas_app_oauth_issuers
+            (app_id, mode, issuer, audience, metadata_url, metadata_type,
+             authorization_endpoint, token_endpoint, jwks_uri, registration_endpoint,
+             scopes_supported, code_challenge_methods_supported, status, verified_at,
+             last_refresh_at, last_refresh_error, jwks_digest,
+             capability_max_lifetime_seconds, revision)
+           VALUES (?, 'external', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, NULL, ?, ?, ?)
+           ON CONFLICT(app_id) DO UPDATE SET mode = excluded.mode, issuer = excluded.issuer,
+             audience = excluded.audience, metadata_url = excluded.metadata_url,
+             metadata_type = excluded.metadata_type,
+             authorization_endpoint = excluded.authorization_endpoint,
+             token_endpoint = excluded.token_endpoint, jwks_uri = excluded.jwks_uri,
+             registration_endpoint = excluded.registration_endpoint,
+             scopes_supported = excluded.scopes_supported,
+             code_challenge_methods_supported = excluded.code_challenge_methods_supported,
+             status = excluded.status, verified_at = excluded.verified_at,
+             last_refresh_at = excluded.last_refresh_at, last_refresh_error = NULL,
+             jwks_digest = excluded.jwks_digest,
+             capability_max_lifetime_seconds = excluded.capability_max_lifetime_seconds,
+             revision = excluded.revision`,
+        ).bind(
+          input.appId, issuer.issuer, issuer.audience, issuer.metadataUrl,
+          issuer.metadataType, issuer.authorizationEndpoint, issuer.tokenEndpoint,
+          issuer.jwksUri, issuer.registrationEndpoint,
+          JSON.stringify(issuer.scopesSupported),
+          JSON.stringify(issuer.codeChallengeMethodsSupported), input.now, input.now,
+          issuer.jwksDigest, issuer.capabilityMaxLifetimeSeconds, issuer.revision,
+        ),
+        this.#appAuditStatement(input, input.expectedIssuerRevision === null
+          ? "oauth_issuer.activated" : "oauth_issuer.replaced", issuer.issuer),
+        ...this.#controlSnapshotStatements(),
+      ]);
+      return "activated";
+    } catch (error) {
+      if (!isJsonFailure(error) && !isUniqueFailure(error)) throw error;
+      if (!await this.#isUsableAppActor(input)) return "actor-not-member";
+      if (isUniqueFailure(error) && await this.hasAppOAuthIssuerElsewhere(issuer.issuer, input.appId)) {
+        return "issuer-conflict";
+      }
+      const inspection = await this.getAppOAuthIssuerInspection(input.inspectionId);
+      return !inspection || inspection.usedAt !== null || inspection.expiresAt <= input.now
+        ? "unavailable" : "revision-mismatch";
+    }
   }
 
   async commitPatchAccountManagedOAuthIssuer(
@@ -1209,6 +1365,80 @@ export class D1AccountRepository implements AccountRepository {
     return "updated";
   }
 
+  #requireAppActor(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly appId?: AppId;
+    readonly inspection?: { readonly stackId: string };
+  }): D1PreparedStatement {
+    const appId = input.appId ?? input.inspection?.stackId;
+    return this.db.prepare(
+      `SELECT CASE WHEN EXISTS (SELECT 1 FROM cas_accounts WHERE account_id = ? AND blocked_at IS NULL)
+        AND EXISTS (SELECT 1 FROM cas_external_identities
+          WHERE external_identity_id = ? AND account_id = ? AND unlinked_at IS NULL)
+        AND EXISTS (SELECT 1 FROM cas_app_members WHERE app_id = ? AND account_id = ?)
+       THEN 1 ELSE json_extract('invalid', '$') END AS allowed`,
+    ).bind(input.actorAccountId, input.actorExternalIdentityId, input.actorAccountId, appId, input.actorAccountId);
+  }
+
+  async #isUsableAppActor(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly appId?: AppId;
+    readonly inspection?: { readonly stackId: string };
+  }): Promise<boolean> {
+    const [account, identity] = await Promise.all([
+      this.getAccount(input.actorAccountId),
+      this.getIdentity(input.actorExternalIdentityId),
+    ]);
+    const appId = input.appId ?? input.inspection?.stackId;
+    return account !== null && account.blockedAt === null && identity !== null
+      && identity.accountId === input.actorAccountId && identity.unlinkedAt === null
+      && appId !== undefined && await this.hasAppMembership(input.actorAccountId, appId);
+  }
+
+  #appAuditStatement(
+    input: {
+      readonly actorAccountId: AccountId;
+      readonly actorExternalIdentityId: string;
+      readonly eventId: string;
+      readonly requestId?: string;
+      readonly traceId?: string;
+      readonly callerChannel?: string;
+      readonly oauthClientHandle?: string;
+      readonly toolName?: string;
+      readonly now: number;
+      readonly appId?: AppId;
+      readonly inspection?: { readonly stackId: string };
+    },
+    action: string,
+    target: string,
+  ): D1PreparedStatement {
+    const appId = input.appId ?? input.inspection?.stackId;
+    return this.db.prepare(
+      `INSERT INTO cas_control_audit_events
+        (event_id, app_id, identity_issuer, subject, action, target, request_id,
+         trace_id, caller_channel, oauth_client_handle, tool_name, created_at,
+         original_account_id, external_identity_id, target_account_id)
+       SELECT ?, ?, issuer, subject, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL
+       FROM cas_external_identities WHERE external_identity_id = ?
+         AND account_id = ? AND unlinked_at IS NULL`,
+    ).bind(
+      input.eventId, appId, action, target, input.requestId ?? null,
+      input.traceId ?? null, input.callerChannel ?? null,
+      input.oauthClientHandle ?? null, input.toolName ?? null, input.now,
+      input.actorAccountId, input.actorExternalIdentityId,
+      input.actorExternalIdentityId, input.actorAccountId,
+    );
+  }
+
+  #controlSnapshotStatements(): readonly D1PreparedStatement[] {
+    return [
+      this.db.prepare("INSERT OR IGNORE INTO cas_control_meta (key, value) VALUES ('snapshot', 0)"),
+      this.db.prepare("UPDATE cas_control_meta SET value = value + 1 WHERE key = 'snapshot'"),
+    ];
+  }
+
   #requirePlatformActor(input: {
     readonly actorAccountId: AccountId;
     readonly actorExternalIdentityId: string;
@@ -1441,5 +1671,30 @@ function platformAuditRecord(row: AccountAuditRow): PlatformAccountAuditRecord {
     requestId: row.request_id,
     createdAt: row.created_at,
     details,
+  };
+}
+
+function oauthIssuerInspectionRecord(row: OAuthIssuerInspectionRow): ControlOAuthIssuerInspectionRecord {
+  return {
+    inspectionId: row.inspection_id,
+    stackId: row.app_id,
+    issuer: row.issuer,
+    audience: row.audience,
+    metadataUrl: row.metadata_url,
+    metadataType: row.metadata_type,
+    authorizationEndpoint: row.authorization_endpoint,
+    tokenEndpoint: row.token_endpoint,
+    jwksUri: row.jwks_uri,
+    registrationEndpoint: row.registration_endpoint,
+    scopesSupported: JSON.parse(row.scopes_supported) as string[],
+    codeChallengeMethodsSupported: JSON.parse(row.code_challenge_methods_supported) as string[],
+    metadataDigest: row.metadata_digest,
+    jwksDigest: row.jwks_digest,
+    challengeHash: row.challenge_hash,
+    capabilityMaxLifetimeSeconds: row.capability_max_lifetime_seconds,
+    createdAt: row.created_at,
+    expiresAt: row.expires_at,
+    usedAt: row.used_at,
+    revision: row.revision,
   };
 }

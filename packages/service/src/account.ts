@@ -7,6 +7,7 @@ import type {
   AppId,
   AppMembership,
   AppOAuthIssuer,
+  AppOAuthIssuerInspection,
   ManagedSpaceCapability,
   PlatformAccountDetail,
   PlatformAccountListItem,
@@ -19,10 +20,12 @@ import type {
   ProviderKind,
 } from "@unicas/admin-protocol";
 import { AppAccountAuditQuerySchema, CAS_ADMIN_IDEMPOTENCY_RETENTION_MS, parseCasAdminETag, PlatformAccountAuditQuerySchema, PlatformPrincipalQuerySchema } from "@unicas/admin-protocol";
-import { generateAccountId, generateEventId, generateExternalIdentityId, generateStackId } from "./control-ids.js";
+import { generateAccountId, generateEventId, generateExternalIdentityId, generateNonce, generateOAuthInspectionId, generateStackId } from "./control-ids.js";
 import { decodeControlListCursor, encodeControlListCursor } from "./control-cursor.js";
-import type { ControlOAuthIssuerRecord, ManagedOAuthIssuerProvisioner } from "./control-admin.js";
-import { canonicalJson, sha256Hex, validateDisplayName } from "./control-validation.js";
+import type { ControlOAuthIssuerInspectionRecord, ControlOAuthIssuerRecord, ManagedOAuthIssuerProvisioner } from "./control-admin.js";
+import { extractJwsPayload, extractJwsProtectedHeader, verifyCompactJwsProof } from "./control-possession.js";
+import { buildOAuthIssuerInspectionChallenge, canonicalizeOAuthIssuer, OAUTH_ISSUER_INSPECTION_TTL_MS, parseOAuthIssuerInspectionChallenge, type DiscoveredOAuthJwk, type OAuthDiscoveryPort } from "./oauth-discovery.js";
+import { canonicalJson, OAUTH_CAPABILITY_MAX_LIFETIME_SECONDS, sha256Hex, stackOAuthResource, validateDisplayName } from "./control-validation.js";
 import type { AuthenticatedProviderResult } from "./authentication.js";
 import { AUTHENTICATION_FLOW_TTL_MS } from "./authentication.js";
 
@@ -151,6 +154,37 @@ export interface AccountRepository {
   }): Promise<readonly App[]>;
   getAccountApp(accountId: AccountId, appId: AppId): Promise<App | null>;
   getAppOAuthIssuer(appId: AppId): Promise<ControlOAuthIssuerRecord | null>;
+  hasAppOAuthIssuerElsewhere(issuer: string, appId: AppId): Promise<boolean>;
+  commitInspectAccountOAuthIssuer(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly inspection: ControlOAuthIssuerInspectionRecord;
+    readonly keys: readonly DiscoveredOAuthJwk[];
+    readonly eventId: string;
+    readonly requestId?: string;
+    readonly traceId?: string;
+    readonly callerChannel?: string;
+    readonly oauthClientHandle?: string;
+    readonly toolName?: string;
+    readonly now: number;
+  }): Promise<"created" | "actor-not-member" | "issuer-conflict">;
+  getAppOAuthIssuerInspection(inspectionId: string): Promise<ControlOAuthIssuerInspectionRecord | null>;
+  listAppOAuthIssuerInspectionKeys(inspectionId: string): Promise<readonly DiscoveredOAuthJwk[]>;
+  commitActivateAccountOAuthIssuer(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly appId: AppId;
+    readonly inspectionId: string;
+    readonly expectedIssuerRevision: number | null;
+    readonly issuer: ControlOAuthIssuerRecord;
+    readonly eventId: string;
+    readonly requestId?: string;
+    readonly traceId?: string;
+    readonly callerChannel?: string;
+    readonly oauthClientHandle?: string;
+    readonly toolName?: string;
+    readonly now: number;
+  }): Promise<"activated" | "actor-not-member" | "unavailable" | "revision-mismatch" | "issuer-conflict">;
   getManagedOAuthIssuer(appId: AppId): Promise<ControlOAuthIssuerRecord | null>;
   commitPatchAccountManagedOAuthIssuer(input: {
     readonly actorAccountId: AccountId;
@@ -309,6 +343,7 @@ export type AccountServiceErrorCode =
   | "APP_SUSPENDED"
   | "APP_CREATION_AUTHORITY_REQUIRED"
   | "NOT_FOUND"
+  | "ISSUER_CONFLICT"
   | "PRECONDITION_REQUIRED"
   | "REVISION_MISMATCH"
   | "IDEMPOTENCY_CONFLICT"
@@ -332,6 +367,13 @@ export class AccountService {
     readonly repository: AccountRepository,
     readonly now: () => number = Date.now,
     readonly managedOAuthIssuer: AccountManagedCapabilityIssuer | null = null,
+    readonly options: {
+      readonly oauthDiscovery?: OAuthDiscoveryPort;
+      readonly oauthResourcePublicOrigin?: string;
+      readonly oauthInspectionTtlMs?: number;
+      readonly generateOAuthInspectionId?: () => string;
+      readonly generateNonce?: () => string;
+    } = {},
   ) { }
 
   async createForExternalIdentity(input: AccountCreateInput): Promise<AccountResolution> {
@@ -548,6 +590,187 @@ export class AccountService {
     const issuer = await this.repository.getAppOAuthIssuer(appId);
     if (!issuer && !optional) throw new AccountServiceError("NOT_FOUND");
     return issuer ? projectAppOAuthIssuer(issuer) : null;
+  }
+
+  async inspectAppOAuthIssuer(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly appId: AppId;
+    readonly issuer: string;
+    readonly requestId?: string;
+    readonly traceId?: string;
+    readonly callerChannel?: string;
+    readonly oauthClientHandle?: string;
+    readonly toolName?: string;
+  }): Promise<AppOAuthIssuerInspection> {
+    const actor = await this.#resolveCanonicalAccount(input.actorAccountId);
+    this.#requireUsableAccount(actor);
+    await this.requireActiveIdentity(actor.accountId, input.actorExternalIdentityId);
+    if (!await this.repository.hasAppMembership(actor.accountId, input.appId)) {
+      throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
+    }
+    if (!this.options.oauthDiscovery || !this.options.oauthResourcePublicOrigin) {
+      throw new AccountServiceError("SERVICE_UNAVAILABLE");
+    }
+    let issuer: string;
+    try {
+      issuer = canonicalizeOAuthIssuer(input.issuer);
+    } catch {
+      throw new AccountServiceError("INVALID_REQUEST");
+    }
+    if (await this.repository.hasAppOAuthIssuerElsewhere(issuer, input.appId)) {
+      throw new AccountServiceError("ISSUER_CONFLICT");
+    }
+    let discovered: Awaited<ReturnType<OAuthDiscoveryPort["inspectIssuer"]>>;
+    try {
+      discovered = await this.options.oauthDiscovery.inspectIssuer({ issuer });
+    } catch (error) {
+      throw new AccountServiceError(error instanceof TypeError ? "INVALID_REQUEST" : "SERVICE_UNAVAILABLE");
+    }
+    const now = this.now();
+    const inspectionId = (this.options.generateOAuthInspectionId ?? generateOAuthInspectionId)();
+    const expiresAt = now + (this.options.oauthInspectionTtlMs ?? OAUTH_ISSUER_INSPECTION_TTL_MS);
+    const audience = stackOAuthResource(this.options.oauthResourcePublicOrigin, input.appId);
+    const challenge = buildOAuthIssuerInspectionChallenge({
+      nonce: (this.options.generateNonce ?? generateNonce)(),
+      inspectionId,
+      stackId: input.appId,
+      issuer,
+      audience,
+      metadataDigest: discovered.metadataDigest,
+      jwksDigest: discovered.jwksDigest,
+      capabilityMaxLifetimeSeconds: OAUTH_CAPABILITY_MAX_LIFETIME_SECONDS,
+      expiresAt,
+    });
+    const inspection: ControlOAuthIssuerInspectionRecord = {
+      inspectionId,
+      stackId: input.appId,
+      ...discovered.metadata,
+      audience,
+      metadataDigest: discovered.metadataDigest,
+      jwksDigest: discovered.jwksDigest,
+      challengeHash: await sha256Hex(challenge),
+      capabilityMaxLifetimeSeconds: OAUTH_CAPABILITY_MAX_LIFETIME_SECONDS,
+      createdAt: now,
+      expiresAt,
+      usedAt: null,
+      revision: 1,
+    };
+    const result = await this.repository.commitInspectAccountOAuthIssuer({
+      actorAccountId: actor.accountId,
+      actorExternalIdentityId: input.actorExternalIdentityId,
+      inspection,
+      keys: discovered.keys,
+      eventId: generateEventId(),
+      requestId: input.requestId,
+      traceId: input.traceId,
+      callerChannel: input.callerChannel,
+      oauthClientHandle: input.oauthClientHandle,
+      toolName: input.toolName,
+      now,
+    });
+    if (result === "actor-not-member") throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
+    if (result === "issuer-conflict") throw new AccountServiceError("ISSUER_CONFLICT");
+    return {
+      inspectionId,
+      metadataUrl: discovered.metadata.metadataUrl,
+      jwksUri: discovered.metadata.jwksUri,
+      challenge,
+      expiresAt,
+      keys: discovered.keys.map(({ kid, algorithm }) => ({ kid, algorithm })),
+    };
+  }
+
+  async activateAppOAuthIssuer(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly appId: AppId;
+    readonly inspectionId: string;
+    readonly activationProof: string;
+    readonly ifMatch?: string;
+    readonly ifNoneMatch?: string;
+    readonly requestId?: string;
+    readonly traceId?: string;
+    readonly callerChannel?: string;
+    readonly oauthClientHandle?: string;
+    readonly toolName?: string;
+  }): Promise<number> {
+    const actor = await this.#resolveCanonicalAccount(input.actorAccountId);
+    this.#requireUsableAccount(actor);
+    await this.requireActiveIdentity(actor.accountId, input.actorExternalIdentityId);
+    if (!await this.repository.hasAppMembership(actor.accountId, input.appId)) {
+      throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
+    }
+    if ((input.ifMatch === undefined) === (input.ifNoneMatch === undefined)
+      || input.ifNoneMatch !== undefined && input.ifNoneMatch !== "*") {
+      throw new AccountServiceError(input.ifMatch === undefined && input.ifNoneMatch === undefined
+        ? "PRECONDITION_REQUIRED" : "INVALID_REQUEST");
+    }
+    const current = await this.repository.getAppOAuthIssuer(input.appId);
+    let expectedRevision: number | null;
+    if (input.ifNoneMatch === "*") {
+      if (current) throw new AccountServiceError("REVISION_MISMATCH");
+      expectedRevision = null;
+    } else {
+      expectedRevision = input.ifMatch === undefined ? null : parseCasAdminETag(input.ifMatch);
+      if (!current || expectedRevision === null || current.revision !== expectedRevision) {
+        throw new AccountServiceError("REVISION_MISMATCH");
+      }
+    }
+    const inspection = await this.repository.getAppOAuthIssuerInspection(input.inspectionId);
+    const now = this.now();
+    if (!inspection || inspection.stackId !== input.appId || inspection.usedAt !== null || inspection.expiresAt <= now) {
+      throw new AccountServiceError("INVALID_REQUEST");
+    }
+    const challenge = extractJwsPayload(input.activationProof);
+    const parsed = challenge === null ? null : parseOAuthIssuerInspectionChallenge(challenge);
+    if (!challenge || !parsed || await sha256Hex(challenge) !== inspection.challengeHash
+      || parsed.inspectionId !== inspection.inspectionId || parsed.stackId !== inspection.stackId
+      || parsed.issuer !== inspection.issuer || parsed.audience !== inspection.audience
+      || parsed.metadataDigest !== inspection.metadataDigest || parsed.jwksDigest !== inspection.jwksDigest
+      || parsed.capabilityMaxLifetimeSeconds !== inspection.capabilityMaxLifetimeSeconds
+      || parsed.expiresAt !== inspection.expiresAt) throw new AccountServiceError("INVALID_REQUEST");
+    const header = extractJwsProtectedHeader(input.activationProof);
+    const keys = await this.repository.listAppOAuthIssuerInspectionKeys(inspection.inspectionId);
+    const key = header === null ? undefined : keys.find(candidate => candidate.kid === header.kid);
+    if (!header || !key || header.alg !== key.algorithm || !await verifyCompactJwsProof({
+      challenge,
+      algorithm: key.algorithm,
+      publicJwk: key.publicJwk as Record<string, unknown>,
+      proof: input.activationProof,
+    })) throw new AccountServiceError("INVALID_REQUEST");
+    if (await this.repository.hasAppOAuthIssuerElsewhere(inspection.issuer, input.appId)) {
+      throw new AccountServiceError("ISSUER_CONFLICT");
+    }
+    const issuer: ControlOAuthIssuerRecord = {
+      ...inspection,
+      mode: "external",
+      status: "active",
+      verifiedAt: now,
+      lastRefreshAt: now,
+      lastRefreshError: null,
+      revision: (current?.revision ?? 0) + 1,
+    };
+    const result = await this.repository.commitActivateAccountOAuthIssuer({
+      actorAccountId: actor.accountId,
+      actorExternalIdentityId: input.actorExternalIdentityId,
+      appId: input.appId,
+      inspectionId: input.inspectionId,
+      expectedIssuerRevision: expectedRevision,
+      issuer,
+      eventId: generateEventId(),
+      requestId: input.requestId,
+      traceId: input.traceId,
+      callerChannel: input.callerChannel,
+      oauthClientHandle: input.oauthClientHandle,
+      toolName: input.toolName,
+      now,
+    });
+    if (result === "actor-not-member") throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
+    if (result === "unavailable") throw new AccountServiceError("INVALID_REQUEST");
+    if (result === "revision-mismatch") throw new AccountServiceError("REVISION_MISMATCH");
+    if (result === "issuer-conflict") throw new AccountServiceError("ISSUER_CONFLICT");
+    return issuer.revision;
   }
 
   async patchManagedOAuthIssuer(input: {

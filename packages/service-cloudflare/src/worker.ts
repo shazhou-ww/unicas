@@ -383,6 +383,9 @@ function adminHandlerFor(env: Env): Promise<(request: Request) => Promise<Respon
       const platformRepository = new D1PlatformAccessRepository(env.CAS_CONTROL_DB);
       const accountRepository = new D1AccountRepository(env.CAS_CONTROL_DB);
       const managedOAuthIssuer = managedIssuerFor(env, now);
+      const oauthDiscovery = new CloudflareOAuthDiscoveryPort({
+        allowedOrigins: parseOriginAllowlist(env.CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS),
+      });
       return createAdminBff({
         config,
         controlPlane: controlPlaneFor(env, now, managedOAuthIssuer),
@@ -395,6 +398,8 @@ function adminHandlerFor(env: Env): Promise<(request: Request) => Promise<Respon
         peopleRepository: new D1PeopleRepository(env.CAS_CONTROL_DB),
         accountRepository,
         managedOAuthIssuer,
+        oauthDiscovery,
+        oauthResourcePublicOrigin: env.CAS_PUBLIC_ORIGIN ?? env.PUBLIC_ORIGIN,
         emailChallengeRepository: new D1EmailChallengeRepository(env.CAS_CONTROL_DB),
         emailChallengeSender: env.EMAIL && config.emailFrom
           ? new CloudflareEmailChallengeSender(env.EMAIL, config.emailFrom)
@@ -594,6 +599,10 @@ async function fetchMcp(
     () => controlPlaneFor(env),
     env.CAS_CONTROL_DB,
     managedIssuerFor(env),
+    new CloudflareOAuthDiscoveryPort({
+      allowedOrigins: parseOriginAllowlist(env.CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS),
+    }),
+    env.CAS_PUBLIC_ORIGIN ?? env.PUBLIC_ORIGIN,
   );
   return worker.fetch(request, {
     ...env,
