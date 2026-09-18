@@ -16,6 +16,14 @@ Updated: 2026-09-17
 
 ## Current state
 
+On 2026-09-18, the requesting user explicitly directed this worktree to take
+over the task from `scottwei-home-pc`. `repoledger doctor` verified the current
+worktree identity as `scottwei-office-pc`; the CLI-validated transfer and all
+repository task-reference updates are published by this dedicated ownership
+milestone. The user also reaffirmed that UniCAS remains in internal development:
+all existing data is disposable test data, so the target is fresh current-model
+initialization with no data migration or forward-compatibility behavior.
+
 The third no-legacy cleanup checkpoint is published. `GET /admin/apps` now runs
 directly through `AccountService` and `D1AccountRepository`, pages Apps by stable
 `accountId`, and no longer rewrites the request or response through
@@ -384,6 +392,9 @@ cutover markers. Then complete the current-model and real-provider/email tests.
 
 ## Decisions
 
+- Requesting user, 2026-09-18: reaffirmed that the service is still in internal
+  development and all data is test data. Implement direct current-model
+  initialization; do not retain data migration or forward compatibility.
 - Requesting user, 2026-09-17: Playground will be removed, so do not migrate its
   Principal-keyed ownership. Retire the Console and administrator HTTP/MCP
   entry points now; remove its unreachable storage implementation with the
@@ -471,6 +482,7 @@ cutover markers. Then complete the current-model and real-provider/email tests.
 | Ownership transfer | `origin/main` commit `1db432c0820218ff821f233b322165149eb1d5f5`, coordinated from `scottwei-home-pc` to `copilot-unicas-standalone`. | Published |
 | Ownership transfer to `scottwei-office-pc` | `origin/main` commit `8a58b31971d3d6b4ea47eca8bc6dbf1c5eac2dc2`, coordinated from `copilot-unicas-standalone` to `scottwei-office-pc`. | Published |
 | Ownership transfer to `scottwei-home-pc` | User-authorized cross-machine continuation from `scottwei-office-pc`, published by this dedicated ownership-transfer commit. | Published |
+| Ownership transfer to `scottwei-office-pc` (2026-09-18) | User-authorized continuation from `scottwei-home-pc`, published by this dedicated ownership-transfer commit. | Published |
 | Implementation complete | Pending. | Pending |
 | Archive | Pending. | Pending |
 

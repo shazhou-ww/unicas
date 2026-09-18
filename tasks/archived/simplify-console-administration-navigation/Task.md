@@ -101,4 +101,4 @@ work begins.
 - [Current Console sidebar](/packages/admin-webui/src/ui/components/app-sidebar.tsx)
 - [Current platform detail composition](/packages/admin-webui/src/ui/app.tsx)
 - [Current Console shell coverage](/packages/admin-webui/tests/ui-mcp-configuration.test.tsx)
-- [Related multi-provider administrator identity task](/tasks/ongoing/scottwei-home-pc/support-multi-provider-admin-identity/Task.md)
+- [Related multi-provider administrator identity task](/tasks/ongoing/scottwei-office-pc/support-multi-provider-admin-identity/Task.md)
