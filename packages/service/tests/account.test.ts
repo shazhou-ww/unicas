@@ -51,6 +51,7 @@ function fixture() {
     listAccountApps: vi.fn(async () => []),
     getAccountApp: vi.fn(async () => null),
     getManagedOAuthIssuer: vi.fn(async () => null),
+    commitPatchAccountManagedOAuthIssuer: vi.fn(async () => "updated"),
     commitPatchAccountApp: vi.fn(async () => "updated"),
     getAccountAppIdempotency: vi.fn(async () => null),
     commitCreateAccountApp: vi.fn(async () => "created"),
@@ -302,6 +303,71 @@ describe("Account service", () => {
       actorExternalIdentityId: identity.externalIdentityId,
       appId: app.appId,
     })).rejects.toMatchObject({ code: "APP_SUSPENDED" });
+  });
+
+  test("reads and conditionally updates managed issuers through Account membership", async () => {
+    const { repository, service } = fixture();
+    const issuer = {
+      stackId: "cas_app_a",
+      mode: "managed" as const,
+      issuer: "https://cas.example/managed-issuers/cas_app_a",
+      audience: "https://cas.example/stacks/cas_app_a",
+      metadataUrl: "https://cas.example/managed-issuers/cas_app_a/.well-known/oauth-authorization-server",
+      metadataType: "oauth" as const,
+      authorizationEndpoint: "https://cas.example/managed-issuers/cas_app_a/authorize",
+      tokenEndpoint: "https://cas.example/managed-issuers/cas_app_a/token",
+      jwksUri: "https://cas.example/managed-issuers/cas_app_a/jwks.json",
+      registrationEndpoint: null,
+      scopesSupported: ["cas:manage"],
+      codeChallengeMethodsSupported: ["S256"],
+      status: "active" as const,
+      verifiedAt: 1,
+      lastRefreshAt: 1,
+      lastRefreshError: null,
+      jwksDigest: "digest",
+      capabilityMaxLifetimeSeconds: 3600,
+      revision: 4,
+    };
+    vi.mocked(repository.hasAppMembership).mockResolvedValue(true);
+    vi.mocked(repository.getManagedOAuthIssuer).mockResolvedValue(issuer);
+
+    await expect(service.getManagedOAuthIssuer(accountId, issuer.stackId)).resolves.toMatchObject({
+      appId: issuer.stackId,
+      status: "active",
+      revision: 4,
+    });
+    const updated = await service.patchManagedOAuthIssuer({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      appId: issuer.stackId,
+      enabled: false,
+      ifMatch: '"4"',
+    });
+    expect(updated).toMatchObject({ appId: issuer.stackId, status: "disabled", revision: 5 });
+    expect(repository.commitPatchAccountManagedOAuthIssuer).toHaveBeenCalledWith(expect.objectContaining({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      appId: issuer.stackId,
+      expectedRevision: 4,
+      enabled: false,
+      nextRevision: 5,
+    }));
+
+    vi.mocked(repository.commitPatchAccountManagedOAuthIssuer).mockResolvedValueOnce("revision-mismatch");
+    await expect(service.patchManagedOAuthIssuer({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      appId: issuer.stackId,
+      enabled: false,
+      ifMatch: '"4"',
+    })).rejects.toMatchObject({ code: "REVISION_MISMATCH" });
+    await expect(service.patchManagedOAuthIssuer({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      appId: issuer.stackId,
+      enabled: true,
+      ifMatch: '"4"',
+    })).rejects.toMatchObject({ code: "INVALID_REQUEST" });
   });
 
   test("creates an App with Account authority and Account-scoped idempotency", async () => {

@@ -117,12 +117,23 @@ describe("adapter-hosted control-plane MCP server", () => {
     const legacyMint = vi.fn(async () => {
       throw new Error("legacy managed capability path must not be called");
     });
+    const legacyGet = vi.fn(async () => {
+      throw new Error("legacy managed issuer read must not be called");
+    });
+    const legacyPatch = vi.fn(async () => {
+      throw new Error("legacy managed issuer update must not be called");
+    });
     const handler = createMcpHandler(
       () => createControlPlaneMcpServer(
-        { ...createControlPlaneOperations(db), mintManagedSpaceCapability: legacyMint },
+        {
+          ...createControlPlaneOperations(db),
+          getManagedOAuthIssuer: legacyGet,
+          patchManagedOAuthIssuer: legacyPatch,
+          mintManagedSpaceCapability: legacyMint,
+        },
         { mutationsEnabled: true, accountService },
       ),
-      { route: "/mcp", authContext: { props: grant(["control:security"]) } },
+      { route: "/mcp", authContext: { props: grant(["control:read", "control:security"]) } },
     );
 
     const minted = await callTool(handler, "mint_managed_space_capability", { appId: app.appId });
@@ -135,6 +146,22 @@ describe("adapter-hosted control-plane MCP server", () => {
       accountId: actor.account.accountId,
       app: expect.objectContaining({ appId: app.appId }),
     }));
+    expect((await callTool(handler, "get_app_managed_issuer", { appId: app.appId })).structuredContent)
+      .toMatchObject({ appId: app.appId, status: "active", etag: '"1"' });
+    expect((await callTool(handler, "update_app_managed_issuer", {
+      appId: app.appId,
+      enabled: false,
+      etag: '"1"',
+    })).structuredContent).toMatchObject({ appId: app.appId, status: "disabled", etag: '"2"' });
+    expect(await db.prepare(
+      "SELECT caller_channel, oauth_client_handle, tool_name FROM cas_control_audit_events WHERE action = 'managed_issuer.disabled'",
+    ).first()).toEqual({
+      caller_channel: "mcp",
+      oauth_client_handle: "a".repeat(64),
+      tool_name: "update_app_managed_issuer",
+    });
+    expect(legacyGet).not.toHaveBeenCalled();
+    expect(legacyPatch).not.toHaveBeenCalled();
     expect(legacyMint).not.toHaveBeenCalled();
   });
 

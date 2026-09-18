@@ -70,7 +70,7 @@ Principal-keyed `getStack`. Physical `stackId` and `tenantId` names remain
 confined to the private audit-reader RPC boundary; public responses retain App
 and Space vocabulary.
 
-The ninth no-legacy cleanup checkpoint is ready to publish. Managed Space
+The ninth no-legacy cleanup checkpoint is published as `077409e`. Managed Space
 capability issuance in HTTP and remote MCP now authorizes through
 `AccountService`, requires the current active ExternalIdentity and stable App
 membership, and derives one Space owner from `(appId, accountId)` rather than
@@ -79,8 +79,17 @@ refDomain instead of the retired `playground:` namespace. Focused tests make the
 legacy control-plane mint method fail if called. Stdio MCP inherits the same
 Account-native HTTP path through the administrator client.
 
-Next: migrate the remaining App issuer and invitation operations. After their
-consumers move, delete legacy HTTP contracts,
+The tenth no-legacy cleanup checkpoint is ready to publish. Managed issuer
+reads and conditional enable/disable updates in HTTP and remote MCP now run
+through `AccountService` and stable Account membership. The D1 update atomically
+checks the unblocked Account, active ExternalIdentity, App membership, and
+issuer revision, then changes status, advances the control snapshot, and writes
+Account/ExternalIdentity audit attribution with MCP caller evidence when
+applicable. The App compatibility adapter no longer rewrites these URLs to
+`/admin/stacks`; focused tests make the legacy get/update methods fail if called.
+
+Next: migrate external App issuer read, inspection, and activation, then App
+invitation operations. After their consumers move, delete legacy HTTP contracts,
 identity-keyed columns/tables (including the retired Playground table), dual
 writes, and startup identity migration rather than adding compatibility flags.
 
@@ -853,6 +862,11 @@ cutover markers. Then complete the current-model and real-provider/email tests.
   both passed with a command-local 15-second timeout; their default 5-second
   runs exceeded the limit under Miniflare load without behavioral failures.
   Both affected package typechecks passed and editor diagnostics were clean.
+- Account-native managed issuer validation passed 20 cloud-neutral Account
+  tests, 61 BFF tests, 12 App adapter tests, 11 D1 Account repository tests, 9
+  remote MCP tests, and 4 managed-issuer tests. Miniflare-heavy suites used the
+  same command-local 15-second allowance. Both affected package typechecks
+  passed and editor diagnostics were clean.
 - This no-legacy cleanup checkpoint and the production OAuth provisioning guide
   are published on the shared primary branch. The next implementation action is
   to replace the internal Principal-keyed App control-plane repository and then

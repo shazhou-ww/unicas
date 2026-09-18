@@ -354,6 +354,84 @@ export class D1AccountRepository implements AccountRepository {
     } : null;
   }
 
+  async commitPatchAccountManagedOAuthIssuer(
+    input: Parameters<AccountRepository["commitPatchAccountManagedOAuthIssuer"]>[0],
+  ): Promise<"updated" | "actor-not-member" | "not-found" | "revision-mismatch"> {
+    const requireActor = this.db.prepare(
+      `SELECT CASE WHEN
+         EXISTS (SELECT 1 FROM cas_accounts WHERE account_id = ? AND blocked_at IS NULL)
+         AND EXISTS (SELECT 1 FROM cas_external_identities
+           WHERE external_identity_id = ? AND account_id = ? AND unlinked_at IS NULL)
+         AND EXISTS (SELECT 1 FROM cas_app_members WHERE app_id = ? AND account_id = ?)
+       THEN 1 ELSE json_extract('invalid', '$') END AS allowed`,
+    ).bind(
+      input.actorAccountId,
+      input.actorExternalIdentityId,
+      input.actorAccountId,
+      input.appId,
+      input.actorAccountId,
+    );
+    const update = this.db.prepare(
+      "UPDATE cas_app_managed_issuers SET status = ?, revision = ? WHERE app_id = ? AND revision = ?",
+    ).bind(
+      input.enabled ? "active" : "disabled",
+      input.nextRevision,
+      input.appId,
+      input.expectedRevision,
+    );
+    const requireUpdated = this.db.prepare(
+      "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('invalid', '$') END AS updated",
+    );
+    const audit = this.db.prepare(
+      `INSERT INTO cas_control_audit_events
+        (event_id, app_id, identity_issuer, subject, action, target, request_id,
+         trace_id, caller_channel, oauth_client_handle, tool_name, created_at,
+         original_account_id, external_identity_id, target_account_id)
+       SELECT ?, ?, identity.issuer, identity.subject, ?, issuer.issuer, ?, ?, ?,
+         ?, ?, ?, ?, ?, NULL
+       FROM cas_external_identities AS identity
+       JOIN cas_app_managed_issuers AS issuer ON issuer.app_id = ?
+       WHERE identity.external_identity_id = ? AND identity.account_id = ?
+         AND identity.unlinked_at IS NULL`,
+    ).bind(
+      input.eventId,
+      input.appId,
+      input.enabled ? "managed_issuer.enabled" : "managed_issuer.disabled",
+      input.requestId ?? null,
+      input.traceId ?? null,
+      input.callerChannel ?? null,
+      input.oauthClientHandle ?? null,
+      input.toolName ?? null,
+      input.now,
+      input.actorAccountId,
+      input.actorExternalIdentityId,
+      input.appId,
+      input.actorExternalIdentityId,
+      input.actorAccountId,
+    );
+    try {
+      await this.db.batch([
+        requireActor,
+        update,
+        requireUpdated,
+        audit,
+        this.db.prepare("INSERT OR IGNORE INTO cas_control_meta (key, value) VALUES ('snapshot', 0)"),
+        this.db.prepare("UPDATE cas_control_meta SET value = value + 1 WHERE key = 'snapshot'"),
+      ]);
+      return "updated";
+    } catch (error) {
+      if (!isJsonFailure(error)) throw error;
+      const account = await this.getAccount(input.actorAccountId);
+      const identity = await this.getIdentity(input.actorExternalIdentityId);
+      if (!account || account.blockedAt !== null || !identity
+        || identity.accountId !== input.actorAccountId || identity.unlinkedAt !== null
+        || !await this.hasAppMembership(input.actorAccountId, input.appId)) {
+        return "actor-not-member";
+      }
+      return await this.getManagedOAuthIssuer(input.appId) ? "revision-mismatch" : "not-found";
+    }
+  }
+
   async commitPatchAccountApp(
     input: Parameters<AccountRepository["commitPatchAccountApp"]>[0],
   ): Promise<"updated" | "actor-not-member" | "not-found" | "revision-mismatch"> {

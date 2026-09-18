@@ -321,6 +321,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     if (appRoute?.operation === "mintManagedCapability") {
       return handleManagedSpaceCapability(request, appRoute.appId);
     }
+    if (appRoute?.operation === "getManagedIssuer" || appRoute?.operation === "patchManagedIssuer") {
+      return handleAccountManagedIssuer(request, appRoute.appId, appRoute.operation);
+    }
     if (appRoute?.operation === "inspectOAuthIssuer" || appRoute?.operation === "activateOAuthIssuer") {
       return handleAppIssuerMutation(request, appRoute.appId, appRoute.operation);
     }
@@ -2240,6 +2243,48 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         const response = json({ error: error.code }, status);
         response.headers.set("Cache-Control", "no-store");
         return response;
+      }
+      throw error;
+    }
+  }
+
+  async function handleAccountManagedIssuer(
+    request: Request,
+    appId: string,
+    operation: "getManagedIssuer" | "patchManagedIssuer",
+  ): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!accountService || !auth.payload.accountId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
+    }
+    try {
+      if (operation === "getManagedIssuer") {
+        return jsonWithEtag(await accountService.getManagedOAuthIssuer(auth.payload.accountId, appId));
+      }
+      if (!auth.payload.externalIdentityId) return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED);
+      if (!(await passCsrf(request, auth.payload))) return csrfRejected();
+      const body = await readJsonBody<{ enabled?: unknown }>(request);
+      if (!body || typeof body.enabled !== "boolean") return invalidRequest("enabled must be a boolean");
+      return jsonWithEtag(await accountService.patchManagedOAuthIssuer({
+        actorAccountId: auth.payload.accountId,
+        actorExternalIdentityId: auth.payload.externalIdentityId,
+        appId,
+        enabled: body.enabled,
+        ifMatch: request.headers.get("If-Match") ?? undefined,
+        requestId: request.headers.get("X-Request-Id") ?? undefined,
+        traceId: request.headers.get("X-Trace-Id") ?? undefined,
+        callerChannel: "admin-webui",
+      }));
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "APP_MEMBERSHIP_REQUIRED" || error.code === "ACCOUNT_BLOCKED" ? 403
+          : error.code === "PRECONDITION_REQUIRED" ? 428
+            : error.code === "REVISION_MISMATCH" ? 412
+              : error.code === "INVALID_REQUEST" ? 400
+                : error.code === "NOT_FOUND" ? 404
+                  : 401;
+        return json({ error: error.code }, status);
       }
       throw error;
     }

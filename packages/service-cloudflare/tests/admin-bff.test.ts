@@ -634,6 +634,7 @@ function memoryAccountRepository(
   const profiles = new Map<string, { accountId: string; displayName: string | null; avatarUrl: string | null; displayNameSource: string | null; avatarSource: string | null; updatedAt: number }>();
   const identities = new Map<string, ExternalIdentityRecord>();
   const identityKeys = new Map<string, ExternalIdentityRecord>();
+  const managedIssuerStates = new Map<string, { status: "active" | "disabled"; revision: number }>();
   function add(
     account: AccountRecord,
     profile: { accountId: string; displayName: string | null; avatarUrl: string | null; displayNameSource: string | null; avatarSource: string | null; updatedAt: number },
@@ -667,9 +668,13 @@ function memoryAccountRepository(
       if (!identity) return [];
       return (await platform.getAccess({ issuer: identity.issuer, subject: identity.subject }))?.authorities ?? [];
     },
-    hasAppMembership: async requested => {
+    hasAppMembership: async (requested, appId) => {
       const identity = identityForAccount(requested);
-      return identity ? platform.hasMembership({ issuer: identity.issuer, subject: identity.subject }) : false;
+      if (!identity) return false;
+      if (appId !== undefined && fakeStacks.has(appId)) {
+        return fakeStacks.get(appId)!.members.has(`${identity.issuer}\n${identity.subject}`);
+      }
+      return platform.hasMembership({ issuer: identity.issuer, subject: identity.subject });
     },
     listAccountMembershipAppIds: async () => [],
     readControlSnapshot: () => platform.readSnapshot(),
@@ -680,27 +685,44 @@ function memoryAccountRepository(
       const { members: _members, stackId, ...record } = app;
       return { appId: stackId, ...record };
     },
-    getManagedOAuthIssuer: async appId => fakeStacks.has(appId) ? ({
-      stackId: appId,
-      mode: "managed",
-      issuer: `${PUBLIC_ORIGIN}/managed-issuers/${appId}`,
-      audience: `${PUBLIC_ORIGIN}/stacks/${appId}`,
-      metadataUrl: `${PUBLIC_ORIGIN}/managed-issuers/${appId}/.well-known/oauth-authorization-server`,
-      metadataType: "oauth",
-      authorizationEndpoint: `${PUBLIC_ORIGIN}/managed-issuers/${appId}/authorize`,
-      tokenEndpoint: `${PUBLIC_ORIGIN}/managed-issuers/${appId}/token`,
-      jwksUri: `${PUBLIC_ORIGIN}/managed-issuers/${appId}/jwks.json`,
-      registrationEndpoint: null,
-      scopesSupported: ["cas:read", "cas:write", "cas:manage"],
-      codeChallengeMethodsSupported: ["S256"],
-      status: "active",
-      verifiedAt: 1,
-      lastRefreshAt: 1,
-      lastRefreshError: null,
-      jwksDigest: "digest",
-      capabilityMaxLifetimeSeconds: 3600,
-      revision: 1,
-    }) : null,
+    getManagedOAuthIssuer: async appId => {
+      if (!fakeStacks.has(appId)) return null;
+      const state = managedIssuerStates.get(appId) ?? { status: "active" as const, revision: 1 };
+      return {
+        stackId: appId,
+        mode: "managed",
+        issuer: `${PUBLIC_ORIGIN}/managed-issuers/${appId}`,
+        audience: `${PUBLIC_ORIGIN}/stacks/${appId}`,
+        metadataUrl: `${PUBLIC_ORIGIN}/managed-issuers/${appId}/.well-known/oauth-authorization-server`,
+        metadataType: "oauth",
+        authorizationEndpoint: `${PUBLIC_ORIGIN}/managed-issuers/${appId}/authorize`,
+        tokenEndpoint: `${PUBLIC_ORIGIN}/managed-issuers/${appId}/token`,
+        jwksUri: `${PUBLIC_ORIGIN}/managed-issuers/${appId}/jwks.json`,
+        registrationEndpoint: null,
+        scopesSupported: ["cas:read", "cas:write", "cas:manage"],
+        codeChallengeMethodsSupported: ["S256"],
+        status: state.status,
+        verifiedAt: 1,
+        lastRefreshAt: 1,
+        lastRefreshError: null,
+        jwksDigest: "digest",
+        capabilityMaxLifetimeSeconds: 3600,
+        revision: state.revision,
+      };
+    },
+    commitPatchAccountManagedOAuthIssuer: async input => {
+      const identity = identities.get(input.actorExternalIdentityId);
+      const app = fakeStacks.get(input.appId);
+      if (!identity || identity.accountId !== input.actorAccountId
+        || !app?.members.has(`${identity.issuer}\n${identity.subject}`)) return "actor-not-member";
+      const state = managedIssuerStates.get(input.appId) ?? { status: "active" as const, revision: 1 };
+      if (state.revision !== input.expectedRevision) return "revision-mismatch";
+      managedIssuerStates.set(input.appId, {
+        status: input.enabled ? "active" : "disabled",
+        revision: input.nextRevision,
+      });
+      return "updated";
+    },
     commitPatchAccountApp: async input => {
       const identity = identities.get(input.actorExternalIdentityId);
       const app = fakeStacks.get(input.app.appId);
@@ -2012,6 +2034,58 @@ describe("cas-admin-webui BFF", () => {
     expect(created.description).toBe("");
     expect(created.stackId).toMatch(/^cas_/);
     expect(ok.headers.get("ETag")).toBe('"1"');
+  });
+
+  test("managed App issuer reads and updates use Account membership", async () => {
+    const provider = await createMockProvider();
+    const platform = new MemoryPlatformAccessRepository();
+    platform.grant(ISSUER, "google-user-123");
+    const accounts = memoryAccountRepository(platform, "google-user-123");
+    const legacyGet = vi.fn(async () => {
+      throw new Error("legacy managed issuer read must not be called");
+    });
+    const legacyPatch = vi.fn(async () => {
+      throw new Error("legacy managed issuer update must not be called");
+    });
+    const bff = await createBff(
+      provider,
+      undefined,
+      {},
+      platform,
+      {
+        ...fakeControlPlane(),
+        getManagedOAuthIssuer: legacyGet,
+        patchManagedOAuthIssuer: legacyPatch,
+      },
+      undefined,
+      undefined,
+      undefined,
+      accounts,
+    );
+    const { cookie, csrf } = await signIn(bff, provider);
+    const appId = await createStack(bff, cookie, csrf, "Managed App");
+    const path = `/admin/apps/${appId}/managed-issuer`;
+
+    const current = await authRequest(bff, path, cookie);
+    expect(current.status).toBe(200);
+    expect(current.headers.get("ETag")).toBe('"1"');
+    expect(await current.json()).toMatchObject({ appId, mode: "managed", status: "active", revision: 1 });
+    expect((await authRequest(bff, path, cookie, {
+      method: "PATCH",
+      headers: { "If-Match": '"1"', "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: false }),
+    })).status).toBe(403);
+
+    const updated = await authRequest(bff, path, cookie, {
+      method: "PATCH",
+      headers: { "If-Match": '"1"', "X-CSRF-Token": csrf, "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: false }),
+    });
+    expect(updated.status).toBe(200);
+    expect(updated.headers.get("ETag")).toBe('"2"');
+    expect(await updated.json()).toMatchObject({ appId, status: "disabled", revision: 2 });
+    expect(legacyGet).not.toHaveBeenCalled();
+    expect(legacyPatch).not.toHaveBeenCalled();
   });
 
   test("App issuer mutations preserve minimal receipts and both conditional activation modes", async () => {

@@ -158,11 +158,10 @@ export function createControlPlaneMcpServer(
     APP_ADMIN_MCP_TOOLS.get_app_managed_issuer.registration,
     async ({ appId }) => {
       const grant = requireGrantScope("control:read");
-      const result = await controlPlane.getManagedOAuthIssuer(
-        serviceContext(grant, "get_app_managed_issuer"),
-        { path: { stackId: appId } },
-      );
-      return appToolResult({ operation: "getManagedIssuer", appId }, withEtag(result));
+      return accountToolResult(async () => {
+        const actor = await requireGrantAccount(grant, options);
+        return withEtag(await options.accountService!.getManagedOAuthIssuer(actor.account.accountId, appId));
+      });
     },
   );
 
@@ -528,12 +527,19 @@ export function createControlPlaneMcpServer(
     APP_ADMIN_MCP_TOOLS.update_app_managed_issuer.registration,
     async ({ appId, enabled, etag }) => {
       const grant = requireMutation("control:security", options);
-      const result = await controlPlane.patchManagedOAuthIssuer(
-        serviceContext(grant, "update_app_managed_issuer"),
-        { path: { stackId: appId }, body: { enabled } },
-        { ifMatch: etag },
-      );
-      return appToolResult({ operation: "patchManagedIssuer", appId }, withEtag(result));
+      return accountToolResult(async () => {
+        const actor = await requireGrantAccount(grant, options);
+        return withEtag(await options.accountService!.patchManagedOAuthIssuer({
+          actorAccountId: actor.account.accountId,
+          actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+          appId,
+          enabled,
+          ifMatch: etag,
+          callerChannel: "mcp",
+          oauthClientHandle: grant.oauthClientHandle,
+          toolName: "update_app_managed_issuer",
+        }));
+      });
     },
   );
 

@@ -341,6 +341,65 @@ describe("D1 Account repository", () => {
     ).first()).toEqual({ description: "After", revision: 2 });
   });
 
+  test("reads and atomically updates a managed issuer through Account membership", async () => {
+    const { db, service } = await fixture();
+    const actor = await service.createForExternalIdentity({
+      provider: "github",
+      issuer: "https://github.com",
+      subject: "issuer-editor",
+    });
+    await db.prepare(
+      "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES ('cas_app_issuer', 'App', '', 'active', 1, 1)",
+    ).run();
+    await db.prepare(
+      "INSERT INTO cas_app_members (app_id, identity_issuer, subject, joined_at, account_id) VALUES ('cas_app_issuer', ?, ?, 1, ?)",
+    ).bind(actor.authenticatedIdentity.issuer, actor.authenticatedIdentity.subject, actor.account.accountId).run();
+    await db.prepare(
+      `INSERT INTO cas_app_managed_issuers
+        (app_id, issuer, audience, metadata_url, authorization_endpoint,
+         token_endpoint, jwks_uri, scopes_supported, code_challenge_methods_supported,
+         status, verified_at, jwks_digest, capability_max_lifetime_seconds, revision)
+       VALUES ('cas_app_issuer', 'https://cas.example/managed-issuers/cas_app_issuer',
+         'https://cas.example/stacks/cas_app_issuer', 'https://cas.example/metadata',
+         'https://cas.example/authorize', 'https://cas.example/token',
+         'https://cas.example/jwks', '["cas:manage"]', '["S256"]',
+         'active', 1, 'digest', 3600, 4)`,
+    ).run();
+
+    await expect(service.getManagedOAuthIssuer(actor.account.accountId, "cas_app_issuer"))
+      .resolves.toMatchObject({ appId: "cas_app_issuer", status: "active", revision: 4 });
+    await expect(service.patchManagedOAuthIssuer({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      appId: "cas_app_issuer",
+      enabled: false,
+      ifMatch: '"4"',
+      requestId: "request-issuer",
+      callerChannel: "admin-webui",
+    })).resolves.toMatchObject({ status: "disabled", revision: 5 });
+    expect(await db.prepare(
+      "SELECT status, revision FROM cas_app_managed_issuers WHERE app_id = 'cas_app_issuer'",
+    ).first()).toEqual({ status: "disabled", revision: 5 });
+    expect(await db.prepare(
+      "SELECT action, original_account_id, external_identity_id FROM cas_control_audit_events WHERE app_id = 'cas_app_issuer'",
+    ).first()).toEqual({
+      action: "managed_issuer.disabled",
+      original_account_id: actor.account.accountId,
+      external_identity_id: actor.authenticatedIdentity.externalIdentityId,
+    });
+
+    await expect(service.patchManagedOAuthIssuer({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      appId: "cas_app_issuer",
+      enabled: true,
+      ifMatch: '"4"',
+    })).rejects.toMatchObject({ code: "REVISION_MISMATCH" });
+    expect(await db.prepare(
+      "SELECT status, revision FROM cas_app_managed_issuers WHERE app_id = 'cas_app_issuer'",
+    ).first()).toEqual({ status: "disabled", revision: 5 });
+  });
+
   test("manages platform authorities and block state by Account ID", async () => {
     const { db, service } = await fixture();
     const actor = await service.createForExternalIdentity({

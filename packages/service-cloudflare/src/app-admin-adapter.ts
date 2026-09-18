@@ -23,6 +23,7 @@ export async function handleAppAdminCompatibilityRequest(
   if (route.operation === "listRefDomains" || route.operation === "listRootDomainRefs"
     || route.operation === "listRootDomainEvents") return legacyHandler(request);
   if (route.operation === "listPeople" || route.operation === "mintManagedCapability" || route.operation === "patchApp"
+    || route.operation === "getManagedIssuer" || route.operation === "patchManagedIssuer"
     || route.operation === "listMemberInvitations" || route.operation === "revokeMemberInvitation"
     || route.operation === "inspectOAuthIssuer" || route.operation === "activateOAuthIssuer") {
     return legacyHandler(request);

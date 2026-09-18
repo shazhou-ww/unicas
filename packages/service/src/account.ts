@@ -6,6 +6,7 @@ import type {
   AppControlAuditEvent,
   AppId,
   AppMembership,
+  AppOAuthIssuer,
   ManagedSpaceCapability,
   PlatformAccountDetail,
   PlatformAccountListItem,
@@ -150,6 +151,21 @@ export interface AccountRepository {
   }): Promise<readonly App[]>;
   getAccountApp(accountId: AccountId, appId: AppId): Promise<App | null>;
   getManagedOAuthIssuer(appId: AppId): Promise<ControlOAuthIssuerRecord | null>;
+  commitPatchAccountManagedOAuthIssuer(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly appId: AppId;
+    readonly expectedRevision: number;
+    readonly enabled: boolean;
+    readonly nextRevision: number;
+    readonly eventId: string;
+    readonly requestId?: string;
+    readonly traceId?: string;
+    readonly callerChannel?: string;
+    readonly oauthClientHandle?: string;
+    readonly toolName?: string;
+    readonly now: number;
+  }): Promise<"updated" | "actor-not-member" | "not-found" | "revision-mismatch">;
   commitPatchAccountApp(input: {
     readonly actorAccountId: AccountId;
     readonly actorExternalIdentityId: string;
@@ -291,6 +307,7 @@ export type AccountServiceErrorCode =
   | "APP_MEMBERSHIP_REQUIRED"
   | "APP_SUSPENDED"
   | "APP_CREATION_AUTHORITY_REQUIRED"
+  | "NOT_FOUND"
   | "PRECONDITION_REQUIRED"
   | "REVISION_MISMATCH"
   | "IDEMPOTENCY_CONFLICT"
@@ -509,6 +526,65 @@ export class AccountService {
     }
     if (!this.managedOAuthIssuer) throw new AccountServiceError("SERVICE_UNAVAILABLE");
     return this.managedOAuthIssuer.issueAccountSpace({ app, issuer, accountId: actor.accountId });
+  }
+
+  async getManagedOAuthIssuer(actorAccountId: AccountId, appId: AppId): Promise<AppOAuthIssuer> {
+    await this.requireAppMembership(actorAccountId, appId);
+    const issuer = await this.repository.getManagedOAuthIssuer(appId);
+    if (!issuer) throw new AccountServiceError("NOT_FOUND");
+    return projectAppOAuthIssuer(issuer);
+  }
+
+  async patchManagedOAuthIssuer(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly appId: AppId;
+    readonly enabled: boolean;
+    readonly ifMatch?: string;
+    readonly requestId?: string;
+    readonly traceId?: string;
+    readonly callerChannel?: string;
+    readonly oauthClientHandle?: string;
+    readonly toolName?: string;
+  }): Promise<AppOAuthIssuer> {
+    if (input.ifMatch === undefined || input.ifMatch.trim().length === 0) {
+      throw new AccountServiceError("PRECONDITION_REQUIRED");
+    }
+    const expectedRevision = parseCasAdminETag(input.ifMatch);
+    if (expectedRevision === null) throw new AccountServiceError("REVISION_MISMATCH");
+    const actor = await this.#resolveCanonicalAccount(input.actorAccountId);
+    this.#requireUsableAccount(actor);
+    await this.requireActiveIdentity(actor.accountId, input.actorExternalIdentityId);
+    if (!await this.repository.hasAppMembership(actor.accountId, input.appId)) {
+      throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
+    }
+    const issuer = await this.repository.getManagedOAuthIssuer(input.appId);
+    if (!issuer) throw new AccountServiceError("NOT_FOUND");
+    if (issuer.revision !== expectedRevision) throw new AccountServiceError("REVISION_MISMATCH");
+    if ((issuer.status === "active") === input.enabled) throw new AccountServiceError("INVALID_REQUEST");
+    const result = await this.repository.commitPatchAccountManagedOAuthIssuer({
+      actorAccountId: actor.accountId,
+      actorExternalIdentityId: input.actorExternalIdentityId,
+      appId: input.appId,
+      expectedRevision,
+      enabled: input.enabled,
+      nextRevision: expectedRevision + 1,
+      eventId: generateEventId(),
+      requestId: input.requestId,
+      traceId: input.traceId,
+      callerChannel: input.callerChannel,
+      oauthClientHandle: input.oauthClientHandle,
+      toolName: input.toolName,
+      now: this.now(),
+    });
+    if (result === "actor-not-member") throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
+    if (result === "not-found") throw new AccountServiceError("NOT_FOUND");
+    if (result === "revision-mismatch") throw new AccountServiceError("REVISION_MISMATCH");
+    return projectAppOAuthIssuer({
+      ...issuer,
+      status: input.enabled ? "active" : "disabled",
+      revision: expectedRevision + 1,
+    });
   }
 
   async patchApp(input: {
@@ -1122,4 +1198,9 @@ function decodeAuditCursor(
   } catch {
     throw new AccountServiceError("INVALID_CURSOR");
   }
+}
+
+function projectAppOAuthIssuer(issuer: ControlOAuthIssuerRecord): AppOAuthIssuer {
+  const { stackId, ...fields } = issuer;
+  return { appId: stackId, ...fields };
 }
