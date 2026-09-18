@@ -593,6 +593,7 @@ async function fetchMcp(
     mcpConfigFromEnv(env),
     () => controlPlaneFor(env),
     env.CAS_CONTROL_DB,
+    managedIssuerFor(env),
   );
   return worker.fetch(request, {
     ...env,

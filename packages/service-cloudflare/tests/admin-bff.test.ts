@@ -16,6 +16,7 @@ import type {
   EmailChallengeBinding,
   EmailChallengeRecord,
   EmailChallengeRepository,
+  AccountManagedCapabilityIssuer,
   AccountRecord,
   AccountRepository,
   ExternalIdentityRecord,
@@ -679,6 +680,27 @@ function memoryAccountRepository(
       const { members: _members, stackId, ...record } = app;
       return { appId: stackId, ...record };
     },
+    getManagedOAuthIssuer: async appId => fakeStacks.has(appId) ? ({
+      stackId: appId,
+      mode: "managed",
+      issuer: `${PUBLIC_ORIGIN}/managed-issuers/${appId}`,
+      audience: `${PUBLIC_ORIGIN}/stacks/${appId}`,
+      metadataUrl: `${PUBLIC_ORIGIN}/managed-issuers/${appId}/.well-known/oauth-authorization-server`,
+      metadataType: "oauth",
+      authorizationEndpoint: `${PUBLIC_ORIGIN}/managed-issuers/${appId}/authorize`,
+      tokenEndpoint: `${PUBLIC_ORIGIN}/managed-issuers/${appId}/token`,
+      jwksUri: `${PUBLIC_ORIGIN}/managed-issuers/${appId}/jwks.json`,
+      registrationEndpoint: null,
+      scopesSupported: ["cas:read", "cas:write", "cas:manage"],
+      codeChallengeMethodsSupported: ["S256"],
+      status: "active",
+      verifiedAt: 1,
+      lastRefreshAt: 1,
+      lastRefreshError: null,
+      jwksDigest: "digest",
+      capabilityMaxLifetimeSeconds: 3600,
+      revision: 1,
+    }) : null,
     commitPatchAccountApp: async input => {
       const identity = identities.get(input.actorExternalIdentityId);
       const app = fakeStacks.get(input.app.appId);
@@ -763,6 +785,7 @@ async function createBff(
   platformAuditRepository?: PlatformAuditRepository,
   peopleRepository?: PeopleRepository,
   accountRepository?: AccountRepository,
+  managedOAuthIssuer?: AccountManagedCapabilityIssuer,
 ): Promise<(request: Request) => Promise<Response>> {
   const providerFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? new URL(input) : input instanceof URL ? input : new URL(input.url);
@@ -818,6 +841,7 @@ async function createBff(
     platformAuditRepository,
     peopleRepository,
     accountRepository,
+    managedOAuthIssuer,
   });
 }
 
@@ -2168,7 +2192,38 @@ describe("cas-admin-webui BFF", () => {
 
   test("managed Space capability mint uses the v2 operation and response", async () => {
     const provider = await createMockProvider();
-    const bff = await createBff(provider);
+    const platform = new MemoryPlatformAccessRepository();
+    platform.grant(ISSUER, "google-user-123");
+    const accounts = memoryAccountRepository(platform, "google-user-123");
+    const legacyMint = vi.fn(async () => {
+      throw new Error("legacy managed capability path must not be called");
+    });
+    const issueAccountSpace = vi.fn(async ({ app, accountId }) => ({
+      accessToken: "short-lived-space-token",
+      tokenType: "Bearer" as const,
+      expiresIn: 120,
+      expiresAt: Date.now() + 120_000,
+      issuer: `${PUBLIC_ORIGIN}/managed-issuers/${app.appId}`,
+      audience: `${PUBLIC_ORIGIN}/stacks/${app.appId}`,
+      spaceId: `member_${accountId.slice(5)}`,
+      permissions: [`spaces:member_${accountId.slice(5)}:cas:manage`],
+    }));
+    const managedOAuthIssuer: AccountManagedCapabilityIssuer = {
+      provision: async appId => (await accounts.getManagedOAuthIssuer(appId))!,
+      issueAccountSpace,
+    };
+    const bff = await createBff(
+      provider,
+      undefined,
+      {},
+      platform,
+      { ...fakeControlPlane(), mintManagedSpaceCapability: legacyMint },
+      undefined,
+      undefined,
+      undefined,
+      accounts,
+      managedOAuthIssuer,
+    );
     const { cookie, csrf } = await signIn(bff, provider);
     const appId = await createStack(bff, cookie, csrf, "Managed App");
 
@@ -2185,9 +2240,13 @@ describe("cas-admin-webui BFF", () => {
     expect(minted.headers.get("Cache-Control")).toBe("no-store");
     expect(await minted.json()).toMatchObject({
       accessToken: "short-lived-space-token",
-      spaceId: "member_test",
-      permissions: ["spaces:member_test:cas:manage"],
+      spaceId: `member_${testAccountId("google-user-123").slice(5)}`,
     });
+    expect(issueAccountSpace).toHaveBeenCalledWith(expect.objectContaining({
+      accountId: testAccountId("google-user-123"),
+      app: expect.objectContaining({ appId }),
+    }));
+    expect(legacyMint).not.toHaveBeenCalled();
   });
 
   test("retired Playground file-root APIs return 404", async () => {

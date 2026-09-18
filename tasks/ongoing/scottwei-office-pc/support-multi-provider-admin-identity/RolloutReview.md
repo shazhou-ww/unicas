@@ -4,8 +4,9 @@ Status: Approved principle; implementation pending
 
 ## Decision
 
-Requesting user, 2026-09-17: the service is not publicly launched; no legacy
-should be retained, and existing data can be cleared whenever needed.
+Requesting user, reaffirmed 2026-09-18: the service is not publicly launched;
+no legacy should be retained, and all development Account and App test data may
+be deleted to reinitialize the current database schema.
 
 This replaces both the original four-stage compatibility rollout and the
 subsequent pinned-revision rehearsal proposal. Deliver one current Account-based
@@ -33,9 +34,9 @@ automatic Account merge are unchanged. Current-model audit and identity-link
 history remain security records during normal operation; disposable pre-launch
 data does not mean normal commands may rewrite security history.
 
-This principle permits data replacement but is not an instruction to clear any
-specific database now. A reset must target an explicitly identified environment
-and resource set. The frozen `unicas.shazhou.work` environment and unrelated
+This decision authorizes data replacement in an explicitly identified
+development environment. It does not identify a remote binding by itself; do
+not infer one. The frozen `unicas.shazhou.work` environment and unrelated
 App/Space data-plane work remain outside this task.
 
 ## Completion checks

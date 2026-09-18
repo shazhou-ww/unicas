@@ -121,4 +121,41 @@ describe("CloudflareManagedIssuer", () => {
     });
     expect(verified.payload).not.toHaveProperty("tenantId");
   });
+
+  test("issues the same Space identity for one Account across login providers", async () => {
+    const authority = await fixture();
+    const app = {
+      appId: "cas_first",
+      displayName: "First",
+      description: "",
+      status: "active" as const,
+      createdAt: 1000,
+      revision: 1,
+    };
+    const issuer = await authority.provision(app.appId, 1000);
+    const accountId = `acct_${"a".repeat(22)}`;
+    const first = await authority.issueAccountSpace({ app, issuer, accountId });
+    const second = await authority.issueAccountSpace({ app, issuer, accountId });
+    const other = await authority.issueAccountSpace({
+      app,
+      issuer,
+      accountId: `acct_${"b".repeat(22)}`,
+    });
+
+    expect(second.spaceId).toBe(first.spaceId);
+    expect(other.spaceId).not.toBe(first.spaceId);
+    const jwks = await authority.jwks() as { keys: Array<Record<string, unknown>> };
+    const publicKey = await importJWK(jwks.keys[0]!, "ES256");
+    const verified = await jwtVerify(first.accessToken, publicKey, {
+      issuer: first.issuer,
+      audience: first.audience,
+      currentDate: new Date(1_700_000_000_000),
+    });
+    expect(verified.payload).toMatchObject({
+      ver: 2,
+      spaceId: first.spaceId,
+      refDomain: expect.stringMatching(/^account:[0-9a-f]{16}$/),
+      sub: expect.stringMatching(/^account:[0-9a-f]{64}$/),
+    });
+  });
 });

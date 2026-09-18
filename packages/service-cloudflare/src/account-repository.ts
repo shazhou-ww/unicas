@@ -9,6 +9,7 @@ import type {
   AccountRecord,
   AccountRepository,
   AccountWithIdentityCreate,
+  ControlOAuthIssuerRecord,
   ExternalIdentityRecord,
   PlatformAccountAuditRecord,
 } from "@unicas/service";
@@ -36,6 +37,23 @@ interface ExternalIdentityRow {
   account_hint: string | null;
   display_name: string | null;
   avatar_url: string | null;
+}
+
+interface ManagedOAuthIssuerRow {
+  readonly app_id: string;
+  readonly issuer: string;
+  readonly audience: string;
+  readonly metadata_url: string;
+  readonly authorization_endpoint: string;
+  readonly token_endpoint: string;
+  readonly jwks_uri: string;
+  readonly scopes_supported: string;
+  readonly code_challenge_methods_supported: string;
+  readonly status: ControlOAuthIssuerRecord["status"];
+  readonly verified_at: number;
+  readonly jwks_digest: string;
+  readonly capability_max_lifetime_seconds: number;
+  readonly revision: number;
 }
 
 interface AccountMembershipRow extends AccountRow {
@@ -302,6 +320,36 @@ export class D1AccountRepository implements AccountRepository {
       description: row.description,
       status: row.status,
       createdAt: row.created_at,
+      revision: row.revision,
+    } : null;
+  }
+
+  async getManagedOAuthIssuer(appId: AppId): Promise<ControlOAuthIssuerRecord | null> {
+    const row = await this.db.prepare(
+      `SELECT app_id, issuer, audience, metadata_url, authorization_endpoint,
+        token_endpoint, jwks_uri, scopes_supported, code_challenge_methods_supported,
+        status, verified_at, jwks_digest, capability_max_lifetime_seconds, revision
+       FROM cas_app_managed_issuers WHERE app_id = ?`,
+    ).bind(appId).first<ManagedOAuthIssuerRow>();
+    return row ? {
+      stackId: row.app_id,
+      mode: "managed",
+      issuer: row.issuer,
+      audience: row.audience,
+      metadataUrl: row.metadata_url,
+      metadataType: "oauth",
+      authorizationEndpoint: row.authorization_endpoint,
+      tokenEndpoint: row.token_endpoint,
+      jwksUri: row.jwks_uri,
+      registrationEndpoint: null,
+      scopesSupported: JSON.parse(row.scopes_supported) as string[],
+      codeChallengeMethodsSupported: JSON.parse(row.code_challenge_methods_supported) as string[],
+      status: row.status,
+      verifiedAt: row.verified_at,
+      lastRefreshAt: row.verified_at,
+      lastRefreshError: null,
+      jwksDigest: row.jwks_digest,
+      capabilityMaxLifetimeSeconds: row.capability_max_lifetime_seconds,
       revision: row.revision,
     } : null;
   }

@@ -104,8 +104,10 @@ and reversibility:
   legacy compatibility in this task's affected surfaces. Existing data is
   disposable; initialize the current model rather than migrate old records.
   [Rollout decision](./RolloutReview.md) supersedes earlier compatibility and
-  rollback requirements in the review artifacts. No data reset is performed
-  merely by recording this decision.
+  rollback requirements in the review artifacts. On 2026-09-18, the requesting
+  user explicitly authorized deleting all development Account and App test data
+  and reinitializing the database. Apply a reset only to an explicitly selected
+  development binding; never infer a remote target.
 - Introduce a stable UniCAS account identifier and persistence model that can
   own App memberships, platform authorities, sessions, and durable audit
   attribution independently of an external login identity.

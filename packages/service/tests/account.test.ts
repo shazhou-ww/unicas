@@ -50,6 +50,7 @@ function fixture() {
     readControlSnapshot: vi.fn(async () => 1),
     listAccountApps: vi.fn(async () => []),
     getAccountApp: vi.fn(async () => null),
+    getManagedOAuthIssuer: vi.fn(async () => null),
     commitPatchAccountApp: vi.fn(async () => "updated"),
     getAccountAppIdempotency: vi.fn(async () => null),
     commitCreateAccountApp: vi.fn(async () => "created"),
@@ -237,6 +238,70 @@ describe("Account service", () => {
     await expect(service.getApp(accountId, "cas_missing")).rejects.toMatchObject({
       code: "APP_MEMBERSHIP_REQUIRED",
     });
+  });
+
+  test("mints managed Space capabilities for the stable Account owner", async () => {
+    const { repository } = fixture();
+    const app = {
+      appId: "cas_app_a",
+      displayName: "App A",
+      description: "",
+      status: "active" as const,
+      createdAt: 1,
+      revision: 2,
+    };
+    const issuer = {
+      stackId: app.appId,
+      mode: "managed" as const,
+      issuer: "https://cas.example/managed-issuers/cas_app_a",
+      audience: "https://cas.example/stacks/cas_app_a",
+      metadataUrl: "https://cas.example/managed-issuers/cas_app_a/.well-known/oauth-authorization-server",
+      metadataType: "oauth" as const,
+      authorizationEndpoint: "https://cas.example/managed-issuers/cas_app_a/authorize",
+      tokenEndpoint: "https://cas.example/managed-issuers/cas_app_a/token",
+      jwksUri: "https://cas.example/managed-issuers/cas_app_a/jwks.json",
+      registrationEndpoint: null,
+      scopesSupported: ["cas:manage"],
+      codeChallengeMethodsSupported: ["S256"],
+      status: "active" as const,
+      verifiedAt: 1,
+      lastRefreshAt: 1,
+      lastRefreshError: null,
+      jwksDigest: "digest",
+      capabilityMaxLifetimeSeconds: 3600,
+      revision: 1,
+    };
+    const capability = {
+      accessToken: "token",
+      tokenType: "Bearer" as const,
+      expiresIn: 3600,
+      expiresAt: 3_600_000,
+      issuer: issuer.issuer,
+      audience: issuer.audience,
+      spaceId: "member_account",
+      permissions: ["spaces:member_account:cas:manage"],
+    };
+    const issueAccountSpace = vi.fn(async () => capability);
+    const service = new AccountService(repository, () => 1000, {
+      provision: vi.fn(async () => issuer),
+      issueAccountSpace,
+    });
+    vi.mocked(repository.getAccountApp).mockResolvedValue(app);
+    vi.mocked(repository.getManagedOAuthIssuer).mockResolvedValue(issuer);
+
+    await expect(service.mintManagedSpaceCapability({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      appId: app.appId,
+    })).resolves.toEqual(capability);
+    expect(issueAccountSpace).toHaveBeenCalledWith({ app, issuer, accountId });
+
+    vi.mocked(repository.getAccountApp).mockResolvedValue({ ...app, status: "suspended" });
+    await expect(service.mintManagedSpaceCapability({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      appId: app.appId,
+    })).rejects.toMatchObject({ code: "APP_SUSPENDED" });
   });
 
   test("creates an App with Account authority and Account-scoped idempotency", async () => {

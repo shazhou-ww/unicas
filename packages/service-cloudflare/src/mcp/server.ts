@@ -542,11 +542,14 @@ export function createControlPlaneMcpServer(
     APP_ADMIN_MCP_TOOLS.mint_managed_space_capability.registration,
     async ({ appId }) => {
       const grant = requireMutation("control:security", options);
-      const result = await controlPlane.mintManagedSpaceCapability(
-        serviceContext(grant, "mint_managed_space_capability"),
-        appId,
-      );
-      return toolResult(result);
+      return accountToolResult(async () => {
+        const actor = await requireGrantAccount(grant, options);
+        return options.accountService!.mintManagedSpaceCapability({
+          actorAccountId: actor.account.accountId,
+          actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+          appId,
+        });
+      });
     },
   );
 

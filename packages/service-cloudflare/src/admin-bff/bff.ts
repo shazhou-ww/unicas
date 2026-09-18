@@ -33,7 +33,7 @@ import type {
   ControlPlaneOperations,
   ControlSessionRepository,
   AccountRepository,
-  ManagedOAuthIssuerProvisioner,
+  AccountManagedCapabilityIssuer,
   EmailChallengeRepository,
   PlatformAccessRepository,
   PlatformAuditRepository,
@@ -102,7 +102,7 @@ export interface CreateAdminBffOptions {
   readonly peopleRepository?: PeopleRepository;
   readonly providerRegistry?: ProviderRegistry;
   readonly accountRepository?: AccountRepository;
-  readonly managedOAuthIssuer?: ManagedOAuthIssuerProvisioner;
+  readonly managedOAuthIssuer?: AccountManagedCapabilityIssuer;
   readonly emailChallengeRepository?: EmailChallengeRepository;
   readonly emailChallengeSender?: EmailChallengeSender;
 }
@@ -1784,8 +1784,8 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
           : error.code === "INVALID_CURSOR" || error.code === "INVALID_REQUEST" ? 400
             : error.code === "PRECONDITION_REQUIRED" ? 428
               : error.code === "REVISION_MISMATCH" ? 412
-            : error.code === "IDEMPOTENCY_CONFLICT" ? 409
-              : 404;
+                : error.code === "IDEMPOTENCY_CONFLICT" ? 409
+                  : 404;
         return json({ error: error.code }, status);
       }
       throw error;
@@ -2218,15 +2218,31 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     const auth = await requireAuthenticated(request);
     if (auth instanceof Response) return auth;
     if (!(await passCsrf(request, auth.payload))) return csrfRejected();
-    const result = await controlPlane.mintManagedSpaceCapability(
-      serviceContext(auth.payload, request),
-      appId,
-    );
-    const response = "error" in result
-      ? json(transformAppAdminError({ ...result }), result.error === "APP_SUSPENDED" ? 403 : casAdminErrorHttpStatus[result.error])
-      : json(result, 201);
-    response.headers.set("Cache-Control", "no-store");
-    return response;
+    if (!accountService || !auth.payload.accountId || !auth.payload.externalIdentityId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
+    }
+    try {
+      const result = await accountService.mintManagedSpaceCapability({
+        actorAccountId: auth.payload.accountId,
+        actorExternalIdentityId: auth.payload.externalIdentityId,
+        appId,
+      });
+      const response = json(result, 201);
+      response.headers.set("Cache-Control", "no-store");
+      return response;
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        const status = error.code === "APP_MEMBERSHIP_REQUIRED" || error.code === "APP_SUSPENDED"
+          || error.code === "ACCOUNT_BLOCKED" ? 403
+          : error.code === "INVALID_REQUEST" ? 400
+            : error.code === "SERVICE_UNAVAILABLE" ? 503
+              : 401;
+        const response = json({ error: error.code }, status);
+        response.headers.set("Cache-Control", "no-store");
+        return response;
+      }
+      throw error;
+    }
   }
 
   // ------------------------------------------------------------------

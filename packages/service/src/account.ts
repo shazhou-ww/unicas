@@ -6,6 +6,7 @@ import type {
   AppControlAuditEvent,
   AppId,
   AppMembership,
+  ManagedSpaceCapability,
   PlatformAccountDetail,
   PlatformAccountListItem,
   PlatformAccountPage,
@@ -96,6 +97,14 @@ export interface AccountAuditActorRecord {
   readonly identity: ExternalIdentityRecord;
 }
 
+export interface AccountManagedCapabilityIssuer extends ManagedOAuthIssuerProvisioner {
+  issueAccountSpace(input: {
+    readonly app: App;
+    readonly issuer: ControlOAuthIssuerRecord;
+    readonly accountId: AccountId;
+  }): Promise<ManagedSpaceCapability>;
+}
+
 export interface AppAccountAuditRecord extends AccountAuditActorRecord {
   readonly eventId: string;
   readonly appId: AppId | null;
@@ -140,6 +149,7 @@ export interface AccountRepository {
     readonly limit: number;
   }): Promise<readonly App[]>;
   getAccountApp(accountId: AccountId, appId: AppId): Promise<App | null>;
+  getManagedOAuthIssuer(appId: AppId): Promise<ControlOAuthIssuerRecord | null>;
   commitPatchAccountApp(input: {
     readonly actorAccountId: AccountId;
     readonly actorExternalIdentityId: string;
@@ -279,6 +289,7 @@ export type AccountServiceErrorCode =
   | "FINAL_IDENTITY_CANNOT_BE_UNLINKED"
   | "FRESH_AUTHENTICATION_REQUIRED"
   | "APP_MEMBERSHIP_REQUIRED"
+  | "APP_SUSPENDED"
   | "APP_CREATION_AUTHORITY_REQUIRED"
   | "PRECONDITION_REQUIRED"
   | "REVISION_MISMATCH"
@@ -288,7 +299,8 @@ export type AccountServiceErrorCode =
   | "LAST_MEMBER"
   | "PLATFORM_ADMIN_REQUIRED"
   | "LAST_PLATFORM_ADMIN"
-  | "SELF_BLOCK_FORBIDDEN";
+  | "SELF_BLOCK_FORBIDDEN"
+  | "SERVICE_UNAVAILABLE";
 
 export class AccountServiceError extends Error {
   constructor(readonly code: AccountServiceErrorCode) {
@@ -301,7 +313,7 @@ export class AccountService {
   constructor(
     readonly repository: AccountRepository,
     readonly now: () => number = Date.now,
-    readonly managedOAuthIssuer: ManagedOAuthIssuerProvisioner | null = null,
+    readonly managedOAuthIssuer: AccountManagedCapabilityIssuer | null = null,
   ) { }
 
   async createForExternalIdentity(input: AccountCreateInput): Promise<AccountResolution> {
@@ -478,6 +490,25 @@ export class AccountService {
     if (!await this.repository.hasAppMembership(actor.accountId, appId)) {
       throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
     }
+  }
+
+  async mintManagedSpaceCapability(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly appId: AppId;
+  }): Promise<ManagedSpaceCapability> {
+    const actor = await this.#resolveCanonicalAccount(input.actorAccountId);
+    this.#requireUsableAccount(actor);
+    await this.requireActiveIdentity(actor.accountId, input.actorExternalIdentityId);
+    const app = await this.repository.getAccountApp(actor.accountId, input.appId);
+    if (!app) throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
+    if (app.status !== "active") throw new AccountServiceError("APP_SUSPENDED");
+    const issuer = await this.repository.getManagedOAuthIssuer(app.appId);
+    if (!issuer || issuer.mode !== "managed" || issuer.status !== "active") {
+      throw new AccountServiceError("INVALID_REQUEST");
+    }
+    if (!this.managedOAuthIssuer) throw new AccountServiceError("SERVICE_UNAVAILABLE");
+    return this.managedOAuthIssuer.issueAccountSpace({ app, issuer, accountId: actor.accountId });
   }
 
   async patchApp(input: {

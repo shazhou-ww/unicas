@@ -70,8 +70,17 @@ Principal-keyed `getStack`. Physical `stackId` and `tenantId` names remain
 confined to the private audit-reader RPC boundary; public responses retain App
 and Space vocabulary.
 
-Next: migrate the remaining App issuer, invitation, and capability operations.
-After their consumers move, delete legacy HTTP contracts,
+The ninth no-legacy cleanup checkpoint is ready to publish. Managed Space
+capability issuance in HTTP and remote MCP now authorizes through
+`AccountService`, requires the current active ExternalIdentity and stable App
+membership, and derives one Space owner from `(appId, accountId)` rather than
+the login provider identity. The current capability uses an `account:`
+refDomain instead of the retired `playground:` namespace. Focused tests make the
+legacy control-plane mint method fail if called. Stdio MCP inherits the same
+Account-native HTTP path through the administrator client.
+
+Next: migrate the remaining App issuer and invitation operations. After their
+consumers move, delete legacy HTTP contracts,
 identity-keyed columns/tables (including the retired Playground table), dual
 writes, and startup identity migration rather than adding compatibility flags.
 
@@ -394,7 +403,10 @@ cutover markers. Then complete the current-model and real-provider/email tests.
 
 - Requesting user, 2026-09-18: reaffirmed that the service is still in internal
   development and all data is test data. Implement direct current-model
-  initialization; do not retain data migration or forward compatibility.
+  initialization; do not retain data migration or forward compatibility. The
+  user explicitly authorized deleting all development Accounts and Apps and
+  reinitializing the database; a remote reset still requires an explicitly
+  selected binding rather than an inferred target.
 - Requesting user, 2026-09-17: Playground will be removed, so do not migrate its
   Principal-keyed ownership. Retire the Console and administrator HTTP/MCP
   entry points now; remove its unreachable storage implementation with the
@@ -835,6 +847,12 @@ cutover markers. Then complete the current-model and real-provider/email tests.
   all 8 focused D1 repository tests. The remaining Principal-keyed tables and
   App compatibility adapter still back the internal legacy control-plane
   repository, so deleting them awaits its Account-native replacement.
+- Account-native managed Space capability validation passed 19 cloud-neutral
+  Account tests, 4 managed-issuer tests, 60 BFF tests, 10 App adapter tests, and
+  9 remote MCP tests. The 10-test D1 Account repository and 9-test MCP suites
+  both passed with a command-local 15-second timeout; their default 5-second
+  runs exceeded the limit under Miniflare load without behavioral failures.
+  Both affected package typechecks passed and editor diagnostics were clean.
 - This no-legacy cleanup checkpoint and the production OAuth provisioning guide
   are published on the shared primary branch. The next implementation action is
   to replace the internal Principal-keyed App control-plane repository and then

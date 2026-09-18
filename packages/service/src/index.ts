@@ -36,6 +36,7 @@ export { AccountService, AccountServiceError, projectAccountSummary } from "./ac
 export type {
   AccountAppMembershipRecord,
   AccountAppIdempotencyRecord,
+  AccountManagedCapabilityIssuer,
   AccountPlatformViewRecord,
   AccountAuditActorRecord,
   AppAccountAuditRecord,
@@ -206,7 +207,7 @@ export type {
 
 export { ControlAuditActions } from "./control-audit.js";
 export type { ControlAuditAction } from "./control-audit.js";
-export { managedIdentityOwnerKey } from "./control-validation.js";
+export { managedAccountOwnerKey, managedIdentityOwnerKey } from "./control-validation.js";
 export {
   decodeControlListCursor,
   encodeControlListCursor,

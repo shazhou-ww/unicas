@@ -63,6 +63,81 @@ describe("adapter-hosted control-plane MCP server", () => {
     })).content[0]?.text).toContain("disabled by deployment policy");
   });
 
+  test("mints managed Space capabilities for the stable Account through MCP", async () => {
+    const repository = new D1AccountRepository(db);
+    const issuerRecord = (appId: string) => ({
+      stackId: appId,
+      mode: "managed" as const,
+      issuer: `https://cas.example/managed-issuers/${appId}`,
+      audience: `https://cas.example/stacks/${appId}`,
+      metadataUrl: `https://cas.example/managed-issuers/${appId}/.well-known/oauth-authorization-server`,
+      metadataType: "oauth" as const,
+      authorizationEndpoint: `https://cas.example/managed-issuers/${appId}/authorize`,
+      tokenEndpoint: `https://cas.example/managed-issuers/${appId}/token`,
+      jwksUri: `https://cas.example/managed-issuers/${appId}/jwks.json`,
+      registrationEndpoint: null,
+      scopesSupported: ["cas:read", "cas:write", "cas:manage"],
+      codeChallengeMethodsSupported: ["S256"],
+      status: "active" as const,
+      verifiedAt: 1000,
+      lastRefreshAt: 1000,
+      lastRefreshError: null,
+      jwksDigest: "digest",
+      capabilityMaxLifetimeSeconds: 3600,
+      revision: 1,
+    });
+    const issueAccountSpace = vi.fn(async ({ app, accountId }) => ({
+      accessToken: "account-space-token",
+      tokenType: "Bearer" as const,
+      expiresIn: 3600,
+      expiresAt: 3_601_000,
+      issuer: `https://cas.example/managed-issuers/${app.appId}`,
+      audience: `https://cas.example/stacks/${app.appId}`,
+      spaceId: `member_${accountId.slice(5)}`,
+      permissions: [`spaces:member_${accountId.slice(5)}:cas:manage`],
+    }));
+    const accountService = new AccountService(repository, () => 1000, {
+      provision: async appId => issuerRecord(appId),
+      issueAccountSpace,
+    });
+    const actor = await accountService.createForExternalIdentity({
+      provider: "google",
+      issuer: "https://accounts.google.com",
+      subject: "alice-sub",
+      displayName: "Alice",
+    });
+    await db.prepare(
+      "INSERT INTO cas_account_platform_authorities (account_id, authority, granted_at) VALUES (?, 'apps.create', 1000)",
+    ).bind(actor.account.accountId).run();
+    const app = await accountService.createApp({
+      actorAccountId: actor.account.accountId,
+      actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
+      displayName: "Managed",
+    });
+    const legacyMint = vi.fn(async () => {
+      throw new Error("legacy managed capability path must not be called");
+    });
+    const handler = createMcpHandler(
+      () => createControlPlaneMcpServer(
+        { ...createControlPlaneOperations(db), mintManagedSpaceCapability: legacyMint },
+        { mutationsEnabled: true, accountService },
+      ),
+      { route: "/mcp", authContext: { props: grant(["control:security"]) } },
+    );
+
+    const minted = await callTool(handler, "mint_managed_space_capability", { appId: app.appId });
+
+    expect(minted.structuredContent).toMatchObject({
+      accessToken: "account-space-token",
+      spaceId: `member_${actor.account.accountId.slice(5)}`,
+    });
+    expect(issueAccountSpace).toHaveBeenCalledWith(expect.objectContaining({
+      accountId: actor.account.accountId,
+      app: expect.objectContaining({ appId: app.appId }),
+    }));
+    expect(legacyMint).not.toHaveBeenCalled();
+  });
+
   test("requires apps.create authority in addition to the delegated write scope", async () => {
     const authorizePlatformOperation = vi.fn(async () => ({
       error: "APP_CREATION_AUTHORITY_REQUIRED" as const,

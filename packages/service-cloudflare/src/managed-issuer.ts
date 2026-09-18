@@ -12,10 +12,11 @@ import {
   spaceCasWritePermission,
 } from "@unicas/tenant-protocol";
 import type {
+  AccountManagedCapabilityIssuer,
   ControlOAuthIssuerRecord,
   ManagedCapabilityIssuer,
 } from "@unicas/service";
-import { managedIdentityOwnerKey } from "@unicas/service";
+import { managedAccountOwnerKey, managedIdentityOwnerKey } from "@unicas/service";
 
 const CAPABILITY_LIFETIME_SECONDS = 60 * 60;
 
@@ -26,7 +27,7 @@ export interface ManagedIssuerOptions {
   readonly now?: () => number;
 }
 
-export class CloudflareManagedIssuer implements ManagedCapabilityIssuer {
+export class CloudflareManagedIssuer implements ManagedCapabilityIssuer, AccountManagedCapabilityIssuer {
   readonly #origin: string;
   readonly #privateKeyPkcs8: string;
   readonly #keyId: string;
@@ -136,6 +137,48 @@ export class CloudflareManagedIssuer implements ManagedCapabilityIssuer {
       .setProtectedHeader({ alg: CapabilityAlgorithm, kid: this.#keyId, typ: CapabilityTokenType })
       .setIssuer(expectedIssuer)
       .setSubject(subject)
+      .setAudience(input.issuer.audience)
+      .setIssuedAt(issuedAt)
+      .setNotBefore(issuedAt - 5)
+      .setExpirationTime(expiresAt)
+      .setJti(crypto.randomUUID())
+      .sign(material.privateKey);
+    return {
+      accessToken,
+      tokenType: "Bearer" as const,
+      expiresIn: CAPABILITY_LIFETIME_SECONDS,
+      expiresAt: expiresAt * 1000,
+      issuer: expectedIssuer,
+      audience: input.issuer.audience,
+      spaceId,
+      permissions,
+    };
+  }
+
+  async issueAccountSpace(input: Parameters<AccountManagedCapabilityIssuer["issueAccountSpace"]>[0]) {
+    const expectedIssuer = this.issuer(input.app.appId);
+    if (input.issuer.issuer !== expectedIssuer || input.issuer.mode !== "managed") {
+      throw new TypeError("managed issuer binding does not match the app");
+    }
+    const material = await this.#material();
+    const accountDigest = await managedAccountOwnerKey(input.app.appId, input.accountId);
+    const spaceId = `member_${accountDigest.slice(0, 24)}`;
+    const permissions = [
+      spaceCasReadPermission(spaceId),
+      spaceCasWritePermission(spaceId),
+      spaceCasManagePermission(spaceId),
+    ];
+    const issuedAt = Math.floor(this.#now() / 1000);
+    const expiresAt = issuedAt + CAPABILITY_LIFETIME_SECONDS;
+    const accessToken = await new SignJWT({
+      ver: SpaceCapabilityVersion,
+      spaceId,
+      permissions,
+      refDomain: `account:${accountDigest.slice(0, 16)}`,
+    })
+      .setProtectedHeader({ alg: CapabilityAlgorithm, kid: this.#keyId, typ: CapabilityTokenType })
+      .setIssuer(expectedIssuer)
+      .setSubject(`account:${accountDigest}`)
       .setAudience(input.issuer.audience)
       .setIssuedAt(issuedAt)
       .setNotBefore(issuedAt - 5)

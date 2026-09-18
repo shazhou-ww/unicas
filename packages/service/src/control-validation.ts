@@ -103,6 +103,10 @@ export function managedIdentityOwnerKey(
   return sha256Hex(`${stackId}\0${identity.identityIssuer}\0${identity.subject}`);
 }
 
+export function managedAccountOwnerKey(appId: string, accountId: string): Promise<string> {
+  return sha256Hex(`${appId}\0${accountId}`);
+}
+
 /** Stable canonical JSON for idempotency payload comparison. */
 export function canonicalJson(value: unknown): string {
   return JSON.stringify(value);
