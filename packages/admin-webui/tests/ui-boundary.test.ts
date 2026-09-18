@@ -25,8 +25,8 @@ function listFiles(dir: string): string[] {
 }
 
 const FORBIDDEN_TOKENS = [
-  "GOOGLE_OIDC_CLIENT_SECRET",
-  "GOOGLE_OIDC_CLIENT_ID",
+  "OAUTH_GOOGLE_CLIENT_SECRET",
+  "OAUTH_GOOGLE_CLIENT_ID",
   "SESSION_ENCRYPTION_KEYS",
   "CAS_CONTROL_DB",
   "D1Database",

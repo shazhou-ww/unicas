@@ -24,28 +24,19 @@ The person doing this work needs:
   `unicas` Worker;
 - repository admin access to configure the GitHub `Production` Environment.
 
-## Current deployment gaps
+## Current deployment requirements
 
-Credential application can start now, but production login must not be enabled
-until these repository gaps are closed:
+Production login must not be enabled until these requirements are met:
 
-1. The production GitHub Actions workflow currently does not copy OAuth
-   Environment variables or secrets into the Worker deployment.
-2. Runtime configuration currently reads one pair named
-   `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET`. Do not use the older
-   split Console/MCP names.
-3. Non-secret Microsoft and GitHub client IDs are not yet present in the
-   production Worker variables.
-4. Provider secrets, `SESSION_ENCRYPTION_KEYS`, and
-   `OAUTH_STATE_ENCRYPTION_KEY` must exist as Cloudflare Worker secrets before
-   deployment.
-5. Cloudflare email delivery to a mailbox that was not pre-verified in the
+1. The GitHub `Production` Environment contains all three new client ID
+   variables and all five Worker secrets listed below. Names using the retired
+   `GOOGLE_OIDC_*`, `MICROSOFT_OIDC_*`, or `GITHUB_OAUTH_*` contract are ignored.
+2. The release deployment synchronizes Worker secrets before deployment and
+   injects all three client IDs as Wrangler variables. Missing values fail the
+   deployment closed.
+3. Cloudflare email delivery to a mailbox that was not pre-verified in the
    account must pass before Microsoft invitation login is accepted for
    production. Binding existence alone is insufficient evidence.
-
-Until a configuration-sync workflow is implemented, store the source values in
-the GitHub `Production` Environment and separately enter each runtime secret as
-a Cloudflare Worker secret. Rotation must update both stores.
 
 ## Credential inventory
 
@@ -53,18 +44,18 @@ a Cloudflare Worker secret. Rotation must update both stores.
 
 | Runtime name | Source |
 | --- | --- |
-| `GOOGLE_OIDC_CLIENT_ID` | Google Web OAuth client ID |
-| `MICROSOFT_OIDC_CLIENT_ID` | Microsoft Application (client) ID |
-| `GITHUB_OAUTH_CLIENT_ID` | GitHub OAuth App client ID |
+| `OAUTH_GOOGLE_CLIENT_ID` | Google Web OAuth client ID |
+| `OAUTH_MICROSOFT_CLIENT_ID` | Microsoft Application (client) ID |
+| `OAUTH_GITHUB_CLIENT_ID` | GitHub OAuth App client ID |
 | `ADMIN_EMAIL_FROM` | Sender on the onboarded Cloudflare domain, currently `no-reply@unicas.work` |
 
 ### Secrets
 
 | Runtime name | Source |
 | --- | --- |
-| `GOOGLE_OIDC_CLIENT_SECRET` | Google Web OAuth client secret |
-| `MICROSOFT_OIDC_CLIENT_SECRET` | Microsoft client secret **Value**, not its Secret ID |
-| `GITHUB_OAUTH_CLIENT_SECRET` | GitHub OAuth App client secret |
+| `OAUTH_GOOGLE_CLIENT_SECRET` | Google Web OAuth client secret |
+| `OAUTH_MICROSOFT_CLIENT_SECRET` | Microsoft client secret **Value**, not its Secret ID |
+| `OAUTH_GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret |
 | `SESSION_ENCRYPTION_KEYS` | Versioned JSON map of key ID to base64url 32-byte AES key |
 | `OAUTH_STATE_ENCRYPTION_KEY` | A different base64url 32-byte AES key |
 
@@ -103,8 +94,8 @@ and [Google OAuth client management](https://support.google.com/cloud/answer/155
 
 7. Create the client. Record the client ID and immediately store the newly
    displayed client secret. Google may not show the complete secret again.
-8. Put the client ID in `GOOGLE_OIDC_CLIENT_ID` and the secret in
-   `GOOGLE_OIDC_CLIENT_SECRET`.
+8. Put the client ID in `OAUTH_GOOGLE_CLIENT_ID` and the secret in
+   `OAUTH_GOOGLE_CLIENT_SECRET`.
 9. Complete Google branding/verification if Google requests it before changing
    the app from Testing to Production. Basic OIDC scopes normally avoid
    sensitive API verification, but branding and domain verification can still
@@ -142,8 +133,8 @@ and [redirect URI rules](https://learn.microsoft.com/en-us/entra/identity-platfo
    Choose the shortest operationally practical expiry, assign an owner and
    rotation date, and create it.
 9. Immediately copy the secret **Value**. Do not copy the Secret ID. Store the
-   client ID as `MICROSOFT_OIDC_CLIENT_ID` and the value as
-   `MICROSOFT_OIDC_CLIENT_SECRET`.
+   client ID as `OAUTH_MICROSOFT_CLIENT_ID` and the value as
+   `OAUTH_MICROSOFT_CLIENT_SECRET`.
 10. Do not add Mail, Contacts, Files, or other Microsoft Graph permissions.
     UniCAS requests only OIDC `openid email profile`. Microsoft email-like token
     claims are display hints and never satisfy an email-constrained invitation;
@@ -182,8 +173,8 @@ Use one production App and one credential pair for both UniCAS surfaces.
 5. Do not enable Device Flow; UniCAS Console, CLI, and MCP all use the server
    web application flow.
 6. Register the application, then select **Generate a new client secret**.
-7. Store the client ID as `GITHUB_OAUTH_CLIENT_ID` and the new secret as
-   `GITHUB_OAUTH_CLIENT_SECRET`.
+7. Store the client ID as `OAUTH_GITHUB_CLIENT_ID` and the new secret as
+   `OAUTH_GITHUB_CLIENT_SECRET`.
 8. No repository or organization permissions are needed. Runtime requests only:
    - `read:user` to read the authenticated profile;
    - `user:email` to read provider-verified email addresses.
@@ -276,45 +267,46 @@ the OAuth-state key as a session key.
 5. Under **Environment secrets**, add the five secret runtime values.
 
 GitHub Environment values are available only to jobs that declare
-`environment: Production`. The current deploy job does this, but it does not
-yet map the OAuth values into Wrangler. Do not interpret successful entry in
-GitHub as successful Worker configuration.
+`environment: Production`. The release deploy job synchronizes the five
+secrets through Wrangler standard input and injects the three client IDs with
+`--var`; ordinary CI cannot read them.
 
-## Materialize Worker configuration
+## Materialize Worker configuration manually
 
-Before the configuration-sync workflow exists:
+The release workflow performs this synchronization. Use the following commands
+only for an explicitly approved emergency rotation or pre-deployment setup:
 
-1. Add or update non-secret client IDs in the production Worker variables.
-2. Enter each secret interactively with Wrangler or in the Cloudflare dashboard
+1. Enter each secret interactively with Wrangler or in the Cloudflare dashboard
    under the `unicas` Worker's variables and secrets. Never place the value in
    a command argument.
 
    ```powershell
-   pnpm --filter @unicas/service-cloudflare exec wrangler secret put GOOGLE_OIDC_CLIENT_SECRET
-   pnpm --filter @unicas/service-cloudflare exec wrangler secret put MICROSOFT_OIDC_CLIENT_SECRET
-   pnpm --filter @unicas/service-cloudflare exec wrangler secret put GITHUB_OAUTH_CLIENT_SECRET
+   pnpm --filter @unicas/service-cloudflare exec wrangler secret put OAUTH_GOOGLE_CLIENT_SECRET
+   pnpm --filter @unicas/service-cloudflare exec wrangler secret put OAUTH_MICROSOFT_CLIENT_SECRET
+   pnpm --filter @unicas/service-cloudflare exec wrangler secret put OAUTH_GITHUB_CLIENT_SECRET
    pnpm --filter @unicas/service-cloudflare exec wrangler secret put SESSION_ENCRYPTION_KEYS
    pnpm --filter @unicas/service-cloudflare exec wrangler secret put OAUTH_STATE_ENCRYPTION_KEY
    ```
 
    Type or paste exactly one value at each Wrangler prompt. Do not pipe a
    secret from a tracked file.
-3. Verify the deployed Worker has these secret names without reading their
+2. Verify the deployed Worker has these secret names without reading their
    values back:
 
    ```text
-   GOOGLE_OIDC_CLIENT_SECRET
-   MICROSOFT_OIDC_CLIENT_SECRET
-   GITHUB_OAUTH_CLIENT_SECRET
+   OAUTH_GOOGLE_CLIENT_SECRET
+   OAUTH_MICROSOFT_CLIENT_SECRET
+   OAUTH_GITHUB_CLIENT_SECRET
    SESSION_ENCRYPTION_KEYS
    OAUTH_STATE_ENCRYPTION_KEY
    ```
 
-4. Ensure the non-secret names exactly match the runtime inventory. Names such
-   as `GITHUB_CONSOLE_OAUTH_CLIENT_ID` are not read by the current Worker.
-5. Use `wrangler secret list` or the Cloudflare dashboard to verify names only;
+3. Ensure the non-secret names exactly match the runtime inventory. GitHub
+   reserves the `GITHUB_*` prefix for Actions; those names are not valid
+   Environment variables and are not read by the Worker.
+4. Use `wrangler secret list` or the Cloudflare dashboard to verify names only;
    never attempt to print secret values.
-6. Run a Wrangler dry-run before any production deployment.
+5. Run a Wrangler dry-run before any production deployment.
 
 ## Acceptance checklist
 

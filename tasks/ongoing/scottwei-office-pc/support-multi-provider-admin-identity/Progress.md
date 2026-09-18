@@ -40,21 +40,27 @@ for Google, Microsoft personal accounts, one current GitHub OAuth App with two
 exact callback URLs, Cloudflare Email Sending onboarding, GitHub Environment
 storage, interactive Worker secret materialization, encryption-key generation,
 and the manual acceptance matrix. It records that the current Worker uses
-Cloudflare `send_email`, not Resend, and that the deployment workflow does not
-yet synchronize OAuth Environment values. Credential issuance, Email Sending
-account enablement, provider registration, and real-provider acceptance are now
-the external next actions; no secret or remote configuration was changed.
+Cloudflare `send_email`, not Resend. Google, Microsoft personal-account, and
+GitHub OAuth applications are registered, and their client IDs and client
+secrets are present in the GitHub `Production` Environment under the current
+names. Real-provider acceptance and Cloudflare Email Sending account enablement
+remain external next actions.
 
-Google and Microsoft GitHub Environment provisioning is now verified by name
-and metadata. The `Production` Environment contains non-empty
-`GOOGLE_OIDC_CLIENT_ID` and `MICROSOFT_OIDC_CLIENT_ID` variables plus
-`GOOGLE_OIDC_CLIENT_SECRET` and `MICROSOFT_OIDC_CLIENT_SECRET` secrets. Secret
-values were neither retrievable nor read. The Google client ID has the expected
-Google Web OAuth shape and exactly matches the current `wrangler.toml` value;
-the Microsoft Application client ID has canonical GUID shape. These entries are
-not yet deployed configuration: the production workflow does not map OAuth
-Environment values into Wrangler, and the Microsoft client ID is not yet a
-Worker variable.
+Google and Microsoft credentials were initially provisioned under provider
+names that are now retired; GitHub Actions additionally forbids Environment
+variables beginning with `GITHUB_`. The runtime and operational contract now
+uses `OAUTH_GOOGLE_CLIENT_ID/SECRET`,
+`OAUTH_MICROSOFT_CLIENT_ID/SECRET`, and
+`OAUTH_GITHUB_CLIENT_ID/SECRET`. The production workflow synchronizes the five
+Worker secrets before deployment and injects all three client IDs through
+Wrangler `--var`; missing values fail closed. All six provider entries are now
+configured under the current names. The superseded
+`GOOGLE_OIDC_CLIENT_SECRET` and `MICROSOFT_OIDC_CLIENT_SECRET` Environment
+secrets were deleted after repository-wide reference checks; every remaining
+Environment variable is used by deployment or smoke validation. GitHub secret
+values were never read or emitted. `SESSION_ENCRYPTION_KEYS` and
+`OAUTH_STATE_ENCRYPTION_KEY` still need to be generated and added before the
+first release deployment.
 
 Validation for this checkpoint:
 
@@ -70,7 +76,7 @@ Validation for this checkpoint:
 - real-D1 platform invitations: 1 test passed;
 - remote/stdio MCP integration: 9 tests passed;
 - fresh control schema: 5 tests passed;
-- deployment/reset plan: 26 tests passed;
+- deployment/reset plan: 27 tests passed;
 - repository policy/docs/boundaries/OpenAPI: 113 tests passed;
 - clean sequential production builds passed for administrator protocol, client,
   WebUI, cloud-neutral service, and Cloudflare adapter.

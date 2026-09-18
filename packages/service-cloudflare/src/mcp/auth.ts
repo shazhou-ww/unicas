@@ -27,13 +27,13 @@ export interface OAuthAuthorizationEnv {
   OAUTH_PROVIDER?: OAuthHelpers;
   MCP_PUBLIC_ORIGIN?: string;
   PUBLIC_ORIGIN?: string;
-  GOOGLE_OIDC_CLIENT_ID?: string;
-  GOOGLE_OIDC_CLIENT_SECRET?: string;
-  MICROSOFT_OIDC_CLIENT_ID?: string;
-  MICROSOFT_OIDC_CLIENT_SECRET?: string;
+  OAUTH_GOOGLE_CLIENT_ID?: string;
+  OAUTH_GOOGLE_CLIENT_SECRET?: string;
+  OAUTH_MICROSOFT_CLIENT_ID?: string;
+  OAUTH_MICROSOFT_CLIENT_SECRET?: string;
   MICROSOFT_OIDC_DISCOVERY_URL?: string;
-  GITHUB_OAUTH_CLIENT_ID?: string;
-  GITHUB_OAUTH_CLIENT_SECRET?: string;
+  OAUTH_GITHUB_CLIENT_ID?: string;
+  OAUTH_GITHUB_CLIENT_SECRET?: string;
   OAUTH_STATE_ENCRYPTION_KEY?: string;
   OIDC_ISSUER?: string;
   OIDC_DISCOVERY_URL?: string;
@@ -285,8 +285,8 @@ function parseOrigin(value: string): string | null {
 
 function oidcClient(env: OAuthAuthorizationEnv, options: OAuthAuthorizationHandlerOptions): OidcClient {
   if (options.oidcFactory) return options.oidcFactory(env);
-  const clientId = requireEnv(env.GOOGLE_OIDC_CLIENT_ID, "GOOGLE_OIDC_CLIENT_ID");
-  const clientSecret = requireEnv(env.GOOGLE_OIDC_CLIENT_SECRET, "GOOGLE_OIDC_CLIENT_SECRET");
+  const clientId = requireEnv(env.OAUTH_GOOGLE_CLIENT_ID, "OAUTH_GOOGLE_CLIENT_ID");
+  const clientSecret = requireEnv(env.OAUTH_GOOGLE_CLIENT_SECRET, "OAUTH_GOOGLE_CLIENT_SECRET");
   const publicOrigin = mcpPublicOrigin(env);
   return new OidcClient({
     issuer: env.OIDC_ISSUER ?? "https://accounts.google.com",
@@ -301,18 +301,18 @@ function providerRegistry(env: OAuthAuthorizationEnv, options: OAuthAuthorizatio
   if (options.providerRegistryFactory) return options.providerRegistryFactory(env);
   const origin = mcpPublicOrigin(env);
   const adapters: ProviderAdapter[] = [];
-  if (options.oidcFactory || env.GOOGLE_OIDC_CLIENT_ID && env.GOOGLE_OIDC_CLIENT_SECRET) {
+  if (options.oidcFactory || env.OAUTH_GOOGLE_CLIENT_ID && env.OAUTH_GOOGLE_CLIENT_SECRET) {
     adapters.push(new GoogleProviderAdapter(oidcClient(env, options), env.OIDC_ISSUER ?? "https://accounts.google.com"));
   }
-  if (env.MICROSOFT_OIDC_CLIENT_ID && env.MICROSOFT_OIDC_CLIENT_SECRET) {
+  if (env.OAUTH_MICROSOFT_CLIENT_ID && env.OAUTH_MICROSOFT_CLIENT_SECRET) {
     adapters.push(createMicrosoftPersonalProvider({
-      clientId: env.MICROSOFT_OIDC_CLIENT_ID, clientSecret: env.MICROSOFT_OIDC_CLIENT_SECRET,
+      clientId: env.OAUTH_MICROSOFT_CLIENT_ID, clientSecret: env.OAUTH_MICROSOFT_CLIENT_SECRET,
       discoveryUrl: env.MICROSOFT_OIDC_DISCOVERY_URL, redirectUri: `${origin}/oauth/callback/microsoft`,
     }));
   }
-  if (env.GITHUB_OAUTH_CLIENT_ID && env.GITHUB_OAUTH_CLIENT_SECRET) {
+  if (env.OAUTH_GITHUB_CLIENT_ID && env.OAUTH_GITHUB_CLIENT_SECRET) {
     adapters.push(createGitHubProvider({
-      clientId: env.GITHUB_OAUTH_CLIENT_ID, clientSecret: env.GITHUB_OAUTH_CLIENT_SECRET,
+      clientId: env.OAUTH_GITHUB_CLIENT_ID, clientSecret: env.OAUTH_GITHUB_CLIENT_SECRET,
       redirectUri: `${origin}/oauth/callback/github`,
     }));
   }

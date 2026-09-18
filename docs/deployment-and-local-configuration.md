@@ -35,7 +35,7 @@ Vite proxies Space, managed-issuer, and discovery routes to the direct edge so
 the local browser topology matches production's single public origin.
 
 The local runtime uses its mock OIDC provider by default. To use Google OIDC,
-set both `GOOGLE_OIDC_CLIENT_ID` and `GOOGLE_OIDC_CLIENT_SECRET`. Optionally set
+set both `OAUTH_GOOGLE_CLIENT_ID` and `OAUTH_GOOGLE_CLIENT_SECRET`. Optionally set
 `GOOGLE_OIDC_ISSUER`; register
 `http://localhost:4070/admin/auth/callback` as the redirect URI.
 
@@ -120,9 +120,9 @@ issuer identifiers remain compatibility contracts and are not renamed.
 Provision secrets with Wrangler so values never appear in shell history:
 
 ```powershell
-pnpm --filter @unicas/service-cloudflare exec wrangler secret put GOOGLE_OIDC_CLIENT_SECRET
-pnpm --filter @unicas/service-cloudflare exec wrangler secret put MICROSOFT_OIDC_CLIENT_SECRET
-pnpm --filter @unicas/service-cloudflare exec wrangler secret put GITHUB_OAUTH_CLIENT_SECRET
+pnpm --filter @unicas/service-cloudflare exec wrangler secret put OAUTH_GOOGLE_CLIENT_SECRET
+pnpm --filter @unicas/service-cloudflare exec wrangler secret put OAUTH_MICROSOFT_CLIENT_SECRET
+pnpm --filter @unicas/service-cloudflare exec wrangler secret put OAUTH_GITHUB_CLIENT_SECRET
 pnpm --filter @unicas/service-cloudflare exec wrangler secret put SESSION_ENCRYPTION_KEYS
 pnpm --filter @unicas/service-cloudflare exec wrangler secret put OAUTH_STATE_ENCRYPTION_KEY
 ```
@@ -143,8 +143,8 @@ Additional features require these secrets:
 | `CAS_R2_SECRET_ACCESS_KEY` | Presigned direct R2 uploads |
 | `MANAGED_ISSUER_PRIVATE_KEY_PKCS8` | UniCAS-managed App issuers |
 | `CAS_AUDIT_READER_KEY` | Protected physical audit-reader RPC |
-| `MICROSOFT_OIDC_CLIENT_SECRET` | Microsoft personal-account administrator login |
-| `GITHUB_OAUTH_CLIENT_SECRET` | GitHub administrator login and verified Emails API lookup |
+| `OAUTH_MICROSOFT_CLIENT_SECRET` | Microsoft personal-account administrator login |
+| `OAUTH_GITHUB_CLIENT_SECRET` | GitHub administrator login and verified Emails API lookup |
 
 `MANAGED_ISSUER_KEY_ID` is the corresponding non-secret key ID in
 `wrangler.toml`. The current implementation exposes one managed signing key;
@@ -154,8 +154,8 @@ Optional OIDC/session variables include `OIDC_ISSUER`, `OIDC_DISCOVERY_URL`,
 `SESSION_TTL_MS`, `SESSION_COOKIE_NAME`, `SESSION_COOKIE_SECURE`, and
 `SESSION_COOKIE_SAME_SITE`.
 
-Set the corresponding non-secret `MICROSOFT_OIDC_CLIENT_ID` and
-`GITHUB_OAUTH_CLIENT_ID` variables before enabling those providers. Microsoft
+Set the corresponding non-secret `OAUTH_MICROSOFT_CLIENT_ID` and
+`OAUTH_GITHUB_CLIENT_ID` variables before enabling those providers. Microsoft
 configuration additionally requires the `EMAIL` send binding and a validated
 `ADMIN_EMAIL_FROM` address on an onboarded UniCAS Email Service domain; Worker
 startup rejects an incomplete combination. The hourly scheduled handler deletes
@@ -302,7 +302,7 @@ when that step fails. It does not set `UNICAS_SMOKE_ALLOW_OTHER_ORIGIN` or
 `https://api.unicas.work` with the Cloudflare-safe concurrency behavior.
 
 Worker runtime secrets remain provisioned only in Cloudflare. Do not copy
-`GOOGLE_OIDC_CLIENT_SECRET`, session or OAuth encryption keys, R2 credentials,
+`OAUTH_GOOGLE_CLIENT_SECRET`, session or OAuth encryption keys, R2 credentials,
 managed-issuer keys, the audit-reader key, or any future Worker runtime secret
 into GitHub for routine deployment. Wrangler preserves those secrets when it
 publishes a new version.

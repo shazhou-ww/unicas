@@ -83,11 +83,11 @@ export async function startLocalUnicasRuntime({
   ]);
 
   const adminOrigin = process.env.UNICAS_ADMIN_ORIGIN ?? "http://localhost:4070";
-  const useGoogle = Boolean(process.env.GOOGLE_OIDC_CLIENT_ID)
-    || Boolean(process.env.GOOGLE_OIDC_CLIENT_SECRET);
+  const useGoogle = Boolean(process.env.OAUTH_GOOGLE_CLIENT_ID)
+    || Boolean(process.env.OAUTH_GOOGLE_CLIENT_SECRET);
   const adminBindings = {
-    GOOGLE_OIDC_CLIENT_ID: process.env.GOOGLE_OIDC_CLIENT_ID ?? "unicas-local-admin",
-    GOOGLE_OIDC_CLIENT_SECRET: process.env.GOOGLE_OIDC_CLIENT_SECRET ?? "unicas-local-admin-secret",
+    OAUTH_GOOGLE_CLIENT_ID: process.env.OAUTH_GOOGLE_CLIENT_ID ?? "unicas-local-admin",
+    OAUTH_GOOGLE_CLIENT_SECRET: process.env.OAUTH_GOOGLE_CLIENT_SECRET ?? "unicas-local-admin-secret",
     SESSION_ENCRYPTION_KEYS: JSON.stringify({ local: SESSION_KEY }),
     ADMIN_PUBLIC_ORIGIN: adminOrigin,
     PUBLIC_ORIGIN: adminOrigin,

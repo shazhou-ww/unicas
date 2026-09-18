@@ -161,13 +161,13 @@ OAUTH_KV                   dedicated OAuth clients/grants/token hashes
 Required secrets:
 
 ```text
-GOOGLE_OIDC_CLIENT_SECRET
+OAUTH_GOOGLE_CLIENT_SECRET
 OAUTH_STATE_ENCRYPTION_KEY   base64url-encoded 32-byte AES key
 SESSION_ENCRYPTION_KEYS      versioned JSON keyring for sessions and sealed invitation replay
 CAS_AUDIT_READER_KEY        shared key for the private audit-reader RPC
 ```
 
-Variables (non-secret; `GOOGLE_OIDC_CLIENT_ID` is a var, not a secret):
+Variables (non-secret; `OAUTH_GOOGLE_CLIENT_ID` is a var, not a secret):
 
 ```text
 MCP_PUBLIC_ORIGIN=https://api.unicas.work
@@ -175,12 +175,12 @@ MCP_MUTATIONS_ENABLED=true
 MCP_ALLOWED_ORIGIN_HOSTNAMES=
 OIDC_ISSUER=...                 optional, defaults to Google
 OIDC_DISCOVERY_URL=...          optional test/local override
-MICROSOFT_OIDC_CLIENT_ID=...    optional personal-account provider
-GITHUB_OAUTH_CLIENT_ID=...      optional GitHub provider
+OAUTH_MICROSOFT_CLIENT_ID=...   optional personal-account provider
+OAUTH_GITHUB_CLIENT_ID=...      optional GitHub provider
 ```
 
-Enable optional providers with their matching `MICROSOFT_OIDC_CLIENT_SECRET`
-and `GITHUB_OAUTH_CLIENT_SECRET` Worker secrets. Register the fixed MCP callback
+Enable optional providers with their matching `OAUTH_MICROSOFT_CLIENT_SECRET`
+and `OAUTH_GITHUB_CLIENT_SECRET` Worker secrets. Register the fixed MCP callback
 URLs `/oauth/google/callback`, `/oauth/microsoft/callback`, and
 `/oauth/github/callback` on `MCP_PUBLIC_ORIGIN`, alongside the corresponding
 Console callbacks. Keep the same Microsoft application ID across both surfaces

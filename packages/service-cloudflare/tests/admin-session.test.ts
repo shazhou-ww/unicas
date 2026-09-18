@@ -71,19 +71,19 @@ describe("configFromEnv", () => {
   test("requires secrets, keys, and origin", () => {
     expect(() => configFromEnv({})).toThrow();
     expect(() => configFromEnv({
-      GOOGLE_OIDC_CLIENT_ID: "id",
-      GOOGLE_OIDC_CLIENT_SECRET: "secret",
+      OAUTH_GOOGLE_CLIENT_ID: "id",
+      OAUTH_GOOGLE_CLIENT_SECRET: "secret",
       SESSION_ENCRYPTION_KEYS: JSON.stringify({ v1: randomKey() }),
     })).toThrow(/PUBLIC_ORIGIN/);
     expect(() => configFromEnv({
-      GOOGLE_OIDC_CLIENT_ID: "id",
-      GOOGLE_OIDC_CLIENT_SECRET: "secret",
+      OAUTH_GOOGLE_CLIENT_ID: "id",
+      OAUTH_GOOGLE_CLIENT_SECRET: "secret",
       SESSION_ENCRYPTION_KEYS: "not-json",
       PUBLIC_ORIGIN: "https://cas.example",
     })).toThrow(/SESSION_ENCRYPTION_KEYS/);
     const config = configFromEnv({
-      GOOGLE_OIDC_CLIENT_ID: "id",
-      GOOGLE_OIDC_CLIENT_SECRET: "secret",
+      OAUTH_GOOGLE_CLIENT_ID: "id",
+      OAUTH_GOOGLE_CLIENT_SECRET: "secret",
       SESSION_ENCRYPTION_KEYS: JSON.stringify({ v1: randomKey() }),
       PUBLIC_ORIGIN: "https://cas.example",
       SESSION_COOKIE_SECURE: "false",
@@ -118,23 +118,23 @@ describe("configFromEnv", () => {
       SESSION_ENCRYPTION_KEYS: JSON.stringify({ v1: randomKey() }),
       PUBLIC_ORIGIN: "https://cas.example",
     };
-    expect(() => configFromEnv({ ...base, MICROSOFT_OIDC_CLIENT_ID: "microsoft" }))
+    expect(() => configFromEnv({ ...base, OAUTH_MICROSOFT_CLIENT_ID: "microsoft" }))
       .toThrow(/configured together/);
     expect(() => configFromEnv({
       ...base,
-      MICROSOFT_OIDC_CLIENT_ID: "microsoft",
-      MICROSOFT_OIDC_CLIENT_SECRET: "microsoft-secret",
+      OAUTH_MICROSOFT_CLIENT_ID: "microsoft",
+      OAUTH_MICROSOFT_CLIENT_SECRET: "microsoft-secret",
     })).toThrow(/EMAIL and ADMIN_EMAIL_FROM/);
-    expect(() => configFromEnv({ ...base, GITHUB_OAUTH_CLIENT_SECRET: "secret" }))
+    expect(() => configFromEnv({ ...base, OAUTH_GITHUB_CLIENT_SECRET: "secret" }))
       .toThrow(/configured together/);
     expect(configFromEnv({
       ...base,
-      MICROSOFT_OIDC_CLIENT_ID: "microsoft",
-      MICROSOFT_OIDC_CLIENT_SECRET: "microsoft-secret",
+      OAUTH_MICROSOFT_CLIENT_ID: "microsoft",
+      OAUTH_MICROSOFT_CLIENT_SECRET: "microsoft-secret",
       EMAIL: { send: async () => ({ messageId: "message-1" }) } as SendEmail,
       ADMIN_EMAIL_FROM: "no-reply@unicas.work",
-      GITHUB_OAUTH_CLIENT_ID: "github",
-      GITHUB_OAUTH_CLIENT_SECRET: "github-secret",
+      OAUTH_GITHUB_CLIENT_ID: "github",
+      OAUTH_GITHUB_CLIENT_SECRET: "github-secret",
     })).toMatchObject({
       microsoftClientId: "microsoft",
       microsoftClientSecret: "microsoft-secret",

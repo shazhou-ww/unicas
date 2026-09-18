@@ -255,12 +255,25 @@ describe("standalone deployment plan", () => {
     for (const binding of [
       "CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}",
       "CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}",
+      "OAUTH_GOOGLE_CLIENT_ID: ${{ vars.OAUTH_GOOGLE_CLIENT_ID }}",
+      "OAUTH_MICROSOFT_CLIENT_ID: ${{ vars.OAUTH_MICROSOFT_CLIENT_ID }}",
+      "OAUTH_GITHUB_CLIENT_ID: ${{ vars.OAUTH_GITHUB_CLIENT_ID }}",
       "UNICAS_SMOKE_APP_ID: ${{ vars.UNICAS_SMOKE_APP_ID }}",
       "UNICAS_SMOKE_ISSUER: ${{ vars.UNICAS_SMOKE_ISSUER }}",
       "UNICAS_SMOKE_AUDIENCE: ${{ vars.UNICAS_SMOKE_AUDIENCE }}",
       "UNICAS_SMOKE_KID: ${{ vars.UNICAS_SMOKE_KID }}",
       "UNICAS_SMOKE_SPACE_ID: ${{ vars.UNICAS_SMOKE_SPACE_ID }}",
     ]) expect(job).toContain(binding);
+    for (const secret of [
+      "OAUTH_GOOGLE_CLIENT_SECRET",
+      "OAUTH_MICROSOFT_CLIENT_SECRET",
+      "OAUTH_GITHUB_CLIENT_SECRET",
+      "SESSION_ENCRYPTION_KEYS",
+      "OAUTH_STATE_ENCRYPTION_KEY",
+    ]) {
+      expect(job).toContain(`${secret}: $` + `{{ secrets.${secret} }}`);
+    }
+    expect(job).toContain('wrangler secret put "$name"');
   });
 
   test("restricts the ephemeral smoke key and removes it after every outcome", () => {
@@ -344,7 +357,7 @@ describe("standalone deployment plan", () => {
 
   test("requires explicit smoke configuration before production commands", () => {
     expect(() => validateDeploymentEnvironment({ production: true }, {}))
-      .toThrow("production smoke configuration is missing");
+      .toThrow("production deployment configuration is missing");
 
     const result = spawnSync(
       process.execPath,
@@ -357,8 +370,22 @@ describe("standalone deployment plan", () => {
     );
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("production smoke configuration is missing");
+    expect(result.stderr).toContain("production deployment configuration is missing");
     expect(result.stdout).not.toContain("> ");
+  });
+
+  test("injects all OAuth client IDs into the production Worker deployment", () => {
+    const environment = {
+      OAUTH_GOOGLE_CLIENT_ID: "google-id",
+      OAUTH_MICROSOFT_CLIENT_ID: "microsoft-id",
+      OAUTH_GITHUB_CLIENT_ID: "github-id",
+    };
+    const deploy = deploymentPlan({ dryRun: true, environment })[1];
+    expect(deploy).toEqual(expect.arrayContaining([
+      "--var", "OAUTH_GOOGLE_CLIENT_ID:google-id",
+      "--var", "OAUTH_MICROSOFT_CLIENT_ID:microsoft-id",
+      "--var", "OAUTH_GITHUB_CLIENT_ID:github-id",
+    ]));
   });
 
   test("dry-run prints the plan without executing external commands", () => {

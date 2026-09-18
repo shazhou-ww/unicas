@@ -50,13 +50,13 @@ export const DEFAULT_SESSION_COOKIE_NAME = "cas_admin_session";
 export const CAS_ADMIN_WEBUI_MOUNT = "/admin" as const;
 
 export interface AdminBffEnv {
-  GOOGLE_OIDC_CLIENT_ID?: string;
-  GOOGLE_OIDC_CLIENT_SECRET?: string;
-  MICROSOFT_OIDC_CLIENT_ID?: string;
-  MICROSOFT_OIDC_CLIENT_SECRET?: string;
+  OAUTH_GOOGLE_CLIENT_ID?: string;
+  OAUTH_GOOGLE_CLIENT_SECRET?: string;
+  OAUTH_MICROSOFT_CLIENT_ID?: string;
+  OAUTH_MICROSOFT_CLIENT_SECRET?: string;
   MICROSOFT_OIDC_DISCOVERY_URL?: string;
-  GITHUB_OAUTH_CLIENT_ID?: string;
-  GITHUB_OAUTH_CLIENT_SECRET?: string;
+  OAUTH_GITHUB_CLIENT_ID?: string;
+  OAUTH_GITHUB_CLIENT_SECRET?: string;
   EMAIL?: SendEmail;
   ADMIN_EMAIL_FROM?: string;
   SESSION_ENCRYPTION_KEYS?: string;
@@ -74,19 +74,19 @@ export interface AdminBffEnv {
 
 /** Parse Worker bindings into a validated BFF config; throws on misconfig. */
 export function configFromEnv(env: AdminBffEnv): AdminBffConfig {
-  const googleClientId = env.GOOGLE_OIDC_CLIENT_ID ?? "";
-  const googleClientSecret = env.GOOGLE_OIDC_CLIENT_SECRET ?? "";
+  const googleClientId = env.OAUTH_GOOGLE_CLIENT_ID ?? "";
+  const googleClientSecret = env.OAUTH_GOOGLE_CLIENT_SECRET ?? "";
   const microsoftClientId = optionalCredentialPair(
-    env.MICROSOFT_OIDC_CLIENT_ID,
-    env.MICROSOFT_OIDC_CLIENT_SECRET,
-    "MICROSOFT_OIDC_CLIENT_ID",
-    "MICROSOFT_OIDC_CLIENT_SECRET",
+    env.OAUTH_MICROSOFT_CLIENT_ID,
+    env.OAUTH_MICROSOFT_CLIENT_SECRET,
+    "OAUTH_MICROSOFT_CLIENT_ID",
+    "OAUTH_MICROSOFT_CLIENT_SECRET",
   );
   const githubClientId = optionalCredentialPair(
-    env.GITHUB_OAUTH_CLIENT_ID,
-    env.GITHUB_OAUTH_CLIENT_SECRET,
-    "GITHUB_OAUTH_CLIENT_ID",
-    "GITHUB_OAUTH_CLIENT_SECRET",
+    env.OAUTH_GITHUB_CLIENT_ID,
+    env.OAUTH_GITHUB_CLIENT_SECRET,
+    "OAUTH_GITHUB_CLIENT_ID",
+    "OAUTH_GITHUB_CLIENT_SECRET",
   );
   const keysRaw = env.SESSION_ENCRYPTION_KEYS ?? "";
   let sessionEncryptionKeys: Readonly<Record<string, string>>;

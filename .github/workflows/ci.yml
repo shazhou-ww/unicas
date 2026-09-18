@@ -107,6 +107,26 @@ jobs:
       - name: Verify validated revision
         run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
 
+      - name: Synchronize production OAuth secrets
+        shell: bash
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          OAUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.OAUTH_GOOGLE_CLIENT_SECRET }}
+          OAUTH_MICROSOFT_CLIENT_SECRET: ${{ secrets.OAUTH_MICROSOFT_CLIENT_SECRET }}
+          OAUTH_GITHUB_CLIENT_SECRET: ${{ secrets.OAUTH_GITHUB_CLIENT_SECRET }}
+          SESSION_ENCRYPTION_KEYS: ${{ secrets.SESSION_ENCRYPTION_KEYS }}
+          OAUTH_STATE_ENCRYPTION_KEY: ${{ secrets.OAUTH_STATE_ENCRYPTION_KEY }}
+        run: |
+          set -euo pipefail
+          for name in OAUTH_GOOGLE_CLIENT_SECRET OAUTH_MICROSOFT_CLIENT_SECRET OAUTH_GITHUB_CLIENT_SECRET SESSION_ENCRYPTION_KEYS OAUTH_STATE_ENCRYPTION_KEY; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::$name is not configured in the Production environment"
+              exit 1
+            fi
+            printf '%s' "${!name}" | pnpm --filter @unicas/service-cloudflare exec wrangler secret put "$name"
+          done
+
       - name: Materialize production smoke signing key
         shell: bash
         env:
@@ -126,6 +146,9 @@ jobs:
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          OAUTH_GOOGLE_CLIENT_ID: ${{ vars.OAUTH_GOOGLE_CLIENT_ID }}
+          OAUTH_MICROSOFT_CLIENT_ID: ${{ vars.OAUTH_MICROSOFT_CLIENT_ID }}
+          OAUTH_GITHUB_CLIENT_ID: ${{ vars.OAUTH_GITHUB_CLIENT_ID }}
           UNICAS_SMOKE_APP_ID: ${{ vars.UNICAS_SMOKE_APP_ID }}
           UNICAS_SMOKE_ISSUER: ${{ vars.UNICAS_SMOKE_ISSUER }}
           UNICAS_SMOKE_AUDIENCE: ${{ vars.UNICAS_SMOKE_AUDIENCE }}
