@@ -45,6 +45,17 @@ yet synchronize OAuth Environment values. Credential issuance, Email Sending
 account enablement, provider registration, and real-provider acceptance are now
 the external next actions; no secret or remote configuration was changed.
 
+Google and Microsoft GitHub Environment provisioning is now verified by name
+and metadata. The `Production` Environment contains non-empty
+`GOOGLE_OIDC_CLIENT_ID` and `MICROSOFT_OIDC_CLIENT_ID` variables plus
+`GOOGLE_OIDC_CLIENT_SECRET` and `MICROSOFT_OIDC_CLIENT_SECRET` secrets. Secret
+values were neither retrievable nor read. The Google client ID has the expected
+Google Web OAuth shape and exactly matches the current `wrangler.toml` value;
+the Microsoft Application client ID has canonical GUID shape. These entries are
+not yet deployed configuration: the production workflow does not map OAuth
+Environment values into Wrangler, and the Microsoft client ID is not yet a
+Worker variable.
+
 Validation for this checkpoint:
 
 - full workspace typecheck: 13 packages passed;
