@@ -30,14 +30,17 @@ same-email test Accounts. Audit rows retained complete Account and External
 Identity attribution without sensitive detail payloads. Cloudflare Email
 Sending delivered the real challenge with SPF, DKIM, and DMARC passing.
 
-Acceptance exposed four follow-up defects. This revision adds explicit
+Acceptance exposed four product/tooling defects and one clean-CI packaging
+defect. This revision adds explicit
 `--provider google|microsoft|github` CLI selection, updates the production MCP
 OAuth smoke to current `get_current_account` and paginated `list_apps` tools and
 adds post-revocation reauthorization, fixes pnpm 11 argument forwarding for the
 remote repoledger CI gate, and preserves the freshly authenticated current
 Account session on a cross-Account link conflict while showing a generic
-Console error. The conflict path still rejects the target identity and performs
-no Account merge or credential-version change.
+Console error. The Cloudflare package test now builds the Console before
+generating inlined assets, so a clean checkout contains the stable JS/CSS asset
+responses asserted by CI. The conflict path still rejects the target identity
+and performs no Account merge or credential-version change.
 
 Validation for this follow-up:
 
@@ -51,6 +54,15 @@ Validation for this follow-up:
 - repository tasks plus deployment/docs/boundary/OpenAPI checks passed all 117
   tests; the corrected `pnpm check:tasks --remote` command passed;
 - the production Worker build and actual Wrangler deployment dry-run passed.
+
+Further production acceptance confirmed that two Accounts sharing the same
+verified email remain separate, cross-Account linking is denied without moving
+identities or authorities, unlink requires fresh authentication, the final
+usable identity control is disabled, and restoration does not revive a
+pre-block CLI session. Google, Microsoft, and GitHub CLI login all resolved the
+same Account after adding explicit provider selection. The remaining manual
+work is the three remote MCP provider passes, the MCP-specific revocation check,
+and final operational secret-owner confirmation.
 
 Next: publish and deploy this follow-up, rerun Microsoft/GitHub CLI and all
 three remote MCP browser flows, verify conflict feedback in production, and
