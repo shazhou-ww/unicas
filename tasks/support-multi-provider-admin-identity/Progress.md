@@ -79,10 +79,16 @@ session to login; restoration did not revive old credentials, while fresh login
 returned the same Account, identities, authorities, and memberships. The real
 challenge email passed SPF, DKIM, and DMARC.
 
-Next: publish and deploy this follow-up, rerun Microsoft/GitHub CLI and all
-three remote MCP browser flows, verify conflict feedback in production, and
-finish the remaining manual privacy/credential-ownership checks before Delivery
-acceptance.
+Repoledger 0.7 incorrectly reported both a bookkeeping-only Progress commit and
+its standard forward revert because history validation did not recognize Git's
+`This reverts commit ...` metadata. The pinned dependency now carries a pnpm
+patch that exempts only an explicit revert pair in the same first-parent
+history; an isolated Git fixture proves unreverted bookkeeping still fails and
+the standard revert clears the diagnostic. This preserves non-force primary
+history while keeping future Progress updates implementation-linked.
+
+Next: deploy the follow-up, verify conflict feedback in production, and finish
+the operator-owned secret inventory confirmation before Delivery acceptance.
 
 On 2026-09-18, the requesting user explicitly directed this worktree to take
 over the task from `scottwei-home-pc`. `repoledger doctor` verified the current

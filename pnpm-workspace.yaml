@@ -34,3 +34,5 @@ allowBuilds:
   workerd: true
   vue-demi: true
   core-js-pure: false
+patchedDependencies:
+  repoledger@0.7.0: patches/repoledger@0.7.0.patch

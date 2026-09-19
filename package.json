@@ -19,7 +19,7 @@
     "test:exhaustive": "pnpm check:repo && pnpm test:packages",
     "test:packages": "pnpm -r test",
     "test:quick": "pnpm check:repo && pnpm --filter \"!@unicas/service-cloudflare\" -r test",
-    "check:repo": "pnpm check:tasks && vitest run tests/deploy-plan.test.mjs tests/docs-site.test.mjs tests/workspace-boundaries.test.mjs tests/openapi-drift.test.ts",
+    "check:repo": "pnpm check:tasks && vitest run tests/deploy-plan.test.mjs tests/docs-site.test.mjs tests/workspace-boundaries.test.mjs tests/openapi-drift.test.ts tests/repoledger-patch.test.mjs",
     "check:workspace": "vitest run tests/workspace-boundaries.test.mjs tests/deploy-plan.test.mjs",
     "check:openapi": "vitest run tests/openapi-drift.test.ts",
     "check:tasks": "repoledger check",
