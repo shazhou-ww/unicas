@@ -23,6 +23,7 @@
 
 - [x] 管理员 A、测试账号 B、冲突账号 C 和测试邮箱 E 已准备完成
 - [x] A、B、C 使用相互隔离的浏览器会话，且管理员 A 在整个验收期间保持可用
+> 备注
 
 ## 2. 检查生产服务和邮件发送能力
 
@@ -57,8 +58,8 @@ Enabled 状态为准。
 不要改用 Resend；当前 Worker 没有 Resend 适配器。
 
 - [x] API 健康检查和 Console 均可访问
-- [ ] Cloudflare Email Sending 中 `unicas.work` 显示 Enabled
-- [ ] 生产 Worker 显示 `EMAIL` 为 Send Email / unrestricted，且
+- [x] Cloudflare Email Sending 中 `unicas.work` 显示 Enabled
+- [x] 生产 Worker 显示 `EMAIL` 为 Send Email / unrestricted，且
    `ADMIN_EMAIL_FROM` 为 `no-reply@unicas.work`
 
 ## 3. 用管理员 A 创建测试账号 B 的邀请
