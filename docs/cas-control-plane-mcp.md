@@ -51,6 +51,10 @@ revoked authority. Email allowlisting is not an MCP authorization source.
 Access tokens expire after 15 minutes. Refresh grants expire after 8 hours and
 refresh tokens rotate. Tokens are audience-bound to the canonical `/mcp`
 resource. The token endpoint also implements RFC 7009 revocation.
+Production validation allows up to 30 seconds for OAuth KV grant-deletion
+propagation, after which a revoked grant must reject its existing access token.
+Account block and credential-version checks remain request-time controls and
+deny independently of that KV cleanup.
 
 New grants bind `accountId`, `externalIdentityId`, the exact authenticated
 issuer/subject, provider, and `credentialVersion`. The Account and current

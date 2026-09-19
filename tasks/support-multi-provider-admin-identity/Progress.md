@@ -61,8 +61,8 @@ identities or authorities, unlink requires fresh authentication, the final
 usable identity control is disabled, and restoration does not revive a
 pre-block CLI session. Google, Microsoft, and GitHub CLI login all resolved the
 same Account after adding explicit provider selection. The remaining manual
-work is the three remote MCP provider passes, the MCP-specific revocation check,
-and final operational secret-owner confirmation.
+work at that checkpoint was remote MCP validation and final operational
+secret-owner confirmation.
 
 After publication, CI run `35443992759` passed from a clean checkout, including
 the corrected remote repoledger gate and complete package suite. Production
@@ -73,20 +73,14 @@ and reauthorization; Microsoft passed the same flow with a short OAuth KV
 propagation delay bounded by the new 30-second assertion. A dedicated live
 grant check also confirmed Account block denies an already issued MCP access
 token with HTTP 403. The smoke now accepts an explicit provider and supports a
-pause-before-block mode without logging access or refresh tokens.
+pause-before-block mode without logging access or refresh tokens. A separate
+browser-session check confirmed Account block redirects an existing Console
+session to login; restoration did not revive old credentials, while fresh login
+returned the same Account, identities, authorities, and memberships. The real
+challenge email passed SPF, DKIM, and DMARC.
 
-Final production revocation checks confirmed a pre-existing Console browser
-session redirects to login after Account block, a pre-existing CLI session is
-rejected, and a live MCP grant is denied within 30 seconds. Restoring the
-Account did not revive old credentials; a fresh login returned the same Account,
-three linked identities, `apps.create`, and unchanged App memberships. The
-production challenge email passed SPF, DKIM, and DMARC. Only the operator-owned
-secret inventory confirmation and Delivery acceptance remain manual.
-
-Next: publish and deploy this follow-up, rerun Microsoft/GitHub CLI and all
-three remote MCP browser flows, verify conflict feedback in production, and
-finish the remaining manual privacy/credential-ownership checks before Delivery
-acceptance.
+Next: deploy this follow-up, verify conflict feedback in production, and finish
+the operator-owned secret inventory confirmation before Delivery acceptance.
 
 On 2026-09-18, the requesting user explicitly directed this worktree to take
 over the task from `scottwei-home-pc`. `repoledger doctor` verified the current
