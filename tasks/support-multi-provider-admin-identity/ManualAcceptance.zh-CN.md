@@ -7,69 +7,6 @@
 写入本文档、Git、Issue、聊天、截图文件名或命令参数。需要输入秘密时，只在
 供应商页面、Cloudflare 控制台或终端的交互式提示中输入。
 
-## 验收勾选总表
-
-只有亲自验证并符合对应章节的通过标准后才勾选。失败、未执行或无法确认的项目
-保持未勾选，并在“验收备注”中记录不含秘密的原因。
-
-验收信息：
-
-- [ ] 已记录验收开始时的 `origin/main` 完整提交哈希：`________________`
-- [ ] 已记录验收日期：`________________`
-- [ ] 管理员 A、测试账号 B、冲突账号 C 和测试邮箱 E 已按第 1 节隔离准备
-
-生产与邮件前置条件：
-
-- [ ] `https://api.unicas.work/health` 返回健康状态
-- [ ] `https://console.unicas.work/` 可访问
-- [ ] Cloudflare Email Sending 中 `unicas.work` 显示 active
-- [ ] `no-reply@unicas.work` 是可用发件人
-- [ ] 生产 `unicas` Worker 存在名为 `EMAIL` 的 Send Email binding
-- [ ] 邮件可实际送达一个未预验证的外部邮箱，而不只是配置存在
-
-邀请和登录：
-
-- [ ] 管理员 A 成功创建测试账号 B 的最小权限邀请
-- [ ] Microsoft 个人账号登录后仍要求独立邮件验证码
-- [ ] 错误验证码失败且响应不泄露账号或邀请状态
-- [ ] 正确验证码成功一次，重放失败
-- [ ] Google Console 登录通过，`accountId` 保持一致
-- [ ] Microsoft Console 登录通过，`accountId` 保持一致
-- [ ] GitHub Console 登录通过，`accountId` 保持一致
-- [ ] Google CLI 登录和 Account/App 读取通过
-- [ ] Microsoft CLI 登录和 Account/App 读取通过
-- [ ] GitHub CLI 登录和 Account/App 读取通过
-- [ ] Google MCP 授权、Account/App 读取和撤销通过
-- [ ] Microsoft MCP 授权、Account/App 读取和撤销通过
-- [ ] GitHub MCP 授权、Account/App 读取和撤销通过
-- [ ] GitHub consent 不含仓库或组织写权限
-
-Account 与安全行为：
-
-- [ ] Microsoft、Google、GitHub 三种身份关联到同一 `B_ACCOUNT_ID`
-- [ ] 关联后 memberships、平台权限和主要验证邮箱未被转移或重复
-- [ ] 相同已验证邮箱没有自动合并 B 与 C
-- [ ] 已属于 C 的身份关联到 B 时被拒绝且没有移动权限
-- [ ] 解除关联需要重新认证，且不改变 Account 权限
-- [ ] 最后一个可用登录身份无法解除
-- [ ] 封禁 B 后，三种供应商的新登录全部被拒绝
-- [ ] 封禁 B 后，已有 Console 会话和 MCP grant 均失效
-- [ ] 恢复 B 后旧凭据不会复活，新登录保留原 `accountId` 和权限
-- [ ] URL、Worker/Actions 日志和审计记录均未泄露秘密
-- [ ] 密钥 owner 和轮换/到期日期已记录在批准的运维系统中
-
-交付：
-
-- [ ] 所有必需项均已通过，没有未解决的安全或交付阻塞
-- [ ] 已记录验收结束时最新的 `origin/main` 完整提交哈希：`________________`
-- [ ] 已向任务执行代理明确批准该完整提交的 Delivery acceptance
-
-验收备注（不得填写秘密、验证码、邀请链接或供应商 subject）：
-
-```text
-
-```
-
 ## 1. 准备测试身份和浏览器环境
 
 至少准备以下身份。不要使用唯一的生产管理员作为被封禁账号。
@@ -84,16 +21,8 @@ Account 与安全行为：
 建议为 A、B、C 分别使用独立浏览器配置文件或无痕窗口，避免供应商自动选择
 错误账号。开始前记录窗口与身份的对应关系。
 
-在仓库根目录运行以下命令，记录待验收的主分支提交：
-
-```powershell
-git fetch origin main
-git rev-parse origin/main
-git status --short --branch
-```
-
-通过标准：工作区没有与本任务冲突的未提交修改，并且后续提交交付批准时使用
-验收结束后最新的 `origin/main` 完整提交哈希，而不是本文档中的示例哈希。
+- [ ] 管理员 A、测试账号 B、冲突账号 C 和测试邮箱 E 已准备完成
+- [ ] A、B、C 使用相互隔离的浏览器会话，且管理员 A 在整个验收期间保持可用
 
 ## 2. 检查生产服务和邮件发送能力
 
@@ -121,6 +50,11 @@ pnpm --filter @unicas/service-cloudflare exec wrangler email sending list
 若 Email Sending、域名或 binding 不可用，停止 Microsoft 邀请验收并记录阻塞。
 不要改用 Resend；当前 Worker 没有 Resend 适配器。
 
+- [ ] API 健康检查和 Console 均可访问
+- [ ] Cloudflare Email Sending 中 `unicas.work` 显示 active
+- [ ] `no-reply@unicas.work` 可作为发件人
+- [ ] 生产 `unicas` Worker 存在名为 `EMAIL` 的 Send Email binding
+
 ## 3. 用管理员 A 创建测试账号 B 的邀请
 
 推荐通过 Console 操作：
@@ -143,6 +77,9 @@ pnpm --filter @unicas/admin-cli unicas platform-invitations create <测试邮箱
 通过标准：创建结果含 `invitationId`、一次性 `acceptUrl`、`expiresAt` 和
 `etag`；邀请列表不再次暴露 `acceptUrl`。
 
+- [ ] 管理员 A 成功创建测试账号 B 的最小权限邀请
+- [ ] 邀请列表不再次暴露一次性 `acceptUrl`
+
 ## 4. 用 Microsoft 个人账号接受邀请
 
 1. 在测试账号 B 的独立浏览器窗口打开上一步的 `acceptUrl`。
@@ -162,6 +99,12 @@ pnpm --filter @unicas/admin-cli unicas platform-invitations create <测试邮箱
 
 通过标准：邮件能送达非预验证邮箱；错误码失败；正确码只成功一次；B 获得稳定
 Account 和邀请授予的权限。
+
+- [ ] 邮件实际送达未预验证的外部邮箱，SPF、DKIM 和 DMARC 结果正常
+- [ ] Microsoft 登录后仍要求独立邮件验证码
+- [ ] 错误验证码失败，且响应不泄露账号或邀请状态
+- [ ] 正确验证码成功一次，重放失败
+- [ ] B 获得稳定 Account 和邀请授予的权限
 
 ## 5. 把 Google 和 GitHub 关联到测试账号 B
 
@@ -191,6 +134,10 @@ Primary verified contact 没有因为关联而转移或重复。
 如果页面提示目标身份已属于另一个 Account，停止该身份的关联测试。该拒绝是
 正确行为；换用一个未绑定身份完成成功关联，不要尝试删除或合并既有 Account。
 
+- [ ] Google 成功关联到 B，`accountId` 保持不变
+- [ ] GitHub 成功关联到 B，且 consent 不含仓库或组织写权限
+- [ ] 三种身份的 memberships、平台权限和主要验证邮箱保持一致
+
 ## 6. 分别验证三种 Console 登录
 
 对 Microsoft、Google、GitHub 各执行一次：
@@ -214,6 +161,11 @@ https://console.unicas.work/admin/auth/callback/github
 
 看到 `redirect_uri_mismatch` 时停止该供应商验收，并检查供应商注册中的 URL 是否
 逐字符一致，包括协议、域名、路径、大小写和末尾没有 `/`。
+
+- [ ] Google Console 登录通过，`accountId`、memberships 和权限一致
+- [ ] Microsoft Console 登录通过，`accountId`、memberships 和权限一致
+- [ ] GitHub Console 登录通过，`accountId`、memberships 和权限一致
+- [ ] 三种登录的最终 URL 均未残留 code、token、challenge 或邀请参数
 
 ## 7. 分别验证三种 CLI 登录
 
@@ -246,6 +198,10 @@ pnpm --filter @unicas/admin-cli build
 6. 每轮结束运行 `unicas logout`，确保下一轮重新认证。
 
 不要提交或分享 `~/.unicas/session.json`。它是当前操作者的本地会话凭据。
+
+- [ ] Google CLI 登录及 Account/App 读取通过
+- [ ] Microsoft CLI 登录及 Account/App 读取通过
+- [ ] GitHub CLI 登录及 Account/App 读取通过
 
 ## 8. 分别验证三种远程 MCP 登录
 
@@ -285,6 +241,10 @@ https://api.unicas.work/oauth/callback/github
 通过标准：三个供应商都能签发 UniCAS grant；工具调用使用同一 Account；撤销后
 旧授权不能继续调用工具。不要用手工注入 bearer token 代替该测试。
 
+- [ ] Google MCP 授权、Account/App 读取和撤销通过
+- [ ] Microsoft MCP 授权、Account/App 读取和撤销通过
+- [ ] GitHub MCP 授权、Account/App 读取和撤销通过
+
 ## 9. 验证相同邮箱不会自动合并
 
 此项使用冲突账号 C，且不能破坏 B 已关联的三种身份。
@@ -301,6 +261,9 @@ https://api.unicas.work/oauth/callback/github
 通过标准：相同邮箱只可作为当前邀请的验证证据，不会成为 Account 主键或触发
 自动合并。
 
+- [ ] B 与 C 使用相同验证邮箱后仍具有不同 `accountId` 和独立权限
+- [ ] 已属于 C 的身份关联到 B 时被拒绝，且没有移动或合并权限
+
 ## 10. 验证解除关联保护
 
 1. 以 B 登录并打开 Account > Login methods。
@@ -311,6 +274,9 @@ https://api.unicas.work/oauth/callback/github
 6. 确认界面不允许删除最后一个登录方法。
 
 不要为了测试最后身份保护而删除 B 的所有身份；按钮禁用或服务端拒绝即为通过。
+
+- [ ] 解除关联要求重新认证，且不改变 B 的 Account、memberships 或权限
+- [ ] 系统不允许解除最后一个可用登录身份
 
 ## 11. 验证封禁会使所有登录和 grant 失效
 
@@ -329,6 +295,11 @@ https://api.unicas.work/oauth/callback/github
    `accountId`、memberships 和权限仍保持不变。
 
 通过标准：封禁覆盖所有关联身份及既有凭据；恢复不会复活旧凭据。
+
+- [ ] 封禁 B 后，三种供应商的新登录全部被拒绝
+- [ ] 封禁 B 后，已有 Console 会话和 MCP grant 均失效
+- [ ] 恢复 B 后旧凭据不会复活
+- [ ] 恢复 B 后新登录成功，原 `accountId`、memberships 和权限保持不变
 
 CLI 等价命令如下，两个位置必须填写同一个 B Account ID：
 
@@ -351,12 +322,15 @@ pnpm --filter @unicas/admin-cli unicas platform-access restore <B_ACCOUNT_ID> --
 发现任何秘密泄露时，立即停止验收并在对应供应商或秘密管理系统中吊销、轮换；
 不要先把秘密内容贴到聊天里排查。
 
+- [ ] URL、Worker/Actions 日志和审计记录均未泄露秘密
+- [ ] 审计记录正确归属到稳定 Account 和实际认证身份
+- [ ] 密钥 owner 和轮换/到期日期已记录在批准的运维系统中
+
 ## 13. 汇总结果并提交交付批准
 
 完成后只汇报脱敏结果，可使用以下格式：
 
 ```text
-验收提交：<git rev-parse origin/main 的完整输出>
 Google Console / CLI / MCP：通过或失败原因
 Microsoft Console / CLI / MCP：通过或失败原因
 Microsoft 外部邮箱挑战、错误码、单次使用：通过或失败原因
@@ -368,11 +342,9 @@ GitHub Console / CLI / MCP 与授权范围：通过或失败原因
 URL、Worker/Actions 日志和审计隐私检查：通过或失败原因
 ```
 
-全部通过后，向任务执行代理明确回复：
-
-```text
-我批准提交 <验收结束时 origin/main 的完整提交哈希> 的 Delivery acceptance。
-```
+全部勾选后，告诉任务执行代理“验收完成”。代理会核对当时最新的主分支提交并向
+你发起明确的 Delivery acceptance 请求；你只需对代理给出的提交选择批准或拒绝，
+不需要自行查找或填写提交哈希。
 
 如果任一项失败，不要批准 Delivery acceptance。记录失败步骤、时间、供应商、页面
 显示的非敏感错误码和预期/实际结果即可；不要自行修改 `Progress.md` 或
