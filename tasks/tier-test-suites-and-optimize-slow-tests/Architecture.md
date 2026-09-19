@@ -1,21 +1,16 @@
 # Architecture review — test orchestration design
 
-Status: Pending human approval
+Status: Approved and implemented
 
-## Decision requested
+## Decision
 
-Approve the responsibility split, measurement method, isolation rules, and
-implementation sequence below. Approval permits structural changes to test
-orchestration, shared setup, artifact reuse, and execution concurrency that
-stay inside this design. It does not authorize developer-facing script/CI
-renames beyond `./SuiteCommandMatrix.md`, and it does not mark delivery
-acceptance.
+The user delegated all task review decisions on 2026-09-19. The responsibility
+split, measurement method, and isolation rules below are approved. Baseline
+evidence selected an additive root-script split and CI composition change; no
+shared fixture cache, runner, execution concurrency, or production code changed.
 
-Measured wall-clock baseline numbers are not yet recorded in
-`./BaselineTiming.md`. This review asks approval of the design and measurement
-method so baseline capture and later optimizations remain evidence-driven.
-Concurrency, caching, and bottleneck dispositions that depend on timings stay
-blocked until comparable baseline rows exist.
+Measured wall-clock baseline numbers and bottleneck dispositions are recorded
+in `./BaselineTiming.md`.
 
 ## Current orchestration (factual inventory)
 
@@ -45,7 +40,7 @@ There is no shared Vitest workspace root config that fans out packages, no
 checked-in timing inventory, and no named suite taxonomy beyond the scripts
 above.
 
-## Responsibility split (proposed)
+## Responsibility split
 
 | Layer | Owns | Must not own |
 | --- | --- | --- |
@@ -86,17 +81,14 @@ Documented in `./BaselineTiming.md` and summarized here:
    permanently changing scripts until Interface/Architecture-approved edits land.
 6. Compare optimizations with the same method on the same class of machine.
 
-## Implementation sequence (after Interface + Architecture approval)
+## Implemented sequence
 
-1. Capture baseline into `./BaselineTiming.md` with the method above (allowed as
-   research even before structural edits; required before claiming speedups).
-2. Implement Interface-approved named scripts with exhaustive coverage preserved.
-3. Apply only straightforward, low-risk optimizations justified by baseline;
-   record before/after rows; record evidence-based disposition for unchanged
-   bottlenecks.
-4. Wire CI to approved composition without dropping checks or duplicate runs.
-5. Document suite choice for developers; validate all new tiers and exhaustive
-   gate on supported local and CI environments.
+1. Captured the baseline and profiled the dominant package.
+2. Added named scripts with exhaustive coverage preserved.
+3. Rejected an ineffective schema-setup batching probe and retained the
+  production migration and test assertions unchanged.
+4. Wired CI to the exhaustive composition without duplicate component runs.
+5. Documented suite choice and validated the new commands locally.
 
 ## Risks
 

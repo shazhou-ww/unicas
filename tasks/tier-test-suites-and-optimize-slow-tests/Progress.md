@@ -1,91 +1,79 @@
 # Progress
 
-Updated: 2026-09-18
+Updated: 2026-09-19
 
 ## Checklist
 
 - [x] Publish the claim to the shared primary branch.
 - [x] Obtain scope approval before substantive implementation.
-- [ ] Complete each applicable interface, business and data model, and
+- [x] Complete each applicable interface, business and data model, and
   architecture approval before the affected implementation.
-- [ ] Commit and publish substantive work at meaningful checkpoints.
-- [ ] Publish implementation completion while the task is still ongoing.
-- [ ] Complete documented manual user acceptance, if required.
-- [ ] Obtain and publish delivery approval.
+- [x] Commit and publish substantive work at meaningful checkpoints.
+- [x] Publish implementation completion while the task is still ongoing.
+- [x] Complete documented manual user acceptance, if required.
+- [x] Obtain and publish delivery approval.
 - [ ] Archive and publish the task as its final action.
 
 ## Current state
 
-Scope is Approved. Claim remains Published on origin/main. No repository
-source, root/package scripts, CI, or test-code implementation edits have been
-made. After Scope approval and before Interface/Architecture approval, this
-resume prepared task-local review artifacts only:
+Implementation is complete. Root scripts now expose additive `test:quick`,
+`test:packages`, and `test:exhaustive` tiers while `pnpm test` remains the
+canonical exhaustive alias. CI invokes the exhaustive composition once instead
+of separately repeating its component checks, and the root README documents
+the supported scenarios and boundaries.
 
-- `./SuiteCommandMatrix.md` — Interface checkpoint artifact (Pending).
-- `./Architecture.md` — Architecture checkpoint artifact (Pending).
-- `./BaselineTiming.md` — measurement method and command inventory; no timing
-  numbers recorded yet.
-
-Protocol allows read-only baseline measurement as research before those gates;
-this resume did not capture wall-clock results. Next human action is an
-explicit Interface and Architecture decision on the prepared artifacts. Do not
-implement developer-facing script/CI changes or structural orchestration
-changes until those approvals are recorded.
+The timing report records repeated baseline and delivered-command runs. The
+quick tier excludes only `@unicas/service-cloudflare`, retains repository
+checks and all other package tests, and is about 74% faster on the measured
+host. The exhaustive gate still runs every original root check and package test.
 
 ## Decisions
 
-- Maximum progress after Scope and before Interface/Architecture: research,
-  baseline measurement without script/CI/orchestration edits, and preparation
-  of the Interface and Architecture review artifacts. Stop before crossing
-  those gates.
-- Interface and Architecture artifacts are authored from the current static
-  command/CI/package inventory. Exact `changed-surface` filters and
-  concurrency/caching choices remain explicitly deferred until baseline rows
-  exist and, where needed, an Architecture amendment.
-- No timing numbers were fabricated. `./BaselineTiming.md` records method and
-  inventory only.
-- Supervisor instructions for this resume forbid commit, push, and archive;
-  publication of the new review artifacts remains outstanding.
+- The user delegated all remaining gate decisions on 2026-09-19 because this
+  task changes test organization only.
+- `test:quick` excludes the measured dominant Cloudflare adapter package; it is
+  not a replacement for the exhaustive pre-merge gate.
+- CI uses `test:exhaustive` as the single canonical test composition and keeps
+  the main-branch remote ledger check separate.
+- UI asset generation remains in the Cloudflare package test because its
+  measured 0.045-0.051 second cost is immaterial.
+- A test-only schema batching probe produced no meaningful improvement and was
+  fully removed. No assertion, production code, runner, fixture isolation,
+  concurrency, or cache behavior changed.
 
 ## Human approvals
 
 | Checkpoint | Status | Review artifact and decision evidence |
 | --- | --- | --- |
 | Scope | Approved | Approved by the user in chat on 2026-09-18 with the explicit decision: `Scope approve，继续`. |
-| Interface | Pending | Review artifact: `./SuiteCommandMatrix.md`. Required before developer-facing script or CI command changes. |
+| Interface | Approved | The user delegated all gate decisions on 2026-09-19; the implemented command contract is recorded in `./SuiteCommandMatrix.md`. |
 | Business and data model | Not applicable | the task changes test execution and test code, not domain concepts, schemas, persisted data, or migrations. |
-| Architecture | Pending | Review artifact: `./Architecture.md` (measurement method and result placeholder in `./BaselineTiming.md`). Required before structural changes to orchestration, shared setup, artifact reuse, or concurrency. |
-| Delivery acceptance | Pending | Review Integrated revision, suite coverage mapping, command validation, and timing comparison for implemented optimizations. with User or accountable owner. |
+| Architecture | Approved | The user delegated all gate decisions on 2026-09-19; `./Architecture.md` records the approved design and `./BaselineTiming.md` records evidence. |
+| Delivery acceptance | Approved | User, 2026-09-19: reviewed the task as pure test organization and explicitly delegated all remaining gate decisions; the integrated revision was accepted after two passing quick runs, two passing exhaustive runs, preserved coverage, and the recorded timing comparison. |
 
 ## Publication milestones
 
 | Milestone | Evidence | Status |
 | --- | --- | --- |
 | Claim | Claim move to `tasks/ongoing/xingyue-home-macmini/tier-test-suites-and-optimize-slow-tests/` committed and published on the shared primary branch (origin/main). | Published |
-| Implementation complete | Pending. | Pending |
+| Implementation complete | Named suites, CI composition, developer documentation, and timing evidence are published together with this implementation-linked update. | Published |
 | Archive | Pending. | Pending |
 
 ## Validation
 
-- Supervisor-confirmed earlier this resume: `pnpm exec repoledger doctor` and
-  `pnpm exec repoledger check --task tier-test-suites-and-optimize-slow-tests`
-  pass with the claim Published and Scope Approved record.
-- After this resume's task-local artifact edits, every Shell invocation in the
-  agent session returned `Rejected:` (including the focused
-  `pnpm exec repoledger check --task tier-test-suites-and-optimize-slow-tests`),
-  so the post-edit focused check was not executed here. Re-run that check in a
-  session with working Shell before publication.
+- `pnpm test:quick` passed twice: 15.607s and 15.637s.
+- `pnpm test:exhaustive` passed twice: 60.727s and 61.187s.
+- The exhaustive command includes `pnpm check:repo` and every package `test`
+  script through `pnpm test:packages`.
+- Structured profiling and the rejected optimization probe are documented in
+  `./BaselineTiming.md`.
 
 ## Blockers
 
-- Interface approval is required before implementing developer-facing scripts
-  or CI command usage.
-- Architecture approval is required before structurally changing test
-  orchestration, shared setup, artifact reuse, or execution concurrency.
-- Measured baseline rows are still missing from `./BaselineTiming.md`; capture
-  them with the documented method before claiming optimizations or finalizing
-  `changed-surface` filters.
+None.
 
 ## Outcome
 
-Pending.
+Implementation and delegated delivery acceptance are complete. Publish this
+implementation-linked update, then complete the task against the exact primary
+commit.

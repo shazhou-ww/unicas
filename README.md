@@ -27,6 +27,19 @@ pnpm dev
 administrator console at <http://localhost:4070/admin/>. Local state is stored
 under `.wrangler/`.
 
+### Test suites
+
+| Scenario | Command | Coverage |
+| --- | --- | --- |
+| Routine changes outside the Cloudflare adapter | `pnpm test:quick` | Repository checks and every package test except `@unicas/service-cloudflare` |
+| One package | `pnpm --filter <package> test` | The selected package only |
+| All package tests | `pnpm test:packages` | Every package test, without repository checks |
+| Before merge or release | `pnpm test` or `pnpm test:exhaustive` | Canonical exhaustive gate: repository checks and every package test |
+
+Use the exhaustive gate for changes to `packages/service-cloudflare`, shared
+test orchestration, or repository-wide behavior. CI runs the same named
+exhaustive suite.
+
 Use Docker when a host Node.js environment is not available:
 
 ```powershell

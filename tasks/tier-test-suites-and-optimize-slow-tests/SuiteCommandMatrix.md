@@ -1,14 +1,12 @@
 # Interface review — test-suite command matrix
 
-Status: Pending human approval
+Status: Approved and implemented
 
-## Decision requested
+## Decision
 
-Approve the suite names, developer scenarios, inclusion boundaries, backward
-compatibility for `pnpm test`, and CI mapping below. Approval permits
-implementing developer-facing root/package scripts and CI command usage that
-match this matrix. It does not authorize structural orchestration changes
-covered by `./Architecture.md`, and it does not mark delivery acceptance.
+The user delegated all task review decisions on 2026-09-19. The additive suite
+names, inclusion boundaries, `pnpm test` compatibility, and CI mapping below
+are approved and implemented.
 
 ## Current developer-facing commands (as-is)
 
@@ -27,15 +25,16 @@ Packages with a `test` script today: `admin-cli`, `admin-client`, `admin-protoco
 `tenant-blob-client`, `tenant-browser-cache`, `tenant-client`, `tenant-file-client`,
 `tenant-protocol`.
 
-## Proposed suite matrix
+## Suite matrix
 
 | Suite id | Scenario | Exact intended command (after implementation) | Inclusion | Exclusion |
 | --- | --- | --- | --- | --- |
-| `exhaustive` | Canonical gate before merge/release confidence | Keep `pnpm test` as `pnpm check:repo && pnpm -r test` (or an equivalent named alias that runs the same two steps) | Every check and package test covered by today's `pnpm check:repo` plus `pnpm -r test` | Deploy smoke, production deploy, and interactive `pnpm dev` |
+| `exhaustive` | Canonical gate before merge/release confidence | `pnpm test` or `pnpm test:exhaustive` | Every check and package test covered by `pnpm check:repo` plus `pnpm test:packages` | Deploy smoke, production deploy, and interactive `pnpm dev` |
 | `repo-static` | Repo policy / docs / OpenAPI / task-ledger without package Vitest | `pnpm check:repo` | Current `check:repo` contents only | Package `test` scripts |
 | `package-unit` | Single-package local loop | `pnpm --filter <pkg> test` (existing) | That package's Vitest suite only | Other packages; root `check:repo` |
-| `changed-surface` | Common local-dev faster subset | New named root script (exact filters TBD after baseline + Architecture approval) | Strict subset of `exhaustive`: at least one materially faster path under the same measurement method | Must not drop assertions; must not become the CI sole gate |
-| `ci-validate` | GitHub Actions validate composition | Documented composition of named suites / existing check scripts | Must preserve today's check coverage without needless duplicate suite runs | Production deploy job |
+| `package-all` | Run package tests without repository checks | `pnpm test:packages` | Every package `test` script | Root `check:repo` |
+| `changed-surface` | Common local-dev faster subset for changes outside the Cloudflare adapter | `pnpm test:quick` | `check:repo` and every package test except `@unicas/service-cloudflare` | Cloudflare adapter/integration tests; it is not the pre-merge gate |
+| `ci-validate` | GitHub Actions validate composition | `pnpm test:exhaustive` | The canonical exhaustive gate once, followed by build, docs, typecheck, and deployment dry-runs | Production deploy job |
 
 ## Backward compatibility
 
@@ -46,26 +45,27 @@ Packages with a `test` script today: `admin-cli`, `admin-client`, `admin-protoco
 - Commands must remain cross-platform for supported Windows local use and
   Linux CI (pnpm scripts / Node; no bash-only root scripts).
 
-## CI mapping (proposed)
+## CI mapping
 
 | CI step today | Proposed named suite / composition |
 | --- | --- |
-| `pnpm check:workspace` | Part of `repo-static` or retained explicit check script |
-| `pnpm check:openapi` | Part of `repo-static` or retained explicit check script |
-| `pnpm check:tasks` | Part of `repo-static` or retained explicit check script |
-| `pnpm -r test` | Package half of `exhaustive` (or `ci-validate` package leg) |
+| `pnpm check:workspace` | Covered by `pnpm test:exhaustive` through `check:repo` |
+| `pnpm check:openapi` | Covered by `pnpm test:exhaustive` through `check:repo` |
+| `pnpm check:tasks` | Covered locally by `pnpm test:exhaustive`; the main-branch remote check remains separate |
+| `pnpm -r test` | Covered by `pnpm test:exhaustive` through `test:packages` |
 | Build / typecheck / docs / wrangler dry-run | Remain adjacent CI steps; not renamed into Vitest tiers by this task unless Architecture says otherwise |
 
 CI must not drop checks and must not needlessly execute the same suite twice
 after the matrix is wired.
 
-## Open items deferred to Architecture / baseline
+## Baseline decisions
 
-- Exact filter list for `changed-surface` (packages/files).
-- Whether service-cloudflare's `build-ui-assets` stays inside `test` or is
-  split as shared setup under Architecture approval.
-- Whether CI collapses `check:workspace` / `check:openapi` / `check:tasks`
-  into one `check:repo` invocation (coverage-preserving composition only).
+- `changed-surface` excludes only `@unicas/service-cloudflare`, the measured
+  dominant package, and retains root checks plus all other package tests.
+- `service-cloudflare` keeps `build-ui-assets` inside its `test` script because
+  measured setup is only 0.045-0.051 seconds.
+- CI calls `test:exhaustive` once instead of separately invoking its component
+  checks and package tests.
 
 ## Required interface validation (after approval + implementation)
 
