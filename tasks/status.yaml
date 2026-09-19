@@ -73,6 +73,6 @@ tasks:
     createdAt: "2026-09-15T08:18:22Z"
     updatedAt: "2026-09-19T05:12:49Z"
   tier-test-suites-and-optimize-slow-tests:
-    state: ongoing
+    state: completed
     createdAt: "2026-09-17T08:01:02Z"
-    updatedAt: "2026-09-19T05:12:49Z"
+    updatedAt: "2026-09-19T09:10:48Z"
