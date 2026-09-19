@@ -64,6 +64,17 @@ same Account after adding explicit provider selection. The remaining manual
 work is the three remote MCP provider passes, the MCP-specific revocation check,
 and final operational secret-owner confirmation.
 
+After publication, CI run `35443992759` passed from a clean checkout, including
+the corrected remote repoledger gate and complete package suite. Production
+retests then passed Google, Microsoft, and GitHub CLI login against the same
+Account. Deterministic per-provider MCP smoke passed Google and GitHub through
+Account/App reads, refresh rotation, RFC 7009 revocation, denied old access,
+and reauthorization; Microsoft passed the same flow with a short OAuth KV
+propagation delay bounded by the new 30-second assertion. A dedicated live
+grant check also confirmed Account block denies an already issued MCP access
+token with HTTP 403. The smoke now accepts an explicit provider and supports a
+pause-before-block mode without logging access or refresh tokens.
+
 Next: publish and deploy this follow-up, rerun Microsoft/GitHub CLI and all
 three remote MCP browser flows, verify conflict feedback in production, and
 finish the remaining manual privacy/credential-ownership checks before Delivery
