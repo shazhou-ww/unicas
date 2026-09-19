@@ -79,8 +79,10 @@ session to login; restoration did not revive old credentials, while fresh login
 returned the same Account, identities, authorities, and memberships. The real
 challenge email passed SPF, DKIM, and DMARC.
 
-Next: deploy this follow-up, verify conflict feedback in production, and finish
-the operator-owned secret inventory confirmation before Delivery acceptance.
+Next: publish and deploy this follow-up, rerun Microsoft/GitHub CLI and all
+three remote MCP browser flows, verify conflict feedback in production, and
+finish the remaining manual privacy/credential-ownership checks before Delivery
+acceptance.
 
 On 2026-09-18, the requesting user explicitly directed this worktree to take
 over the task from `scottwei-home-pc`. `repoledger doctor` verified the current
