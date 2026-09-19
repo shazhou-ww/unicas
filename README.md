@@ -59,9 +59,10 @@ The accepted origin architecture is documented in
 resource vocabulary is documented in
 [`docs/terminology.md`](docs/terminology.md).
 
-Repository work is tracked alongside the code under [`tasks/`](tasks/README.md).
-New work starts in `backlog/`, moves to `ongoing/` with a maintained
-`Progress.md`, and finishes in `archived/` whether completed or abandoned.
+Repository work is tracked alongside the code under stable [`tasks/`](tasks/)
+paths, with lifecycle state recorded in [`tasks/status.yaml`](tasks/status.yaml).
+The workflow is documented in
+[`docs/repository-tasks.md`](docs/repository-tasks.md).
 
 Report suspected vulnerabilities privately as described in
 [`SECURITY.md`](SECURITY.md).

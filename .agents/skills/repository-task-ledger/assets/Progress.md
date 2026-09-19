@@ -2,18 +2,6 @@
 
 Updated: YYYY-MM-DD
 
-## Checklist
-
-- [ ] Publish the claim to the shared primary branch.
-- [ ] Obtain scope approval before substantive implementation.
-- [ ] Complete each applicable interface, business and data model, and
-	architecture approval before the affected implementation.
-- [ ] Commit and publish substantive work at meaningful checkpoints.
-- [ ] Publish implementation completion while the task is still ongoing.
-- [ ] Complete documented manual user acceptance, if required.
-- [ ] Obtain and publish delivery approval.
-- [ ] Archive and publish the task as its final action.
-
 ## Current state
 
 The latest verified state and the next concrete action.
@@ -25,10 +13,14 @@ The latest verified state and the next concrete action.
 ## Human approvals
 
 Copy all five checkpoints from `Task.md`. Use `Pending`, `Approved`,
-`Not applicable`, or `Reopened`. An approval entry names the human reviewer,
-date, reviewed artifact, and decision evidence. A not-applicable entry repeats
-the task-specific rationale. Task creation, invocation, silence, and routine
-Git authorization are not approval.
+`Not applicable`, or `Reopened`. A status may include a human-readable note
+after a colon or dash; the leading value remains the canonical fact. An
+approval entry names the human reviewer, date, reviewed artifact, and decision
+evidence. A not-applicable entry repeats the task-specific rationale. Task
+creation, invocation, silence, and routine Git authorization are not approval.
+Record only decisions known when publishing an implementation delta. Delivery
+may remain Pending here; `task complete --approved-commit` binds the later
+delivery decision without a Progress-only commit.
 
 | Checkpoint | Status | Review artifact and decision evidence |
 | --- | --- | --- |
@@ -37,20 +29,6 @@ Git authorization are not approval.
 | Business and data model | `<Pending or Not applicable>` | Match the applicability and plan in `Task.md`. |
 | Architecture | `<Pending or Not applicable>` | Match the applicability and plan in `Task.md`. |
 | Delivery acceptance | Pending | Published implementation and acceptance evidence. |
-
-## Publication milestones
-
-In each milestone commit, replace its pending entry with `Published` and
-concise, human-readable evidence of what is being published and where. After
-publication, verify it from Git history. Do not copy commit hashes into this
-document; Git history is the source of truth for exact commit identity and
-reachability.
-
-| Milestone | Evidence | Status |
-| --- | --- | --- |
-| Claim | Pending. | Pending |
-| Implementation complete | Pending. | Pending |
-| Archive | Pending. | Pending |
 
 ## Validation
 
@@ -66,5 +44,5 @@ portable file-relative convention.
 
 ## Outcome
 
-Fill this in before archiving as `Completed` or `Abandoned`, with a concise
-reason and any remaining follow-up.
+Describe the implementation outcome and remaining delivery action. Lifecycle
+state remains authoritative in `tasks/status.yaml`.

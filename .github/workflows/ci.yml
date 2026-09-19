@@ -46,6 +46,10 @@ jobs:
       - name: Check repository task ledger
         run: pnpm check:tasks
 
+      - name: Check published repository task ledger
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: pnpm check:tasks -- --remote
+
       - name: Build
         run: pnpm build
 

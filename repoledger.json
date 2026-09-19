@@ -1,6 +1,0 @@
-{
-  "$schema": "./node_modules/repoledger/schema/v1.json",
-  "tasksDirectory": "tasks",
-  "remote": "origin",
-  "branch": "main"
-}
