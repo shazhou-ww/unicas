@@ -7,6 +7,69 @@
 写入本文档、Git、Issue、聊天、截图文件名或命令参数。需要输入秘密时，只在
 供应商页面、Cloudflare 控制台或终端的交互式提示中输入。
 
+## 验收勾选总表
+
+只有亲自验证并符合对应章节的通过标准后才勾选。失败、未执行或无法确认的项目
+保持未勾选，并在“验收备注”中记录不含秘密的原因。
+
+验收信息：
+
+- [ ] 已记录验收开始时的 `origin/main` 完整提交哈希：`________________`
+- [ ] 已记录验收日期：`________________`
+- [ ] 管理员 A、测试账号 B、冲突账号 C 和测试邮箱 E 已按第 1 节隔离准备
+
+生产与邮件前置条件：
+
+- [ ] `https://api.unicas.work/health` 返回健康状态
+- [ ] `https://console.unicas.work/` 可访问
+- [ ] Cloudflare Email Sending 中 `unicas.work` 显示 active
+- [ ] `no-reply@unicas.work` 是可用发件人
+- [ ] 生产 `unicas` Worker 存在名为 `EMAIL` 的 Send Email binding
+- [ ] 邮件可实际送达一个未预验证的外部邮箱，而不只是配置存在
+
+邀请和登录：
+
+- [ ] 管理员 A 成功创建测试账号 B 的最小权限邀请
+- [ ] Microsoft 个人账号登录后仍要求独立邮件验证码
+- [ ] 错误验证码失败且响应不泄露账号或邀请状态
+- [ ] 正确验证码成功一次，重放失败
+- [ ] Google Console 登录通过，`accountId` 保持一致
+- [ ] Microsoft Console 登录通过，`accountId` 保持一致
+- [ ] GitHub Console 登录通过，`accountId` 保持一致
+- [ ] Google CLI 登录和 Account/App 读取通过
+- [ ] Microsoft CLI 登录和 Account/App 读取通过
+- [ ] GitHub CLI 登录和 Account/App 读取通过
+- [ ] Google MCP 授权、Account/App 读取和撤销通过
+- [ ] Microsoft MCP 授权、Account/App 读取和撤销通过
+- [ ] GitHub MCP 授权、Account/App 读取和撤销通过
+- [ ] GitHub consent 不含仓库或组织写权限
+
+Account 与安全行为：
+
+- [ ] Microsoft、Google、GitHub 三种身份关联到同一 `B_ACCOUNT_ID`
+- [ ] 关联后 memberships、平台权限和主要验证邮箱未被转移或重复
+- [ ] 相同已验证邮箱没有自动合并 B 与 C
+- [ ] 已属于 C 的身份关联到 B 时被拒绝且没有移动权限
+- [ ] 解除关联需要重新认证，且不改变 Account 权限
+- [ ] 最后一个可用登录身份无法解除
+- [ ] 封禁 B 后，三种供应商的新登录全部被拒绝
+- [ ] 封禁 B 后，已有 Console 会话和 MCP grant 均失效
+- [ ] 恢复 B 后旧凭据不会复活，新登录保留原 `accountId` 和权限
+- [ ] URL、Worker/Actions 日志和审计记录均未泄露秘密
+- [ ] 密钥 owner 和轮换/到期日期已记录在批准的运维系统中
+
+交付：
+
+- [ ] 所有必需项均已通过，没有未解决的安全或交付阻塞
+- [ ] 已记录验收结束时最新的 `origin/main` 完整提交哈希：`________________`
+- [ ] 已向任务执行代理明确批准该完整提交的 Delivery acceptance
+
+验收备注（不得填写秘密、验证码、邀请链接或供应商 subject）：
+
+```text
+
+```
+
 ## 1. 准备测试身份和浏览器环境
 
 至少准备以下身份。不要使用唯一的生产管理员作为被封禁账号。
@@ -41,6 +104,19 @@ git status --short --branch
    **Email Sending**。
 5. 确认 `unicas.work` 状态为 active，并确认 `no-reply@unicas.work` 可作为发件人。
 6. 打开 `unicas` Worker 的 Bindings，确认存在名为 `EMAIL` 的 Send Email binding。
+
+也可从仓库根目录用 `cfg` 中已有的 Cloudflare 凭据执行只读检查。以下命令只把
+值注入当前 PowerShell 进程，不会打印令牌：
+
+```powershell
+$env:CLOUDFLARE_ACCOUNT_ID = (cfg get CLOUDFLARE_ACCOUNT_ID).Trim()
+$env:CLOUDFLARE_API_TOKEN = (cfg get CLOUDFLARE_API_TOKEN).Trim()
+pnpm --filter @unicas/service-cloudflare exec wrangler email sending list
+```
+
+只有输出中列出 `unicas.work` 且状态为 active，相关勾选项才算通过。输出
+`No sending subdomains found in this account.` 表示尚未开通，而不是 Worker binding
+配置错误。
 
 若 Email Sending、域名或 binding 不可用，停止 Microsoft 邀请验收并记录阻塞。
 不要改用 Resend；当前 Worker 没有 Resend 适配器。
