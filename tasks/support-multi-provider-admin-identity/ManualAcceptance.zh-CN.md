@@ -21,8 +21,8 @@
 建议为 A、B、C 分别使用独立浏览器配置文件或无痕窗口，避免供应商自动选择
 错误账号。开始前记录窗口与身份的对应关系。
 
-- [ ] 管理员 A、测试账号 B、冲突账号 C 和测试邮箱 E 已准备完成
-- [ ] A、B、C 使用相互隔离的浏览器会话，且管理员 A 在整个验收期间保持可用
+- [x] 管理员 A、测试账号 B、冲突账号 C 和测试邮箱 E 已准备完成
+- [x] A、B、C 使用相互隔离的浏览器会话，且管理员 A 在整个验收期间保持可用
 
 ## 2. 检查生产服务和邮件发送能力
 
@@ -31,8 +31,12 @@
 3. 打开 `https://console.unicas.work/`，确认能进入登录页或跳转到 `/admin/`。
 4. 在 Cloudflare 控制台打开 **Compute** > **Email Service** >
    **Email Sending**。
-5. 确认 `unicas.work` 状态为 active，并确认 `no-reply@unicas.work` 可作为发件人。
-6. 打开 `unicas` Worker 的 Bindings，确认存在名为 `EMAIL` 的 Send Email binding。
+5. 确认 `unicas.work` 状态为 Enabled。Cloudflare 按已 onboarding 的发件域名
+   授权，不会另外列出或验证 `no-reply@unicas.work` 这样的单个发件地址。
+6. 打开 `unicas` Worker 的 Settings > Bindings，确认 `EMAIL` 是
+   `Send Email / unrestricted`，并确认 `ADMIN_EMAIL_FROM` 是
+   `no-reply@unicas.work`。`unrestricted` 表示 binding 没有额外的
+   `allowed_sender_addresses` 限制；发件地址仍必须属于已启用的域名。
 
 也可从仓库根目录用 `cfg` 中已有的 Cloudflare 凭据执行只读检查。以下命令只把
 值注入当前 PowerShell 进程，不会打印令牌：
@@ -45,15 +49,17 @@ pnpm --filter @unicas/service-cloudflare exec wrangler email sending list
 
 只有输出中列出 `unicas.work` 且状态为 active，相关勾选项才算通过。输出
 `No sending subdomains found in this account.` 表示尚未开通，而不是 Worker binding
-配置错误。
+配置错误。如果命令返回 `Authentication error`，表示当前 API token 缺少 Email
+Sending 权限，不能据此判断域名状态；此时以 Cloudflare Dashboard 显示的
+Enabled 状态为准。
 
 若 Email Sending、域名或 binding 不可用，停止 Microsoft 邀请验收并记录阻塞。
 不要改用 Resend；当前 Worker 没有 Resend 适配器。
 
-- [ ] API 健康检查和 Console 均可访问
-- [ ] Cloudflare Email Sending 中 `unicas.work` 显示 active
-- [ ] `no-reply@unicas.work` 可作为发件人
-- [ ] 生产 `unicas` Worker 存在名为 `EMAIL` 的 Send Email binding
+- [x] API 健康检查和 Console 均可访问
+- [ ] Cloudflare Email Sending 中 `unicas.work` 显示 Enabled
+- [ ] 生产 Worker 显示 `EMAIL` 为 Send Email / unrestricted，且
+   `ADMIN_EMAIL_FROM` 为 `no-reply@unicas.work`
 
 ## 3. 用管理员 A 创建测试账号 B 的邀请
 
