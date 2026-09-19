@@ -72,8 +72,10 @@ function AccountAvatar({ account }: { readonly account: AccountSelf }) {
 
 export function AccountView({
   navigateExternal = url => window.location.assign(url),
+  identityError = null,
 }: {
   readonly navigateExternal?: (url: string) => void;
+  readonly identityError?: string | null;
 }) {
   const [account, setAccount] = useState<AccountSelf | null>(null);
   const [displayName, setDisplayName] = useState("");
@@ -164,6 +166,9 @@ export function AccountView({
   }
 
   const profileChanged = displayName.trim() !== (account.displayName ?? "") || avatarSource !== "unchanged";
+  const identityErrorMessage = identityError === "link-conflict"
+    ? "That login method could not be linked. No Account access was changed."
+    : null;
 
   return (
     <section className="page space-y-6" aria-labelledby="account-heading">
@@ -172,7 +177,7 @@ export function AccountView({
         <p className="mt-2 text-sm text-muted-foreground">Manage your profile and login methods.</p>
       </header>
 
-      {error ? <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive" role="alert">{error}</div> : null}
+      {identityErrorMessage || error ? <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive" role="alert">{identityErrorMessage ?? error}</div> : null}
       {status ? <div className="rounded-md border bg-muted/50 p-3 text-sm" role="status">{status}</div> : null}
 
       <Card>

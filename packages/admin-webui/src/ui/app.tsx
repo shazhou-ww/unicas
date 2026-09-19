@@ -23,6 +23,7 @@ import { TabsTrigger } from "@/components/ui/tabs.js";
 
 export function App() {
   const route = useHashRoute();
+  const [routePath, routeSearch] = route.split("?", 2);
   const inviteMatch = matchRoute("/invitations/:token", route);
   const platformInviteMatch = matchRoute("/platform-invitations/:token", route);
   const inviteToken = inviteMatch?.params.token ?? platformInviteMatch?.params.token ?? null;
@@ -119,8 +120,8 @@ export function App() {
     detail = <LoginErrorView />;
   } else if (inviteMatch) {
     detail = <InvitationView token={inviteMatch.params.token!} />;
-  } else if (route === "/account") {
-    detail = <AccountView />;
+  } else if (routePath === "/account") {
+    detail = <AccountView identityError={new URLSearchParams(routeSearch ?? "").get("identityError")} />;
   } else if (appRoute) {
     if (appError) {
       detail = (

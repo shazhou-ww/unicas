@@ -1,7 +1,8 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
-import { defineConfig } from "vitest/config";
+import { defineConfig, type UserConfig } from "vite";
+import type { UserConfig as VitestUserConfig } from "vitest/config";
 
 /**
  * The admin console is served under `/admin/` on the CAS service domain;
@@ -9,7 +10,7 @@ import { defineConfig } from "vitest/config";
  * Vite serves the SPA and proxies every other `/admin` path (API + OIDC) to
  * the local BFF Worker (see stacks/unicas/local).
  */
-export default defineConfig({
+const config: UserConfig & { test: VitestUserConfig["test"] } = {
   base: "/admin/",
   plugins: [react(), tailwindcss()],
   resolve: {
@@ -73,4 +74,6 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./tests/setup.ts"],
   },
-});
+};
+
+export default defineConfig(config);

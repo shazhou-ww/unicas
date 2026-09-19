@@ -1,6 +1,6 @@
 # Progress
 
-Updated: 2026-09-18
+Updated: 2026-09-19
 
 ## Checklist
 
@@ -15,6 +15,47 @@ Updated: 2026-09-18
 - [ ] Archive and publish the task as its final action.
 
 ## Current state
+
+Production manual acceptance on 2026-09-19 verified real Google, Microsoft
+personal-account, and GitHub Console login against one stable Account; a
+Microsoft invitation email challenge with single-use verification; explicit
+Google and GitHub linking; same-email Account isolation; cross-Account link
+conflict rejection without grant or identity transfer; fresh-auth unlink and
+final-identity protection; and Account block/restore across all three new login
+attempts. A pre-block CLI session was rejected immediately after block and did
+not revive after restore. Production D1 count/status checks confirmed consumed
+challenge state, accepted invitations, stable authority ownership, three active
+linked identities after restoration, and no Account alias between the two
+same-email test Accounts. Audit rows retained complete Account and External
+Identity attribution without sensitive detail payloads. Cloudflare Email
+Sending delivered the real challenge with SPF, DKIM, and DMARC passing.
+
+Acceptance exposed four follow-up defects. This revision adds explicit
+`--provider google|microsoft|github` CLI selection, updates the production MCP
+OAuth smoke to current `get_current_account` and paginated `list_apps` tools and
+adds post-revocation reauthorization, fixes pnpm 11 argument forwarding for the
+remote repoledger CI gate, and preserves the freshly authenticated current
+Account session on a cross-Account link conflict while showing a generic
+Console error. The conflict path still rejects the target identity and performs
+no Account merge or credential-version change.
+
+Validation for this follow-up:
+
+- all 49 administrator CLI tests and CLI typecheck passed;
+- all 71 active administrator WebUI tests passed with 7 skipped, WebUI source
+  and test typechecks passed, and the production Console build passed;
+- the two focused Miniflare Account link/unlink tests passed, including the new
+  cross-Account conflict/session regression, and Cloudflare typecheck passed;
+- the complete Cloudflare suite passed all 262 tests across 28 files;
+- all 13 workspace package typechecks passed;
+- repository tasks plus deployment/docs/boundary/OpenAPI checks passed all 117
+  tests; the corrected `pnpm check:tasks --remote` command passed;
+- the production Worker build and actual Wrangler deployment dry-run passed.
+
+Next: publish and deploy this follow-up, rerun Microsoft/GitHub CLI and all
+three remote MCP browser flows, verify conflict feedback in production, and
+finish the remaining manual privacy/credential-ownership checks before Delivery
+acceptance.
 
 On 2026-09-18, the requesting user explicitly directed this worktree to take
 over the task from `scottwei-home-pc`. `repoledger doctor` verified the current

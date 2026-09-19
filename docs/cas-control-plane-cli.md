@@ -20,7 +20,7 @@ See `packages/admin-cli/README.md` for the full command reference.
 
 ```powershell
 pnpm --filter @unicas/admin-cli build
-pnpm --filter @unicas/admin-cli unicas login        # browser: choose a configured provider via the BFF
+pnpm --filter @unicas/admin-cli unicas login --provider google
 pnpm --filter @unicas/admin-cli unicas account
 pnpm --filter @unicas/admin-cli unicas apps list
 pnpm --filter @unicas/admin-cli unicas apps create "Operations" --idempotency-key create-ops-1

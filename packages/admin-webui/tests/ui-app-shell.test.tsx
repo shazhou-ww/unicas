@@ -104,6 +104,16 @@ describe("current App shell", () => {
     expect(screen.getAllByText("Google")).toHaveLength(2);
   });
 
+  test("renders a generic Account link conflict without exposing another Account", async () => {
+    window.location.hash = "#/account?identityError=link-conflict";
+    render(<App />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "That login method could not be linked. No Account access was changed.",
+    );
+    expect(screen.queryByText(/another Account/i)).not.toBeInTheDocument();
+  });
+
   test("does not render stale App details or drafts while switching Apps", async () => {
     const other = { ...currentApp, appId: "cas_two", displayName: "Second App", description: "Second description", revision: 8 };
     let resolveOther!: (response: Response) => void;

@@ -128,7 +128,7 @@ async function mcpRequest(accessToken, body, sessionId) {
   return { body: text ? parseMcpBody(text) : null, sessionId: response.headers.get("Mcp-Session-Id") ?? sessionId };
 }
 
-async function callWhoami(accessToken) {
+async function callReadTools(accessToken) {
   const initialized = await mcpRequest(accessToken, {
     jsonrpc: "2.0",
     id: 1,
@@ -140,13 +140,20 @@ async function callWhoami(accessToken) {
     },
   });
   assert(!initialized.body?.error, "MCP initialize");
-  const called = await mcpRequest(accessToken, {
+  const account = await mcpRequest(accessToken, {
     jsonrpc: "2.0",
     id: 2,
     method: "tools/call",
-    params: { name: "whoami", arguments: {} },
+    params: { name: "get_current_account", arguments: {} },
   }, initialized.sessionId);
-  assert(!called.body?.error, "MCP whoami");
+  assert(!account.body?.error, "MCP get_current_account");
+  const apps = await mcpRequest(accessToken, {
+    jsonrpc: "2.0",
+    id: 3,
+    method: "tools/call",
+    params: { name: "list_apps", arguments: { limit: 1 } },
+  }, account.sessionId);
+  assert(!apps.body?.error, "MCP paginated App read");
 }
 
 async function refresh(clientId, refreshToken) {
@@ -181,7 +188,7 @@ async function main() {
   const tokens = await authorize(clientId);
   assert(typeof tokens.access_token === "string", "authorization code exchange");
   assert(typeof tokens.refresh_token === "string", "refresh token issued");
-  await callWhoami(tokens.access_token);
+  await callReadTools(tokens.access_token);
 
   const refreshed = await refresh(clientId, tokens.refresh_token);
   assert(typeof refreshed.access_token === "string", "refresh token exchange");
@@ -198,6 +205,12 @@ async function main() {
     body: JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/list", params: {} }),
   });
   assert(rejected.status === 401, "revoked grant rejects its access token");
+
+  const reauthorized = await authorize(clientId);
+  assert(typeof reauthorized.access_token === "string", "reauthorization code exchange");
+  assert(typeof reauthorized.refresh_token === "string", "reauthorization refresh token issued");
+  await callReadTools(reauthorized.access_token);
+  await revoke(clientId, reauthorized.refresh_token);
   console.log("MCP OAUTH SMOKE PASS");
 }
 

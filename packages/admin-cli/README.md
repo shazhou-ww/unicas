@@ -39,7 +39,7 @@ This produces `dist/cli.js` (the `unicas` bin target).
 ## Log in
 
 ```powershell
-pnpm --filter @unicas/admin-cli unicas login
+pnpm --filter @unicas/admin-cli unicas login --provider google
 ```
 
 `login` authorizes through the control-plane BFF:
@@ -47,8 +47,9 @@ pnpm --filter @unicas/admin-cli unicas login
 1. Starts a local `127.0.0.1` callback server and opens the browser at
    `${UNICAS_ADMIN_URL}/admin/auth/cli/authorize` (fixed public client id
    `unicas-cli`, S256 PKCE, loopback redirect).
-2. The BFF redirects to Google (its own confidential client + secret,
-   server-side), the operator signs in and consents, and the BFF verifies
+2. The BFF redirects to the selected Google, personal Microsoft, or GitHub
+  provider (using its confidential client + secret server-side), the operator
+  signs in and consents, and the BFF verifies
   current Account admission before issuing a session.
 3. The BFF redirects the browser back to the CLI's loopback with a one-time
    code; the CLI validates `state`, then POSTs `{ code, codeVerifier }` to

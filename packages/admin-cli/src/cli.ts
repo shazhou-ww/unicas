@@ -29,7 +29,8 @@ import { printError, printText } from "./output.js";
 const HELP = `UniCAS control-plane management CLI
 
 Usage:
-  unicas login [--port N] [--no-browser]                      Provider login, then exchange for an admin session
+  unicas login [--provider google|microsoft|github] [--port N] [--no-browser]
+                                                               Provider login, then exchange for an admin session
   unicas logout                                            End the admin session and clear it locally
   unicas status                                             Show local session state
   unicas account                                            Current Account, login method, authorities, and App memberships
