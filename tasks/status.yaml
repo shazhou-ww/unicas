@@ -1,0 +1,78 @@
+version: 1
+tasks:
+  add-platform-access-management:
+    state: completed
+    createdAt: "2026-09-15T14:26:52Z"
+    updatedAt: "2026-09-19T05:12:49Z"
+  adopt-admin-webui-query-cache:
+    state: backlog
+    createdAt: "2026-09-17T07:47:55Z"
+    updatedAt: "2026-09-19T05:12:49Z"
+  adopt-repoledger-cli:
+    state: completed
+    createdAt: "2026-09-15T08:13:24Z"
+    updatedAt: "2026-09-19T05:12:49Z"
+  adopt-repository-task-ledger-skill:
+    state: completed
+    createdAt: "2026-09-15T04:02:17Z"
+    updatedAt: "2026-09-19T05:12:49Z"
+  automate-cloudflare-deployments:
+    state: completed
+    createdAt: "2026-09-14T13:31:14Z"
+    updatedAt: "2026-09-19T05:12:49Z"
+  deploy-documentation-site:
+    state: completed
+    createdAt: "2026-09-14T11:50:56Z"
+    updatedAt: "2026-09-19T05:12:49Z"
+  deploy-production-from-release-branch:
+    state: completed
+    createdAt: "2026-09-15T07:50:34Z"
+    updatedAt: "2026-09-19T05:12:49Z"
+  document-worktree-identity-config:
+    state: completed
+    createdAt: "2026-09-15T04:09:43Z"
+    updatedAt: "2026-09-19T05:12:49Z"
+  enforce-app-suspension-boundary:
+    state: completed
+    createdAt: "2026-09-15T14:26:52Z"
+    updatedAt: "2026-09-19T05:12:49Z"
+  extract-standalone-repository:
+    state: completed
+    createdAt: "2026-09-14T09:35:30Z"
+    updatedAt: "2026-09-19T05:12:49Z"
+  manage-app-member-invitations:
+    state: completed
+    createdAt: "2026-09-15T14:26:52Z"
+    updatedAt: "2026-09-19T05:12:49Z"
+  migrate-app-space-terminology:
+    state: completed
+    createdAt: "2026-09-14T09:30:47Z"
+    updatedAt: "2026-09-19T05:12:49Z"
+  replace-active-app-oauth-issuer:
+    state: completed
+    createdAt: "2026-09-15T14:26:52Z"
+    updatedAt: "2026-09-19T05:12:49Z"
+  replace-playground-with-reference-app:
+    state: backlog
+    createdAt: "2026-09-17T04:40:22Z"
+    updatedAt: "2026-09-19T05:12:49Z"
+  simplify-console-administration-navigation:
+    state: completed
+    createdAt: "2026-09-17T04:16:49Z"
+    updatedAt: "2026-09-19T05:12:49Z"
+  split-public-domain-topology:
+    state: completed
+    createdAt: "2026-09-14T09:30:47Z"
+    updatedAt: "2026-09-19T05:12:49Z"
+  support-multi-provider-admin-identity:
+    state: ongoing
+    createdAt: "2026-09-16T02:07:06Z"
+    updatedAt: "2026-09-19T05:12:49Z"
+  tag-successful-production-deployments:
+    state: completed
+    createdAt: "2026-09-15T08:18:22Z"
+    updatedAt: "2026-09-19T05:12:49Z"
+  tier-test-suites-and-optimize-slow-tests:
+    state: completed
+    createdAt: "2026-09-17T08:01:02Z"
+    updatedAt: "2026-09-19T09:10:48Z"

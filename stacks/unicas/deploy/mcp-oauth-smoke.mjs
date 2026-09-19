@@ -1,10 +1,30 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
+import { parseArgs } from "node:util";
 
 const BASE = "https://api.unicas.work";
 const RESOURCE = `${BASE}/mcp`;
 const CALLBACK_PORT = 43128;
 const REDIRECT_URI = `http://127.0.0.1:${CALLBACK_PORT}/callback`;
+const OPTIONS = parseOptions(process.argv.slice(2));
+
+function parseOptions(args) {
+  const { values } = parseArgs({
+    args,
+    options: {
+      provider: { type: "string" },
+      "expect-account-block": { type: "boolean" },
+    },
+    allowPositionals: false,
+  });
+  if (values.provider !== undefined && !["google", "microsoft", "github"].includes(values.provider)) {
+    throw new Error("--provider must be google, microsoft, or github");
+  }
+  return {
+    provider: values.provider ?? null,
+    expectAccountBlock: values["expect-account-block"] === true,
+  };
+}
 
 function base64Url(bytes) {
   return Buffer.from(bytes).toString("base64url");
@@ -80,6 +100,7 @@ async function authorize(clientId) {
   url.searchParams.set("code_challenge", challenge);
   url.searchParams.set("code_challenge_method", "S256");
   url.searchParams.set("resource", RESOURCE);
+  if (OPTIONS.provider) url.searchParams.set("provider", OPTIONS.provider);
   console.log("Open this URL in your browser:");
   console.log(url.toString());
   try {
@@ -128,7 +149,7 @@ async function mcpRequest(accessToken, body, sessionId) {
   return { body: text ? parseMcpBody(text) : null, sessionId: response.headers.get("Mcp-Session-Id") ?? sessionId };
 }
 
-async function callWhoami(accessToken) {
+async function callReadTools(accessToken) {
   const initialized = await mcpRequest(accessToken, {
     jsonrpc: "2.0",
     id: 1,
@@ -140,13 +161,20 @@ async function callWhoami(accessToken) {
     },
   });
   assert(!initialized.body?.error, "MCP initialize");
-  const called = await mcpRequest(accessToken, {
+  const account = await mcpRequest(accessToken, {
     jsonrpc: "2.0",
     id: 2,
     method: "tools/call",
-    params: { name: "whoami", arguments: {} },
+    params: { name: "get_current_account", arguments: {} },
   }, initialized.sessionId);
-  assert(!called.body?.error, "MCP whoami");
+  assert(!account.body?.error, "MCP get_current_account");
+  const apps = await mcpRequest(accessToken, {
+    jsonrpc: "2.0",
+    id: 3,
+    method: "tools/call",
+    params: { name: "list_apps", arguments: { limit: 1 } },
+  }, account.sessionId);
+  assert(!apps.body?.error, "MCP paginated App read");
 }
 
 async function refresh(clientId, refreshToken) {
@@ -172,6 +200,31 @@ async function revoke(clientId, token) {
   assert(response.ok, "RFC 7009 revocation");
 }
 
+async function waitForDeniedAccess(accessToken, acceptedStatuses) {
+  const deadline = Date.now() + 30_000;
+  do {
+    const response = await fetch(RESOURCE, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json, text/event-stream",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/list", params: {} }),
+    });
+    if (acceptedStatuses.includes(response.status)) return;
+    if (response.status !== 200 || Date.now() >= deadline) {
+      throw new Error(`ASSERT FAILED: revoked grant rejects its access token (last HTTP ${response.status})`);
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  } while (true);
+}
+
+async function waitForOperator() {
+  console.log("Block the authenticated Account, then press Enter to verify this existing grant.");
+  await new Promise(resolve => process.stdin.once("data", resolve));
+}
+
 async function main() {
   const metadata = await json(await fetch(`${BASE}/.well-known/oauth-authorization-server`), "authorization metadata");
   assert(metadata.issuer === BASE, "authorization metadata uses API origin");
@@ -181,23 +234,29 @@ async function main() {
   const tokens = await authorize(clientId);
   assert(typeof tokens.access_token === "string", "authorization code exchange");
   assert(typeof tokens.refresh_token === "string", "refresh token issued");
-  await callWhoami(tokens.access_token);
+  await callReadTools(tokens.access_token);
+
+  if (OPTIONS.expectAccountBlock) {
+    await waitForOperator();
+    await waitForDeniedAccess(tokens.access_token, [401, 403]);
+    assert(true, "Account block rejects the existing MCP access token within 30 seconds");
+    console.log("MCP ACCOUNT BLOCK SMOKE PASS");
+    return;
+  }
 
   const refreshed = await refresh(clientId, tokens.refresh_token);
   assert(typeof refreshed.access_token === "string", "refresh token exchange");
   assert(typeof refreshed.refresh_token === "string", "refresh token rotation");
   await revoke(clientId, refreshed.refresh_token);
 
-  const rejected = await fetch(RESOURCE, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${refreshed.access_token}`,
-      Accept: "application/json, text/event-stream",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/list", params: {} }),
-  });
-  assert(rejected.status === 401, "revoked grant rejects its access token");
+  await waitForDeniedAccess(refreshed.access_token, [401]);
+  assert(true, "revoked grant rejects its access token within 30 seconds");
+
+  const reauthorized = await authorize(clientId);
+  assert(typeof reauthorized.access_token === "string", "reauthorization code exchange");
+  assert(typeof reauthorized.refresh_token === "string", "reauthorization refresh token issued");
+  await callReadTools(reauthorized.access_token);
+  await revoke(clientId, reauthorized.refresh_token);
   console.log("MCP OAUTH SMOKE PASS");
 }
 

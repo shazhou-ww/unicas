@@ -3,8 +3,9 @@
 Updated: YYYY-MM-DD
 
 This guide records manual test execution, not the delivery approval decision.
-Record delivery approval separately under Human approvals in `./Progress.md`.
-A single response satisfies both only when the user explicitly reports both.
+Delivery approval is bound by `task complete --approved-commit`; do not create
+a Progress-only commit to repeat it. A single response satisfies both manual
+acceptance and delivery approval only when the user explicitly reports both.
 
 ## Purpose
 
@@ -13,7 +14,7 @@ State the user-visible behavior or decision this guide validates.
 ## Test target
 
 - Published implementation: `<remote>/<primary-branch>` and release, build, or
-	deployment identifier when applicable.
+  deployment identifier when applicable.
 - Environment or entry point: Exact location the user should open or operate.
 
 Use a file-relative link for any target stored in this task directory.

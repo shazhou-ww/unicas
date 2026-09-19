@@ -1,54 +1,28 @@
 ---
 name: task-new
-description: "Record a repository implementation task only when the user explicitly invokes /task-new. Use active conversation context when available; never trigger from an ordinary implementation request or proposal alone."
+description: "Register a repository implementation task only when the user explicitly invokes task-new. Ordinary requests remain task-free."
 argument-hint: "[optional task context]"
 user-invocable: true
 ---
 
 # New Repository Task
 
-Use this entry only after explicit user invocation. Never invoke it because
-work appears large or long-running. Lifecycle rules belong to
-`repository-task-ledger`.
+Load `repository-task-ledger`, repository instructions, and the repository task
+profile. If the core is unavailable, stop without changing task state.
 
-## Load The Core
+1. Require explicit `task-new` invocation. Never invoke it because work looks
+   large or long-running.
+2. Resolve one accepted, testable outcome from the latest explicit direction.
+3. Apply the core admission boundary: the outcome must be expected to change at
+   least one path outside the configured task directory.
+4. Run `repoledger task list` and inspect only plausible semantic overlaps. The
+   CLI reports facts; the agent decides conceptual overlap with the user.
+5. Plan scope and delivery review. Classify interface, business/data model, and
+   architecture review for the actual outcome.
+6. Prepare `<tasksDirectory>/<task-name>/Task.md` from the core template.
+7. Run `repoledger task register <task-name>` and verify the published backlog
+   record from refreshed primary.
 
-Load `repository-task-ledger` by name, then the repository's agent instructions
-and task profile. If the core is unavailable, stop and request the complete
-skill package. Do not reconstruct it, invent a substitute, or change task
-state.
-
-## Record The Candidate
-
-1. If the user did not explicitly invoke `task-new`, stop before reading or
-   changing the ledger. Ordinary requests, discussion, and agent suggestions
-   are not invocations.
-2. Resolve the candidate from the latest explicit direction and settled
-   conversation outcome. Command text is optional and overrides older context;
-   do not ask the user to restate one clear outcome.
-3. Identify the owning repository, one testable outcome, important boundaries,
-   and observable acceptance criteria. Invocation counts as acceptance only
-   when the candidate is sufficiently specified and passes core admission.
-4. Populate the task template's human review checkpoints for this specific
-   outcome. Scope alignment and delivery acceptance are always required. Mark
-   interface, business and data model, and architecture review as `Required`,
-   `Not applicable` with a reason, or `Assess during execution` with the
-   decision trigger. Name the expected reviewer or role, concrete review
-   artifact, and approval gate. Do not ask for every approval during intake;
-   unresolved design details belong at their planned execution checkpoint.
-   Acceptance of the candidate for the backlog is not scope approval.
-5. Use `repoledger status` when available to inventory active positions, then
-   read only definitions that plausibly match the candidate. The CLI supplies
-   positions, not semantic duplicate judgment. Ignore unrelated claims, dirty
-   files, and surface overlap during intake. If a match exists, ask whether to
-   merge context or create a distinct task; do not mutate either route until
-   the user decides.
-6. Apply core admission and ask only for the smallest missing decision. Keep
-   rejected, duplicate, unconfirmed, and task-free requests outside the ledger.
-   For admitted work, use the core template and profile, then run
-   `repoledger check --task <task-name>` when available before publication.
-
-Finish by reporting whether the candidate was admitted and whether it was
-merged or created. When created, include the task's canonical backlog path and
-published state. Do not claim or implement the task unless the user explicitly
-changes the intent to execution.
+Do not create `Progress.md`, start the task, or implement it unless the user
+also explicitly requests execution. Finish by reporting the canonical stable
+path and published backlog state.

@@ -1,0 +1,40 @@
+diff --git a/src/index.js b/src/index.js
+index 47d71784a7a9b4549b6990b4eade928c1aeac2dc..e75e57dbd65d12388326407e4bdf0a0c87317761 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -31,11 +31,34 @@ function validateProgressHistory(root, config, primary) {
+   const migration = introduced.stdout.split(/\r?\n/, 1)[0];
+   const listed = runGit(root, ["rev-list", "--first-parent", "--reverse", `${migration}..${primary}`]);
+   if (!listed.ok || !listed.stdout) return [];
++  const commits = listed.stdout.split(/\r?\n/).filter(Boolean);
++  const reverted = new Set();
++  for (const commit of commits) {
++    const message = runGit(root, ["show", "-s", "--format=%B", commit]);
++    if (!message.ok) continue;
++    const match = /^This reverts commit ([0-9a-f]{40})\.$/m.exec(message.stdout);
++    if (!match || !commits.includes(match[1])) continue;
++    const targetParent = runGit(root, ["rev-parse", `${match[1]}^1`]);
++    const targetChanged = targetParent.ok
++      ? runGit(root, ["diff", "--name-only", targetParent.stdout, match[1]])
++      : null;
++    const revertParent = runGit(root, ["rev-parse", `${commit}^1`]);
++    const revertChanged = revertParent.ok
++      ? runGit(root, ["diff", "--name-only", revertParent.stdout, commit])
++      : null;
++    if (!targetChanged?.ok || !revertChanged?.ok) continue;
++    const revertedPaths = new Set(revertChanged.stdout.split(/\r?\n/).filter(Boolean));
++    const targetPaths = targetChanged.stdout.split(/\r?\n/).filter(Boolean);
++    if (targetPaths.length === 0 || !targetPaths.every((path) => revertedPaths.has(path))) continue;
++    reverted.add(commit);
++    reverted.add(match[1]);
++  }
+   const diagnostics = [];
+   const progressPattern = new RegExp(
+     `^${config.tasksDirectory.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/[^/]+/Progress\\.md$`,
+   );
+-  for (const commit of listed.stdout.split(/\r?\n/).filter(Boolean)) {
++  for (const commit of commits) {
++    if (reverted.has(commit)) continue;
+     const parent = runGit(root, ["rev-parse", `${commit}^1`]);
+     if (!parent.ok) continue;
+     const changed = runGit(root, [

@@ -2,32 +2,28 @@
 
 ## Task workflow
 
-For Issue triage and all planned or multi-step work, load and follow the
-[`repository-task-ledger` skill](.agents/skills/repository-task-ledger/SKILL.md).
-Then apply the UniCAS-specific profile in [`tasks/README.md`](tasks/README.md).
+Load and follow the
+[`repository-task-ledger` skill](.agents/skills/repository-task-ledger/SKILL.md)
+only when the user invokes `task-new`, invokes `task-exec`, or asks to manage
+an existing repository task. Then apply the UniCAS-specific profile in
+[`docs/repository-tasks.md`](docs/repository-tasks.md). Ordinary implementation
+requests remain task-free.
 
-- Resolve the current identity from the worktree-scoped Git key
-  `task-ledger.identity`; the device-global `task-ledger.defaultIdentity` may
-  suggest a value during setup but never replaces the explicit binding. Verify
-  the resolved lowercase kebab-case identity's lane exists on `origin/main`;
-  never infer it from the path, branch, user, or agent.
-- Inspect `tasks/ongoing/<identity>/` and `tasks/backlog/` before creating or
-  claiming related work.
-- Create accepted new work under `tasks/backlog/<task-name>/Task.md`.
-- Planning and review alone do not start implementation; leave the task in
-  `backlog/` until implementation begins.
-- Before the first implementation edit, claim the task with `git mv` under the
-  worktree's registered `tasks/ongoing/<identity>/` lane and create
-  `Progress.md`.
-- Run `pnpm exec repoledger doctor` locally before claiming or resuming work to
-  refresh `origin/main` and validate the real worktree-scoped identity.
-- Keep the `Progress.md` checklist, current state, decisions, validation, and
-  blockers current after meaningful milestones.
-- Before finishing or pausing a session, leave the next concrete action in
-  `Progress.md` so another agent can resume without reconstructing context.
-- On completion or abandonment, record the outcome and move the whole folder
-  to `tasks/archived/`.
-- Never copy one task into multiple status or identity directories.
+- Treat `origin/main` as the authoritative task state. Run
+  `pnpm exec repoledger task list`, `pnpm exec repoledger status <task-name>`,
+  and `pnpm exec repoledger check <task-name> --remote` as directed by the
+  skill before task work.
+- Keep every task at the stable path `tasks/<task-name>/`; lifecycle state is
+  recorded only in `tasks/status.yaml`.
+- Register accepted new tasks with `repoledger task register` and start
+  implementation with `repoledger task start`. Do not manually edit lifecycle
+  records or create identity lanes.
+- Create or update `Progress.md` only in a commit that also changes at least one
+  path outside `tasks/`. Keep it concise and outcome-focused.
+- Use the normal non-force integration path to publish implementation to
+  `main`. Never treat a branch, worktree, person, or device as task ownership.
+- Complete or abandon work only through the corresponding repoledger command
+  after the skill's review and acceptance requirements are satisfied.
 
 ## Documentation boundary
 
@@ -53,10 +49,10 @@ Then apply the UniCAS-specific profile in [`tasks/README.md`](tasks/README.md).
 
 ## Validation
 
-- `pnpm check:tasks` runs the pinned `repoledger check` followed by focused
-  UniCAS policy tests. Keep it as the CI and repository validation entry point.
-- Use `pnpm exec repoledger doctor` as a separate local readiness check. Do not
-  run `doctor` in CI because CI is identity-independent.
+- `pnpm check:tasks` runs the pinned local `repoledger check`; CI adds
+  `--remote` to validate canonical `origin/main` state.
+- Use `pnpm exec repoledger task list`, `status`, and focused `check` commands
+  for task readiness. Repoledger 0.7 has no identity or `doctor` workflow.
 - Run the narrowest relevant executable test after implementation edits.
-- Before archiving a completed task, run the validation required by its
-  acceptance criteria and record the results in `Progress.md`.
+- Before completing a task, run the validation required by its acceptance
+  criteria and publish the final implementation-linked `Progress.md` update.

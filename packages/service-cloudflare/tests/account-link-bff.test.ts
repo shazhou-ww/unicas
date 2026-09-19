@@ -82,6 +82,83 @@ async function callback(
 }
 
 describe("BFF Account identity mutations", () => {
+  test("preserves the current Account session when the target identity belongs elsewhere", async () => {
+    runtime = new Miniflare(convertV4MiniflareOptions({
+      workers: [{
+        name: "account-link-conflict-bff-test",
+        modules: true,
+        script: "export default { fetch() { return new Response('ok'); } };",
+        compatibilityDate: "2025-08-17",
+        d1Databases: { DB: "account-link-conflict-bff-test" },
+      }],
+    }));
+    await runtime.ready;
+    const db: D1Database = await runtime.getD1Database("DB", "account-link-conflict-bff-test");
+    await migrateControlSchema(db);
+    let clock = 1000;
+    const now = () => clock;
+    const repository = new D1AccountRepository(db);
+    const accounts = new AccountService(repository, now);
+    const current = await accounts.createForExternalIdentity({
+      provider: "google",
+      issuer: "https://google.example",
+      subject: "google-subject",
+      displayName: "Current User",
+    });
+    const conflicting = await accounts.createForExternalIdentity({
+      provider: "github",
+      issuer: "https://github.example",
+      subject: "github-subject",
+      displayName: "Other User",
+    });
+    await db.prepare(
+      "INSERT INTO cas_account_platform_authorities (account_id, authority, granted_at) VALUES (?, 'apps.create', 1)",
+    ).bind(current.account.accountId).run();
+    const sessions = new MemorySessions();
+    const bff = createAdminBff({
+      config: {
+        googleClientId: "google",
+        googleClientSecret: "secret",
+        sessionEncryptionKeys: { v1: randomKey() },
+        publicOrigin: "https://console.example",
+        sessionCookieSecure: false,
+        csrfEnforced: false,
+        now,
+      },
+      sessionStore: sessions,
+      accountRepository: repository,
+      providerRegistry: new ProviderRegistry([adapter("google", now), adapter("github", now)]),
+    });
+
+    const loginStart = await bff(new Request("https://console.example/admin/auth/start/google"));
+    const login = await callback(bff, loginStart, "google");
+    const linkStart = await bff(new Request("https://console.example/admin/auth/link/github", {
+      method: "POST",
+      headers: { Cookie: cookieFrom(login), Accept: "application/json" },
+    }));
+    const { redirectTo } = await linkStart.json() as { redirectTo: string };
+    const linkRedirect = new Response(null, {
+      status: 302,
+      headers: { Location: redirectTo, "Set-Cookie": linkStart.headers.get("Set-Cookie")! },
+    });
+    clock += 1;
+    const currentProof = await callback(bff, linkRedirect, "google");
+    clock += 1;
+    const conflict = await callback(bff, currentProof, "github");
+
+    expect(conflict.headers.get("Location")).toBe("/admin/#/account?identityError=link-conflict");
+    const restoredCookie = cookieFrom(conflict);
+    expect(await (await bff(new Request("https://console.example/admin/account", {
+      headers: { Cookie: restoredCookie },
+    }))).json()).toMatchObject({
+      accountId: current.account.accountId,
+      identities: [{ provider: "google", currentLogin: true }],
+    });
+    expect(await repository.getActiveIdentity("https://github.example", "github-subject"))
+      .toMatchObject({ accountId: conflicting.account.accountId });
+    expect(await repository.getAccount(current.account.accountId)).toMatchObject({ credentialVersion: 1 });
+  }, 30_000);
+
   test("freshly links and unlinks a provider while rotating credential version", async () => {
     runtime = new Miniflare(convertV4MiniflareOptions({
       workers: [{

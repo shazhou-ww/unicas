@@ -37,14 +37,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check workspace boundaries
-        run: pnpm check:workspace
+      - name: Run exhaustive test suite
+        run: pnpm test:exhaustive
 
-      - name: Check generated OpenAPI documents
-        run: pnpm check:openapi
-
-      - name: Check repository task ledger
-        run: pnpm check:tasks
+      - name: Check published repository task ledger
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: pnpm check:tasks --remote
 
       - name: Build
         run: pnpm build
@@ -54,9 +52,6 @@ jobs:
 
       - name: Typecheck
         run: pnpm typecheck
-
-      - name: Test packages
-        run: pnpm -r test
 
       - name: Build deployment bundle
         run: pnpm --filter @unicas/service-cloudflare exec wrangler deploy --dry-run

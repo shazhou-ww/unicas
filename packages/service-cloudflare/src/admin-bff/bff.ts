@@ -1404,8 +1404,25 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         credentialVersion: resolution.account.credentialVersion,
       }, "/admin/#/account", sessionId);
     } catch (error) {
-      await sessionStore.delete(sessionId);
       if (error instanceof AccountServiceError) {
+        if (error.code === "IDENTITY_LINK_CONFLICT" && mutation.kind === "link-target") {
+          return createAuthenticatedSession(request, {
+            v: 1,
+            authenticated: true,
+            identityIssuer: mutation.currentIssuer,
+            subject: mutation.currentSubject,
+            displayName: mutation.currentDisplayName,
+            emailForDisplay: mutation.currentEmailForDisplay,
+            csrfToken: generateCsrfToken(),
+            authProvider: mutation.currentProvider,
+            authenticatedAt: mutation.currentAuthenticatedAt,
+            verifiedEmailEvidence: mutation.currentVerifiedEmailEvidence,
+            accountId: mutation.accountId,
+            externalIdentityId: mutation.currentExternalIdentityId,
+            credentialVersion: mutation.expectedCredentialVersion,
+          }, "/admin/#/account?identityError=link-conflict", sessionId);
+        }
+        await sessionStore.delete(sessionId);
         const code = error.code === "IDENTITY_LINK_CONFLICT"
           ? "link-conflict"
           : error.code === "FINAL_IDENTITY_CANNOT_BE_UNLINKED"
@@ -1416,6 +1433,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
           headers: { Location: `/admin/#/account?identityError=${code}` },
         });
       }
+      await sessionStore.delete(sessionId);
       throw error;
     }
   }

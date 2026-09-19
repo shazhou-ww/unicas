@@ -1,7 +1,7 @@
 /**
  * Interactive `unicas login`: the CLI never talks to Google directly. It opens
  * the browser at the BFF's `/admin/auth/cli/authorize` endpoint, which runs
- * its own Google OIDC (client secret held server-side), then redirects the
+ * the selected provider flow (client secret held server-side), then redirects the
  * browser back to the CLI's loopback with a one-time code. The CLI exchanges
  * the code (PKCE) for a BFF session cookie + CSRF token and persists it.
  */
@@ -15,6 +15,7 @@ import {
   generatePkceVerifier,
   s256Challenge,
 } from "@unicas/control-auth";
+import type { ProviderKind } from "@unicas/admin-protocol";
 import type { PersistedSession, TokenStore } from "../store.js";
 
 export interface LoginFlowOptions {
@@ -25,6 +26,8 @@ export interface LoginFlowOptions {
   readonly port?: number;
   /** Open the system browser automatically (default true). */
   readonly openBrowser?: boolean;
+  /** Authentication provider selected for this login. */
+  readonly provider?: ProviderKind;
   /** Injectable fetch for tests. */
   readonly fetchImpl?: typeof fetch;
   /** Abort signal; rejects the pending callback with an error. */
@@ -67,6 +70,7 @@ export async function runLoginFlow(options: LoginFlowOptions): Promise<LoginFlow
   authorizeUrl.searchParams.set("state", state);
   authorizeUrl.searchParams.set("code_challenge", codeChallenge);
   authorizeUrl.searchParams.set("code_challenge_method", "S256");
+  if (options.provider) authorizeUrl.searchParams.set("provider", options.provider);
   callback.captureState(state);
   options.onAuthorizeUrl?.(authorizeUrl);
   log("");

@@ -32,6 +32,7 @@ describe("runLoginFlow", () => {
       adminOrigin: FAKE_ORIGIN,
       store,
       openBrowser: false,
+      provider: "microsoft",
       fetchImpl: admin.fetch,
       log: () => undefined,
       onCallbackServerStarted: (port) => {
@@ -50,6 +51,7 @@ describe("runLoginFlow", () => {
     expect(authorizeUrl.pathname).toBe("/admin/auth/cli/authorize");
     expect(authorizeUrl.searchParams.get("client_id")).toBe("unicas-cli");
     expect(authorizeUrl.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(authorizeUrl.searchParams.get("provider")).toBe("microsoft");
     expect(authorizeUrl.searchParams.get("code_challenge")).toMatch(/^[A-Za-z0-9_-]{43,}$/);
     expect(authorizeUrl.searchParams.get("state")).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(authorizeUrl.searchParams.get("redirect_uri")).toContain(`127.0.0.1:${callbackPort}/callback`);

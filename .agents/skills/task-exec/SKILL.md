@@ -1,56 +1,45 @@
 ---
 name: task-exec
-description: "Claim, resume, and complete an existing repository task, preferably from an attached canonical Task.md. Use when the user invokes /task-exec, attaches a task, or asks to execute backlog or ongoing work."
+description: "Start, resume, and finish one existing repository task from canonical primary-branch state."
 argument-hint: "[attach Task.md or optionally name a task]"
 user-invocable: true
 ---
 
 # Execute Repository Task
 
-Use this entry to resolve one existing task and execute it through the
-`repository-task-ledger` lifecycle.
-
-## Load The Core
-
-Load `repository-task-ledger` by name, then the repository's agent instructions
-and task profile. If the core is unavailable, stop and request the complete
-skill package. Do not reconstruct it, invent a substitute, or change task or
+Load `repository-task-ledger`, repository instructions, and the repository task
+profile. If the core is unavailable, stop without changing task or
 implementation files.
 
 ## Resolve One Task
 
-1. Prefer exactly one attached canonical `Task.md` as a locator, not a content
-   snapshot. Otherwise resolve from the supplied name or description, then the
-   latest explicit conversation context.
-2. Follow the core preparation sequence: run `doctor`, use `status` for the
-   deterministic position, run `check --task` for focused validity, and read
-   the latest canonical `Task.md` and `Progress.md` before routing status.
-3. Require one unambiguous task in one owning repository. For no match,
-   conflicting locators, multiple plausible matches, or ambiguous ownership,
-   ask for the smallest clarification. Never create a task; route new intake
-   through `task-new`.
-4. Route by current status:
-    - **Backlog:** after semantic overlap review, preview and apply
-       `task claim --update-all-refs`, then publish before implementation.
-   - **Ongoing here:** resume from canonical task and progress state.
-    - **Ongoing elsewhere:** coordinate explicitly; the receiving worktree may
-      then use `task claim --take-from <source-identity> --update-all-refs`.
-      Never take over implicitly.
-   - **Archived:** report the recorded outcome and stop.
+1. Prefer one attached canonical `Task.md` as a locator, not a snapshot.
+   Otherwise resolve one task from the supplied name or latest explicit context.
+2. Run `repoledger task list`, `repoledger status <task-name>`, and
+   `repoledger check <task-name> --remote`.
+3. Read the latest stable `Task.md` and any existing `Progress.md` from primary.
+4. Require one unambiguous task and owning repository. Ask the smallest
+   clarification for no match, conflicting locators, or semantic overlap.
+5. Route by state:
+   - `backlog`: review overlap, then run `repoledger task start <task-name>`.
+   - `ongoing`: resume from primary.
+   - `completed` or `abandoned`: report the terminal outcome and stop.
 
-## Execute The Lifecycle
+There is no identity claim, takeover, handoff state, task source branch, or
+archive move.
 
-After resolving the route, follow `repository-task-ledger` and the repository
-profile as the sole authority for implementation, validation, progress,
-publication, acceptance, handoff, abandonment, and archival. Continue until
-the task reaches its next genuine external blocker or its completed archive
-state. A pending human review checkpoint is such a blocker: publish its review
-artifact and current progress, request an explicit decision, and do not cross
-the protected implementation or completion gate. Do not pause merely to
-request permission for routine lifecycle actions that the core protocol
-already authorizes.
+## Execute
 
-Finish by reporting the resolved task, resulting ledger state, validation
-outcome, and shared-primary-branch publication state. When blocked, preserve
-the exact blocker and next action in the task progress record before reporting
-it.
+Follow the core lifecycle through implementation, validation, human review,
+primary publication, and completion or abandonment. Continue until the task is
+terminal or reaches a genuine external blocker.
+
+Update `Progress.md` only in a commit that also changes a path outside the task
+directory. Do not stop merely to create or publish procedural task metadata.
+For a human review gate, publish the review artifact to primary, request an
+explicit decision for that commit, and stop before protected implementation.
+Approval alone does not require a follow-up commit.
+
+Finish by reporting the task, lifecycle state, validation, and primary
+publication state. When blocked without an implementation delta, report the
+blocker directly instead of manufacturing a Progress update.

@@ -51,6 +51,10 @@ revoked authority. Email allowlisting is not an MCP authorization source.
 Access tokens expire after 15 minutes. Refresh grants expire after 8 hours and
 refresh tokens rotate. Tokens are audience-bound to the canonical `/mcp`
 resource. The token endpoint also implements RFC 7009 revocation.
+Production validation allows up to 30 seconds for OAuth KV grant-deletion
+propagation, after which a revoked grant must reject its existing access token.
+Account block and credential-version checks remain request-time controls and
+deny independently of that KV cleanup.
 
 New grants bind `accountId`, `externalIdentityId`, the exact authenticated
 issuer/subject, provider, and `credentialVersion`. The Account and current
@@ -210,7 +214,9 @@ pnpm --filter @unicas/service-cloudflare test
 pnpm --filter @unicas/service-cloudflare build
 pnpm --filter @unicas/service-cloudflare exec wrangler deploy --dry-run
 pnpm --filter @unicas/admin-webui test
-node stacks/unicas/deploy/mcp-oauth-smoke.mjs
+node stacks/unicas/deploy/mcp-oauth-smoke.mjs --provider google
+node stacks/unicas/deploy/mcp-oauth-smoke.mjs --provider microsoft
+node stacks/unicas/deploy/mcp-oauth-smoke.mjs --provider github
 ```
 
 The release gate additionally requires a real GitHub Copilot flow through the
@@ -221,6 +227,10 @@ replace that test.
 The interactive production smoke prints a loopback OAuth authorization URL and
 never logs access or refresh tokens. Complete Google account selection and the
 UniCAS consent page in a browser while its callback listener is running.
+Use `--expect-account-block` with one provider when validating revocation: the
+smoke pauses after authenticated Account/App reads, then verifies the existing
+MCP access token is denied within 30 seconds after an operator blocks the
+Account and presses Enter.
 
 ## Rollout and incident response
 

@@ -26,7 +26,7 @@ minimumReleaseAgeExclude:
   - '@codemirror/state'
   - '@tanstack/virtual-core'
   - '@tanstack/vue-virtual'
-  - repoledger@0.4.0 || 0.4.1 || 0.5.0 || 0.6.0
+  - repoledger@0.4.0 || 0.4.1 || 0.5.0 || 0.6.0 || 0.7.0
 overrides:
   '@jridgewell/sourcemap-codec': 1.5.5
 allowBuilds:
@@ -34,3 +34,5 @@ allowBuilds:
   workerd: true
   vue-demi: true
   core-js-pure: false
+patchedDependencies:
+  repoledger@0.7.0: patches/repoledger@0.7.0.patch
