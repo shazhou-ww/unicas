@@ -75,6 +75,14 @@ grant check also confirmed Account block denies an already issued MCP access
 token with HTTP 403. The smoke now accepts an explicit provider and supports a
 pause-before-block mode without logging access or refresh tokens.
 
+Final production revocation checks confirmed a pre-existing Console browser
+session redirects to login after Account block, a pre-existing CLI session is
+rejected, and a live MCP grant is denied within 30 seconds. Restoring the
+Account did not revive old credentials; a fresh login returned the same Account,
+three linked identities, `apps.create`, and unchanged App memberships. The
+production challenge email passed SPF, DKIM, and DMARC. Only the operator-owned
+secret inventory confirmation and Delivery acceptance remain manual.
+
 Next: publish and deploy this follow-up, rerun Microsoft/GitHub CLI and all
 three remote MCP browser flows, verify conflict feedback in production, and
 finish the remaining manual privacy/credential-ownership checks before Delivery
