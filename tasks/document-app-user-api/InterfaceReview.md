@@ -1,20 +1,21 @@
 # App-user API interface review
 
-Status: Awaiting requesting-user approval
+Status: Approved by the requesting user on 2026-09-20 for primary commit
+`b6eb183bc18d546020f1de52725eca5de2d1073f`.
 
 ## Decision requested
 
 Approve the proposed canonical `docs/app-user-api/` guide represented by the
 draft pages below:
 
-- [Entry page and integration boundary](./interface-review/README.md)
-- [Scenarios and request sequences](./interface-review/scenarios.md)
-- [HTTP operation reference](./interface-review/http-api.md)
-- [Capability authorization](./interface-review/authorization.md)
+- [Entry page and integration boundary](../../docs/app-user-api/README.md)
+- [Scenarios and request sequences](../../docs/app-user-api/scenarios.md)
+- [HTTP operation reference](../../docs/app-user-api/http-api.md)
+- [Capability authorization](../../docs/app-user-api/authorization.md)
 
-Approval permits publishing this reviewed material under `docs/app-user-api/`
-and adding it to the documentation site. It does not authorize any API,
-capability, client, service, or storage behavior change.
+The approval permits publishing this reviewed material under
+`docs/app-user-api/` and adding it to the documentation site. It does not
+authorize any API, capability, client, service, or storage behavior change.
 
 ## Review focus
 

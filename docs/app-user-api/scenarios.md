@@ -182,7 +182,7 @@ Lease duration defaults to 15 minutes and is clamped to 60 seconds through 24
 hours. Renewing an active lease preserves its original start and never shortens
 its expiry.
 
-See [State protection and garbage collection](../../../docs/cas-state-protection-and-gc.md)
+See [State protection and garbage collection](../cas-state-protection-and-gc.md)
 for the full accepted model.
 
 ## Failure and retry rules
