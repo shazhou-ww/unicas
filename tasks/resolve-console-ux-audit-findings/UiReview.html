@@ -716,14 +716,27 @@
     }
 
     .mobile-stage {
-      display: grid;
+      position: relative;
+      display: block;
       min-height: 610px;
-      grid-template-columns: minmax(0, 1fr) 272px;
+      overflow: hidden;
       background: #e6e6e8;
     }
 
+    .mobile-stage::before {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background: rgba(24, 24, 27, 0.58);
+      content: "";
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 160ms ease;
+    }
+
     .mobile-page {
-      position: relative;
+      position: absolute;
+      inset: 0;
       min-width: 0;
       padding: 16px;
       overflow: hidden;
@@ -735,12 +748,39 @@
     }
 
     .mobile-drawer {
+      position: absolute;
+      inset: 0 0 0 auto;
+      z-index: 2;
       display: flex;
+      width: min(272px, calc(100% - 56px));
       min-width: 0;
       flex-direction: column;
       padding: 16px 12px;
       background: var(--surface);
       border-left: 1px solid var(--border);
+      box-shadow: -12px 0 28px rgba(24, 24, 27, 0.13);
+      transform: translateX(100%);
+      transition: transform 180ms ease;
+    }
+
+    body[data-drawer="open"] .mobile-stage::before {
+      opacity: 1;
+    }
+
+    body[data-drawer="open"] .mobile-drawer {
+      transform: translateX(0);
+    }
+
+    body[data-drawer="open"] .floating-trigger {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .drawer-topline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
     }
 
     .drawer-apps {
@@ -822,6 +862,17 @@
       border: 1px solid var(--border);
       border-radius: 6px;
       box-shadow: 0 3px 10px rgba(24, 24, 27, 0.14);
+      transition: opacity 120ms ease;
+    }
+
+    .glyph-icon {
+      width: 20px;
+      height: 20px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
 
     .before .covered-line {
@@ -843,14 +894,6 @@
       height: 44px;
       right: 16px;
       bottom: 16px;
-    }
-
-    body[data-size="mobile"] .mobile-stage {
-      grid-template-columns: minmax(56px, 1fr) minmax(0, 272px);
-    }
-
-    body[data-size="desktop"] .mobile-stage {
-      grid-template-columns: minmax(140px, 1fr) 272px;
     }
 
     .record-stage {
@@ -1353,16 +1396,16 @@
   </style>
 </head>
 
-<body data-size="desktop" data-record="people">
+<body data-size="desktop" data-record="people" data-drawer="open">
   <a class="skip-link" href="#review-content">Skip to comparison</a>
 
   <header class="review-header">
-    <a class="wordmark" href="./Task.md" aria-label="Open the normative task contract">
+    <a class="wordmark" href="./InterfaceDesign.md" aria-label="Open the interface design intent">
       <span class="brand-mark">U</span><span>UniCAS</span>
     </a>
     <div class="review-title">
       <h1>Console UX recovery</h1>
-      <p>Illustrative before/after views for the production findings. The task contract remains normative.</p>
+      <p>Illustrative before/after views for the production findings. The design note records intent; the task owns scope.</p>
     </div>
     <div class="review-state">Pending interface approval</div>
   </header>
@@ -1554,10 +1597,24 @@
                 <p class="tiny muted">Current session</p>
               </div>
               <span class="covered-line" aria-hidden="true"></span>
-              <button class="floating-trigger" type="button" aria-label="Current navigation trigger">Menu</button>
+              <button class="floating-trigger" type="button" aria-label="Open navigation" data-drawer-open>
+                <svg class="glyph-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M4 6h16" />
+                  <path d="M4 12h16" />
+                  <path d="M4 18h16" />
+                </svg>
+              </button>
             </section>
-            <aside class="mobile-drawer" aria-label="Current mobile drawer illustration">
-              <div class="mock-brand"><span class="brand-mark">U</span><span>UniCAS</span></div>
+            <aside class="mobile-drawer" aria-label="Current mobile drawer illustration" data-drawer-panel>
+              <div class="drawer-topline">
+                <div class="mock-brand"><span class="brand-mark">U</span><span>UniCAS</span></div>
+                <button class="tiny-button" type="button" aria-label="Close navigation" data-drawer-close>
+                  <svg class="glyph-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M18 6 6 18" />
+                    <path d="m6 6 12 12" />
+                  </svg>
+                </button>
+              </div>
               <div class="drawer-apps">
                 <div class="drawer-label"><span>Apps</span><button class="tiny-button" type="button"
                     aria-label="Current Create App">+</button></div>
@@ -1580,10 +1637,26 @@
                 <p><strong>Google</strong> <span class="badge success">Current session</span></p>
                 <p class="tiny muted">Last used today at 10:42</p>
               </div>
-              <button class="floating-trigger touch-target" type="button" aria-label="Open navigation">Menu</button>
+              <button class="floating-trigger touch-target" type="button" aria-label="Open navigation"
+                data-drawer-open>
+                <svg class="glyph-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M4 6h16" />
+                  <path d="M4 12h16" />
+                  <path d="M4 18h16" />
+                </svg>
+              </button>
             </section>
-            <aside class="mobile-drawer" aria-label="Proposed mobile drawer illustration">
-              <div class="mock-brand"><span class="brand-mark">U</span><span>UniCAS</span></div>
+            <aside class="mobile-drawer" aria-label="Proposed mobile drawer illustration" data-drawer-panel>
+              <div class="drawer-topline">
+                <div class="mock-brand"><span class="brand-mark">U</span><span>UniCAS</span></div>
+                <button class="tiny-button touch-target" type="button" aria-label="Close navigation"
+                  data-drawer-close>
+                  <svg class="glyph-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M18 6 6 18" />
+                    <path d="m6 6 12 12" />
+                  </svg>
+                </button>
+              </div>
               <div class="drawer-apps">
                 <div class="drawer-label"><span>Apps</span><button class="mock-button small touch-target"
                     type="button">Create App</button></div>
@@ -2019,7 +2092,7 @@ control plane with it:
   <footer class="review-footer">
     <p>This standalone file is an illustrative review aid, not production UI or a behavior contract. It uses synthetic
       identities and no production credentials.</p>
-    <a href="./Task.md">Open the normative task</a>
+    <span><a href="./InterfaceDesign.md">Read design intent</a> &middot; <a href="./Task.md">Open task contract</a></span>
   </footer>
 
   <script>
@@ -2071,6 +2144,34 @@ control plane with it:
     }
 
     recordButtons.forEach((button) => button.addEventListener("click", () => setRecordType(button.dataset.recordTarget)));
+
+    const drawerStages = [...document.querySelectorAll(".mobile-stage")];
+    const drawerOpenButtons = [...document.querySelectorAll("[data-drawer-open]")];
+    const drawerCloseButtons = [...document.querySelectorAll("[data-drawer-close]")];
+
+    function setDrawerState(open, source) {
+      document.body.dataset.drawer = open ? "open" : "closed";
+      drawerStages.forEach((stage) => {
+        const pageContent = stage.querySelector(".mobile-page");
+        const drawer = stage.querySelector("[data-drawer-panel]");
+        const openButton = stage.querySelector("[data-drawer-open]");
+        const closeButton = stage.querySelector("[data-drawer-close]");
+        pageContent.inert = open;
+        drawer.inert = !open;
+        drawer.setAttribute("aria-hidden", String(!open));
+        openButton.tabIndex = open ? -1 : 0;
+        closeButton.tabIndex = open ? 0 : -1;
+      });
+      if (source) {
+        const stage = source.closest(".mobile-stage");
+        const target = stage.querySelector(open ? "[data-drawer-close]" : "[data-drawer-open]");
+        requestAnimationFrame(() => target.focus());
+      }
+    }
+
+    drawerOpenButtons.forEach((button) => button.addEventListener("click", () => setDrawerState(true, button)));
+    drawerCloseButtons.forEach((button) => button.addEventListener("click", () => setDrawerState(false, button)));
+    setDrawerState(true);
 
     const narrowViewport = window.matchMedia("(max-width: 700px)");
     if (narrowViewport.matches) setSize("mobile");
