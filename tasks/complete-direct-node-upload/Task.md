@@ -99,6 +99,9 @@ The proposed replacement is specified in
 - [ ] The same lease request returns a ready lease for an existing node,
       upload instructions for an absent node, and a ready lease after the
       corresponding direct upload has completed.
+- [ ] Upload state is derived from the node ready flag, durable validation
+      evidence, the current upload-authorization record, and R2 object
+      presence; no separate persisted state enum is introduced.
 - [ ] A caller that knows only an existing node hash can acquire or renew its
       lease without reading node metadata or content.
 - [ ] The client carries no upload-session identity. UniCAS safely fences stale
@@ -122,6 +125,18 @@ The proposed replacement is specified in
 - [ ] A rejected write-once upload cannot strand the node: the detecting lease
       call reports the rejection, durably rotates the internal generation, and
       returns a fresh upload target that can accept corrected bytes.
+- [ ] A structurally valid parent whose child is not ready retains its uploaded
+      object and reports the dependency; retrying lease after the child becomes
+      ready publishes the parent without another parent upload.
+- [ ] Durable, generation-fenced validation evidence prevents rehashing or
+      reparsing a valid parent while it waits for children, without allowing
+      staged metadata from a retired upload to be published.
+- [ ] An uploaded object remains eligible for validation after its signing URL
+      expires, while an expired authorization with no object rotates to a fresh
+      internal generation.
+- [ ] Publication interruption and ready-record/object inconsistency have
+      distinct tested recovery and error behavior; storage inconsistency never
+      silently falls back to a new upload.
 - [ ] Concurrent callers for the same node converge on one immutable ready node
       and receive valid leases without client-visible coordination.
 - [ ] Inline upload and the legacy upload headers and client configuration are
