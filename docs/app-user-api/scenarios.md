@@ -123,7 +123,7 @@ sequenceDiagram
     else Same requestId with different payload
         CAS-->>App: 409 IDEMPOTENCY_CONFLICT
     else Missing/unready node or negative aggregate
-        CAS-->>App: 404 or 409; no partial commit
+        CAS-->>App: 404 or 409, no partial commit
     else Internal revision race
         CAS->>CAS: Bounded retry with backoff
         CAS-->>App: One atomic outcome
