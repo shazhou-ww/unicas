@@ -1,0 +1,1729 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UniCAS Console UX review</title>
+  <style>
+    :root {
+      --canvas: #f6f6f7;
+      --surface: #ffffff;
+      --surface-subtle: #f1f1f3;
+      --ink: #18181b;
+      --muted: #66666f;
+      --border: #dddddf;
+      --border-strong: #b9b9c0;
+      --accent: #0f766e;
+      --accent-soft: #e8f5f2;
+      --danger: #b42318;
+      --danger-soft: #fff1f0;
+      --warning: #92400e;
+      --warning-soft: #fff8e7;
+      --shadow: 0 18px 45px rgba(24, 24, 27, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      min-width: 320px;
+      min-height: 100%;
+      background: var(--canvas);
+    }
+
+    body {
+      min-width: 320px;
+      min-height: 100vh;
+      margin: 0;
+      color: var(--ink);
+      background-color: var(--canvas);
+      background-image:
+        linear-gradient(rgba(24, 24, 27, 0.024) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(24, 24, 27, 0.024) 1px, transparent 1px);
+      background-size: 28px 28px;
+      font-family: "Aptos", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+      font-size: 14px;
+      line-height: 1.45;
+      letter-spacing: 0;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+      letter-spacing: 0;
+    }
+
+    button,
+    a {
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    button:focus-visible,
+    a:focus-visible,
+    input:focus-visible,
+    select:focus-visible {
+      outline: 3px solid rgba(15, 118, 110, 0.28);
+      outline-offset: 2px;
+    }
+
+    .skip-link {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 100;
+      padding: 8px 12px;
+      color: #fff;
+      background: var(--ink);
+      border-radius: 6px;
+      transform: translateY(-160%);
+    }
+
+    .skip-link:focus {
+      transform: translateY(0);
+    }
+
+    .review-header,
+    main,
+    .review-footer {
+      width: min(1480px, calc(100% - 40px));
+      margin-inline: auto;
+    }
+
+    .review-header {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 24px;
+      align-items: start;
+      padding: 30px 0 20px;
+      border-bottom: 1px solid var(--border-strong);
+    }
+
+    .wordmark,
+    .mock-brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      color: var(--ink);
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      color: #fff;
+      background: #263746;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .review-title h1 {
+      margin: 0;
+      font-size: 27px;
+      line-height: 1.15;
+      font-weight: 680;
+    }
+
+    .review-title p {
+      max-width: 70ch;
+      margin: 7px 0 0;
+      color: #505058;
+    }
+
+    .review-state {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding-top: 5px;
+      color: #505058;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .review-state::before {
+      width: 8px;
+      height: 8px;
+      background: var(--warning);
+      border-radius: 50%;
+      content: "";
+    }
+
+    main {
+      padding: 20px 0 42px;
+    }
+
+    .decision {
+      display: grid;
+      grid-template-columns: minmax(250px, 0.8fr) minmax(0, 1.2fr);
+      gap: 28px;
+      align-items: center;
+      padding: 16px 18px;
+      background: rgba(255, 255, 255, 0.76);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .eyebrow {
+      margin: 0 0 4px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+
+    .decision h2 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.3;
+    }
+
+    .delta-list,
+    .change-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .delta-list {
+      justify-content: flex-end;
+    }
+
+    .delta-list li,
+    .change-list li {
+      padding: 5px 8px;
+      color: #115e59;
+      background: var(--accent-soft);
+      border: 1px solid #b9ddd7;
+      border-radius: 5px;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .review-controls {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+      margin-top: 18px;
+    }
+
+    .scenario-switch,
+    .viewport-switch,
+    .record-switch,
+    .mini-tabs {
+      display: inline-flex;
+      gap: 3px;
+      padding: 3px;
+      background: #e9e9ec;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+    }
+
+    .scenario-switch {
+      flex-wrap: wrap;
+    }
+
+    .scenario-tab,
+    .viewport-button,
+    .record-button,
+    .mini-tab {
+      min-height: 36px;
+      padding: 7px 12px;
+      color: #505058;
+      background: transparent;
+      border: 0;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: 650;
+    }
+
+    .scenario-tab[aria-selected="true"],
+    .viewport-button[aria-pressed="true"],
+    .record-button[aria-pressed="true"],
+    .mini-tab.active {
+      color: var(--ink);
+      background: var(--surface);
+      box-shadow: 0 1px 3px rgba(24, 24, 27, 0.12);
+    }
+
+    .scenario {
+      margin-top: 20px;
+    }
+
+    .scenario[hidden] {
+      display: none;
+    }
+
+    .scenario-heading {
+      display: grid;
+      grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr);
+      gap: 28px;
+      align-items: end;
+      margin-bottom: 14px;
+    }
+
+    .scenario-heading h2 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 680;
+    }
+
+    .scenario-heading p {
+      margin: 4px 0 0;
+      color: var(--muted);
+    }
+
+    .scenario-heading .change-list {
+      justify-content: flex-end;
+    }
+
+    .comparison-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    .compare-frame {
+      min-width: 0;
+      overflow: hidden;
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .compare-frame.after {
+      border-color: #8ec7bf;
+    }
+
+    .frame-heading {
+      display: flex;
+      min-height: 46px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 14px;
+      background: #fafafa;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .phase {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+
+    .phase::before {
+      width: 7px;
+      height: 7px;
+      background: #8b8b93;
+      border-radius: 50%;
+      content: "";
+    }
+
+    .after .phase {
+      color: var(--accent);
+    }
+
+    .after .phase::before {
+      background: var(--accent);
+    }
+
+    .frame-heading strong {
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .mock-viewport {
+      position: relative;
+      width: 100%;
+      min-height: 500px;
+      overflow: hidden;
+      background-color: #fbfbfc;
+      background-image:
+        linear-gradient(rgba(24, 24, 27, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(24, 24, 27, 0.025) 1px, transparent 1px);
+      background-size: 24px 24px;
+      transition: width 160ms ease;
+    }
+
+    body[data-size="mobile"] .mock-viewport {
+      width: min(100%, 360px);
+      min-height: 610px;
+      margin-inline: auto;
+      border-inline: 1px solid var(--border);
+    }
+
+    body[data-size="mobile"] .desktop-only,
+    body[data-size="desktop"] .mobile-only {
+      display: none !important;
+    }
+
+    .mock-button,
+    .provider-button,
+    .text-button,
+    .icon-button {
+      display: inline-flex;
+      min-height: 36px;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 7px 12px;
+      color: var(--ink);
+      background: var(--surface);
+      border: 1px solid #cfcfd4;
+      border-radius: 6px;
+      font-weight: 650;
+    }
+
+    .mock-button.primary,
+    .provider-button.primary {
+      color: #fff;
+      background: #27272a;
+      border-color: #27272a;
+    }
+
+    .mock-button.danger {
+      color: #fff;
+      background: var(--danger);
+      border-color: var(--danger);
+    }
+
+    .mock-button.small {
+      min-height: 32px;
+      padding: 5px 9px;
+      font-size: 12px;
+    }
+
+    .icon-button {
+      width: 40px;
+      padding: 0;
+    }
+
+    .after .icon-button,
+    .after .touch-target {
+      min-width: 44px;
+      min-height: 44px;
+    }
+
+    .mock-input,
+    .mock-select {
+      width: 100%;
+      min-height: 38px;
+      padding: 8px 10px;
+      color: var(--ink);
+      background: var(--surface);
+      border: 1px solid #cfcfd4;
+      border-radius: 6px;
+    }
+
+    .mock-label {
+      display: grid;
+      gap: 5px;
+      color: #303036;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .tiny {
+      font-size: 11px;
+    }
+
+    .mono {
+      overflow-wrap: anywhere;
+      font-family: "Cascadia Mono", "Segoe UI Mono", monospace;
+      font-size: 11px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      min-height: 22px;
+      padding: 2px 8px;
+      background: var(--surface-subtle);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
+    .badge.success {
+      color: #115e59;
+      background: var(--accent-soft);
+      border-color: #b9ddd7;
+    }
+
+    .mock-screen-heading {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.25;
+      font-weight: 680;
+    }
+
+    .mock-card {
+      padding: 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+    }
+
+    .mock-card h4 {
+      margin: 0 0 8px;
+      font-size: 15px;
+    }
+
+    .mock-card p {
+      margin: 0;
+    }
+
+    .auth-before-brand {
+      position: absolute;
+      top: 0;
+      left: 0;
+      display: flex;
+      height: 26px;
+      align-items: center;
+      gap: 7px;
+      font-weight: 700;
+    }
+
+    .auth-before-brand .brand-mark {
+      width: 26px;
+      height: 26px;
+    }
+
+    .auth-stage {
+      display: grid;
+      min-height: 500px;
+      place-items: center;
+      padding: 28px;
+    }
+
+    .auth-copy {
+      width: min(360px, 100%);
+    }
+
+    .auth-card {
+      width: min(380px, 100%);
+      padding: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 14px 38px rgba(24, 24, 27, 0.09);
+    }
+
+    .auth-card .mock-brand {
+      margin-bottom: 24px;
+    }
+
+    .auth-copy h3,
+    .auth-card h3 {
+      margin: 5px 0 6px;
+      font-size: 21px;
+      line-height: 1.25;
+    }
+
+    .auth-copy>p,
+    .auth-card>p {
+      margin: 0 0 16px;
+      color: var(--muted);
+    }
+
+    .provider-stack {
+      display: grid;
+      gap: 8px;
+    }
+
+    .provider-button {
+      width: 100%;
+      justify-content: flex-start;
+    }
+
+    .provider-mark {
+      display: grid;
+      width: 24px;
+      height: 24px;
+      place-items: center;
+      background: var(--surface-subtle);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .auth-note {
+      margin: 16px 0 0 !important;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+      font-size: 12px;
+    }
+
+    .loading-stage {
+      min-height: 500px;
+      padding: 16px;
+    }
+
+    .corner-loader {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+    }
+
+    .spinner {
+      width: 16px;
+      height: 16px;
+      flex: 0 0 auto;
+      border: 2px solid #d4d4d8;
+      border-top-color: #52525b;
+      border-radius: 50%;
+      animation: spin 700ms linear infinite;
+    }
+
+    .loading-shell {
+      display: grid;
+      grid-template-columns: 145px minmax(0, 1fr);
+      min-height: 500px;
+    }
+
+    .mini-sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding: 16px 12px;
+      background: rgba(255, 255, 255, 0.75);
+      border-right: 1px solid var(--border);
+    }
+
+    .nav-line {
+      height: 34px;
+      background: var(--surface-subtle);
+      border-radius: 5px;
+    }
+
+    .nav-line.short {
+      width: 66%;
+    }
+
+    .loading-content {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-width: 0;
+      padding: 18px;
+    }
+
+    .loading-content-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .bounded-loader {
+      display: grid;
+      place-items: center;
+      min-height: 330px;
+    }
+
+    .status-panel {
+      display: grid;
+      width: min(330px, 100%);
+      gap: 10px;
+      justify-items: center;
+      padding: 22px;
+      text-align: center;
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px dashed var(--border-strong);
+      border-radius: 7px;
+    }
+
+    .status-panel p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    body[data-size="mobile"] .loading-shell {
+      grid-template-columns: 1fr;
+    }
+
+    body[data-size="mobile"] .mini-sidebar {
+      display: none;
+    }
+
+    body[data-size="mobile"] .loading-content {
+      padding: 16px;
+    }
+
+    .mobile-stage {
+      display: grid;
+      min-height: 610px;
+      grid-template-columns: minmax(0, 1fr) 272px;
+      background: #e6e6e8;
+    }
+
+    .mobile-page {
+      position: relative;
+      min-width: 0;
+      padding: 16px;
+      overflow: hidden;
+      background: #fafafa;
+    }
+
+    .mobile-page .mock-card {
+      margin-top: 22px;
+    }
+
+    .mobile-drawer {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      padding: 16px 12px;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+    }
+
+    .drawer-apps {
+      margin-top: 26px;
+    }
+
+    .drawer-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #303036;
+      font-size: 11px;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+
+    .tiny-button {
+      display: grid;
+      width: 24px;
+      height: 24px;
+      place-items: center;
+      padding: 0;
+      background: transparent;
+      border: 0;
+    }
+
+    .drawer-item,
+    .drawer-profile {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 46px;
+      margin-top: 8px;
+      padding: 8px;
+      border-radius: 6px;
+    }
+
+    .drawer-item {
+      background: var(--surface-subtle);
+    }
+
+    .app-mark,
+    .avatar {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      flex: 0 0 auto;
+      place-items: center;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 750;
+    }
+
+    .avatar {
+      color: #fff;
+      background: #27272a;
+      border-radius: 50%;
+    }
+
+    .drawer-profile {
+      border-top: 1px solid var(--border);
+      border-radius: 0;
+    }
+
+    .after .drawer-profile {
+      margin-top: auto;
+    }
+
+    .floating-trigger {
+      position: absolute;
+      right: 10px;
+      bottom: 10px;
+      display: grid;
+      width: 40px;
+      height: 40px;
+      place-items: center;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      box-shadow: 0 3px 10px rgba(24, 24, 27, 0.14);
+    }
+
+    .before .covered-line {
+      position: absolute;
+      right: 18px;
+      bottom: 26px;
+      width: 115px;
+      height: 9px;
+      background: #c9c9ce;
+      border-radius: 4px;
+    }
+
+    .after .mobile-page {
+      padding-bottom: 76px;
+    }
+
+    .after .floating-trigger {
+      width: 44px;
+      height: 44px;
+      right: 16px;
+      bottom: 16px;
+    }
+
+    body[data-size="mobile"] .mobile-stage {
+      grid-template-columns: minmax(56px, 1fr) minmax(0, 272px);
+    }
+
+    body[data-size="desktop"] .mobile-stage {
+      grid-template-columns: minmax(140px, 1fr) 272px;
+    }
+
+    .record-stage {
+      min-height: 500px;
+      padding: 18px;
+    }
+
+    .mock-header-row,
+    .toolbar,
+    .toolbar-actions,
+    .card-topline,
+    .action-row,
+    .field-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .mock-header-row {
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .record-switch {
+      margin-bottom: 14px;
+    }
+
+    .record-view[hidden] {
+      display: none;
+    }
+
+    .toolbar {
+      align-items: end;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .toolbar .mock-label {
+      flex: 1 1 120px;
+    }
+
+    .toolbar-actions {
+      margin-left: auto;
+    }
+
+    .before .toolbar-actions.wrap-break {
+      width: 100%;
+      justify-content: flex-end;
+    }
+
+    .wide-table-clip {
+      overflow: hidden;
+      border-top: 1px solid var(--border);
+    }
+
+    .wide-table {
+      width: 820px;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+
+    .wide-table th,
+    .wide-table td {
+      padding: 10px 8px;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .fake-scrollbar {
+      height: 9px;
+      margin-top: 144px;
+      background: #d3d3d7;
+      border-radius: 6px;
+    }
+
+    .fake-scrollbar::before {
+      display: block;
+      width: 36%;
+      height: 9px;
+      background: #8d8d95;
+      border-radius: 6px;
+      content: "";
+    }
+
+    .responsive-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+
+    .responsive-table th,
+    .responsive-table td {
+      padding: 10px 8px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .record-cards {
+      display: grid;
+      gap: 10px;
+    }
+
+    .record-card {
+      display: grid;
+      gap: 10px;
+      padding: 13px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+    }
+
+    .card-topline {
+      justify-content: space-between;
+    }
+
+    .record-card dl {
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr);
+      gap: 6px 10px;
+      margin: 0;
+      font-size: 11px;
+    }
+
+    .record-card dt {
+      color: var(--muted);
+    }
+
+    .record-card dd {
+      min-width: 0;
+      margin: 0;
+      overflow-wrap: anywhere;
+    }
+
+    body[data-size="mobile"] .record-stage {
+      padding: 14px;
+    }
+
+    body[data-size="mobile"] .toolbar {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    body[data-size="mobile"] .toolbar .search-field {
+      grid-column: 1 / -1;
+    }
+
+    body[data-size="mobile"] .toolbar-actions {
+      grid-column: 1 / -1;
+      justify-content: flex-end;
+      margin-left: 0;
+    }
+
+    .access-stage {
+      display: grid;
+      min-height: 500px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      align-content: start;
+      padding: 18px;
+    }
+
+    .access-panel {
+      min-width: 0;
+      padding: 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+    }
+
+    .access-panel h4 {
+      margin: 0 0 8px;
+      font-size: 14px;
+    }
+
+    .access-panel p {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .raw-error,
+    .actionable-error {
+      margin: 12px 0;
+      padding: 10px;
+      color: var(--danger);
+      background: var(--danger-soft);
+      border: 1px solid #f1b8b2;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
+    .actionable-error strong {
+      display: block;
+      margin-bottom: 3px;
+      color: #7f1d1d;
+    }
+
+    .choice-list {
+      display: grid;
+      gap: 8px;
+      margin: 10px 0 12px;
+    }
+
+    .choice {
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+      padding: 9px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
+    .choice input {
+      width: 16px;
+      height: 16px;
+      margin: 1px 0 0;
+    }
+
+    .authority-row {
+      display: flex;
+      min-height: 36px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+
+    .authority-row:last-child {
+      border-bottom: 0;
+    }
+
+    body[data-size="mobile"] .access-stage {
+      grid-template-columns: 1fr;
+      padding: 14px;
+    }
+
+    .handoff-stage {
+      display: grid;
+      min-height: 500px;
+      grid-template-columns: minmax(0, 1.25fr) minmax(190px, 0.75fr);
+      gap: 16px;
+      align-items: center;
+      padding: 18px;
+    }
+
+    .handoff-dialog,
+    .callback-page {
+      min-width: 0;
+      padding: 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+    }
+
+    .handoff-dialog h4,
+    .callback-page h4 {
+      margin: 0 0 7px;
+      font-size: 15px;
+    }
+
+    .handoff-dialog>p,
+    .callback-page>p {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .prompt-columns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .prompt-box {
+      height: 180px;
+      padding: 10px;
+      overflow: auto;
+      white-space: pre;
+      background: #fafafa;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: "Cascadia Mono", "Segoe UI Mono", monospace;
+      font-size: 10px;
+    }
+
+    .bare-callback {
+      min-height: 230px;
+      padding: 8px;
+      background: #fff;
+      border: 0;
+      border-radius: 0;
+    }
+
+    .bare-callback h4 {
+      font-family: serif;
+      font-size: 24px;
+    }
+
+    .bare-callback p {
+      color: #000;
+      font-family: serif;
+      font-size: 16px;
+    }
+
+    .setup-choice {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 10px;
+      padding: 3px;
+      background: var(--surface-subtle);
+      border-radius: 6px;
+    }
+
+    .setup-choice button {
+      flex: 1;
+      min-height: 34px;
+      padding: 6px;
+      background: transparent;
+      border: 0;
+      border-radius: 5px;
+      font-size: 11px;
+    }
+
+    .setup-choice button:first-child {
+      background: var(--surface);
+      box-shadow: 0 1px 3px rgba(24, 24, 27, 0.12);
+    }
+
+    .single-prompt {
+      min-height: 104px;
+      padding: 10px;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+      background: #fafafa;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: "Cascadia Mono", "Segoe UI Mono", monospace;
+      font-size: 10px;
+    }
+
+    .callback-page.polished {
+      text-align: center;
+    }
+
+    .success-mark {
+      display: grid;
+      width: 42px;
+      height: 42px;
+      place-items: center;
+      margin: 0 auto 12px;
+      color: #fff;
+      background: var(--accent);
+      border-radius: 50%;
+      font-weight: 800;
+    }
+
+    body[data-size="mobile"] .handoff-stage {
+      grid-template-columns: 1fr;
+      padding: 14px;
+    }
+
+    body[data-size="mobile"] .prompt-columns {
+      grid-template-columns: 1fr;
+    }
+
+    body[data-size="mobile"] .prompt-box {
+      height: 118px;
+      white-space: pre-wrap;
+    }
+
+    .review-footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 18px 0 30px;
+      color: var(--muted);
+      border-top: 1px solid var(--border-strong);
+      font-size: 12px;
+    }
+
+    .review-footer p {
+      max-width: 80ch;
+      margin: 0;
+    }
+
+    .review-footer a {
+      color: var(--ink);
+      font-weight: 650;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @media (max-width: 900px) {
+      .review-header,
+      .decision,
+      .scenario-heading {
+        grid-template-columns: 1fr;
+      }
+
+      .review-state {
+        padding-top: 0;
+      }
+
+      .delta-list,
+      .scenario-heading .change-list {
+        justify-content: flex-start;
+      }
+
+      .review-controls {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .comparison-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 540px) {
+      .review-header,
+      main,
+      .review-footer {
+        width: min(100% - 24px, 1480px);
+      }
+
+      .review-header {
+        gap: 12px;
+        padding-top: 18px;
+      }
+
+      .review-title h1 {
+        font-size: 23px;
+      }
+
+      .scenario-switch {
+        display: grid;
+        width: 100%;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .viewport-switch {
+        width: 100%;
+      }
+
+      .viewport-button[data-size-target="desktop"] {
+        display: none;
+      }
+
+      .viewport-button {
+        flex: 1;
+      }
+
+      .frame-heading {
+        align-items: flex-start;
+        flex-direction: column;
+        padding-block: 9px;
+      }
+
+      .review-footer {
+        display: block;
+      }
+
+      .review-footer a {
+        display: inline-block;
+        margin-top: 8px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+
+<body data-size="desktop" data-record="people">
+  <a class="skip-link" href="#review-content">Skip to comparison</a>
+
+  <header class="review-header">
+    <a class="wordmark" href="./Task.md" aria-label="Open the normative task contract">
+      <span class="brand-mark">U</span><span>UniCAS</span>
+    </a>
+    <div class="review-title">
+      <h1>Console UX recovery</h1>
+      <p>Illustrative before/after views for the production findings. The task contract remains normative.</p>
+    </div>
+    <div class="review-state">Pending interface approval</div>
+  </header>
+
+  <main id="review-content">
+    <section class="decision" aria-labelledby="decision-title">
+      <div>
+        <p class="eyebrow">Decision requested</p>
+        <h2 id="decision-title">Approve this responsive, state-aware direction before implementation.</h2>
+      </div>
+      <ul class="delta-list" aria-label="Material design changes">
+        <li>Bound every system state</li>
+        <li>Replace mobile wide-table traps</li>
+        <li>Explain privileged decisions</li>
+        <li>Unify browser auth handoffs</li>
+      </ul>
+    </section>
+
+    <div class="review-controls">
+      <nav class="scenario-switch" role="tablist" aria-label="Review scenario">
+        <button class="scenario-tab" id="tab-entry" type="button" role="tab" aria-selected="true"
+          aria-controls="scenario-entry" data-scenario-target="entry">Sign in</button>
+        <button class="scenario-tab" id="tab-loading" type="button" role="tab" aria-selected="false"
+          aria-controls="scenario-loading" data-scenario-target="loading">Loading</button>
+        <button class="scenario-tab" id="tab-navigation" type="button" role="tab" aria-selected="false"
+          aria-controls="scenario-navigation" data-scenario-target="navigation">Navigation</button>
+        <button class="scenario-tab" id="tab-records" type="button" role="tab" aria-selected="false"
+          aria-controls="scenario-records" data-scenario-target="records">Records</button>
+        <button class="scenario-tab" id="tab-access" type="button" role="tab" aria-selected="false"
+          aria-controls="scenario-access" data-scenario-target="access">Access states</button>
+        <button class="scenario-tab" id="tab-handoff" type="button" role="tab" aria-selected="false"
+          aria-controls="scenario-handoff" data-scenario-target="handoff">AI &amp; OAuth</button>
+      </nav>
+
+      <div class="viewport-switch" role="group" aria-label="Mock viewport">
+        <button class="viewport-button" type="button" aria-pressed="true" data-size-target="desktop">Desktop</button>
+        <button class="viewport-button" type="button" aria-pressed="false" data-size-target="mobile">Mobile</button>
+      </div>
+    </div>
+
+    <section class="scenario" id="scenario-entry" role="tabpanel" aria-labelledby="tab-entry"
+      data-scenario="entry">
+      <header class="scenario-heading">
+        <div>
+          <h2>Authentication entry</h2>
+          <p>Make the first-party boundary look deliberate before sending users to an external provider.</p>
+        </div>
+        <ul class="change-list" aria-label="Planned sign-in changes">
+          <li>Inset brand</li>
+          <li>Bounded provider panel</li>
+          <li>Shared normal/error hierarchy</li>
+        </ul>
+      </header>
+      <div class="comparison-grid">
+        <article class="compare-frame before" aria-labelledby="entry-before-title">
+          <header class="frame-heading"><span class="phase">Before</span><strong id="entry-before-title">Loose controls on the grid</strong></header>
+          <div class="mock-viewport">
+            <div class="auth-before-brand"><span class="brand-mark">U</span><span>UniCAS</span></div>
+            <div class="auth-stage">
+              <section class="auth-copy" aria-label="Current sign-in illustration">
+                <p class="eyebrow">Restricted console</p>
+                <h3>Sign in to UniCAS</h3>
+                <p>Choose a configured login method to continue.</p>
+                <div class="provider-stack">
+                  <button class="provider-button" type="button">Continue with Google</button>
+                  <button class="provider-button" type="button">Continue with Microsoft</button>
+                  <button class="provider-button" type="button">Continue with GitHub</button>
+                </div>
+              </section>
+            </div>
+          </div>
+        </article>
+
+        <article class="compare-frame after" aria-labelledby="entry-after-title">
+          <header class="frame-heading"><span class="phase">After</span><strong id="entry-after-title">One trusted authentication surface</strong></header>
+          <div class="mock-viewport">
+            <div class="auth-stage">
+              <section class="auth-card" aria-label="Proposed sign-in illustration">
+                <div class="mock-brand"><span class="brand-mark">U</span><span>UniCAS</span></div>
+                <p class="eyebrow">Restricted console</p>
+                <h3>Sign in to UniCAS</h3>
+                <p>Choose a login method configured for this environment.</p>
+                <div class="provider-stack">
+                  <button class="provider-button" type="button"><span class="provider-mark">G</span>Continue with Google</button>
+                  <button class="provider-button" type="button"><span class="provider-mark">M</span>Continue with Microsoft</button>
+                  <button class="provider-button" type="button"><span class="provider-mark">GH</span>Continue with GitHub</button>
+                </div>
+                <p class="auth-note">Access is checked after authentication. No provider credential is shared with UniCAS.</p>
+              </section>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="scenario" id="scenario-loading" role="tabpanel" aria-labelledby="tab-loading"
+      data-scenario="loading" hidden>
+      <header class="scenario-heading">
+        <div>
+          <h2>Route and session loading</h2>
+          <p>Reserve the destination before data arrives and keep the status attached to what is loading.</p>
+        </div>
+        <ul class="change-list" aria-label="Planned loading changes">
+          <li>Stable content region</li>
+          <li>Named status</li>
+          <li>Reduced-motion support</li>
+        </ul>
+      </header>
+      <div class="comparison-grid">
+        <article class="compare-frame before" aria-labelledby="loading-before-title">
+          <header class="frame-heading"><span class="phase">Before</span><strong id="loading-before-title">Spinner inherits the page corner</strong></header>
+          <div class="mock-viewport loading-stage">
+            <div class="corner-loader" role="status"><span class="spinner" aria-hidden="true"></span>Loading app...</div>
+          </div>
+        </article>
+
+        <article class="compare-frame after" aria-labelledby="loading-after-title">
+          <header class="frame-heading"><span class="phase">After</span><strong id="loading-after-title">Destination stays legible</strong></header>
+          <div class="mock-viewport loading-shell">
+            <aside class="mini-sidebar" aria-label="Preserved navigation illustration">
+              <div class="mock-brand"><span class="brand-mark">U</span><span>UniCAS</span></div>
+              <div class="nav-line"></div><div class="nav-line short"></div>
+            </aside>
+            <section class="loading-content" aria-label="Loading App overview illustration">
+              <div class="loading-content-header"><h3 class="mock-screen-heading">Production Smoke</h3><span class="badge">Overview</span></div>
+              <div class="bounded-loader">
+                <div class="status-panel" role="status">
+                  <span class="spinner" aria-hidden="true"></span>
+                  <strong>Loading App overview</strong>
+                  <p>Navigation remains available while current settings load.</p>
+                </div>
+              </div>
+            </section>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="scenario" id="scenario-navigation" role="tabpanel" aria-labelledby="tab-navigation"
+      data-scenario="navigation" hidden>
+      <header class="scenario-heading">
+        <div>
+          <h2>Mobile shell and drawer</h2>
+          <p>Keep right-handed access without covering the work or losing the profile anchor.</p>
+        </div>
+        <ul class="change-list" aria-label="Planned navigation changes">
+          <li>Reserved safe area</li>
+          <li>44px controls</li>
+          <li>Profile anchored at bottom</li>
+        </ul>
+      </header>
+      <div class="comparison-grid">
+        <article class="compare-frame before" aria-labelledby="navigation-before-title">
+          <header class="frame-heading"><span class="phase">Before</span><strong id="navigation-before-title">Trigger and profile float over the flow</strong></header>
+          <div class="mock-viewport mobile-stage">
+            <section class="mobile-page" aria-label="Current mobile content illustration">
+              <h3 class="mock-screen-heading">Account</h3>
+              <div class="mock-card"><h4>Login methods</h4><p class="muted">Google</p><p class="tiny muted">Current session</p></div>
+              <span class="covered-line" aria-hidden="true"></span>
+              <button class="floating-trigger" type="button" aria-label="Current navigation trigger">Menu</button>
+            </section>
+            <aside class="mobile-drawer" aria-label="Current mobile drawer illustration">
+              <div class="mock-brand"><span class="brand-mark">U</span><span>UniCAS</span></div>
+              <div class="drawer-apps">
+                <div class="drawer-label"><span>Apps</span><button class="tiny-button" type="button" aria-label="Current Create App">+</button></div>
+                <div class="drawer-item"><span class="app-mark">PR</span><strong>Production Smoke</strong></div>
+              </div>
+              <div class="drawer-profile"><span class="avatar">AM</span><span><strong>Alex Morgan</strong><br><span class="tiny muted">1 App membership</span></span></div>
+            </aside>
+          </div>
+        </article>
+
+        <article class="compare-frame after" aria-labelledby="navigation-after-title">
+          <header class="frame-heading"><span class="phase">After</span><strong id="navigation-after-title">Safe trigger, anchored identity</strong></header>
+          <div class="mock-viewport mobile-stage">
+            <section class="mobile-page" aria-label="Proposed mobile content illustration">
+              <h3 class="mock-screen-heading">Account</h3>
+              <div class="mock-card"><h4>Login methods</h4><p><strong>Google</strong> <span class="badge success">Current session</span></p><p class="tiny muted">Last used today at 10:42</p></div>
+              <button class="floating-trigger touch-target" type="button" aria-label="Open navigation">Menu</button>
+            </section>
+            <aside class="mobile-drawer" aria-label="Proposed mobile drawer illustration">
+              <div class="mock-brand"><span class="brand-mark">U</span><span>UniCAS</span></div>
+              <div class="drawer-apps">
+                <div class="drawer-label"><span>Apps</span><button class="mock-button small touch-target" type="button">Create App</button></div>
+                <div class="drawer-item"><span class="app-mark">PR</span><strong>Production Smoke</strong></div>
+              </div>
+              <div class="drawer-profile"><span class="avatar">AM</span><span><strong>Alex Morgan</strong><br><span class="tiny muted">Administration</span></span></div>
+            </aside>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="scenario" id="scenario-records" role="tabpanel" aria-labelledby="tab-records"
+      data-scenario="records" hidden>
+      <header class="scenario-heading">
+        <div>
+          <h2>People and audit records</h2>
+          <p>Preserve identity and actions on narrow screens instead of making users pan a long table.</p>
+        </div>
+        <div>
+          <ul class="change-list" aria-label="Planned record changes">
+            <li>Responsive record cards</li>
+            <li>Visible active filters</li>
+            <li>Readable event labels</li>
+          </ul>
+          <div class="record-switch" role="group" aria-label="Record type" style="margin-top: 10px; float: right;">
+            <button class="record-button" type="button" aria-pressed="true" data-record-target="people">People</button>
+            <button class="record-button" type="button" aria-pressed="false" data-record-target="audit">Change Logs</button>
+          </div>
+        </div>
+      </header>
+      <div class="comparison-grid">
+        <article class="compare-frame before" aria-labelledby="records-before-title">
+          <header class="frame-heading"><span class="phase">Before</span><strong id="records-before-title">Wide table inside a narrow viewport</strong></header>
+          <div class="mock-viewport record-stage">
+            <div class="record-view" data-record-view="people">
+              <div class="mock-header-row"><h3 class="mock-screen-heading">Administration</h3><span class="badge">Members</span></div>
+              <div class="toolbar">
+                <label class="mock-label search-field">Search<input class="mock-input" value="" placeholder="Search people"></label>
+                <label class="mock-label">Queue<select class="mock-select"><option>Current</option></select></label>
+                <label class="mock-label">Authority<select class="mock-select"><option>All authorities</option></select></label>
+                <div class="toolbar-actions wrap-break"><button class="icon-button" type="button" aria-label="Refresh people">Reload</button><button class="mock-button primary" type="button">Invite</button></div>
+              </div>
+              <div class="wide-table-clip" aria-label="Current people table crop">
+                <table class="wide-table"><thead><tr><th>Account / Email</th><th>Status</th><th>Authorities</th><th>Apps</th><th>Created</th><th>Actions</th></tr></thead><tbody>
+                  <tr><td><strong>Alex Morgan</strong><br><span class="mono muted">acct_01HX8Q7...</span></td><td>active</td><td>platform.admin<br>apps.create</td><td>3</td><td>9/19/2026</td><td>Open</td></tr>
+                  <tr><td><strong>Riley Chen</strong><br><span class="mono muted">acct_01HX9K2...</span></td><td>active</td><td>apps.create</td><td>1</td><td>9/18/2026</td><td>Open</td></tr>
+                </tbody></table>
+                <div class="fake-scrollbar" aria-label="Horizontal scrollbar appears after the result set"></div>
+              </div>
+            </div>
+            <div class="record-view" data-record-view="audit" hidden>
+              <div class="mock-header-row"><h3 class="mock-screen-heading">Change Logs</h3><span class="badge">12 events</span></div>
+              <div class="toolbar"><label class="mock-label search-field">Action<select class="mock-select"><option>All actions</option></select></label><label class="mock-label">Actor ID<input class="mock-input"></label><div class="toolbar-actions"><button class="mock-button primary" type="button">Apply</button></div></div>
+              <div class="wide-table-clip" aria-label="Current audit table crop">
+                <table class="wide-table"><thead><tr><th>Time</th><th>Action</th><th>Actor</th><th>Target</th><th>Result</th><th>Request</th></tr></thead><tbody>
+                  <tr><td>9/19/2026, 9:38 PM</td><td class="mono">platform_access.restored</td><td>Alex Morgan<br><span class="mono muted">acct_01HX8Q7...</span></td><td class="mono">acct_01HX9K2...</td><td>succeeded</td><td>-</td></tr>
+                  <tr><td>9/19/2026, 9:37 PM</td><td class="mono">platform_access.blocked</td><td>Alex Morgan</td><td class="mono">acct_01HX9K2...</td><td>succeeded</td><td>-</td></tr>
+                </tbody></table>
+                <div class="fake-scrollbar" aria-label="Horizontal scrollbar appears after the result set"></div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="compare-frame after" aria-labelledby="records-after-title">
+          <header class="frame-heading"><span class="phase">After</span><strong id="records-after-title">Desktop table, mobile record summaries</strong></header>
+          <div class="mock-viewport record-stage">
+            <div class="record-view" data-record-view="people">
+              <div class="mock-header-row"><h3 class="mock-screen-heading">Administration</h3><span class="badge">Members</span></div>
+              <div class="toolbar">
+                <label class="mock-label search-field">Search<input class="mock-input" value="" placeholder="Name, email, or Account ID"></label>
+                <label class="mock-label">Queue<select class="mock-select"><option>Accounts</option></select></label>
+                <label class="mock-label">Access<select class="mock-select"><option>All access</option></select></label>
+                <div class="toolbar-actions"><button class="icon-button" type="button" aria-label="Refresh people">Reload</button><button class="mock-button primary touch-target" type="button">Invite</button></div>
+              </div>
+              <table class="responsive-table desktop-only"><thead><tr><th>Account</th><th>Access</th><th>Authorities</th><th>Apps</th><th>Updated</th><th>Action</th></tr></thead><tbody>
+                <tr><td><strong>Alex Morgan</strong><br><span class="mono muted">acct_01HX8Q7...</span></td><td><span class="badge success">Active</span></td><td>Platform admin, Create Apps</td><td>3</td><td>Sep 19, 9:38 PM</td><td><button class="mock-button small" type="button">View</button></td></tr>
+                <tr><td><strong>Riley Chen</strong><br><span class="mono muted">acct_01HX9K2...</span></td><td><span class="badge success">Active</span></td><td>Create Apps</td><td>1</td><td>Sep 18, 3:57 PM</td><td><button class="mock-button small" type="button">View</button></td></tr>
+              </tbody></table>
+              <div class="record-cards mobile-only">
+                <article class="record-card"><div class="card-topline"><strong>Alex Morgan</strong><span class="badge success">Active</span></div><div class="mono muted">acct_01HX8Q7...</div><dl><dt>Authorities</dt><dd>Platform admin, Create Apps</dd><dt>Apps</dt><dd>3</dd><dt>Updated</dt><dd>Sep 19, 9:38 PM</dd></dl><button class="mock-button touch-target" type="button">View account</button></article>
+                <article class="record-card"><div class="card-topline"><strong>Riley Chen</strong><span class="badge success">Active</span></div><div class="mono muted">acct_01HX9K2...</div><dl><dt>Authorities</dt><dd>Create Apps</dd><dt>Apps</dt><dd>1</dd></dl><button class="mock-button touch-target" type="button">View account</button></article>
+              </div>
+            </div>
+            <div class="record-view" data-record-view="audit" hidden>
+              <div class="mock-header-row"><h3 class="mock-screen-heading">Change Logs</h3><span class="badge">12 events</span></div>
+              <div class="toolbar"><label class="mock-label search-field">Action<select class="mock-select"><option>All actions</option></select></label><label class="mock-label">Actor ID<input class="mock-input" placeholder="acct_..."></label><div class="toolbar-actions"><button class="mock-button primary" type="button">Apply filters</button></div></div>
+              <table class="responsive-table desktop-only"><thead><tr><th>Time</th><th>Change</th><th>Actor</th><th>Target</th><th>Result</th><th>Details</th></tr></thead><tbody>
+                <tr><td>Sep 19, 9:38 PM</td><td><strong>Access restored</strong><br><span class="mono muted">platform_access.restored</span></td><td>Alex Morgan</td><td class="mono">acct_01HX9K2...</td><td><span class="badge success">Succeeded</span></td><td><button class="mock-button small" type="button">View</button></td></tr>
+                <tr><td>Sep 19, 9:37 PM</td><td><strong>Access blocked</strong><br><span class="mono muted">platform_access.blocked</span></td><td>Alex Morgan</td><td class="mono">acct_01HX9K2...</td><td><span class="badge success">Succeeded</span></td><td><button class="mock-button small" type="button">View</button></td></tr>
+              </tbody></table>
+              <div class="record-cards mobile-only">
+                <article class="record-card"><div class="card-topline"><strong>Access restored</strong><span class="badge success">Succeeded</span></div><div class="tiny muted">Sep 19, 9:38 PM</div><dl><dt>Actor</dt><dd>Alex Morgan</dd><dt>Target</dt><dd class="mono">acct_01HX9K2...</dd><dt>Event</dt><dd class="mono">platform_access.restored</dd></dl><button class="mock-button touch-target" type="button">View event details</button></article>
+                <article class="record-card"><div class="card-topline"><strong>Access blocked</strong><span class="badge success">Succeeded</span></div><div class="tiny muted">Sep 19, 9:37 PM</div><dl><dt>Actor</dt><dd>Alex Morgan</dd><dt>Target</dt><dd class="mono">acct_01HX9K2...</dd></dl><button class="mock-button touch-target" type="button">View event details</button></article>
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="scenario" id="scenario-access" role="tabpanel" aria-labelledby="tab-access"
+      data-scenario="access" hidden>
+      <header class="scenario-heading">
+        <div>
+          <h2>Errors and privileged decisions</h2>
+          <p>Explain consequences before action and keep diagnostic identifiers available as secondary detail.</p>
+        </div>
+        <ul class="change-list" aria-label="Planned access-state changes">
+          <li>Actionable issuer errors</li>
+          <li>Explicit invitation scope</li>
+          <li>Human-readable authorities</li>
+        </ul>
+      </header>
+      <div class="comparison-grid">
+        <article class="compare-frame before" aria-labelledby="access-before-title">
+          <header class="frame-heading"><span class="phase">Before</span><strong id="access-before-title">Codes and controls without consequences</strong></header>
+          <div class="mock-viewport access-stage">
+            <section class="access-panel"><h4>Managed issuer</h4><p>UniCAS built-in authorization server.</p><div class="raw-error" role="alert">NOT_FOUND</div><button class="mock-button" type="button" disabled>Inspect issuer</button></section>
+            <section class="access-panel"><h4>Invite App member</h4><label class="mock-label">Email constraint (optional)<input class="mock-input" type="email"></label><div class="action-row" style="margin-top: 12px; justify-content: end;"><button class="mock-button primary" type="button">Create invitation</button></div></section>
+            <section class="access-panel"><h4>Account Details</h4><p class="mono">acct_01HX9K2...</p><div class="authority-row"><span>platform.admin</span><input type="checkbox"></div><div class="authority-row"><span>apps.create</span><input type="checkbox" checked></div><p style="margin-top: 12px;">App Memberships (0)</p></section>
+          </div>
+        </article>
+
+        <article class="compare-frame after" aria-labelledby="access-after-title">
+          <header class="frame-heading"><span class="phase">After</span><strong id="access-after-title">Cause, effect, and next action</strong></header>
+          <div class="mock-viewport access-stage">
+            <section class="access-panel"><h4>Managed issuer unavailable</h4><div class="actionable-error" role="alert"><strong>Settings could not be loaded</strong>The issuer may not be configured, or the request failed. Retry before editing.</div><button class="mock-button" type="button">Retry</button></section>
+            <section class="access-panel"><h4>Who can accept?</h4><div class="choice-list"><label class="choice"><input type="radio" name="invite-scope" checked><span><strong>Only this email</strong><br><span class="muted">Recipient must sign in with a matching verified address.</span></span></label><label class="choice"><input type="radio" name="invite-scope"><span><strong>Anyone with the one-time link</strong><br><span class="muted">Treat the link like a credential.</span></span></label></div><button class="mock-button primary" type="button">Create invitation</button></section>
+            <section class="access-panel"><h4>Alex Morgan</h4><p class="mono">acct_01HX9K2...</p><p class="tiny">Changes apply immediately.</p><div class="authority-row"><span><strong>Platform administration</strong><br><span class="tiny muted">Manage platform access</span></span><input type="checkbox"></div><div class="authority-row"><span><strong>Create Apps</strong><br><span class="tiny muted">Register new Apps</span></span><input type="checkbox" checked></div><p style="margin-top: 12px;"><strong>No App memberships</strong><br><span class="tiny muted">This Account does not administer an App.</span></p></section>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="scenario" id="scenario-handoff" role="tabpanel" aria-labelledby="tab-handoff"
+      data-scenario="handoff" hidden>
+      <header class="scenario-heading">
+        <div>
+          <h2>AI setup and OAuth completion</h2>
+          <p>Turn two dense handoffs into one focused setup choice and one trustworthy completion state.</p>
+        </div>
+        <ul class="change-list" aria-label="Planned handoff changes">
+          <li>One setup path at a time</li>
+          <li>No nested two-axis scroll</li>
+          <li>Self-contained result page</li>
+        </ul>
+      </header>
+      <div class="comparison-grid">
+        <article class="compare-frame before" aria-labelledby="handoff-before-title">
+          <header class="frame-heading"><span class="phase">Before</span><strong id="handoff-before-title">Competing prompts, bare callback</strong></header>
+          <div class="mock-viewport handoff-stage">
+            <section class="handoff-dialog"><h4>Connect an AI tool</h4><p>Use the server URL directly, or paste a prompt into your AI tool.</p><div class="prompt-columns"><div><strong class="tiny">Configuration prompt</strong><pre class="prompt-box">Add a remote MCP server named
+"UniCAS" with this URL:
+https://console.unicas.work/mcp</pre></div><div><strong class="tiny">CLI prompt</strong><pre class="prompt-box">Install the UniCAS CLI and its
+agent skill, then operate the
+control plane with it:
+1. Install the CLI...
+2. Log in once...</pre></div></div></section>
+            <section class="callback-page bare-callback" aria-label="Current authorization result illustration"><h4>Authorization complete</h4><p>You can close this window and return to the terminal.</p></section>
+          </div>
+        </article>
+
+        <article class="compare-frame after" aria-labelledby="handoff-after-title">
+          <header class="frame-heading"><span class="phase">After</span><strong id="handoff-after-title">Focused setup, clear completion</strong></header>
+          <div class="mock-viewport handoff-stage">
+            <section class="handoff-dialog"><h4>Connect an AI tool</h4><p>Choose the setup supported by your tool.</p><div class="setup-choice" aria-label="Illustrative setup choice"><button type="button">Remote MCP</button><button type="button">CLI / stdio</button></div><div class="field-row" style="margin-bottom: 10px;"><code class="mono" style="flex: 1;">https://console.unicas.work/mcp</code><button class="mock-button small" type="button">Copy URL</button></div><pre class="single-prompt">Add a remote MCP server named "UniCAS" using Streamable HTTP. Authentication opens in your browser; no API key is required.</pre><div class="action-row" style="justify-content: end; margin-top: 10px;"><button class="mock-button" type="button">Copy setup prompt</button></div></section>
+            <section class="callback-page polished" aria-label="Proposed authorization result illustration"><div class="success-mark" aria-hidden="true">OK</div><h4>Authorization complete</h4><p>UniCAS is connected. Return to your terminal or AI tool to continue.</p><span class="badge success">You can close this window</span></section>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="review-footer">
+    <p>This standalone file is an illustrative review aid, not production UI or a behavior contract. It uses synthetic identities and no production credentials.</p>
+    <a href="./Task.md">Open the normative task</a>
+  </footer>
+
+  <script>
+    const scenarioTabs = [...document.querySelectorAll("[data-scenario-target]")];
+    const scenarios = [...document.querySelectorAll("[data-scenario]")];
+    const sizeButtons = [...document.querySelectorAll("[data-size-target]")];
+    const recordButtons = [...document.querySelectorAll("[data-record-target]")];
+    const recordViews = [...document.querySelectorAll("[data-record-view]")];
+
+    function activateScenario(name, moveFocus = false) {
+      scenarioTabs.forEach((tab) => {
+        const selected = tab.dataset.scenarioTarget === name;
+        tab.setAttribute("aria-selected", String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+        if (selected && moveFocus) tab.focus();
+      });
+      scenarios.forEach((scenario) => {
+        scenario.hidden = scenario.dataset.scenario !== name;
+      });
+    }
+
+    scenarioTabs.forEach((tab, index) => {
+      tab.addEventListener("click", () => activateScenario(tab.dataset.scenarioTarget));
+      tab.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "Home" && event.key !== "End") return;
+        event.preventDefault();
+        let targetIndex = index;
+        if (event.key === "ArrowRight") targetIndex = (index + 1) % scenarioTabs.length;
+        if (event.key === "ArrowLeft") targetIndex = (index - 1 + scenarioTabs.length) % scenarioTabs.length;
+        if (event.key === "Home") targetIndex = 0;
+        if (event.key === "End") targetIndex = scenarioTabs.length - 1;
+        activateScenario(scenarioTabs[targetIndex].dataset.scenarioTarget, true);
+      });
+    });
+
+    function setSize(size) {
+      document.body.dataset.size = size;
+      sizeButtons.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.sizeTarget === size)));
+    }
+
+    sizeButtons.forEach((button) => button.addEventListener("click", () => setSize(button.dataset.sizeTarget)));
+
+    function setRecordType(type) {
+      document.body.dataset.record = type;
+      recordButtons.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.recordTarget === type)));
+      recordViews.forEach((view) => {
+        view.hidden = view.dataset.recordView !== type;
+      });
+    }
+
+    recordButtons.forEach((button) => button.addEventListener("click", () => setRecordType(button.dataset.recordTarget)));
+
+    const narrowViewport = window.matchMedia("(max-width: 700px)");
+    if (narrowViewport.matches) setSize("mobile");
+    narrowViewport.addEventListener("change", (event) => setSize(event.matches ? "mobile" : "desktop"));
+  </script>
+</body>
+
+</html>

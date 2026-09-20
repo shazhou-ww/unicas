@@ -248,6 +248,7 @@ work begins.
 
 ## References
 
+- [Pending interface review](./UiReview.html)
 - [Admin WebUI shell and routing](/packages/admin-webui/src/ui/app.tsx)
 - [Sidebar and mobile navigation](/packages/admin-webui/src/ui/components/app-sidebar.tsx)
 - [Responsive and authentication styles](/packages/admin-webui/src/ui/styles.css)
