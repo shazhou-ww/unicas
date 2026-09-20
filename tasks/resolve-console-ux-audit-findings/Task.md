@@ -4,20 +4,23 @@ Created: 2026-09-20
 
 ## Goal
 
-Make the signed-in UniCAS Console's core administration workflows usable and
-self-explanatory at 375px, 768px, and 1280px widths, with primary information
-and actions reachable without page-level horizontal scrolling, obscured
-content, ambiguous state, or raw backend errors.
+Make the UniCAS Console entry, core signed-in administration workflows, and
+browser-facing authorization handoffs usable and self-explanatory at 375px,
+768px, and 1280px widths, with primary information and actions reachable
+without page-level horizontal scrolling, obscured content, ambiguous state,
+raw backend errors, or visibly unfinished system pages.
 
 ## Context
 
 A read-only Chromium walkthrough of the production Console at
 <https://console.unicas.work/admin/> on 2026-09-20 used an existing platform
-administrator session. It covered the no-selection home, mobile navigation,
-App Overview, App Members, App Change Logs, Administration Members,
-Administration Change Logs, Account, invitation and account-detail overlays,
-and Connect AI tools. Measurements below are CSS pixels from the rendered
-production UI.
+administrator session plus an isolated anonymous session. It covered the
+sign-in page, no-selection home, mobile navigation, App Overview, App Members,
+App Change Logs, Administration Members, Administration Change Logs, Account,
+invitation and account-detail overlays, and Connect AI tools. A follow-up source
+inspection also covered the local callback page shown after CLI/MCP browser
+authorization. Measurements below are CSS pixels from the rendered production
+UI.
 
 The walkthrough found these reproducible issues:
 
@@ -54,8 +57,21 @@ The walkthrough found these reproducible issues:
 - **P2 - Loading, empty, and failure states are visually inconsistent.** People
   views show `Loading people...` together with an empty table frame, platform
   Change Logs substitutes one text line for the data region, and App Change
-  Logs uses low-contrast skeleton rows. These states are easy to confuse with
-  an empty result and do not consistently offer retry or preserve context.
+  Logs uses low-contrast skeleton rows. Session, App, and Account loading
+  spinners can appear at the upper-left of the viewport or content region
+  because the shell has no stable loading-state layout. These states are easy
+  to confuse with an empty result and do not consistently reserve space, offer
+  retry, or preserve context.
+- **P2 - The sign-in page lacks an intentional authentication surface.** Its
+  `app-header` has no matching layout style, so the 26px brand mark sits against
+  the upper-left viewport edge. The normal provider chooser has no panel
+  background, border, padding, or visual grouping and appears to float directly
+  on the page grid, unlike the styled access-restricted state.
+- **P2 - The CLI/MCP authorization result page looks unfinished at a critical
+  trust handoff.** The loopback callback returns a bare unstyled heading and
+  paragraph for success, failure, state mismatch, and not-found responses. It
+  has no document title, viewport metadata, brand/status treatment, bounded
+  content layout, or consistent next-action hierarchy.
 - **P2 - Sensitive account and invitation actions lack decision context.** The
   App invitation dialog does not explain what leaving `Email constraint
   (optional)` blank authorizes before enabling Create invitation. Account
@@ -100,6 +116,16 @@ than duplicate its data-fetching work.
   with distinct, accessible messages that identify what happened and offer an
   appropriate retry or next step. Coordinate App/issuer fetch lifecycle changes
   with the query-cache task.
+- Give session, App, Account, and other route-level loading states a stable,
+  intentionally positioned content region so indicators do not fall into a
+  page corner or cause avoidable layout shifts.
+- Give the Console sign-in and remote MCP provider-selection pages a coherent,
+  responsive authentication shell with deliberate brand placement, a visually
+  bounded provider-choice region, and consistent normal, restricted, and error
+  states.
+- Give CLI/MCP loopback authorization success and failure responses a polished,
+  self-contained result page with clear status, next action, and accessible
+  document structure while preserving the callback's existing behavior.
 - Clarify App invitation constraint consequences, platform account identity and
   authority effects, mutation timing, empty membership state, linked-login
   activity, and unavailable identity actions without changing their underlying
@@ -121,8 +147,9 @@ than duplicate its data-fetching work.
   request deduplication owned by `adopt-admin-webui-query-cache`.
 - Restoring the retired Console Playground or implementing the reference file
   App owned by `replace-playground-with-reference-app`.
-- Rebranding UniCAS, replacing the existing component system, or redesigning
-  public documentation and sign-in pages.
+- Rebranding UniCAS, replacing the existing component system, redesigning
+  public documentation, or restyling upstream Google, Microsoft, and GitHub
+  identity-provider pages.
 
 ## Acceptance criteria
 
@@ -148,6 +175,10 @@ than duplicate its data-fetching work.
       as the sole message; the UI distinguishes absent configuration,
       authorization, loading, and request failure and offers the valid retry or
       next action while explaining disabled controls.
+- [ ] Session, App, Account, people, and audit loading indicators appear inside
+  a stable, intentional status region rather than at a viewport or content
+  corner; status text is announced, motion honors reduced-motion settings,
+  and resolved content does not shift unnecessarily.
 - [ ] People and audit initial-load, background/load-more, empty-filter, stale or
       retained-data, and failure states are visually distinct, announced to
       assistive technology, and do not present an empty table as confirmed
@@ -162,12 +193,22 @@ than duplicate its data-fetching work.
 - [ ] The no-selection home exposes a plainly named next action, and App
       Overview and Connect AI tools remain scannable on mobile and desktop
       without nested horizontal and vertical reading traps.
-- [ ] Focused Admin WebUI tests cover the corrected state and interaction
-      semantics, and automated browser checks capture the affected routes at
-      375px, 768px, and 1280px with long identifiers and representative data.
-- [ ] `@unicas/admin-webui` tests, typecheck, and build pass without changing
-      admin/data-plane package boundaries or the existing route and permission
-      contracts.
+- [ ] The Console sign-in and remote MCP provider-selection pages place UniCAS
+  branding with deliberate viewport spacing and present providers inside a
+  clear, responsive authentication surface whose normal, restricted, and
+  error states share one visual hierarchy.
+- [ ] CLI/MCP loopback success, provider failure, missing-code, state-mismatch,
+  and not-found responses render a responsive self-contained result page
+  with a document title, viewport metadata, recognizable UniCAS/status
+  treatment, accessible status semantics, and an explicit safe next step.
+- [ ] Focused Admin WebUI, Admin BFF, MCP authorization, and Admin CLI tests
+  cover the corrected state and interaction semantics, and automated browser
+  checks capture the affected routes and standalone pages at 375px, 768px,
+  and 1280px with long identifiers and representative data.
+- [ ] Relevant `@unicas/admin-webui`, `@unicas/service-cloudflare`, and
+  `@unicas/admin-cli` tests, typechecks, and builds pass without changing
+  admin/data-plane package boundaries or existing OAuth, route, and
+  permission contracts.
 
 ## Constraints
 
@@ -184,6 +225,9 @@ than duplicate its data-fetching work.
   request lifecycle.
 - Validate destructive and permission-changing flows with local fixtures or
   isolated test data. Production walkthroughs remain read-only.
+- Keep loopback authorization result pages self-contained and functional
+  without remote assets or scripts; continue escaping provider-supplied error
+  text and do not expose authorization codes, state, credentials, or secrets.
 - Preserve the product display name `UniCAS` and support reduced motion,
   keyboard navigation, focus restoration, and assistive technology throughout
   responsive transitions.
@@ -197,16 +241,19 @@ work begins.
 | Checkpoint | Applicability | Reviewer | Planned review artifact | Approval required before |
 | --- | --- | --- | --- | --- |
 | Scope | Required | User or accountable product owner | This production audit, prioritized findings, scope boundaries, constraints, acceptance criteria, and coordination with adjacent backlog work. | Substantive implementation. |
-| Interface | Required | User or delegated Console product owner | Task-owned before/after HTML review covering home, navigation, Overview, people, audit, Account, invitation/account-detail overlays, and Connect AI tools at mobile, tablet, and desktop widths, including loading, empty, error, long-content, and destructive-action states. | Implementing the affected interaction and responsive presentation. |
+| Interface | Required | User or delegated Console product owner | Task-owned before/after HTML review covering sign-in/provider selection, global loading states, home, navigation, Overview, people, audit, Account, invitation/account-detail overlays, Connect AI tools, and CLI/MCP authorization results at mobile, tablet, and desktop widths, including loading, empty, error, long-content, and destructive-action states. | Implementing the affected interaction and responsive presentation. |
 | Business and data model | Not applicable: the task preserves existing App, account, authority, invitation, audit, issuer, and identity semantics and changes only their presentation. | Not applicable | Not applicable | Not applicable |
-| Architecture | Assess during execution: required if implementation introduces a shared responsive data-view abstraction, a new UI dependency, or changes state ownership across views. | User or delegated architecture owner | Proposed component ownership, dependency impact, and state boundaries for any shared abstraction. | Adding that abstraction/dependency or moving state ownership. |
+| Architecture | Assess during execution: required if implementation introduces a shared responsive data-view or authentication-page abstraction, a new UI dependency, cross-package runtime code sharing, or changes state ownership across views. | User or delegated architecture owner | Proposed component ownership, dependency impact, state boundaries, and package placement for any shared abstraction. | Adding that abstraction/dependency, sharing runtime presentation code across packages, or moving state ownership. |
 | Delivery acceptance | Required | User or accountable product owner | Integrated revision, focused automated results, responsive screenshots at 375px, 768px, and 1280px, keyboard and assistive-state checks, and read-only production smoke results. | Running `task complete` for the exact approved primary commit. |
 
 ## References
 
 - [Admin WebUI shell and routing](/packages/admin-webui/src/ui/app.tsx)
 - [Sidebar and mobile navigation](/packages/admin-webui/src/ui/components/app-sidebar.tsx)
-- [Responsive styles](/packages/admin-webui/src/ui/styles.css)
+- [Responsive and authentication styles](/packages/admin-webui/src/ui/styles.css)
+- [Console sign-in rendering](/packages/service-cloudflare/src/admin-bff/bff.ts)
+- [Remote MCP provider selection](/packages/service-cloudflare/src/mcp/auth.ts)
+- [CLI/MCP loopback authorization result rendering](/packages/admin-cli/src/oauth/login.ts)
 - [People and invitation workflows](/packages/admin-webui/src/ui/views/people.tsx)
 - [App Change Logs](/packages/admin-webui/src/ui/views/control-audit.tsx)
 - [Platform Change Logs](/packages/admin-webui/src/ui/views/platform/audit.tsx)
