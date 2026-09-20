@@ -168,6 +168,11 @@
     .page-head h3 { margin: 0; font-size: 20px; font-weight: 680; }
     .page-head p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
 
+    .page-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+    .breadcrumbs { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin: 14px 0 0; color: var(--muted); font-size: 12px; }
+    .breadcrumb { padding: 2px 4px; color: var(--muted-strong); background: transparent; border: 0; border-radius: 4px; }
+    .breadcrumb.current { color: var(--foreground); font-weight: 650; }
+
     .button { display: inline-flex; min-height: 34px; align-items: center; justify-content: center; gap: 6px; padding: 7px 11px; color: var(--foreground); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; font-weight: 650; }
     .button.primary { color: var(--primary-foreground); background: var(--primary); border-color: var(--primary); }
     .button.danger { color: var(--danger); background: var(--danger-soft); border-color: #efc4c0; }
@@ -185,6 +190,8 @@
     .filemeta { color: var(--muted); font-size: 11px; }
     .row-actions { display: flex; gap: 4px; }
     .icon-button { display: grid; width: 30px; height: 30px; place-items: center; background: transparent; border: 1px solid transparent; border-radius: 5px; color: var(--muted-strong); }
+    .empty-folder { display: grid; min-height: 164px; place-items: center; padding: 22px; color: var(--muted); text-align: center; background: var(--surface); }
+    .empty-folder strong { display: block; margin-bottom: 4px; color: var(--foreground); font-size: 14px; }
 
     .login { display: grid; min-height: 570px; place-items: center; padding: 24px; background: var(--background); }
     .login-panel { width: min(360px, 100%); padding: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 14px 36px rgba(24, 24, 27, 0.07); }
@@ -203,6 +210,14 @@
     .error { margin-top: 15px; padding: 11px 12px; color: #7f1d1d; background: var(--danger-soft); border: 1px solid #efc4c0; border-radius: 7px; }
     .error strong { display: block; }
     .error span { font-size: 11px; }
+
+    .rename-panel { width: min(380px, 100%); margin: 18px auto 0; padding: 18px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 10px 28px rgba(24, 24, 27, 0.08); }
+    .rename-panel h4 { margin: 0; font-size: 16px; }
+    .rename-panel p { margin: 5px 0 14px; color: var(--muted); font-size: 12px; }
+    .rename-panel label { display: block; margin-bottom: 5px; color: var(--muted-strong); font-size: 11px; font-weight: 650; }
+    .rename-panel input { width: 100%; min-height: 37px; padding: 7px 9px; color: var(--foreground); background: var(--surface); border: 1px solid var(--danger); border-radius: 6px; font: inherit; }
+    .field-error { margin: 5px 0 13px; color: var(--danger); font-size: 11px; }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 7px; }
 
     .reference-note { margin: 18px 0 0; padding: 12px 14px; color: var(--muted-strong); background: var(--warning-soft); border-left: 3px solid #d7a84f; }
     footer { padding: 0 0 30px; color: var(--muted); font-size: 12px; }
@@ -266,15 +281,16 @@
     <section class="decision" aria-labelledby="decision-title">
       <div>
         <p class="eyebrow">Decision requested</p>
-        <h2 id="decision-title">Adopt the Console visual language for a focused Spaces file utility.</h2>
+        <h2 id="decision-title">Adopt the Console visual language for a navigable Spaces file utility.</h2>
       </div>
-      <p>Approve the Google-only login, compact file list, bounded upload feedback, and explicit recovery states. This is not a production prototype.</p>
+      <p>Approve the Google-only login, folder navigation, targeted upload, rename behavior, and explicit recovery states. This is not a production prototype.</p>
     </section>
 
     <div class="controls">
       <div class="tabs" role="tablist" aria-label="Review scenario">
         <button class="tab" role="tab" aria-selected="true" data-scenario="files">Files</button>
         <button class="tab" role="tab" aria-selected="false" data-scenario="login">Google login</button>
+        <button class="tab" role="tab" aria-selected="false" data-scenario="rename">Rename conflict</button>
         <button class="tab" role="tab" aria-selected="false" data-scenario="upload">Upload failure</button>
       </div>
       <div class="viewport-toggle" aria-label="Preview width">
@@ -322,12 +338,17 @@
               <div class="user">Wei &middot; Google</div>
             </aside>
             <div class="workspace">
-              <div class="page-head"><div><h3>Your files</h3><p>3 files &middot; 9.1 MB</p></div><button class="button primary"><span aria-hidden="true">&#43;</span> Upload file</button></div>
-              <div class="table">
+              <div class="page-head"><div><h3 id="folder-title">Releases</h3><p id="folder-summary">2 folders &middot; 3 files &middot; 9.1 MB</p></div><div class="page-actions"><button class="button">New folder</button><button class="button primary"><span aria-hidden="true">&#43;</span> Upload file</button></div></div>
+              <nav class="breadcrumbs" aria-label="Current folder"><button class="breadcrumb" data-folder-path="files">Files</button><span>/</span><button class="breadcrumb" data-folder-path="projects">Projects</button><span>/</span><button class="breadcrumb current" data-folder-path="releases" aria-current="page">Releases</button><span data-child-crumb hidden>/</span><button class="breadcrumb current" data-folder-path="2026" data-child-crumb hidden>2026</button></nav>
+              <div class="table" id="release-list">
                 <div class="row header"><span>Name</span><span>Size</span><span>Uploaded</span><span>Actions</span></div>
-                <div class="row"><span class="filename">release-evidence.json</span><span class="filemeta">18 KB</span><span class="filemeta">Today</span><span class="row-actions"><button class="icon-button" aria-label="Download release-evidence.json">&#8595;</button><button class="icon-button" aria-label="Delete release-evidence.json">&times;</button></span></div>
-                <div class="row"><span class="filename">sample-video.mp4</span><span class="filemeta">8.8 MB</span><span class="filemeta">Yesterday</span><span class="row-actions"><button class="icon-button" aria-label="Download sample-video.mp4">&#8595;</button><button class="icon-button" aria-label="Delete sample-video.mp4">&times;</button></span></div>
-                <div class="row"><span class="filename">notes.txt</span><span class="filemeta">2 KB</span><span class="filemeta">Sep 18</span><span class="row-actions"><button class="icon-button" aria-label="Download notes.txt">&#8595;</button><button class="icon-button" aria-label="Delete notes.txt">&times;</button></span></div>
+                <div class="row"><button class="breadcrumb filename" data-open-folder="2026" aria-label="Open 2026 folder">&#9633;&nbsp; 2026</button><span class="filemeta">Folder</span><span class="filemeta">Today</span><span class="row-actions"><button class="icon-button" aria-label="Open 2026 folder">&rsaquo;</button></span></div>
+                <div class="row"><button class="breadcrumb filename" aria-label="Open Archives folder">&#9633;&nbsp; Archives</button><span class="filemeta">Folder</span><span class="filemeta">Sep 18</span><span class="row-actions"><button class="icon-button" aria-label="Open Archives folder">&rsaquo;</button></span></div>
+                <div class="row"><span class="filename">release-evidence.json</span><span class="filemeta">18 KB</span><span class="filemeta">Today</span><span class="row-actions"><button class="icon-button" aria-label="Download release-evidence.json">&#8595;</button><button class="icon-button" aria-label="Rename release-evidence.json">&#9998;</button><button class="icon-button" aria-label="Delete release-evidence.json">&times;</button></span></div>
+                <div class="row"><span class="filename">sample-video.mp4</span><span class="filemeta">8.8 MB</span><span class="filemeta">Yesterday</span><span class="row-actions"><button class="icon-button" aria-label="Download sample-video.mp4">&#8595;</button><button class="icon-button" aria-label="Rename sample-video.mp4">&#9998;</button><button class="icon-button" aria-label="Delete sample-video.mp4">&times;</button></span></div>
+                <div class="row"><span class="filename">notes.txt</span><span class="filemeta">2 KB</span><span class="filemeta">Sep 18</span><span class="row-actions"><button class="icon-button" aria-label="Download notes.txt">&#8595;</button><button class="icon-button" aria-label="Rename notes.txt">&#9998;</button><button class="icon-button" aria-label="Delete notes.txt">&times;</button></span></div>
+              </div>
+              <div class="table" id="empty-folder" hidden><div class="empty-folder"><div><strong>This folder is empty</strong><span>Upload a file or create a folder in Releases / 2026.</span></div></div></div>
               </div>
             </div>
           </div>
@@ -345,6 +366,28 @@
           </div>
         </div>
 
+        <div class="scenario" data-panel="rename" hidden>
+          <div class="screen">
+            <aside class="sidebar">
+              <div class="sidebar-head"><span class="brand-mark">UC</span><span>Spaces</span></div>
+              <nav class="nav" aria-label="Spaces navigation"><div class="nav-title">Personal</div><div class="nav-item active"><span class="nav-icon">&#9638;</span><span>Files</span></div></nav>
+              <div class="user">Wei &middot; Google</div>
+            </aside>
+            <div class="workspace">
+              <div class="page-head"><div><h3>Releases</h3><p>Rename changes the path, not stored bytes.</p></div></div>
+              <nav class="breadcrumbs" aria-label="Current folder"><button class="breadcrumb">Files</button><span>/</span><button class="breadcrumb">Projects</button><span>/</span><span class="breadcrumb current" aria-current="page">Releases</span></nav>
+              <section class="rename-panel" role="dialog" aria-modal="true" aria-labelledby="rename-title">
+                <h4 id="rename-title">Rename file</h4>
+                <p>The existing content is reused when this change commits.</p>
+                <label for="rename-input">File name</label>
+                <input id="rename-input" value="release-evidence.json" aria-invalid="true" aria-describedby="rename-error">
+                <div class="field-error" id="rename-error">A file with this name already exists in Releases.</div>
+                <div class="dialog-actions"><button class="button">Cancel</button><button class="button primary" disabled>Rename</button></div>
+              </section>
+            </div>
+          </div>
+        </div>
+
         <div class="scenario" data-panel="upload" hidden>
           <div class="screen">
             <aside class="sidebar">
@@ -353,7 +396,8 @@
               <div class="user">Wei &middot; Google</div>
             </aside>
             <div class="workspace">
-              <div class="page-head"><div><h3>Upload file</h3><p>Files are committed only after verification.</p></div><button class="button">Cancel</button></div>
+              <div class="page-head"><div><h3>Upload to Releases</h3><p>Files are committed only after verification.</p></div><button class="button">Cancel</button></div>
+              <nav class="breadcrumbs" aria-label="Upload destination"><button class="breadcrumb">Files</button><span>/</span><button class="breadcrumb">Projects</button><span>/</span><span class="breadcrumb current" aria-current="page">Releases</span></nav>
               <div class="dropzone"><div><strong>sample-video.mp4</strong><p>8.8 MB &middot; Preparing canonical nodes</p><button class="button">Choose another file</button></div></div>
               <div class="progress" aria-label="Upload progress: 61 percent"><span></span></div>
               <div class="stage-row"><span>Commit</span><span>61%</span></div>
@@ -375,6 +419,23 @@
     const tabs = [...document.querySelectorAll(".tab")];
     const panels = [...document.querySelectorAll("[data-panel]")];
     const viewportButtons = [...document.querySelectorAll(".viewport-button")];
+    const releaseList = document.querySelector("#release-list");
+    const emptyFolder = document.querySelector("#empty-folder");
+    const folderTitle = document.querySelector("#folder-title");
+    const folderSummary = document.querySelector("#folder-summary");
+    const childCrumbs = [...document.querySelectorAll("[data-child-crumb]")];
+
+    function showFolder(path) {
+      const isChild = path === "2026";
+      releaseList.hidden = isChild;
+      emptyFolder.hidden = !isChild;
+      folderTitle.textContent = isChild ? "2026" : "Releases";
+      folderSummary.textContent = isChild ? "Empty folder" : "2 folders, 3 files, 9.1 MB";
+      for (const crumb of childCrumbs) crumb.hidden = !isChild;
+    }
+
+    document.querySelector("[data-open-folder='2026']").addEventListener("click", () => showFolder("2026"));
+    document.querySelector("[data-folder-path='releases']").addEventListener("click", () => showFolder("releases"));
 
     for (const tab of tabs) {
       tab.addEventListener("click", () => {

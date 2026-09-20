@@ -10,8 +10,9 @@ Approve these target business rules:
   Google is the only enabled MVP provider.
 - A Principal maps to an explicitly provisioned Space. Provider identity,
   email, and Console membership never derive Space identity or authority.
-- The App owns file names, catalog state, smoke-run cleanup, and capability
-  issuance; UniCAS owns opaque canonical nodes and Root Ref retention.
+- The App owns a hierarchical file-system Root, path names, catalog state,
+  smoke-run cleanup, and capability issuance; UniCAS owns opaque canonical
+  nodes and Root Ref retention.
 
 Approval permits the App-owned D1 persistence and Root Ref lifecycle described
 below after the other protected reviews are approved.
@@ -20,7 +21,7 @@ below after the other protected reviews are approved.
 
 | Current | Proposed | Why |
 | --- | --- | --- |
-| No maintained file App or App-owned catalog exists. | Spaces D1 stores admitted Principals, provider bindings, Space mappings, file roots, sessions, and smoke cleanup records. | Business identity and file discovery belong to the App, not UniCAS. |
+| No maintained file App or App-owned catalog exists. | Spaces D1 stores admitted Principals, provider bindings, Space mappings, one file-system Root per Principal, sessions, and smoke cleanup records. Paths and directories live in the Root's immutable manifest. | Business identity and file discovery belong to the App, while the public file client owns canonical manifest encoding. |
 | Live smoke configuration supplies a capability externally. | The App authenticates a dedicated smoke Principal and issues the same bounded capability class used by its backend workflow. | Exercise real issuer and mapping boundaries without an admin session. |
 | Provider support is unspecified. | External identity keys are `(provider, provider_subject)`; Google is enabled first and Microsoft/GitHub remain unavailable. | Add providers later without changing Principal or Space identity. |
 
@@ -53,14 +54,18 @@ erDiagram
     string ref_domain UK
   }
 
-  FILE_ROOT {
-    string file_id PK
+  FILE_SYSTEM_ROOT {
+    string root_id PK
     string principal_id FK
-    string root_id UK
     string manifest_hash
-    string display_name
-    int byte_length
-    string state
+    int revision
+  }
+
+  PATH_ENTRY {
+    string root_id PK, FK
+    string absolute_path PK
+    string entry_type
+    string blob_hash
   }
 
   SMOKE_RUN["SMOKE_RUN &lt;&lt;EI&gt;&gt;"] {
@@ -72,7 +77,8 @@ erDiagram
 
   SMOKE_RESOURCE["SMOKE_RESOURCE &lt;&lt;EI&gt;&gt;"] {
     string run_id PK, FK
-    string file_id PK, FK
+    string root_id FK
+    string absolute_path PK
   }
 
   SPACE {
@@ -93,19 +99,22 @@ erDiagram
   PRINCIPAL ||--o{ SESSION : holds
   PRINCIPAL ||--|| PRINCIPAL_SPACE : is_assigned
   PRINCIPAL_SPACE }o--|| SPACE : selects
-  PRINCIPAL ||--o{ FILE_ROOT : catalogs
-  FILE_ROOT ||--|| ROOT_REF : retains_with
+  PRINCIPAL ||--|| FILE_SYSTEM_ROOT : owns
+  FILE_SYSTEM_ROOT ||--o{ PATH_ENTRY : snapshots
+  FILE_SYSTEM_ROOT ||--|| ROOT_REF : retains_with
   PRINCIPAL ||--o{ SMOKE_RUN : executes
   SMOKE_RUN ||--o{ SMOKE_RESOURCE : tracks
-  SMOKE_RESOURCE }o--|| FILE_ROOT : cleans
+  SMOKE_RESOURCE }o--|| FILE_SYSTEM_ROOT : cleans_from
   SPACE ||--o{ ROOT_REF : contains
 ```
 
 `SPACE` and `ROOT_REF` are UniCAS-owned business entities shown to explain the
-boundary; they are not copied into App D1 beyond the identifiers needed for the
-mapping and catalog. Canonical nodes, leases, edges, and content remain entirely
-inside UniCAS and are intentionally absent from the App model. Capabilities and
-presigned URLs are request-scoped values and are not durable entities.
+boundary. `PATH_ENTRY` is a logical projection of the current immutable file
+manifest and is not a D1 table: explicit directories and files are encoded by
+the published file client, while file entries reference immutable blob hashes.
+Canonical nodes, leases, edges, and content remain entirely inside UniCAS and
+are intentionally absent from App D1. Capabilities and presigned URLs are
+request-scoped values and are not durable entities.
 
 ## Lifecycle semantics
 
@@ -114,7 +123,8 @@ presigned URLs are request-scoped values and are not durable entities.
 | `EXTERNAL_IDENTITY <<EI>>` | Provider and subject never change; linking creates a new binding. Display claims may refresh on Principal. | Principal suspension or an explicit future unlink policy. | No self-service unlink in MVP. |
 | `SESSION <<EI>>` | Identity and expiry are fixed after issue. | Logout, expiry, Principal suspension, or server revocation. | Expired/revoked rows are pruned. |
 | `PRINCIPAL_SPACE` | Bootstrap or an explicit operator migration may replace the mapping; login cannot. | Principal suspension or mapping removal. | Operator-controlled; Root Refs must first be reconciled. |
-| `FILE_ROOT` | Name and lifecycle state may change; root identity and committed manifest binding do not change in place. | Successful idempotent release and catalog deletion. | User delete or stale-smoke cleanup only. |
+| `FILE_SYSTEM_ROOT` | Root identity is stable; manifest hash and optimistic revision advance atomically after each committed path mutation. | Principal deprovisioning or complete smoke cleanup. | Operator or smoke lifecycle only, after Root Ref release. |
+| `PATH_ENTRY` | A directory create, file write, file rename, or remove operation produces a replacement immutable manifest. File blob hashes remain stable when only names change. | Removal in a committed replacement manifest. | User file mutation or bounded smoke cleanup; root `/` is immutable. |
 | `SMOKE_RUN <<EI>>` | Run identity, Principal, and expiry are fixed; cleanup state advances idempotently. | All tracked roots are released, or an actionable cleanup failure remains. | Pruned after bounded evidence retention. |
 | `SMOKE_RESOURCE <<EI>>` | Binding is fixed after insertion. | Parent run cleanup releases the referenced root. | Removed after confirmed cleanup. |
 | `ROOT_REF` | Positive count changes only through UniCAS atomic Root Ref updates. | Positive count reaches zero. | UniCAS retention and GC semantics apply. |
@@ -127,12 +137,19 @@ presigned URLs are request-scoped values and are not durable entities.
    Principal-to-Space mapping and cannot call the UniCAS admin plane.
 3. A Principal's file catalog resolves only through its assigned App, Space,
    and Root Ref domain. Cross-Space identifiers are rejected before data access.
-4. A successful file catalog entry references one positively retained manifest
-   Root Ref. A failed catalog transition leaves a reconciliation record rather
-   than reporting success.
-5. Deletion and smoke cleanup are idempotent and converge through retry; stale
+4. Each Principal owns exactly one file-system Root. Within a manifest, each
+  normalized absolute path is unique, its parent must be a directory, and a
+  path cannot be moved into itself or its descendant. The root `/` cannot be
+  renamed or deleted.
+5. A successful Root catalog revision references one positively retained
+  manifest Root Ref. Folder creation, upload, rename, and removal become
+  visible together only after commit; optimistic conflicts cannot overwrite a
+  concurrent revision.
+6. Renaming a file or folder changes manifest paths and reuses every unchanged
+  file blob hash; it does not upload identical content again.
+7. Deletion and smoke cleanup are idempotent and converge through retry; stale
    smoke records carry an expiry so scheduled cleanup is bounded and discoverable.
-6. Signing keys, Google credentials, smoke credentials, capabilities, signed
+8. Signing keys, Google credentials, smoke credentials, capabilities, signed
    upload URLs, and uploaded bytes are never stored in App D1.
 
 ## Migration impact
@@ -146,5 +163,6 @@ does not rewrite existing Principal, Space, file, or Root Ref identity.
 
 ## Review question
 
-Approve this provider-neutral Principal model, pre-provisioned one-Principal to
-one-Space mapping, App-owned catalog, and idempotent retention lifecycle?
+Approve this provider-neutral Principal model, one Principal-to-Space mapping
+and file-system Root, immutable hierarchical manifest, and idempotent retention
+lifecycle?

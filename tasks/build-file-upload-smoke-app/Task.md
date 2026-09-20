@@ -45,9 +45,10 @@ external application.
   credentials, access UniCAS D1/R2 bindings, or add a privileged smoke-only
   endpoint to UniCAS.
 - Implement the smallest useful file workflow: upload a file through the public
-  file/blob clients, commit its root with a positive Root Ref, list or resolve
-  the committed file, download and verify exact bytes, then release test data
-  through an idempotent cleanup path.
+  file/blob clients, create and navigate folders, upload into the selected
+  folder, rename files, commit the file-system root with a positive
+  Root Ref, download and verify exact bytes, then release test data through an
+  idempotent cleanup path.
 - Exercise the lease-driven direct upload path, including the initial lease,
   presigned PUT, repeated identical lease, ready-node reuse, and at least one
   multi-node file whose index references uploaded children.
@@ -72,7 +73,9 @@ external application.
   or implicit `(App, Account) -> Space` mapping.
 - Migrating or deleting historical Playground records or content.
 - Building a general-purpose drive, collaboration product, sharing system,
-  synchronization engine, or full file-management tutorial.
+  synchronization engine, previews, version history, or a full file-management
+  tutorial beyond the reviewed folder, navigation, upload, rename, download,
+  and delete workflow.
 - Changing UniCAS node identity, lease, Root Ref, authorization, usage,
   garbage-collection, or direct-upload semantics solely for the smoke App.
 - Giving the App private UniCAS bindings or deployment credentials unavailable
@@ -97,6 +100,9 @@ external application.
       session or managed issuer.
 - [ ] The App owns its Principal-to-Space mapping and file-root catalog; UniCAS
       stores only opaque canonical nodes, leases, edges, and Root Refs.
+- [ ] An authenticated user can create folders, navigate the hierarchy, upload
+  into the currently selected folder, and rename files without re-uploading
+  unchanged file bytes.
 - [ ] The deployed App uploads a multi-node file through published clients and
       the public lease-driven direct upload API, commits a positive Root Ref,
       downloads the file, and verifies exact bytes.

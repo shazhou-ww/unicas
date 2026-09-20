@@ -19,16 +19,18 @@ or production credential creation.
 
 ## Included MVP
 
-1. An admitted Google user signs in, sees their files, uploads one bounded
-   file, downloads exact bytes, and deletes the file.
+1. An admitted Google user signs in, creates folders, navigates with
+  breadcrumbs, uploads one bounded file into the selected folder, renames a
+  file or folder, downloads exact bytes, and deletes entries.
 2. The App maps that Principal to a pre-provisioned Space, issues short-lived
    least-privileged capabilities, and maintains its own file-root catalog.
 3. The App Worker uses only published UniCAS clients and public HTTPS routes;
    it has no UniCAS D1, R2, Durable Object, administrator-session, or service
    implementation access.
-4. A dedicated non-interactive smoke Principal runs a multi-node upload twice,
-   verifies ready-node reuse, commits and reads a positive Root Ref, proves one
-   denied authority and one denied Space request, and cleans up idempotently.
+4. A dedicated non-interactive smoke Principal creates a uniquely named folder,
+   runs a multi-node upload into it twice, verifies ready-node reuse, renames
+   the file, commits and reads a positive Root Ref, proves one denied authority
+   and one denied Space request, and cleans up idempotently.
 5. A scheduled bounded sweeper releases stale smoke roots left by interruption.
 6. The protected release path deploys UniCAS, deploys the Spaces App, runs its
    smoke, and only then promotes the product and documentation sites.
@@ -38,8 +40,9 @@ or production credential creation.
 - Microsoft and GitHub login implementation, provider credentials, and account
   linking UI. The data model may accept those provider identifiers, but the MVP
   exposes no enabled login path for them.
-- Self-service signup, runtime Space provisioning, sharing, folders, previews,
-  collaboration, synchronization, version history, and general drive features.
+- Self-service signup, runtime Space provisioning, sharing, previews,
+  collaboration, synchronization, version history, cross-folder copy, and
+  general drive features beyond basic folder and entry operations.
 - Direct browser possession of UniCAS capabilities or presigned upload URLs.
 - Production deployment, DNS mutation, App/Space bootstrap, and secret creation
   before reviewed implementation and an explicit deployment decision.
@@ -60,5 +63,6 @@ or production credential creation.
 
 ## Review question
 
-Approve this scope, including Google-only MVP login, the Worker-mediated file
-path, pre-provisioned Principal-to-Space mappings, and release-blocking smoke?
+Approve this scope, including Google-only MVP login, folder navigation and
+rename, the Worker-mediated file path, pre-provisioned Principal-to-Space
+mappings, and release-blocking smoke?

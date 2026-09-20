@@ -83,13 +83,20 @@ catalog, session, or capability semantics.
 - Upload uses `@unicas/tenant-file-client`, backed by the public blob and
   transport clients. Multi-node encoding and deterministic hashes remain owned
   by the published clients.
+- Each Principal has one pre-created file-system Root. Explicit directories and
+  file paths live in its immutable file manifest; the App D1 catalog stores the
+  Root identity, current manifest hash, and optimistic revision, not one row per
+  file.
+- Folder creation uses `mkdir`, navigation uses `readdir`, uploads call `write`
+  with a path under the selected folder, and file rename uses `move`. A single
+  `commit` publishes each mutation as a new immutable manifest.
 - Commit first retains the new manifest with a positive Root Ref, then updates
-  the App catalog, then releases a replaced manifest according to the existing
-  file-client contract.
-- Download resolves the App catalog, opens the retained manifest, and streams
-  exact bytes through the public read operations.
-- Delete marks the catalog entry for deletion, releases its Root Ref
-  idempotently, and removes the catalog entry after successful reconciliation.
+  the App catalog, then releases the replaced manifest according to the existing
+  file-client contract. Unchanged file entries retain their existing blob
+  hashes, so folder or file rename does not re-upload content.
+- Download opens the Principal's cataloged Root and streams the selected path
+  through public read operations. Delete uses `remove` and commits the next
+  manifest; deleting the whole smoke Root releases its final Root Ref.
 - Every smoke resource has a unique run identity and expiry. The command cleans
   in `finally`; a scheduled Worker sweep retries stale records with bounded
   work, so interrupted runs cannot accumulate indefinitely.
@@ -120,8 +127,11 @@ plans and Wrangler dry-runs.
   for normal UniCAS garbage collection.
 - A retained root without a completed catalog transition is recorded for
   reconciliation before success is returned.
-- Cleanup is retry-safe. A partial release remains queued until its positive
-  Root Ref reaches zero and the catalog record can be removed.
+- Folder creation, file move, and removal remain invisible until manifest commit;
+  optimistic revision conflicts reload the Root and return a retryable conflict
+  rather than silently overwriting a concurrent directory change.
+- Cleanup is retry-safe. A partial smoke Root release remains queued until its
+  positive Root Ref reaches zero and the catalog record can be removed.
 - Rollback deploys the prior Spaces Worker. D1 migrations are additive through
   the initial release; destructive rollback is not part of the MVP.
 

@@ -16,18 +16,23 @@ contract.
 2. Successful Google callback opens the file list for the admitted Principal.
    Unknown identities see an admission denial with sign-out and retry actions;
    no Space is created.
-3. `Upload file` accepts one bounded file, shows determinate progress by
-   workflow stage, and adds the committed file only after positive Root Ref and
-   catalog commit succeed.
-4. Each file row exposes download and delete. Download preserves exact bytes
-   and a safe filename. Delete requires confirmation and remains retryable until
-   release is confirmed.
-5. Empty, loading, authorization, upload, readback, and cleanup failure states
+3. The root and each folder show directories before files, with a breadcrumb
+   from `Files` to the current location. Selecting a folder navigates into it;
+   breadcrumb segments navigate back without a full-page reload.
+4. `New folder` creates one valid child directory. `Upload file` targets the
+   currently displayed folder, shows determinate progress by workflow stage,
+   and appears only after the replacement manifest and Root Ref commit succeed.
+5. A file row provides download, rename, and delete. Rename is inline or
+   dialog-based and preserves unchanged bytes. Delete requires confirmation and
+   remains retryable until the replacement manifest commits.
+6. Empty, loading, authorization, name conflict, optimistic conflict, upload,
+   readback, and cleanup failure states
    are explicit. Errors show a stable code and correlation ID, never secret or
    uploaded content.
 
-The MVP is a compact file utility, not a drive. It has no folders, previews,
-sharing, drag reordering, bulk operations, or account-linking UI.
+The MVP is a compact file utility, not a general drive. It has no previews,
+sharing, drag reordering, bulk operations, cross-folder copy, or account-linking
+UI.
 
 ## App HTTP surface
 
@@ -38,17 +43,21 @@ sharing, drag reordering, bulk operations, or account-linking UI.
 | `POST /auth/logout` | App session | Revoke session, clear cookie, return `204` | Idempotent when already logged out. |
 | `POST /api/smoke/session` | Protected smoke credential | Short-lived session for the dedicated smoke Principal | Disabled outside the protected deployment; rejects invalid credentials without logging them. |
 | `GET /api/session` | App session | Principal display data and enabled provider | `401 session_required` or `403 principal_suspended`. |
-| `GET /api/files` | App session | Principal-owned committed catalog rows | Never accepts App, Space, Principal, or ref-domain override. |
-| `POST /api/files` | App session, multipart body | `201` committed file summary | Reject size/type framing before work; report stage and correlation ID; reconcile retained partial commit. |
-| `GET /api/files/{fileId}` | App session | Stream exact bytes with safe content headers | `404` for absent or non-owned identifier; range support follows accepted implementation capability. |
-| `DELETE /api/files/{fileId}` | App session plus explicit UI confirmation | `204` after release or accepted idempotent absence | Retry-safe; cleanup-pending response does not claim deletion completed. |
+| `GET /api/entries?path=/...` | App session | Current directory entries and Root revision | Reject invalid paths; never accepts App, Space, Principal, or ref-domain override. |
+| `POST /api/folders` | App session, `{ parentPath, name, revision }` | `201` directory summary and next revision | Reject invalid/reserved names, absent parents, duplicates, and stale revisions. |
+| `POST /api/files` | App session, multipart body with `parentPath` and `revision` | `201` committed file summary and next revision | Reject size/path framing before work; reconcile a retained partial commit. |
+| `GET /api/files/content?path=/...` | App session | Stream exact bytes with safe content headers | `404` for absent/non-file path; range support follows accepted implementation capability. |
+| `PATCH /api/files` | App session, `{ path, name, revision }` | Renamed file and next revision | Reject non-file paths, duplicates, invalid names, and stale revisions; does not re-upload file bytes. |
+| `DELETE /api/files?path=/...` | App session plus revision and explicit UI confirmation | `204` after replacement manifest commit | Reject non-file paths; deletion is retry-safe. |
 | `GET /.well-known/openid-configuration` | None | Stable issuer metadata for UniCAS discovery | Public metadata contains no private material. |
 | `GET /.well-known/jwks.json` | None | Active and overlap-window public signing keys | Cache policy must not outlive key rotation overlap. |
 
 Mutation routes require same-origin checks and CSRF protection in addition to
 the session cookie. API responses are JSON except redirects, downloads, and
 empty `204` responses. Unknown routes do not fall back to the SPA under `/api`,
-`/auth`, or `/.well-known`.
+`/auth`, or `/.well-known`. All paths are normalized absolute paths; names are
+single path segments and cannot contain separators, control characters, `.`,
+or `..`. The client sends the last observed Root revision with every mutation.
 
 ## Upload stage contract
 
@@ -73,15 +82,19 @@ store. The command:
 
 1. authenticates as the dedicated smoke Principal through an App-owned,
    non-browser exchange;
-2. uploads deterministic, uniquely named multi-node bytes through the App;
-3. verifies the committed catalog entry, positive Root Ref, download length,
-   and exact digest;
-4. uploads identical bytes again and requires public lease results to confirm
-   immutable ready-node reuse;
-5. requires one denied operation lacking authority and one denied request for a
+2. creates a uniquely named folder and navigates/list-checks it;
+3. uploads deterministic, uniquely named multi-node bytes into that folder;
+4. renames the uploaded file and verifies the old path is absent, the new path
+   resolves, the committed Root Ref is positive, and downloaded bytes have the
+   exact length and digest;
+5. uploads identical bytes again and requires public lease results to confirm
+   immutable ready-node reuse without a content upload caused by rename;
+6. requires one denied operation lacking authority and one denied request for a
    different Space;
-6. releases both test roots and repeats cleanup to prove idempotency; and
-7. exits nonzero at the first failed stage after attempting bounded cleanup.
+7. removes the smoke file and folder through the App's bounded cleanup path,
+   releases the test Root when dedicated, and repeats cleanup to prove
+   idempotency; and
+8. exits nonzero at the first failed stage after attempting bounded cleanup.
 
 Successful output is one non-secret summary containing run ID and completed
 stages. Failed output contains run ID, stage, stable App/UniCAS error code, and
@@ -105,5 +118,6 @@ The smoke interface remains independent of social login availability.
 
 ## Review question
 
-Approve this Google-only MVP user workflow, Worker HTTP contract, coarse progress
-and error model, and release-smoke command behavior?
+Approve this Google-only MVP workflow with folder creation, breadcrumb
+navigation, folder-targeted upload, file rename, the Worker HTTP contract, and
+release-smoke behavior?
