@@ -46,6 +46,11 @@ describe("documentation static site", () => {
     expect(architecture).toContain('href="#1-goals"');
     expect(architecture).toContain('href="/cas-binary-format/"');
     expect(architecture).toContain('aria-label="On this page"');
+
+    const appUser = await page("app-user-api");
+    expect(appUser).toContain('href="/app-user-api/scenarios/"');
+    expect(appUser).toContain('href="/reference/packages/"');
+    expect(appUser).toContain("docs/app-user-api/README.md");
   });
 
   test("emits a successful generated-link report", async () => {

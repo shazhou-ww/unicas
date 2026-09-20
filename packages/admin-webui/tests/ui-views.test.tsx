@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
@@ -33,6 +33,19 @@ function accountSummary(displayName: string | null, email: string | null = null)
     avatar: { kind: "fallback", initials: displayName?.slice(0, 2).toUpperCase() ?? "UC", colorIndex: 1 },
   };
 }
+
+let fetchMock: ReturnType<typeof vi.fn>;
+
+beforeEach(() => {
+  fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+  document.head.innerHTML = '<meta name="x-csrf-token" content="csrf-1" />';
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe("InvitationView", () => {
   test("accepts an App membership invitation", async () => {
@@ -143,12 +156,12 @@ describe("Platform Accounts PeopleView", () => {
     openAccount.focus();
     await user.keyboard("{Enter}");
     expect(await screen.findByText("app-1")).toBeInTheDocument();
-    await user.click(within(screen.getByRole("dialog", { name: "Account Details" })).getByRole("button", { name: "Close" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Developer" })).getByRole("button", { name: "Close" }));
     await user.click(screen.getByRole("button", { name: "Load more" }));
     await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => String(path).includes("cursor=next-page"))).toBe(true));
     expect(fetchMock.mock.calls.some(([path]) => String(path).includes("after=next-page"))).toBe(false);
     await user.type(screen.getByLabelText("Search people"), "developer");
-    await user.click(screen.getByRole("button", { name: "Apply" }));
+    await user.click(screen.getByRole("button", { name: "Apply filters" }));
     await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => String(path).includes("query=developer"))).toBe(true));
   });
 
@@ -175,13 +188,13 @@ describe("Platform Accounts PeopleView", () => {
     render(<PeopleView scope={{ platform: true }} />);
 
     await user.click(await screen.findByRole("button", { name: "Open Account details for Developer" }));
-    await user.click(await screen.findByLabelText("apps.create"));
+    await user.click(await screen.findByLabelText(/^Create Apps/));
     expect(await screen.findByRole("dialog", { name: "Confirm Platform Access change" })).toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
 
-    await user.click(screen.getByLabelText("apps.create"));
+    await user.click(screen.getByLabelText(/^Create Apps/));
     await user.click(screen.getByRole("button", { name: "Confirm change" }));
     await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(true));
     const command = fetchMock.mock.calls.find(([, init]) => init?.method === "DELETE");
@@ -211,11 +224,15 @@ describe("PlatformAuditView", () => {
     const user = userEvent.setup();
     render(<PlatformAuditView />);
 
-    await screen.findByText("No changes yet.");
-    expect(screen.getByRole("table")).toBeVisible();
+    await screen.findByText("No changes found.");
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Change Logs" }).querySelector(".bg-card")).toBeNull();
-    await user.type(screen.getByLabelText("Actor Account ID"), ACCOUNT_ID);
-    await user.click(screen.getByRole("button", { name: "Apply" }));
+    const actorFilter = screen.getByLabelText("Actor Account ID");
+    expect(actorFilter).toHaveAttribute("name", "actorAccountId");
+    expect(actorFilter).toHaveAttribute("autocomplete", "off");
+    await user.type(actorFilter, ACCOUNT_ID);
+    await user.click(screen.getByRole("button", { name: "Apply filters" }));
+    expect(await screen.findByText("Platform invitation created")).toBeInTheDocument();
     expect(await screen.findByText("platform_invitation.created")).toBeInTheDocument();
     expect(within(screen.getByRole("region", { name: "Change Logs" })).getByRole("table")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Load more" }));
@@ -224,13 +241,59 @@ describe("PlatformAuditView", () => {
     expect(pagedPath).toContain(`actorAccountId=${ACCOUNT_ID}`);
     expect(pagedPath).toContain("cursor=audit-next");
   });
+
+  test("renders complete mobile audit summaries without a wide table", async () => {
+    const previousWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    const event = {
+      eventId: "event-mobile",
+      action: "platform_access.restored",
+      actorAccount: accountSummary("Admin", "admin@example.com"),
+      authenticatedIdentity: { externalIdentityId: "ext-admin", provider: "google", accountHint: null, linkedAt: 1, lastAuthenticatedAt: 1, currentLogin: false, issuer: "https://accounts.example", subject: "admin" },
+      targetAccount: accountSummary("Developer", "developer@example.com"),
+      targetInvitationId: null,
+      result: "succeeded",
+      requestId: "request-mobile",
+      createdAt: 1,
+      details: {},
+    };
+    fetchMock.mockResolvedValueOnce(json({ items: [event], nextCursor: null }));
+    try {
+      render(<PlatformAuditView />);
+      const item = await screen.findByRole("listitem", { name: "Account access restored, succeeded" });
+      expect(within(item).getByText("platform_access.restored")).toBeVisible();
+      expect(within(item).getByText("Admin")).toBeVisible();
+      expect(within(item).getByText(ACCOUNT_ID)).toBeVisible();
+      expect(within(item).getByRole("button", { name: /Copy Request ID request-mobile/ })).toBeVisible();
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: previousWidth });
+    }
+  });
+
+  test("ignores a stale platform audit response after filters change", async () => {
+    let resolveOld!: (response: Response) => void;
+    const oldRequest = new Promise<Response>(resolve => { resolveOld = resolve; });
+    const identity = { externalIdentityId: "ext-admin", provider: "google", accountHint: null, linkedAt: 1, lastAuthenticatedAt: 1, currentLogin: false, issuer: "https://accounts.example", subject: "admin" };
+    const oldEvent = { eventId: "old", action: "platform_access.blocked", actorAccount: accountSummary("Old Admin"), authenticatedIdentity: identity, targetAccount: accountSummary("Developer"), targetInvitationId: null, result: "succeeded", requestId: null, createdAt: 1, details: {} };
+    const newEvent = { ...oldEvent, eventId: "new", action: "platform_access.restored", actorAccount: accountSummary("New Admin") };
+    fetchMock.mockImplementationOnce(() => oldRequest).mockResolvedValueOnce(json({ items: [newEvent], nextCursor: null }));
+    const user = userEvent.setup();
+    render(<PlatformAuditView />);
+
+    await user.type(screen.getByLabelText("Actor Account ID"), ACCOUNT_ID);
+    await user.click(screen.getByRole("button", { name: "Apply filters" }));
+    expect(await screen.findByText("Account access restored")).toBeVisible();
+    await act(async () => resolveOld(json({ items: [oldEvent], nextCursor: null })));
+    expect(screen.queryByText("Account access blocked")).not.toBeInTheDocument();
+    expect(screen.getByText("New Admin")).toBeVisible();
+  });
 });
 
-function managedIssuer() {
+function externalIssuer() {
   return {
     appId: STACK,
-    mode: "managed",
-    issuer: `https://cas.example/managed-issuers/${STACK}`,
+    issuer: "https://issuer.example",
     audience: `https://cas.example/stacks/${STACK}`,
     metadataUrl: "https://cas.example/metadata",
     metadataType: "oauth",
@@ -249,196 +312,6 @@ function managedIssuer() {
     revision: 1,
   };
 }
-
-const PlaygroundView = (_props: { readonly appId: string }) => null;
-
-describe.skip("retired PlaygroundView", () => {
-  test("creates a root from an inline editor on blur", async () => {
-    fetchMock
-      .mockResolvedValueOnce(json(managedIssuer()))
-      .mockResolvedValueOnce(json({ items: [] }))
-      .mockResolvedValueOnce(json({
-        accessToken: "space-token",
-        tokenType: "Bearer",
-        expiresIn: 3600,
-        expiresAt: Date.now() + 3_600_000,
-        issuer: `https://cas.example/managed-issuers/${STACK}`,
-        audience: `https://cas.example/stacks/${STACK}`,
-        spaceId: "member_abc",
-        permissions: ["spaces:member_abc:cas:manage"],
-      }))
-      .mockResolvedValueOnce(json({ hash: "a".repeat(64), ready: true, leaseStartedAt: 1, leaseExpiresAt: 2 }))
-      .mockResolvedValueOnce(json({ success: true, revision: 1 }))
-      .mockResolvedValueOnce(json({ rootId: "root-1", name: "Project", manifestHash: "a".repeat(64), revision: 1, createdAt: 1, updatedAt: 1 }))
-      .mockResolvedValueOnce(json({ metadata: { hash: "a".repeat(64), size: 7, contentType: "application/vnd.unicas.file-manifest+cbor;version=1", refs: [] } }))
-      .mockResolvedValueOnce(new Response(Uint8Array.from([0xa2, 0x61, 0x65, 0x80, 0x61, 0x76, 0x01])))
-      .mockResolvedValueOnce(json({ items: [{ rootId: "root-1", name: "Project", manifestHash: "a".repeat(64), revision: 1, createdAt: 1, updatedAt: 1 }] }));
-    const user = userEvent.setup();
-    render(<PlaygroundView appId={STACK} />);
-
-    await user.click(await screen.findByRole("button", { name: "Create root" }));
-    const editor = screen.getByRole("textbox", { name: "New root name" });
-    await user.type(editor, "Project");
-    await user.tab();
-
-    await waitFor(() => expect(within(screen.getByRole("complementary", { name: "File roots" })).getByRole("button", { name: /Project/ })).toBeInTheDocument());
-    const createCall = fetchMock.mock.calls.find(([path, init]) =>
-      path === `/admin/apps/${STACK}/playground/file-roots` && init?.method === "POST"
-    );
-    expect(createCall).toBeDefined();
-    expect(JSON.parse(String(createCall?.[1]?.body))).toMatchObject({ name: "Project" });
-  });
-
-  test("rejects an invalid inline root name before issuing a capability", async () => {
-    fetchMock
-      .mockResolvedValueOnce(json(managedIssuer()))
-      .mockResolvedValueOnce(json({ items: [] }));
-    const user = userEvent.setup();
-    render(<PlaygroundView appId={STACK} />);
-
-    await user.click(await screen.findByRole("button", { name: "Create root" }));
-    await user.type(screen.getByRole("textbox", { name: "New root name" }), "   ");
-    await user.tab();
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("Root name is required");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
-  test("rejects a duplicate inline root name locally", async () => {
-    fetchMock
-      .mockResolvedValueOnce(json(managedIssuer()))
-      .mockResolvedValueOnce(json({ items: [{ rootId: "root-1", name: "Project", manifestHash: "a".repeat(64), revision: 1, createdAt: 1, updatedAt: 1 }] }));
-    const user = userEvent.setup();
-    render(<PlaygroundView appId={STACK} />);
-
-    await user.click(await screen.findByRole("button", { name: "Create root" }));
-    await user.type(screen.getByRole("textbox", { name: "New root name" }), "project");
-    await user.tab();
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("already exists");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
-  test("keeps the member capability private and reads Space usage", async () => {
-    fetchMock
-      .mockResolvedValueOnce(json(managedIssuer()))
-      .mockResolvedValueOnce(json({ items: [] }))
-      .mockResolvedValueOnce(json({
-        accessToken: "space-token",
-        tokenType: "Bearer",
-        expiresIn: 3600,
-        expiresAt: Date.now() + 3_600_000,
-        issuer: `https://cas.example/managed-issuers/${STACK}`,
-        audience: `https://cas.example/stacks/${STACK}`,
-        spaceId: "member_abc",
-        permissions: ["spaces:member_abc:cas:manage"],
-      }))
-      .mockResolvedValueOnce(json({ nodeCount: 0, readyContentBytes: 0, readyStoredBytes: 0, reservedBytes: 0, notReadyNodeCount: 0, leasedNodeCount: 0 }));
-    const user = userEvent.setup();
-    render(<PlaygroundView appId={STACK} />);
-
-    expect(await screen.findByRole("button", { name: /Usage/ })).toBeInTheDocument();
-    expect(screen.getByText("File roots")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Run garbage collection" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Refresh usage" }));
-    await waitFor(() => expect(screen.getByText("Nodes").nextSibling).toHaveTextContent("0"));
-    expect(screen.getByText("member_abc")).toBeInTheDocument();
-    expect(screen.queryByDisplayValue("space-token")).not.toBeInTheDocument();
-
-    expect(fetchMock).toHaveBeenNthCalledWith(3,
-      `/admin/apps/${STACK}/managed-capabilities`,
-      expect.objectContaining({ method: "POST" }),
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(4,
-      `https://cas.example/v2/apps/${STACK}/spaces/member_abc/cas/usage`,
-      expect.objectContaining({ headers: expect.any(Headers) }),
-    );
-    expect((fetchMock.mock.calls[3][1]?.headers as Headers).get("Authorization")).toBe("Bearer space-token");
-  });
-
-  test.each([false, true])("refreshes usage after GC and preserves its result if the refresh fails (%s)", async (refreshFails) => {
-    const before = { nodeCount: 3, readyContentBytes: 2048, readyStoredBytes: 3072, reservedBytes: 0, notReadyNodeCount: 0, leasedNodeCount: 0 };
-    const after = { ...before, nodeCount: 1, readyContentBytes: 1024, readyStoredBytes: 1536 };
-    fetchMock
-      .mockResolvedValueOnce(json(managedIssuer()))
-      .mockResolvedValueOnce(json({ items: [] }))
-      .mockResolvedValueOnce(json({
-        accessToken: "space-token", tokenType: "Bearer", expiresIn: 3600,
-        expiresAt: Date.now() + 3_600_000,
-        issuer: `https://cas.example/managed-issuers/${STACK}`,
-        audience: `https://cas.example/stacks/${STACK}`, spaceId: "member_abc",
-        permissions: ["spaces:member_abc:cas:manage"],
-      }))
-      .mockResolvedValueOnce(json(before))
-      .mockResolvedValueOnce(json({ examined: 3, deleted: 2, reclaimedContentBytes: 1024 }))
-      .mockResolvedValueOnce(refreshFails ? json({ error: "UNAVAILABLE", message: "Usage temporarily unavailable" }, 503) : json(after));
-    const user = userEvent.setup();
-    render(<PlaygroundView appId={STACK} />);
-    await user.click(await screen.findByRole("button", { name: "Refresh usage" }));
-    await waitFor(() => expect(screen.getByText("Nodes").nextSibling).toHaveTextContent("3"));
-    const confirmation = screen.getByRole("checkbox", { name: /I understand/ });
-    await user.click(confirmation);
-    await user.click(screen.getByRole("button", { name: "Run garbage collection" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Refresh usage" })).toBeEnabled());
-    expect(fetchMock.mock.calls.slice(4).map(([path]) => path)).toEqual([
-      `https://cas.example/v2/apps/${STACK}/spaces/member_abc/cas/gc`,
-      `https://cas.example/v2/apps/${STACK}/spaces/member_abc/cas/usage`,
-    ]);
-    expect(screen.getByText(/Examined 3, deleted 2/)).toBeInTheDocument();
-    expect(confirmation).not.toBeChecked();
-    expect(screen.getByText("Nodes").nextSibling).toHaveTextContent(refreshFails ? "3" : "1");
-    expect(screen.getByText("Content").nextSibling).toHaveTextContent(refreshFails ? "2.00 KiB" : "1.00 KiB");
-    if (refreshFails) expect(screen.getByRole("alert")).toHaveTextContent("Usage temporarily unavailable");
-  });
-
-  test("renews a capability only when a request finds it expired", async () => {
-    const now = Date.now();
-    const capability = (accessToken: string) => ({
-      accessToken,
-      tokenType: "Bearer",
-      expiresIn: 1,
-      expiresAt: now + (accessToken === "space-token-1" ? 1000 : 10_000),
-      issuer: `https://cas.example/managed-issuers/${STACK}`,
-      audience: `https://cas.example/stacks/${STACK}`,
-      spaceId: "member_abc",
-      permissions: ["spaces:member_abc:cas:manage"],
-    });
-    fetchMock
-      .mockResolvedValueOnce(json(managedIssuer()))
-      .mockResolvedValueOnce(json({ items: [] }))
-      .mockResolvedValueOnce(json(capability("space-token-1")))
-      .mockResolvedValueOnce(json({ nodeCount: 1, readyContentBytes: 0, readyStoredBytes: 0, reservedBytes: 0, notReadyNodeCount: 0, leasedNodeCount: 0 }))
-      .mockResolvedValueOnce(json(capability("space-token-2")))
-      .mockResolvedValueOnce(json({ nodeCount: 2, readyContentBytes: 0, readyStoredBytes: 0, reservedBytes: 0, notReadyNodeCount: 0, leasedNodeCount: 0 }));
-    const user = userEvent.setup();
-    render(<PlaygroundView appId={STACK} />);
-
-    await user.click(await screen.findByRole("button", { name: "Refresh usage" }));
-    await waitFor(() => expect(screen.getByText("Nodes").nextSibling).toHaveTextContent("1"));
-    vi.spyOn(Date, "now").mockReturnValue(now + 2000);
-    await user.click(screen.getByRole("button", { name: "Refresh usage" }));
-    await waitFor(() => expect(screen.getByText("Nodes").nextSibling).toHaveTextContent("2"));
-
-    const issueCalls = fetchMock.mock.calls.filter(([path]) =>
-      path === `/admin/apps/${STACK}/managed-capabilities`
-    );
-    expect(issueCalls).toHaveLength(2);
-    expect((fetchMock.mock.calls[5][1]?.headers as Headers).get("Authorization")).toBe("Bearer space-token-2");
-  });
-});
-
-let fetchMock: ReturnType<typeof vi.fn>;
-
-beforeEach(() => {
-  fetchMock = vi.fn();
-  vi.stubGlobal("fetch", fetchMock);
-  document.head.innerHTML = '<meta name="x-csrf-token" content="csrf-1" />';
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-});
 
 describe("MembersView", () => {
   test("filters and pages invitations and revokes using the invitation revision", async () => {
@@ -463,10 +336,10 @@ describe("MembersView", () => {
     expect(new Headers(deletion?.[1]?.headers).get("If-Match")).toBe('"7"');
     expect(fetchMock.mock.calls[1][0]).toContain("cursor=page-2");
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    screen.getByRole("combobox", { name: "People filter" }).focus();
+    screen.getByRole("combobox", { name: "People collection" }).focus();
     await user.keyboard("{Enter}");
     await user.click(await screen.findByRole("option", { name: "Invitation history" }));
-    await user.click(screen.getByRole("button", { name: "Apply" }));
+    await user.click(screen.getByRole("button", { name: "Apply filters" }));
     expect(await screen.findByText("No people found.")).toBeInTheDocument();
     expect(fetchMock.mock.calls.at(-1)?.[0]).toContain("filter=history");
   });
@@ -479,6 +352,7 @@ describe("MembersView", () => {
     const user = userEvent.setup();
     const { rerender } = render(<MembersView appId={STACK} appRevision={1} onChanged={() => undefined} />);
     await user.click(screen.getByRole("button", { name: "Invite" }));
+    await user.click(screen.getByRole("radio", { name: /Anyone with the one-time link/ }));
     await user.click(screen.getByRole("button", { name: "Create invitation" }));
     expect(await screen.findByText("https://console.example.test/synthetic-once")).toBeInTheDocument();
     rerender(<MembersView appId="other-app" appRevision={1} onChanged={() => undefined} />);
@@ -506,6 +380,7 @@ describe("MembersView", () => {
     render(<MembersView appId={STACK} appRevision={1} onChanged={() => undefined} />);
     await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "Invite" }));
+    await user.click(screen.getByRole("radio", { name: /Anyone with the one-time link/ }));
     await user.click(screen.getByRole("button", { name: "Create invitation" }));
     await waitFor(() => expect(screen.getByText(/Share this one-time URL/)).toBeInTheDocument());
     expect(screen.getByText("https://cas.example/admin/invitations/token-xyz")).toBeInTheDocument();
@@ -539,62 +414,8 @@ describe("MembersView", () => {
 });
 
 describe("IssuerView", () => {
-  test.each([0, 3])("hides a disabled managed issuer URL at revision %s and follows enable/disable changes", async (revision) => {
-    const user = userEvent.setup();
-    const disabled = { ...managedIssuer(), status: "disabled", revision };
-    fetchMock
-      .mockResolvedValueOnce(json(null))
-      .mockResolvedValueOnce(json(disabled))
-      .mockResolvedValueOnce(json({ ...disabled, status: "active", revision: revision + 1 }))
-      .mockResolvedValueOnce(json({ ...disabled, revision: revision + 2 }));
-    render(<IssuerView appId={STACK} />);
-    const enable = await screen.findByRole("button", { name: "Enable managed issuer" });
-    expect(screen.queryByText("Managed issuer URL")).not.toBeInTheDocument();
-    expect(screen.queryByText(disabled.issuer)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^Copy Managed issuer URL / })).not.toBeInTheDocument();
-    await user.click(enable);
-    expect(await screen.findByRole("button", { name: /^Copy Managed issuer URL / })).toHaveTextContent(disabled.issuer);
-    await user.click(screen.getByRole("button", { name: "Disable managed issuer" }));
-    await screen.findByRole("button", { name: "Enable managed issuer" });
-    expect(screen.queryByText("Managed issuer URL")).not.toBeInTheDocument();
-    expect(screen.queryByText(disabled.issuer)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^Copy Managed issuer URL / })).not.toBeInTheDocument();
-  });
-
-  test("copies the managed issuer URL from a non-editable text block with keyboard support", async () => {
-    const user = userEvent.setup();
-    const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
-    const notify = vi.spyOn(toast, "success");
-    fetchMock.mockResolvedValueOnce(json(null)).mockResolvedValueOnce(json(managedIssuer()));
-    render(<IssuerView appId={STACK} />);
-    const copy = await screen.findByRole("button", { name: /^Copy Managed issuer URL / });
-    expect(copy).toHaveClass("cursor-pointer", "max-w-full", "whitespace-normal");
-    expect(copy.parentElement).toHaveClass("flex-col", "gap-2");
-    expect(screen.queryByRole("textbox", { name: "Managed issuer URL" })).not.toBeInTheDocument();
-    expect(copy).toHaveTextContent(managedIssuer().issuer);
-    await user.click(copy);
-    expect(writeText).toHaveBeenCalledWith(managedIssuer().issuer);
-    expect(notify).toHaveBeenCalledWith("Managed issuer URL copied", expect.any(Object));
-    await user.keyboard("{Enter}");
-    expect(writeText).toHaveBeenCalledTimes(2);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
-  test("reports clipboard failures without changing the issuer", async () => {
-    const user = userEvent.setup();
-    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
-    const notify = vi.spyOn(toast, "error");
-    fetchMock.mockResolvedValueOnce(json(null)).mockResolvedValueOnce(json(managedIssuer()));
-    render(<IssuerView appId={STACK} />);
-    await user.click(await screen.findByRole("button", { name: /^Copy Managed issuer URL / }));
-    expect(notify).toHaveBeenCalledWith("Could not copy Managed issuer URL. Try again.", expect.any(Object));
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
   test("shows the connect form when no OAuth issuer is configured", async () => {
-    fetchMock
-      .mockResolvedValueOnce(json(null))
-      .mockResolvedValueOnce(json(managedIssuer()));
+    fetchMock.mockResolvedValueOnce(json(null));
     render(<IssuerView appId={STACK} />);
     await waitFor(() => expect(screen.getByRole("button", { name: "Inspect issuer" })).toBeInTheDocument());
     const customCard = screen.getByRole("heading", { name: "Custom OAuth authorization server" }).closest<HTMLDivElement>("div[class*='bg-card']")!;
@@ -622,7 +443,7 @@ describe("IssuerView", () => {
       jwksDigest: "digest",
       capabilityMaxLifetimeSeconds: 1800,
       revision: 2,
-    })).mockResolvedValueOnce(json(managedIssuer()));
+    }));
     render(<IssuerView appId={STACK} />);
     const customCard = screen.getByRole("heading", { name: "Custom OAuth authorization server" }).closest<HTMLDivElement>("div[class*='bg-card']")!;
     await waitFor(() => expect(within(customCard).getByText(/Status:/)).toHaveTextContent("active"));
@@ -633,12 +454,11 @@ describe("IssuerView", () => {
   });
 
   test("keeps current authority visible while inspecting and replacing a candidate", async () => {
-    const current = { ...managedIssuer(), mode: "external", issuer: "https://current.example", revision: 9 };
-    fetchMock.mockResolvedValueOnce(json(current)).mockResolvedValueOnce(json(managedIssuer()))
+    const current = { ...externalIssuer(), issuer: "https://current.example", revision: 9 };
+    fetchMock.mockResolvedValueOnce(json(current))
       .mockResolvedValueOnce(json({ inspectionId: "candidate", metadataUrl: "https://replacement.example/metadata", jwksUri: "https://replacement.example/jwks", challenge: "candidate-challenge", expiresAt: 4102444800000, keys: [{ kid: "key", algorithm: "ES256" }] }))
       .mockResolvedValueOnce(new Response(null, { status: 204, headers: { ETag: '"10"' } }))
-      .mockResolvedValueOnce(json({ ...current, issuer: "https://replacement.example", revision: 10 }))
-      .mockResolvedValueOnce(json(managedIssuer()));
+      .mockResolvedValueOnce(json({ ...current, issuer: "https://replacement.example", revision: 10 }));
     const user = userEvent.setup();
     render(<IssuerView appId={STACK} />);
     const input = await screen.findByLabelText("Issuer", { selector: "#oauth-issuer-url" });
@@ -648,11 +468,11 @@ describe("IssuerView", () => {
     await user.click(screen.getByRole("button", { name: "Inspect replacement" }));
     expect(await screen.findByText("candidate-challenge")).toBeInTheDocument();
     const custom = screen.getByRole("heading", { name: "Custom OAuth authorization server" }).closest<HTMLDivElement>("div[class*='bg-card']")!;
-    expect(within(custom).getByText(/Mode:/)).toHaveTextContent("https://current.example");
-    expect(within(custom).getByText(/Mode:/)).toHaveTextContent("active");
+    expect(within(custom).getByText(/Status:/)).toHaveTextContent("https://current.example");
+    expect(within(custom).getByText(/Status:/)).toHaveTextContent("active");
     await user.type(screen.getByLabelText("Activation proof (compact JWS)"), "synthetic-proof");
     await user.click(screen.getByRole("button", { name: "Verify and replace" }));
-    await waitFor(() => expect(within(custom).getByText(/Mode:/)).toHaveTextContent("https://replacement.example"));
+    await waitFor(() => expect(within(custom).getByText(/Status:/)).toHaveTextContent("https://replacement.example"));
     const update = fetchMock.mock.calls.find(([, init]) => init?.method === "PUT");
     expect(new Headers(update?.[1]?.headers).get("If-Match")).toBe('"9"');
     expect(new Headers(update?.[1]?.headers).has("If-None-Match")).toBe(false);
@@ -661,7 +481,6 @@ describe("IssuerView", () => {
   test("inspects and activates a standards-based OAuth issuer", async () => {
     fetchMock
       .mockResolvedValueOnce(json(null))
-      .mockResolvedValueOnce(json(managedIssuer()))
       .mockResolvedValueOnce(json({
         inspectionId: "oinsp_1", appId: STACK, issuer: "https://auth.example", audience: `https://cas.example/stacks/${STACK}`,
         metadataUrl: "https://auth.example/.well-known/oauth-authorization-server", metadataType: "oauth",
@@ -691,8 +510,7 @@ describe("IssuerView", () => {
         jwksDigest: "j",
         capabilityMaxLifetimeSeconds: 1800,
         revision: 2,
-      }))
-      .mockResolvedValueOnce(json(managedIssuer()));
+      }));
     const user = userEvent.setup();
     render(<IssuerView appId={STACK} />);
     await user.type(await screen.findByLabelText("Issuer", { selector: "#oauth-issuer-url" }), "https://auth.example");
@@ -728,10 +546,51 @@ describe("ControlAuditView", () => {
     const user = userEvent.setup();
     render(<ControlAuditView appId={STACK} />);
     await waitFor(() => expect(screen.getByText("app.created")).toBeInTheDocument());
+    expect(screen.getByText("App created")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Copy Request ID r1" })).toBeVisible();
     expect(screen.getByText("Legacy")).toHaveAttribute("title", "Historical action from the retired issuer-key API");
     await user.click(screen.getByRole("button", { name: "Load more" }));
     await waitFor(() => expect(screen.getByText("member.invited")).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: "Load more" })).not.toBeInTheDocument();
+  });
+
+  test("renders complete mobile App audit summaries without a wide table", async () => {
+    const previousWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    const auditIdentity = { externalIdentityId: "ext-alice", provider: "google", accountHint: null, linkedAt: 1, lastAuthenticatedAt: 1, currentLogin: false, issuer: "iss", subject: "alice" };
+    fetchMock.mockResolvedValueOnce(json({
+      items: [{ eventId: "evt_mobile", appId: STACK, actorAccount: accountSummary("Alice"), authenticatedIdentity: auditIdentity, targetAccount: null, action: "member.invited", target: "inv_1", requestId: "r-mobile", traceId: null, caller: null, createdAt: 1 }],
+      nextCursor: null,
+    }));
+    try {
+      render(<ControlAuditView appId={STACK} />);
+      const item = await screen.findByRole("listitem", { name: "Member invited" });
+      expect(within(item).getByText("member.invited")).toBeVisible();
+      expect(within(item).getByText("Alice")).toBeVisible();
+      expect(within(item).getByText("inv_1")).toBeVisible();
+      expect(within(item).getByRole("button", { name: "Copy Request ID r-mobile" })).toBeVisible();
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: previousWidth });
+    }
+  });
+
+  test("ignores a stale App audit response after filters change", async () => {
+    let resolveOld!: (response: Response) => void;
+    const oldRequest = new Promise<Response>(resolve => { resolveOld = resolve; });
+    const identity = { externalIdentityId: "ext-alice", provider: "google", accountHint: null, linkedAt: 1, lastAuthenticatedAt: 1, currentLogin: false, issuer: "iss", subject: "alice" };
+    const oldEvent = { eventId: "old", appId: STACK, actorAccount: accountSummary("Old Admin"), authenticatedIdentity: identity, targetAccount: null, action: "app.suspended", target: STACK, requestId: null, traceId: null, caller: null, createdAt: 1 };
+    const newEvent = { ...oldEvent, eventId: "new", actorAccount: accountSummary("New Admin"), action: "app.restored" };
+    fetchMock.mockImplementationOnce(() => oldRequest).mockResolvedValueOnce(json({ items: [newEvent], nextCursor: null }));
+    const user = userEvent.setup();
+    render(<ControlAuditView appId={STACK} />);
+
+    await user.type(screen.getByLabelText("Actor Account ID"), ACCOUNT_ID);
+    await user.click(screen.getByRole("button", { name: "Apply filters" }));
+    expect(await screen.findByText("App restored")).toBeVisible();
+    await act(async () => resolveOld(json({ items: [oldEvent], nextCursor: null })));
+    expect(screen.queryByText("App suspended")).not.toBeInTheDocument();
+    expect(screen.getByText("New Admin")).toBeVisible();
   });
 });
 

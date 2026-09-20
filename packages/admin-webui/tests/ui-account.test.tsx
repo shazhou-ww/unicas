@@ -47,6 +47,16 @@ beforeEach(() => {
 });
 
 describe("AccountView", () => {
+  test("renders a bounded loading status while Account data is pending", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
+    render(<AccountView />);
+
+    const loading = await screen.findByRole("status");
+    expect(loading).toHaveClass("console-loading-state");
+    expect(loading).toHaveTextContent("Loading Account");
+    expect(loading).toHaveAttribute("aria-busy", "true");
+  });
+
   test("updates mutable profile fields without an App revision", async () => {
     let patch: { body: unknown; headers: Headers } | null = null;
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -64,6 +74,8 @@ describe("AccountView", () => {
     render(<AccountView />);
 
     const name = await screen.findByLabelText("Display name");
+    expect(name).toHaveAttribute("name", "displayName");
+    expect(name).toHaveAttribute("autocomplete", "name");
     await user.clear(name);
     await user.type(name, "Alice Updated");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
@@ -118,11 +130,34 @@ describe("AccountView", () => {
     expect(navigateExternal).toHaveBeenCalledWith("https://google.example/authorize");
   });
 
+  test("restores focus from Account dialogs and exposes a 44px close target", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => json(account)));
+    const user = userEvent.setup();
+    render(<AccountView />);
+
+    const link = await screen.findByRole("button", { name: /link login method/i });
+    await user.click(link);
+    await user.click(screen.getByRole("menuitem", { name: "Microsoft" }));
+    const close = screen.getByRole("button", { name: "Close" });
+    expect(close).toHaveClass("h-11", "w-11");
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(link).toHaveFocus());
+
+    const unlink = screen.getByRole("button", { name: "Unlink GitHub" });
+    await user.click(unlink);
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(unlink).toHaveFocus());
+  });
+
   test("does not allow the final login method to be unlinked", async () => {
-    account = { ...account, identities: [googleIdentity], linkableProviders: ["microsoft", "github"] };
+    account = { ...account, identities: [{ ...googleIdentity, lastAuthenticatedAt: null }], linkableProviders: ["microsoft", "github"] };
     vi.stubGlobal("fetch", vi.fn(async () => json(account)));
     render(<AccountView />);
 
-    expect(await screen.findByRole("button", { name: "Unlink Google" })).toBeDisabled();
+    const unlink = await screen.findByRole("button", { name: "Unlink Google" });
+    expect(unlink).toBeDisabled();
+    expect(unlink).toHaveAccessibleDescription("Add another login method before unlinking this one.");
+    expect(screen.getByText("Used for current session", { exact: false })).toBeVisible();
+    expect(screen.queryByText("Last used Never", { exact: false })).not.toBeInTheDocument();
   });
 });

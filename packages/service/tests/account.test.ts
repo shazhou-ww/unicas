@@ -65,8 +65,6 @@ function fixture() {
     getAccountAppInvitationByTokenHash: vi.fn(async () => null),
     commitAcceptAccountAppInvitation: vi.fn(async () => "accepted"),
     appendAccountSessionAudit: vi.fn(async () => "recorded"),
-    getManagedOAuthIssuer: vi.fn(async () => null),
-    commitPatchAccountManagedOAuthIssuer: vi.fn(async () => "updated"),
     commitPatchAccountApp: vi.fn(async () => "updated"),
     getAccountAppIdempotency: vi.fn(async () => null),
     commitCreateAccountApp: vi.fn(async () => "created"),
@@ -256,141 +254,11 @@ describe("Account service", () => {
     });
   });
 
-  test("mints managed Space capabilities for the stable Account owner", async () => {
-    const { repository } = fixture();
-    const app = {
-      appId: "cas_app_a",
-      displayName: "App A",
-      description: "",
-      status: "active" as const,
-      createdAt: 1,
-      revision: 2,
-    };
-    const issuer = {
-      appId: app.appId,
-      mode: "managed" as const,
-      issuer: "https://cas.example/managed-issuers/cas_app_a",
-      audience: "https://cas.example/stacks/cas_app_a",
-      metadataUrl: "https://cas.example/managed-issuers/cas_app_a/.well-known/oauth-authorization-server",
-      metadataType: "oauth" as const,
-      authorizationEndpoint: "https://cas.example/managed-issuers/cas_app_a/authorize",
-      tokenEndpoint: "https://cas.example/managed-issuers/cas_app_a/token",
-      jwksUri: "https://cas.example/managed-issuers/cas_app_a/jwks.json",
-      registrationEndpoint: null,
-      scopesSupported: ["cas:manage"],
-      codeChallengeMethodsSupported: ["S256"],
-      status: "active" as const,
-      verifiedAt: 1,
-      lastRefreshAt: 1,
-      lastRefreshError: null,
-      jwksDigest: "digest",
-      capabilityMaxLifetimeSeconds: 3600,
-      revision: 1,
-    };
-    const capability = {
-      accessToken: "token",
-      tokenType: "Bearer" as const,
-      expiresIn: 3600,
-      expiresAt: 3_600_000,
-      issuer: issuer.issuer,
-      audience: issuer.audience,
-      spaceId: "member_account",
-      permissions: ["spaces:member_account:cas:manage"],
-    };
-    const issueAccountSpace = vi.fn(async () => capability);
-    const service = new AccountService(repository, () => 1000, {
-      provision: vi.fn(async () => issuer),
-      issueAccountSpace,
-    });
-    vi.mocked(repository.getAccountApp).mockResolvedValue(app);
-    vi.mocked(repository.getManagedOAuthIssuer).mockResolvedValue(issuer);
-
-    await expect(service.mintManagedSpaceCapability({
-      actorAccountId: accountId,
-      actorExternalIdentityId: identity.externalIdentityId,
-      appId: app.appId,
-    })).resolves.toEqual(capability);
-    expect(issueAccountSpace).toHaveBeenCalledWith({ app, issuer, accountId });
-
-    vi.mocked(repository.getAccountApp).mockResolvedValue({ ...app, status: "suspended" });
-    await expect(service.mintManagedSpaceCapability({
-      actorAccountId: accountId,
-      actorExternalIdentityId: identity.externalIdentityId,
-      appId: app.appId,
-    })).rejects.toMatchObject({ code: "APP_SUSPENDED" });
-  });
-
-  test("reads and conditionally updates managed issuers through Account membership", async () => {
-    const { repository, service } = fixture();
-    const issuer = {
-      appId: "cas_app_a",
-      mode: "managed" as const,
-      issuer: "https://cas.example/managed-issuers/cas_app_a",
-      audience: "https://cas.example/stacks/cas_app_a",
-      metadataUrl: "https://cas.example/managed-issuers/cas_app_a/.well-known/oauth-authorization-server",
-      metadataType: "oauth" as const,
-      authorizationEndpoint: "https://cas.example/managed-issuers/cas_app_a/authorize",
-      tokenEndpoint: "https://cas.example/managed-issuers/cas_app_a/token",
-      jwksUri: "https://cas.example/managed-issuers/cas_app_a/jwks.json",
-      registrationEndpoint: null,
-      scopesSupported: ["cas:manage"],
-      codeChallengeMethodsSupported: ["S256"],
-      status: "active" as const,
-      verifiedAt: 1,
-      lastRefreshAt: 1,
-      lastRefreshError: null,
-      jwksDigest: "digest",
-      capabilityMaxLifetimeSeconds: 3600,
-      revision: 4,
-    };
-    vi.mocked(repository.hasAppMembership).mockResolvedValue(true);
-    vi.mocked(repository.getManagedOAuthIssuer).mockResolvedValue(issuer);
-
-    await expect(service.getManagedOAuthIssuer(accountId, issuer.appId)).resolves.toMatchObject({
-      appId: issuer.appId,
-      status: "active",
-      revision: 4,
-    });
-    const updated = await service.patchManagedOAuthIssuer({
-      actorAccountId: accountId,
-      actorExternalIdentityId: identity.externalIdentityId,
-      appId: issuer.appId,
-      enabled: false,
-      ifMatch: '"4"',
-    });
-    expect(updated).toMatchObject({ appId: issuer.appId, status: "disabled", revision: 5 });
-    expect(repository.commitPatchAccountManagedOAuthIssuer).toHaveBeenCalledWith(expect.objectContaining({
-      actorAccountId: accountId,
-      actorExternalIdentityId: identity.externalIdentityId,
-      appId: issuer.appId,
-      expectedRevision: 4,
-      enabled: false,
-      nextRevision: 5,
-    }));
-
-    vi.mocked(repository.commitPatchAccountManagedOAuthIssuer).mockResolvedValueOnce("revision-mismatch");
-    await expect(service.patchManagedOAuthIssuer({
-      actorAccountId: accountId,
-      actorExternalIdentityId: identity.externalIdentityId,
-      appId: issuer.appId,
-      enabled: false,
-      ifMatch: '"4"',
-    })).rejects.toMatchObject({ code: "REVISION_MISMATCH" });
-    await expect(service.patchManagedOAuthIssuer({
-      actorAccountId: accountId,
-      actorExternalIdentityId: identity.externalIdentityId,
-      appId: issuer.appId,
-      enabled: true,
-      ifMatch: '"4"',
-    })).rejects.toMatchObject({ code: "INVALID_REQUEST" });
-  });
-
   test("reads an external issuer only through Account App membership", async () => {
     const { repository, service } = fixture();
     vi.mocked(repository.hasAppMembership).mockResolvedValue(true);
     vi.mocked(repository.getAppOAuthIssuer).mockResolvedValue({
       appId: "cas_app_a",
-      mode: "external",
       issuer: "https://issuer.example",
       audience: "https://api.example/app",
       metadataUrl: "https://issuer.example/.well-known/openid-configuration",
@@ -437,7 +305,7 @@ describe("Account service", () => {
       algorithm: "ES256",
       publicJwk,
     }]);
-    const service = new AccountService(repository, () => 1000, null, {
+    const service = new AccountService(repository, () => 1000, {
       oauthResourcePublicOrigin: "https://cas.example",
       generateOAuthInspectionId: () => "inspection-1",
       generateNonce: () => "nonce-1",

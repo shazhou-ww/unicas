@@ -148,7 +148,6 @@ export interface AppMemberInvitation {
 
 export interface AppOAuthIssuer {
   readonly appId: AppId;
-  readonly mode: "managed" | "external";
   readonly issuer: string;
   readonly audience: string;
   readonly metadataUrl: string;
@@ -175,17 +174,6 @@ export interface AppOAuthIssuerInspection {
   readonly challenge: string;
   readonly expiresAt: number;
   readonly keys: readonly { readonly kid: string; readonly algorithm: string }[];
-}
-
-export interface ManagedSpaceCapability {
-  readonly accessToken: string;
-  readonly tokenType: "Bearer";
-  readonly expiresIn: number;
-  readonly expiresAt: number;
-  readonly issuer: string;
-  readonly audience: string;
-  readonly spaceId: string;
-  readonly permissions: readonly string[];
 }
 
 export interface AppRefDomain {

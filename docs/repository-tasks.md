@@ -50,6 +50,9 @@ device, worktree, or source branch, and no identity lane or marker is used.
   leave the task in `backlog`.
 - Create or update `Progress.md` only with a publication that also changes a
   path outside `tasks/`; do not create bookkeeping-only progress commits.
+- Before completion, reconcile the task's acceptance criteria and Progress
+  review/manual checklists with the evidence being approved. The completion
+  command records lifecycle state but does not rewrite those artifacts.
 - Use `repoledger task complete --approved-commit <commit>` only after delivery
   approval names the exact current primary commit. Use `task abandon` only
   after an explicit accountable decision.

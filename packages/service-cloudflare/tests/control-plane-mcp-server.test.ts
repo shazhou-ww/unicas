@@ -58,50 +58,13 @@ describe("adapter-hosted control-plane MCP server", () => {
     expect((await callTool(handlerFor(grant(["control:write"]), { mutationsEnabled: true }), "invite_app_member", {
       appId: "cas_app", email: "bob@example.com", confirmEmail: "bob@example.com", idempotencyKey: "invite-1",
     })).content[0]?.text).toContain("control:security");
-    expect((await callTool(handlerFor(grant(["control:security"])), "mint_managed_space_capability", {
-      appId: "cas_app",
-    })).content[0]?.text).toContain("disabled by deployment policy");
   });
 
-  test("mints managed Space capabilities for the stable Account through MCP", async () => {
+  test("reads and replaces an external App issuer through MCP", async () => {
     const repository = new D1AccountRepository(db);
     const { privateKey, publicKey } = await generateKeyPair("ES256", { extractable: true });
     const publicJwk = { ...(await exportJWK(publicKey)), kid: "issuer-key", alg: "ES256" };
-    const issuerRecord = (appId: string) => ({
-      appId,
-      mode: "managed" as const,
-      issuer: `https://cas.example/managed-issuers/${appId}`,
-      audience: `https://cas.example/stacks/${appId}`,
-      metadataUrl: `https://cas.example/managed-issuers/${appId}/.well-known/oauth-authorization-server`,
-      metadataType: "oauth" as const,
-      authorizationEndpoint: `https://cas.example/managed-issuers/${appId}/authorize`,
-      tokenEndpoint: `https://cas.example/managed-issuers/${appId}/token`,
-      jwksUri: `https://cas.example/managed-issuers/${appId}/jwks.json`,
-      registrationEndpoint: null,
-      scopesSupported: ["cas:read", "cas:write", "cas:manage"],
-      codeChallengeMethodsSupported: ["S256"],
-      status: "active" as const,
-      verifiedAt: 1000,
-      lastRefreshAt: 1000,
-      lastRefreshError: null,
-      jwksDigest: "digest",
-      capabilityMaxLifetimeSeconds: 3600,
-      revision: 1,
-    });
-    const issueAccountSpace = vi.fn(async ({ app, accountId }) => ({
-      accessToken: "account-space-token",
-      tokenType: "Bearer" as const,
-      expiresIn: 3600,
-      expiresAt: 3_601_000,
-      issuer: `https://cas.example/managed-issuers/${app.appId}`,
-      audience: `https://cas.example/stacks/${app.appId}`,
-      spaceId: `member_${accountId.slice(5)}`,
-      permissions: [`spaces:member_${accountId.slice(5)}:cas:manage`],
-    }));
     const accountService = new AccountService(repository, () => 1000, {
-      provision: async appId => issuerRecord(appId),
-      issueAccountSpace,
-    }, {
       oauthResourcePublicOrigin: "https://cas.example",
       oauthDiscovery: {
         inspectIssuer: async ({ issuer }) => ({
@@ -134,25 +97,13 @@ describe("adapter-hosted control-plane MCP server", () => {
     const app = await accountService.createApp({
       actorAccountId: actor.account.accountId,
       actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
-      displayName: "Managed",
+      displayName: "External issuer App",
     });
     const handler = createMcpHandler(
       () => createControlPlaneMcpServer({ mutationsEnabled: true, accountService }),
       { route: "/mcp", authContext: { props: grant(["control:read", "control:security"]) } },
     );
 
-    const minted = await callTool(handler, "mint_managed_space_capability", { appId: app.appId });
-
-    expect(minted.structuredContent).toMatchObject({
-      accessToken: "account-space-token",
-      spaceId: `member_${actor.account.accountId.slice(5)}`,
-    });
-    expect(issueAccountSpace).toHaveBeenCalledWith(expect.objectContaining({
-      accountId: actor.account.accountId,
-      app: expect.objectContaining({ appId: app.appId }),
-    }));
-    expect((await callTool(handler, "get_app_managed_issuer", { appId: app.appId })).structuredContent)
-      .toMatchObject({ appId: app.appId, status: "active", etag: '"1"' });
     await db.prepare(
       `INSERT INTO cas_app_oauth_issuers
         (app_id, mode, issuer, audience, metadata_url, metadata_type,
@@ -180,18 +131,6 @@ describe("adapter-hosted control-plane MCP server", () => {
       activationProof: proof,
       etag: '"3"',
     })).structuredContent).toEqual({ etag: '"4"' });
-    expect((await callTool(handler, "update_app_managed_issuer", {
-      appId: app.appId,
-      enabled: false,
-      etag: '"1"',
-    })).structuredContent).toMatchObject({ appId: app.appId, status: "disabled", etag: '"2"' });
-    expect(await db.prepare(
-      "SELECT caller_channel, oauth_client_handle, tool_name FROM cas_control_audit_events WHERE action = 'managed_issuer.disabled'",
-    ).first()).toEqual({
-      caller_channel: "mcp",
-      oauth_client_handle: "a".repeat(64),
-      tool_name: "update_app_managed_issuer",
-    });
   });
 
   test("requires apps.create authority in addition to the delegated write scope", async () => {
@@ -428,7 +367,7 @@ describe("adapter-hosted control-plane MCP server", () => {
     })).structuredContent).toEqual({ etag: '"2"' });
   });
 
-  test("serves Account-keyed App memberships without retired Playground tools", async () => {
+  test("serves Account-keyed App memberships", async () => {
     const accountService = new AccountService(new D1AccountRepository(db), () => 1000);
     const aliceAccount = await accountService.createForExternalIdentity({
       provider: "google",
@@ -497,12 +436,6 @@ describe("adapter-hosted control-plane MCP server", () => {
     })).structuredContent).toEqual({ ok: true });
     expect((await callTool(aliceHandler, "list_app_members", { appId, limit: 10 })).structuredContent)
       .toMatchObject({ items: [{ account: { accountId: aliceAccount.account.accountId } }] });
-    expect(APP_ADMIN_MCP_TOOL_LIST.map(tool => tool.name)).not.toEqual(expect.arrayContaining([
-      "list_app_playground_file_roots",
-      "create_app_playground_file_root",
-      "update_app_playground_file_root",
-      "delete_app_playground_file_root",
-    ]));
   });
 
   test("maps physical audit dimensions to App and Space MCP output", async () => {

@@ -9,7 +9,6 @@ import type {
   AppMembership,
   AppOAuthIssuer,
   AppOAuthIssuerInspection,
-  ManagedSpaceCapability,
   PlatformAccountDetail,
   PlatformAccountListItem,
   PlatformAccountPage,
@@ -147,18 +146,6 @@ export interface AccountOAuthIssuerInspectionRecord {
   readonly expiresAt: number;
   readonly usedAt: number | null;
   readonly revision: number;
-}
-
-export interface AccountManagedIssuerProvisioner {
-  provision(appId: AppId, createdAt: number): Promise<AccountOAuthIssuerRecord>;
-}
-
-export interface AccountManagedCapabilityIssuer extends AccountManagedIssuerProvisioner {
-  issueAccountSpace(input: {
-    readonly app: App;
-    readonly issuer: AccountOAuthIssuerRecord;
-    readonly accountId: AccountId;
-  }): Promise<ManagedSpaceCapability>;
 }
 
 export interface AppAccountAuditRecord extends AccountAuditActorRecord {
@@ -308,22 +295,6 @@ export interface AccountRepository {
     readonly callerChannel?: string;
     readonly now: number;
   }): Promise<"recorded" | "account-unavailable">;
-  getManagedOAuthIssuer(appId: AppId): Promise<AccountOAuthIssuerRecord | null>;
-  commitPatchAccountManagedOAuthIssuer(input: {
-    readonly actorAccountId: AccountId;
-    readonly actorExternalIdentityId: string;
-    readonly appId: AppId;
-    readonly expectedRevision: number;
-    readonly enabled: boolean;
-    readonly nextRevision: number;
-    readonly eventId: string;
-    readonly requestId?: string;
-    readonly traceId?: string;
-    readonly callerChannel?: string;
-    readonly oauthClientHandle?: string;
-    readonly toolName?: string;
-    readonly now: number;
-  }): Promise<"updated" | "actor-not-member" | "not-found" | "revision-mismatch">;
   commitPatchAccountApp(input: {
     readonly actorAccountId: AccountId;
     readonly actorExternalIdentityId: string;
@@ -347,7 +318,6 @@ export interface AccountRepository {
     readonly actorAccountId: AccountId;
     readonly actorExternalIdentityId: string;
     readonly app: App;
-    readonly managedIssuer: AccountOAuthIssuerRecord | null;
     readonly idempotency: AccountAppIdempotencyRecord | null;
     readonly eventId: string;
     readonly requestId?: string;
@@ -494,7 +464,6 @@ export class AccountService {
   constructor(
     readonly repository: AccountRepository,
     readonly now: () => number = Date.now,
-    readonly managedOAuthIssuer: AccountManagedCapabilityIssuer | null = null,
     readonly options: {
       readonly oauthDiscovery?: OAuthDiscoveryPort;
       readonly oauthResourcePublicOrigin?: string;
@@ -680,32 +649,6 @@ export class AccountService {
     }
   }
 
-  async mintManagedSpaceCapability(input: {
-    readonly actorAccountId: AccountId;
-    readonly actorExternalIdentityId: string;
-    readonly appId: AppId;
-  }): Promise<ManagedSpaceCapability> {
-    const actor = await this.#resolveCanonicalAccount(input.actorAccountId);
-    this.#requireUsableAccount(actor);
-    await this.requireActiveIdentity(actor.accountId, input.actorExternalIdentityId);
-    const app = await this.repository.getAccountApp(actor.accountId, input.appId);
-    if (!app) throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
-    if (app.status !== "active") throw new AccountServiceError("APP_SUSPENDED");
-    const issuer = await this.repository.getManagedOAuthIssuer(app.appId);
-    if (!issuer || issuer.mode !== "managed" || issuer.status !== "active") {
-      throw new AccountServiceError("INVALID_REQUEST");
-    }
-    if (!this.managedOAuthIssuer) throw new AccountServiceError("SERVICE_UNAVAILABLE");
-    return this.managedOAuthIssuer.issueAccountSpace({ app, issuer, accountId: actor.accountId });
-  }
-
-  async getManagedOAuthIssuer(actorAccountId: AccountId, appId: AppId): Promise<AppOAuthIssuer> {
-    await this.requireAppMembership(actorAccountId, appId);
-    const issuer = await this.repository.getManagedOAuthIssuer(appId);
-    if (!issuer) throw new AccountServiceError("NOT_FOUND");
-    return projectAppOAuthIssuer(issuer);
-  }
-
   async getAppOAuthIssuer(actorAccountId: AccountId, appId: AppId): Promise<AppOAuthIssuer>;
   async getAppOAuthIssuer(actorAccountId: AccountId, appId: AppId, optional: true): Promise<AppOAuthIssuer | null>;
   async getAppOAuthIssuer(actorAccountId: AccountId, appId: AppId, optional: boolean): Promise<AppOAuthIssuer | null>;
@@ -872,7 +815,6 @@ export class AccountService {
     }
     const issuer: AccountOAuthIssuerRecord = {
       ...inspection,
-      mode: "external",
       status: "active",
       verifiedAt: now,
       lastRefreshAt: now,
@@ -1228,58 +1170,6 @@ export class AccountService {
     });
   }
 
-  async patchManagedOAuthIssuer(input: {
-    readonly actorAccountId: AccountId;
-    readonly actorExternalIdentityId: string;
-    readonly appId: AppId;
-    readonly enabled: boolean;
-    readonly ifMatch?: string;
-    readonly requestId?: string;
-    readonly traceId?: string;
-    readonly callerChannel?: string;
-    readonly oauthClientHandle?: string;
-    readonly toolName?: string;
-  }): Promise<AppOAuthIssuer> {
-    if (input.ifMatch === undefined || input.ifMatch.trim().length === 0) {
-      throw new AccountServiceError("PRECONDITION_REQUIRED");
-    }
-    const expectedRevision = parseCasAdminETag(input.ifMatch);
-    if (expectedRevision === null) throw new AccountServiceError("REVISION_MISMATCH");
-    const actor = await this.#resolveCanonicalAccount(input.actorAccountId);
-    this.#requireUsableAccount(actor);
-    await this.requireActiveIdentity(actor.accountId, input.actorExternalIdentityId);
-    if (!await this.repository.hasAppMembership(actor.accountId, input.appId)) {
-      throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
-    }
-    const issuer = await this.repository.getManagedOAuthIssuer(input.appId);
-    if (!issuer) throw new AccountServiceError("NOT_FOUND");
-    if (issuer.revision !== expectedRevision) throw new AccountServiceError("REVISION_MISMATCH");
-    if ((issuer.status === "active") === input.enabled) throw new AccountServiceError("INVALID_REQUEST");
-    const result = await this.repository.commitPatchAccountManagedOAuthIssuer({
-      actorAccountId: actor.accountId,
-      actorExternalIdentityId: input.actorExternalIdentityId,
-      appId: input.appId,
-      expectedRevision,
-      enabled: input.enabled,
-      nextRevision: expectedRevision + 1,
-      eventId: generateEventId(),
-      requestId: input.requestId,
-      traceId: input.traceId,
-      callerChannel: input.callerChannel,
-      oauthClientHandle: input.oauthClientHandle,
-      toolName: input.toolName,
-      now: this.now(),
-    });
-    if (result === "actor-not-member") throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
-    if (result === "not-found") throw new AccountServiceError("NOT_FOUND");
-    if (result === "revision-mismatch") throw new AccountServiceError("REVISION_MISMATCH");
-    return projectAppOAuthIssuer({
-      ...issuer,
-      status: input.enabled ? "active" : "disabled",
-      revision: expectedRevision + 1,
-    });
-  }
-
   async patchApp(input: {
     readonly actorAccountId: AccountId;
     readonly actorExternalIdentityId: string;
@@ -1383,13 +1273,10 @@ export class AccountService {
       key: input.idempotencyKey, payloadHash, response: app, createdAt: now,
       expiresAt: now + CAS_ADMIN_IDEMPOTENCY_RETENTION_MS,
     };
-    const managedIssuer = this.managedOAuthIssuer
-      ? await this.managedOAuthIssuer.provision(app.appId, now)
-      : null;
     const result = await this.repository.commitCreateAccountApp({
       actorAccountId: actor.accountId,
       actorExternalIdentityId: input.actorExternalIdentityId,
-      app, managedIssuer, idempotency, eventId: generateEventId(),
+      app, idempotency, eventId: generateEventId(),
       requestId: input.requestId, traceId: input.traceId, callerChannel: input.callerChannel,
       oauthClientHandle: input.oauthClientHandle, toolName: input.toolName,
     });

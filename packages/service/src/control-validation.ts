@@ -100,18 +100,6 @@ export async function sha256Hex(value: string): Promise<string> {
     .join("");
 }
 
-/** Stable, non-PII owner key used to isolate managed capabilities by identity. */
-export function managedIdentityOwnerKey(
-  stackId: string,
-  identity: { readonly identityIssuer: string; readonly subject: string },
-): Promise<string> {
-  return sha256Hex(`${stackId}\0${identity.identityIssuer}\0${identity.subject}`);
-}
-
-export function managedAccountOwnerKey(appId: string, accountId: string): Promise<string> {
-  return sha256Hex(`${appId}\0${accountId}`);
-}
-
 /** Stable canonical JSON for idempotency payload comparison. */
 export function canonicalJson(value: unknown): string {
   return JSON.stringify(value);

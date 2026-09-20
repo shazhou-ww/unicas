@@ -97,7 +97,7 @@ describe("unicas mcp (stdio server)", () => {
     expect(toolsList.id).toBe(2);
     const tools = (toolsList.result as { tools: Array<{ name: string }> }).tools;
     expect(tools.map((tool) => tool.name)).toEqual(TOOL_CATALOG.map((tool) => tool.name));
-    expect(tools.map((tool) => tool.name)).toContain("mint_managed_space_capability");
+    expect(tools.map((tool) => tool.name)).not.toContain("mint_managed_space_capability");
     expect(tools.map((tool) => tool.name)).toContain("get_app_oauth_issuer");
     expect(tools.map((tool) => tool.name)).not.toContain("add_issuer_key");
 

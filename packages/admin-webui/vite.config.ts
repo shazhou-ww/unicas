@@ -47,10 +47,6 @@ const config: UserConfig & { test: VitestUserConfig["test"] } = {
         target: "http://localhost:8794",
         changeOrigin: false,
       },
-      "/managed-issuers": {
-        target: "http://localhost:8794",
-        changeOrigin: false,
-      },
       "/.well-known": {
         target: "http://localhost:8794",
         changeOrigin: false,

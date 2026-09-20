@@ -9,6 +9,10 @@ const SITE_ROOT = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_OUTPUT = join(SITE_ROOT, "dist");
 
 export const DOCUMENTS = [
+  ["app-user-api", "App-user API", "Integrate", "docs/app-user-api/README.md"],
+  ["app-user-api/scenarios", "App-user scenarios", "Integrate", "docs/app-user-api/scenarios.md"],
+  ["app-user-api/http-api", "App-user HTTP API", "Integrate", "docs/app-user-api/http-api.md"],
+  ["app-user-api/authorization", "App-user authorization", "Integrate", "docs/app-user-api/authorization.md"],
   ["cas-architecture", "CAS Architecture", "Architecture"],
   ["cas-binary-format", "CAS Binary Format", "Architecture"],
   ["cas-state-protection-and-gc", "State Protection and GC", "Architecture"],
@@ -31,7 +35,7 @@ const PACKAGE_REFERENCES = [
 ];
 
 const knownSources = new Map([
-  ...DOCUMENTS.map(([slug]) => [`docs/${slug}.md`, `/${slug}/`]),
+  ...DOCUMENTS.map(([slug, , , sourcePath]) => [sourcePath ?? `docs/${slug}.md`, `/${slug}/`]),
   ...PACKAGE_REFERENCES.map(([slug, , source]) => [source, `/reference/${slug}/`]),
   ["GLOSSARY.md", "/glossary/"],
 ]);
@@ -250,8 +254,8 @@ export async function buildDocsSite(outputDir = DEFAULT_OUTPUT) {
   const pages = new Map();
   pages.set("/", overviewPage());
 
-  for (const [slug, title] of DOCUMENTS) {
-    const sourcePath = `docs/${slug}.md`;
+  for (const [slug, title, , configuredSourcePath] of DOCUMENTS) {
+    const sourcePath = configuredSourcePath ?? `docs/${slug}.md`;
     const markdown = await readFile(join(ROOT, sourcePath), "utf8");
     const route = `/${slug}/`;
     pages.set(route, articlePage(title, title, renderMarkdown(markdown, sourcePath), sourcePath, route));

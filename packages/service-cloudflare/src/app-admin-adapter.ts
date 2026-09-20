@@ -42,8 +42,6 @@ export function transformAppAdminResponse(route: AppAdminRoute, body: unknown): 
     case "acceptMemberInvitation":
       return isRecord(body) ? { appId: body.stackId } : body;
     case "getOAuthIssuer":
-    case "getManagedIssuer":
-    case "patchManagedIssuer":
     case "inspectOAuthIssuer":
     case "activateOAuthIssuer":
       return body === null ? null : renameField(body, "stackId", "appId");
@@ -56,8 +54,6 @@ export function transformAppAdminResponse(route: AppAdminRoute, body: unknown): 
     case "listRootDomainEvents":
       return mapArrayProperty(body, "events", value => renameField(value, "tenantId", "spaceId"));
     case "deleteMember":
-      return body;
-    case "mintManagedCapability":
       return body;
   }
 }

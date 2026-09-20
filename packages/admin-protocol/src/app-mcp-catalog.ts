@@ -84,15 +84,6 @@ export const APP_ADMIN_MCP_TOOLS = {
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
   }),
-  get_app_managed_issuer: tool({
-    name: "get_app_managed_issuer",
-    requiredScope: "control:read",
-    registration: {
-      description: "Get the managed issuer state and current mutation ETag for an App.",
-      inputSchema: z.object({ appId }),
-      annotations: { readOnlyHint: true, destructiveHint: false },
-    },
-  }),
   list_app_ref_domains: tool({
     name: "list_app_ref_domains",
     requiredScope: "control:read",
@@ -373,24 +364,6 @@ export const APP_ADMIN_MCP_TOOLS = {
         ifNoneMatch: z.literal("*").optional(),
       }).refine(input => !(input.etag !== undefined && input.ifNoneMatch !== undefined)),
       annotations: { destructiveHint: true, idempotentHint: false },
-    },
-  }),
-  update_app_managed_issuer: tool({
-    name: "update_app_managed_issuer",
-    requiredScope: "control:security",
-    registration: {
-      description: "Enable or disable the managed App issuer using its current ETag.",
-      inputSchema: z.object({ appId, enabled: z.boolean(), etag }),
-      annotations: { destructiveHint: false, idempotentHint: false },
-    },
-  }),
-  mint_managed_space_capability: tool({
-    name: "mint_managed_space_capability",
-    requiredScope: "control:security",
-    registration: {
-      description: "Mint a short-lived managed capability for the current Principal's personal Space in an App.",
-      inputSchema: z.object({ appId }),
-      annotations: { destructiveHint: false, idempotentHint: false },
     },
   }),
 } as const;

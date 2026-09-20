@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { CircleAlert, LoaderCircle } from "lucide-react";
+import { CircleAlert } from "lucide-react";
 import type { App as AppResource, AppAdminMeResponse } from "@unicas/admin-client";
 import { api } from "./api.js";
 import { navigate, parseAppRoute, parsePlatformRoute, useHashRoute, matchRoute } from "./router.js";
 import { AppSidebar } from "./components/app-sidebar.js";
 import { AppDetailTabs, WorkspaceDetailHeader } from "./components/app-detail-tabs.js";
 import { CopyNotifications } from "./components/copy-bubble.js";
+import { LoadingState } from "./components/loading-state.js";
 import { McpConfigurationDialog } from "./mcp-configuration-dialog.js";
 import { MyAppsView } from "./views/my-stacks.js";
 import { InvitationView } from "./views/invitations.js";
@@ -134,12 +135,11 @@ export function App() {
       );
     } else if (!currentApp || currentApp.appId !== appRoute.appId) {
       detail = (
-        <div className="page">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <LoaderCircle className="h-4 w-4 animate-spin" />
-            <span>Loading app…</span>
-          </div>
-        </div>
+        <LoadingState
+          className="page"
+          label="Loading App"
+          detail="Navigation stays available while settings load."
+        />
       );
     } else {
       const renderSection = () => {
@@ -230,10 +230,10 @@ export function App() {
   if (me === null && error === null) {
     return (
       <div className="loading-shell">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <LoaderCircle className="h-4 w-4 animate-spin" />
-          <span>Loading session…</span>
-        </div>
+        <LoadingState
+          label="Loading Console session"
+          detail="Preparing your Apps and navigation."
+        />
       </div>
     );
   }

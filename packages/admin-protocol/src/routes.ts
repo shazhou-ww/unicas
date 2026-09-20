@@ -16,9 +16,6 @@ export type AppAdminRoute =
   | { operation: "revokeMemberInvitation"; appId: string; invitationId: string }
   | { operation: "acceptMemberInvitation"; token: string }
   | { operation: "getOAuthIssuer"; appId: string }
-  | { operation: "getManagedIssuer"; appId: string }
-  | { operation: "patchManagedIssuer"; appId: string }
-  | { operation: "mintManagedCapability"; appId: string }
   | { operation: "inspectOAuthIssuer"; appId: string }
   | { operation: "activateOAuthIssuer"; appId: string }
   | { operation: "listRefDomains"; appId: string }
@@ -69,10 +66,6 @@ export const appAdminRoutes = {
     `/admin/member-invitations/${segment(token)}/accept`,
   oauthIssuer: ({ appId }: { appId: string }) =>
     `/admin/apps/${segment(appId)}/oauth-issuer`,
-  managedCapability: ({ appId }: { appId: string }) =>
-    `/admin/apps/${segment(appId)}/managed-capabilities`,
-  managedIssuer: ({ appId }: { appId: string }) =>
-    `/admin/apps/${segment(appId)}/managed-issuer`,
   oauthIssuerInspections: ({ appId }: { appId: string }) =>
     `/admin/apps/${segment(appId)}/oauth-issuer/inspections`,
   refDomains: ({ appId }: { appId: string }) =>
@@ -179,16 +172,6 @@ export function matchAppAdminRoute(
   if (parts.length === 4 && parts[3] === "oauth-issuer") {
     if (method === "GET") return { operation: "getOAuthIssuer", appId };
     if (method === "PUT") return { operation: "activateOAuthIssuer", appId };
-    return null;
-  }
-
-  if (parts.length === 4 && parts[3] === "managed-capabilities" && method === "POST") {
-    return { operation: "mintManagedCapability", appId };
-  }
-
-  if (parts.length === 4 && parts[3] === "managed-issuer") {
-    if (method === "GET") return { operation: "getManagedIssuer", appId };
-    if (method === "PATCH") return { operation: "patchManagedIssuer", appId };
     return null;
   }
 

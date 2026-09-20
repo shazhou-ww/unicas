@@ -88,7 +88,6 @@ describe("control schema", () => {
       "cas_identity_migration_journal",
       "cas_platform_principals",
       "cas_operator_identities",
-      "cas_playground_file_roots",
       "cas_control_idempotency",
     ]) expect(names.has(retired), `unexpected table ${retired}`).toBe(false);
 
@@ -168,14 +167,12 @@ describe("control schema", () => {
       "cas_app_members",
       "cas_app_member_invitations",
       "cas_app_oauth_issuers",
-      "cas_app_managed_issuers",
     ]) expect(names.has(expected), `missing table ${expected}`).toBe(true);
     for (const legacy of [
       "cas_stacks",
       "cas_stack_members",
       "cas_stack_member_invitations",
       "cas_stack_oauth_issuers",
-      "cas_stack_managed_issuers",
     ]) expect(names.has(legacy), `unexpected table ${legacy}`).toBe(false);
 
     for (const table of [
@@ -183,7 +180,6 @@ describe("control schema", () => {
       "cas_app_members",
       "cas_app_member_invitations",
       "cas_app_oauth_issuers",
-      "cas_app_managed_issuers",
       "cas_oauth_issuer_inspections",
       "cas_control_audit_events",
     ]) {
@@ -193,18 +189,4 @@ describe("control schema", () => {
     }
   });
 
-  test("preserves configured managed capability lifetimes", async () => {
-    const database = await createDb();
-    await migrateControlSchema(database);
-    const insert = `INSERT INTO cas_app_managed_issuers
-      (app_id, issuer, audience, metadata_url, authorization_endpoint, token_endpoint, jwks_uri, status, verified_at, jwks_digest, capability_max_lifetime_seconds)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 1, 'digest', ?)`;
-    await database.prepare(insert).bind("cas_custom", "https://issuer.example/custom", "https://cas.example/custom", "https://issuer.example/custom/metadata", "https://issuer.example/custom/authorize", "https://issuer.example/custom/token", "https://issuer.example/custom/jwks", 600).run();
-
-    await migrateControlSchema(database);
-
-    expect(await database.prepare(
-      "SELECT app_id, capability_max_lifetime_seconds, revision FROM cas_app_managed_issuers",
-    ).first()).toEqual({ app_id: "cas_custom", capability_max_lifetime_seconds: 600, revision: 1 });
-  });
 });

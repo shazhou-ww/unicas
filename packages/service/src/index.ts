@@ -39,8 +39,6 @@ export type {
   AccountAppInvitationCreateResponse,
   AccountAppInvitationIdempotencyRecord,
   AccountAppInvitationRecord,
-  AccountManagedCapabilityIssuer,
-  AccountManagedIssuerProvisioner,
   AccountOAuthIssuerInspectionRecord,
   AccountOAuthIssuerRecord,
   AccountPlatformViewRecord,
@@ -205,7 +203,6 @@ export type {
 
 export { ControlAuditActions } from "./control-audit.js";
 export type { ControlAuditAction } from "./control-audit.js";
-export { managedAccountOwnerKey, managedIdentityOwnerKey } from "./control-validation.js";
 export {
   decodeControlListCursor,
   encodeControlListCursor,

@@ -193,61 +193,61 @@ and reversibility:
 
 ## Acceptance criteria
 
-- [ ] A newly provisioned administrator has one stable UniCAS account whose App
+- [x] A newly provisioned administrator has one stable UniCAS account whose App
   memberships, platform authorities, and authorization do not change when a
   linked external login identity is used.
-- [ ] Console navigation, administrator OpenAPI, clients, stdio MCP, and remote
+- [x] Console navigation, administrator OpenAPI, clients, stdio MCP, and remote
   MCP expose no Playground entry point or file-root operation; retired HTTP
   paths fail closed without compatibility aliases.
-- [ ] Platform Account and App member reads resolve the same Account profile
+- [x] Platform Account and App member reads resolve the same Account profile
       and present a consistent primary verified email, display name, and avatar
       or deterministic fallback without duplicating those values in access or
       membership records.
-- [ ] Persistent and wire models distinguish the internal `accountId`, every
+- [x] Persistent and wire models distinguish the internal `accountId`, every
   linked `(issuer, subject)` ExternalIdentity, the optional primary verified email,
       and display-only Profile; no schema or API treats `(issuer, email)` as a
       user key.
-- [ ] Fresh schema initialization and explicit Account bootstrap work without
+- [x] Fresh schema initialization and explicit Account bootstrap work without
   legacy tables, migration maps, dual writes, or old credential upgrades;
   retired contracts are removed and old sessions/grants fail closed.
-- [ ] Console, CLI, and MCP login offer the configured Google, personal
+- [x] Console, CLI, and MCP login offer the configured Google, personal
       Microsoft account, and GitHub methods and resolve all three through the
       same account-binding service before issuing a UniCAS session or grant.
-- [ ] Google tokens are accepted only after signature, issuer, audience, expiry,
+- [x] Google tokens are accepted only after signature, issuer, audience, expiry,
       nonce, and subject validation; only `email_verified=true` addresses can
       satisfy an email-constrained invitation.
-- [ ] Personal Microsoft account tokens are accepted only from the configured
+- [x] Personal Microsoft account tokens are accepted only from the configured
       `consumers` flow after strict token validation, and their raw `email` or
       `preferred_username` claims cannot satisfy an invitation without the
       separate UniCAS email challenge.
-- [ ] GitHub login revalidates the authenticated user for every callback, keys
+- [x] GitHub login revalidates the authenticated user for every callback, keys
       the identity by durable numeric user ID, and allows only an address marked
       `verified` by the Emails API to satisfy an invitation.
-- [ ] Invitation acceptance receives explicit, fresh verified-email evidence,
+- [x] Invitation acceptance receives explicit, fresh verified-email evidence,
       compares only the canonical invitation address, atomically consumes the
       invitation, and grants membership to the stable account rather than to a
       display email or raw provider identity.
-- [ ] A caller cannot use an unverified, absent, stale, mismatched, public-only,
+- [x] A caller cannot use an unverified, absent, stale, mismatched, public-only,
       or display-only email value to cross the invitation admission gate.
-- [ ] Two unlinked provider identities reporting the same email remain separate;
+- [x] Two unlinked provider identities reporting the same email remain separate;
       the product may suggest linking but does not combine accounts or inherit
       authority automatically.
-- [ ] Linking requires fresh successful authentication of both identities,
+- [x] Linking requires fresh successful authentication of both identities,
       rejects an identity already bound elsewhere, rotates affected sessions,
       and emits audit evidence without provider tokens or invitation secrets.
-- [ ] Unlinking requires fresh authentication, cannot remove the final usable
+- [x] Unlinking requires fresh authentication, cannot remove the final usable
       identity, and does not alter the account's memberships or audit identity.
-- [ ] The Account model can block a future merged source `accountId` and retain
+- [x] The Account model can block a future merged source `accountId` and retain
   an immutable alias to a surviving Account without rewriting historical
   audit attribution; this task exposes no Merge or unmerge operation.
-- [ ] Blocking an account or removing its final admission grant denies all
+- [x] Blocking an account or removing its final admission grant denies all
       linked identities on browser, CLI, and MCP paths within the accepted
       revocation bound.
-- [ ] Login, callback, linking, email challenge, and initialization failures fail
+- [x] Login, callback, linking, email challenge, and initialization failures fail
       closed without exposing account existence, invitation validity, provider
       tokens, email challenge values, or private email lists in responses,
       URLs, logs, or audit records.
-- [ ] Protocol, service, Cloudflare adapter, BFF, CLI/MCP, Console, initialization,
+- [x] Protocol, service, Cloudflare adapter, BFF, CLI/MCP, Console, initialization,
       and security tests cover successful and denied flows for all providers,
       and the relevant package and repository validation commands pass.
 

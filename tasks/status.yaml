@@ -28,6 +28,10 @@ tasks:
     state: completed
     createdAt: "2026-09-15T07:50:34Z"
     updatedAt: "2026-09-19T05:12:49Z"
+  document-app-user-api:
+    state: completed
+    createdAt: "2026-09-20T02:02:51Z"
+    updatedAt: "2026-09-20T04:27:25Z"
   document-worktree-identity-config:
     state: completed
     createdAt: "2026-09-15T04:09:43Z"
@@ -36,6 +40,10 @@ tasks:
     state: completed
     createdAt: "2026-09-15T14:26:52Z"
     updatedAt: "2026-09-19T05:12:49Z"
+  enforce-terminal-task-artifact-consistency:
+    state: backlog
+    createdAt: "2026-09-19T14:25:40Z"
+    updatedAt: "2026-09-19T14:25:40Z"
   extract-standalone-repository:
     state: completed
     createdAt: "2026-09-14T09:35:30Z"
@@ -53,9 +61,17 @@ tasks:
     createdAt: "2026-09-15T14:26:52Z"
     updatedAt: "2026-09-19T05:12:49Z"
   replace-playground-with-reference-app:
-    state: backlog
+    state: abandoned
     createdAt: "2026-09-17T04:40:22Z"
-    updatedAt: "2026-09-19T05:12:49Z"
+    updatedAt: "2026-09-20T02:29:31Z"
+  resolve-console-ux-audit-findings:
+    state: completed
+    createdAt: "2026-09-20T01:51:55Z"
+    updatedAt: "2026-09-20T04:42:20Z"
+  retire-playground-and-managed-issuer:
+    state: completed
+    createdAt: "2026-09-20T02:30:21Z"
+    updatedAt: "2026-09-20T03:21:40Z"
   simplify-console-administration-navigation:
     state: completed
     createdAt: "2026-09-17T04:16:49Z"
@@ -65,9 +81,9 @@ tasks:
     createdAt: "2026-09-14T09:30:47Z"
     updatedAt: "2026-09-19T05:12:49Z"
   support-multi-provider-admin-identity:
-    state: ongoing
+    state: completed
     createdAt: "2026-09-16T02:07:06Z"
-    updatedAt: "2026-09-19T05:12:49Z"
+    updatedAt: "2026-09-19T14:19:35Z"
   tag-successful-production-deployments:
     state: completed
     createdAt: "2026-09-15T08:18:22Z"

@@ -10,11 +10,21 @@ Updated: 2026-09-19
       architecture approval before the affected implementation.
 - [x] Commit and publish substantive work at meaningful checkpoints.
 - [x] Publish implementation completion while the task is still ongoing.
-- [ ] Complete documented manual user acceptance, if required.
-- [ ] Obtain and publish delivery approval.
-- [ ] Archive and publish the task as its final action.
+- [x] Complete documented manual user acceptance, if required.
+- [x] Obtain and publish delivery approval.
+- [x] Complete and publish the task as its final lifecycle action.
 
 ## Current state
+
+Delivery acceptance is complete. The requesting user approved exact
+`origin/main` commit `3ab698e1e23bb9508b870de73bcb5200bd11fc6f` on
+2026-09-19 after release workflow `35447334070` deployed the identical tree,
+passed all production origin checks, and published tag
+`production-20260919-239`. Production retesting confirmed cross-Account Google
+link conflict feedback preserves the current Account session and transfers no
+identity or authority; the original Google identity was restored afterward.
+Repoledger published the terminal `completed` state in commit
+`136d93fc1179c48fc14979dcaed916cec4d8c062`.
 
 Production manual acceptance on 2026-09-19 verified real Google, Microsoft
 personal-account, and GitHub Console login against one stable Account; a
@@ -87,8 +97,7 @@ history; an isolated Git fixture proves unreverted bookkeeping still fails and
 the standard revert clears the diagnostic. This preserves non-force primary
 history while keeping future Progress updates implementation-linked.
 
-Next: deploy the follow-up, verify conflict feedback in production, and finish
-the operator-owned secret inventory confirmation before Delivery acceptance.
+No implementation or acceptance work remains for this task.
 
 On 2026-09-18, the requesting user explicitly directed this worktree to take
 over the task from `scottwei-home-pc`. `repoledger doctor` verified the current
@@ -753,7 +762,7 @@ cutover markers. Then complete the current-model and real-provider/email tests.
 | Business and data model | Approved | Requesting user, 2026-09-17: after reviewing the Account `blockedAt`, authority child-row, primary verified contact, generic-revision removal, and `credentialVersion` refinements published in `4f02dea51c7da183369141f0eec706c758bb90e0`, stated there were no remaining issues and directed iterative implementation. |
 | Architecture | Approved | Requesting user, 2026-09-17: responding to [RolloutReview](./RolloutReview.md), stated the service is pre-launch, no legacy should remain, and data is disposable. This replaces compatibility rollout proposals with direct current-model replacement; it is not delivery acceptance or a specific reset command. |
 | Interface | Approved | Requesting user, 2026-09-17: approved proceeding after the revised interface and HTML comparison were published in `4f02dea51c7da183369141f0eec706c758bb90e0`. |
-| Delivery acceptance | Pending | Present the integrated revision and complete validation, security/privacy, deployment/rollback, and manual test evidence after implementation publication. |
+| Delivery acceptance | Approved | Requesting user, 2026-09-19: approved exact `origin/main` commit `3ab698e1e23bb9508b870de73bcb5200bd11fc6f` after the complete validation, production deployment, and manual provider test evidence was presented. |
 
 ## Publication milestones
 
@@ -765,7 +774,7 @@ cutover markers. Then complete the current-model and real-provider/email tests.
 | Ownership transfer to `scottwei-home-pc` | User-authorized cross-machine continuation from `scottwei-office-pc`, published by this dedicated ownership-transfer commit. | Published |
 | Ownership transfer to `scottwei-office-pc` (2026-09-18) | User-authorized continuation from `scottwei-home-pc`, published by this dedicated ownership-transfer commit. | Published |
 | Implementation complete | `origin/main` commit `ac8f4628f3b50c316ddc0ee79797430f909bbd90` removes legacy administrator compatibility and passes the complete automated validation matrix. | Published |
-| Archive | Pending. | Pending |
+| Completion | Repoledger published `completed` in `origin/main` commit `136d93fc1179c48fc14979dcaed916cec4d8c062`. | Published |
 
 ## Validation
 

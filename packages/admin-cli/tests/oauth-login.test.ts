@@ -64,6 +64,12 @@ describe("runLoginFlow", () => {
       `http://127.0.0.1:${callbackPort}/callback?code=one-time-code-1&state=${state}`,
     );
     expect(callbackResponse.status).toBe(200);
+    const callbackHtml = await callbackResponse.text();
+    expect(callbackHtml).toContain("<title>Authorization complete - UniCAS</title>");
+    expect(callbackHtml).toContain('<span class="brand-mark">U</span><span>UniCAS</span>');
+    expect(callbackHtml).toContain('<span class="status success">Connected</span>');
+    expect(callbackHtml).toContain("You can close this window");
+    expect(callbackHtml).not.toContain("one-time-code-1");
 
     const outcome = await flowResult;
     expect(outcome.ok).toBe(true);
@@ -112,10 +118,47 @@ describe("runLoginFlow", () => {
       `http://127.0.0.1:${callbackPort}/callback?code=evil-code&state=wrong-state`,
     );
     expect(response.status).toBe(400);
+    const responseHtml = await response.text();
+    expect(responseHtml).toContain("<title>Authorization failed - UniCAS</title>");
+    expect(responseHtml).toContain('<main class="error"');
+    expect(responseHtml).toContain('<span class="status error">Failed</span>');
+    expect(responseHtml).toContain("The authorization state did not match");
+    expect(responseHtml).not.toContain("evil-code");
     const outcome = await flowResult;
     expect(outcome.ok).toBe(false);
     if (outcome.ok) return;
     expect((outcome.error as Error).message).toMatch(/state mismatch/i);
+  });
+
+  test("escapes provider errors in the branded callback page", async () => {
+    const admin = new FakeAdminApi();
+    let callbackPort = 0;
+    let resolveAuthorize: (url: URL) => void = () => undefined;
+    const authorizeUrlPromise = new Promise<URL>((resolve) => {
+      resolveAuthorize = resolve;
+    });
+    const flow = runLoginFlow({
+      adminOrigin: FAKE_ORIGIN,
+      store,
+      openBrowser: false,
+      fetchImpl: admin.fetch,
+      log: () => undefined,
+      onCallbackServerStarted: (port) => {
+        callbackPort = port;
+      },
+      onAuthorizeUrl: (url) => resolveAuthorize(url),
+    });
+    const flowResult = flow.catch((error: unknown) => error as Error);
+
+    await authorizeUrlPromise;
+    const response = await fetch(
+      `http://127.0.0.1:${callbackPort}/callback?error=access_denied&error_description=${encodeURIComponent("<script>alert(1)</script>")}`,
+    );
+    expect(response.status).toBe(400);
+    const responseHtml = await response.text();
+    expect(responseHtml).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(responseHtml).not.toContain("<script>alert(1)</script>");
+    expect((await flowResult).message).toMatch(/authorization error: access_denied/);
   });
 });
 

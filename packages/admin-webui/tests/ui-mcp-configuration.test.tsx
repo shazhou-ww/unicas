@@ -68,6 +68,9 @@ describe("AI tool connection", () => {
     const dialog = screen.getByRole("dialog", { name: "Connect an AI tool" });
     expect(dialog).toBeInTheDocument();
     expect(dialog).toHaveTextContent(`${window.location.origin}/mcp`);
+    expect(screen.getByRole("button", { name: "Remote MCP" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("heading", { name: "Remote MCP prompt" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "CLI / stdio prompt" })).not.toBeInTheDocument();
 
     // The URL is a click-to-copy bubble.
     const urlBubble = screen.getByRole("button", { name: "Copy MCP server URL" });
@@ -79,6 +82,11 @@ describe("AI tool connection", () => {
     expect(await navigator.clipboard.readText()).toContain('remote MCP server named "UniCAS"');
     expect(screen.getByRole("button", { name: "Prompt copied" })).toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "CLI / stdio" }));
+    expect(screen.getByRole("button", { name: "CLI / stdio" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("heading", { name: "CLI / stdio prompt" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Remote MCP prompt" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Copy MCP server URL" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Copy CLI prompt" }));
     const cliPrompt = await navigator.clipboard.readText();
     expect(cliPrompt).toContain("pnpm install --global ./packages/admin-cli");
@@ -204,9 +212,13 @@ describe("AI tool connection", () => {
     render(<App />);
 
     const trigger = await screen.findByRole("button", { name: "Open navigation" });
+    expect(trigger).toHaveClass("console-mobile-sidebar-trigger");
     await user.click(trigger);
     const drawer = await screen.findByRole("dialog", { name: "Navigation" });
     expect(drawer.className).toContain("right-0");
+    expect(drawer).toHaveClass("console-mobile-sidebar-sheet");
+    expect(within(drawer).getByRole("button", { name: "Create App" })).toHaveClass("console-sidebar-create-button");
+    expect(within(drawer).getByRole("button", { name: "Close" })).toHaveClass("h-11", "w-11");
     await user.keyboard("{Escape}");
     await waitFor(() => expect(trigger).toHaveFocus());
     await user.click(trigger);

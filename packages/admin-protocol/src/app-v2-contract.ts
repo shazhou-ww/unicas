@@ -13,7 +13,6 @@ import {
   AppRefDomainSchema,
   AppSchema,
   CasHashSchema,
-  ManagedSpaceCapabilitySchema,
   SpaceRootRefBalanceSchema,
   SpaceRootRefEventSchema,
   ExternalIdentitySummarySchema,
@@ -324,21 +323,6 @@ export const activateAppOAuthIssuerContract = appProcedure
   .input(z.object({ params: appParams, headers: AppIssuerPreconditionSchema, body: ActivateAppIssuerRequestSchema }).readonly())
   .output(z.object({ headers: z.object({ ETag: z.string().regex(/^"(0|[1-9][0-9]*)"$/) }).readonly() }).readonly());
 
-export const getAppManagedIssuerContract = appProcedure
-  .route({ method: "GET", path: `${AppAdminApiBasePath}/{appId}/managed-issuer`, operationId: "getAppManagedIssuer", summary: "Read the managed App issuer", inputStructure: "detailed", tags: ["Managed Issuer"] })
-  .input(z.object({ params: appParams }).readonly())
-  .output(AppOAuthIssuerSchema);
-
-export const patchAppManagedIssuerContract = appProcedure
-  .route({ method: "PATCH", path: `${AppAdminApiBasePath}/{appId}/managed-issuer`, operationId: "patchAppManagedIssuer", summary: "Update the managed App issuer", inputStructure: "detailed", tags: ["Managed Issuer"] })
-  .input(z.object({ params: appParams, headers: mutationHeaders, body: z.object({ enabled: z.boolean() }).readonly() }).readonly())
-  .output(AppOAuthIssuerSchema);
-
-export const mintManagedSpaceCapabilityContract = appProcedure
-  .route({ method: "POST", path: `${AppAdminApiBasePath}/{appId}/managed-capabilities`, operationId: "mintManagedSpaceCapability", summary: "Mint a managed Space capability", inputStructure: "detailed", successStatus: 201, tags: ["Managed Issuer"] })
-  .input(z.object({ params: appParams }).readonly())
-  .output(ManagedSpaceCapabilitySchema);
-
 export const listAppRefDomainsContract = appProcedure
   .route({ method: "GET", path: `${AppAdminApiBasePath}/{appId}/ref-domains`, operationId: "listAppRefDomains", summary: "List observed refDomains", inputStructure: "detailed", tags: ["Root Ref Audit"] })
   .input(z.object({ params: appParams }).readonly())
@@ -502,9 +486,6 @@ export const appAdminApiContract = {
     get: getAppOAuthIssuerContract,
     inspect: inspectAppOAuthIssuerContract,
     activate: activateAppOAuthIssuerContract,
-    getManaged: getAppManagedIssuerContract,
-    patchManaged: patchAppManagedIssuerContract,
-    mintCapability: mintManagedSpaceCapabilityContract,
   },
   audit: {
     listRefDomains: listAppRefDomainsContract,

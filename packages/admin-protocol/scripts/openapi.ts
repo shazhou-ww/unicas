@@ -10,12 +10,12 @@ export function generateAppAdminOpenApiDocument() {
     info: {
       title: "UniCAS App Administrator API",
       version: "2.0.0",
-      description: "Administrator control plane for Apps, Principal memberships, OAuth issuers, Playground roots, and App/Space audit data.",
+      description: "Administrator control plane for Apps, Principal memberships, external OAuth issuers, and App/Space audit data.",
     },
     tags: [
       { name: "Identity" }, { name: "Apps" }, { name: "Members" },
-      { name: "OAuth Issuer" }, { name: "Managed Issuer" },
-      { name: "Playground" }, { name: "Audit" }, { name: "Root Ref Audit" },
+      { name: "OAuth Issuer" },
+      { name: "Audit" }, { name: "Root Ref Audit" },
     ],
     security: [{ adminSession: [] }],
     components: {

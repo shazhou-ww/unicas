@@ -59,13 +59,11 @@ describe("App admin physical compatibility adapter", () => {
 
   test.each([
     ["getOAuthIssuer", "GET", "/admin/apps/app-1/oauth-issuer"],
-    ["getManagedIssuer", "GET", "/admin/apps/app-1/managed-issuer"],
-    ["patchManagedIssuer", "PATCH", "/admin/apps/app-1/managed-issuer"],
     ["createMemberInvitation", "POST", "/admin/apps/app-1/member-invitations"],
     ["listMemberInvitations", "GET", "/admin/apps/app-1/member-invitations"],
     ["revokeMemberInvitation", "DELETE", "/admin/apps/app-1/member-invitations/inv-1"],
   ] as const)("forwards %s through the Account-native App path", async (operation, method, path) => {
-    const handler = vi.fn(async () => Response.json({ appId: "app-1", mode: "managed" }));
+    const handler = vi.fn(async () => Response.json({ appId: "app-1" }));
     await handleAppAdminCompatibilityRequest(
       request(path, { method }),
       operation === "revokeMemberInvitation"
@@ -217,31 +215,4 @@ describe("App admin physical compatibility adapter", () => {
     });
   });
 
-  test("forwards managed Space issuance to the dedicated v2 BFF path", async () => {
-    const legacyHandler = vi.fn(async () => Response.json({
-      accessToken: "space-token",
-      tokenType: "Bearer",
-      expiresIn: 3600,
-      expiresAt: 3_600_000,
-      issuer: "https://api.unicas.work/managed-issuers/app-1",
-      audience: "https://api.unicas.work/stacks/app-1",
-      spaceId: "member-1",
-      permissions: ["spaces:member-1:cas:manage"],
-    }, { status: 201, headers: { "Cache-Control": "no-store" } }));
-    const response = await handleAppAdminCompatibilityRequest(
-      request("/admin/apps/app-1/managed-capabilities", { method: "POST" }),
-      { operation: "mintManagedCapability", appId: "app-1" },
-      legacyHandler,
-    );
-    expect(response.status).toBe(201);
-    expect(response.headers.get("Cache-Control")).toBe("no-store");
-    expect(legacyHandler).toHaveBeenCalledWith(expect.objectContaining({
-      method: "POST",
-      url: "https://console.unicas.work/admin/apps/app-1/managed-capabilities",
-    }));
-    await expect(response.json()).resolves.toMatchObject({
-      spaceId: "member-1",
-      permissions: ["spaces:member-1:cas:manage"],
-    });
-  });
 });

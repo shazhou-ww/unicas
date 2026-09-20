@@ -53,30 +53,6 @@ const me = {
   }],
 };
 
-function managedIssuer(status: "active" | "disabled" = "active") {
-  return {
-    appId: currentApp.appId,
-    mode: "managed",
-    issuer: `https://cas.example/managed-issuers/${currentApp.appId}`,
-    audience: `https://cas.example/stacks/${currentApp.appId}`,
-    metadataUrl: "https://cas.example/metadata",
-    metadataType: "oauth",
-    authorizationEndpoint: "https://cas.example/authorize",
-    tokenEndpoint: "https://cas.example/token",
-    jwksUri: "https://cas.example/jwks",
-    registrationEndpoint: null,
-    scopesSupported: ["cas:manage"],
-    codeChallengeMethodsSupported: ["S256"],
-    status,
-    verifiedAt: 1,
-    lastRefreshAt: 1,
-    lastRefreshError: null,
-    jwksDigest: "digest",
-    capabilityMaxLifetimeSeconds: 3600,
-    revision: status === "active" ? 1 : 0,
-  };
-}
-
 beforeEach(() => {
   toast.dismiss();
   window.location.hash = "#/apps/cas_one/overview";
@@ -86,9 +62,7 @@ beforeEach(() => {
     if (url.pathname === "/admin/account") return json(account);
     if (url.pathname === "/admin/apps") return json({ items: [currentApp] });
     if (url.pathname === "/admin/apps/cas_one") return json(currentApp);
-    if (url.pathname.endsWith("/managed-issuer")) return json(managedIssuer());
     if (url.pathname.endsWith("/oauth-issuer")) return json(null);
-    if (url.pathname.endsWith("/file-roots")) return json({ items: [] });
     if (url.pathname.endsWith("/people")) return json({ items: [], nextCursor: null });
     throw new Error(`Unexpected request: ${url.pathname}${url.search}`);
   }));
@@ -130,7 +104,11 @@ describe("current App shell", () => {
     await user.type(await screen.findByLabelText("Description"), "unsaved first App draft");
     const otherLink = document.querySelector<HTMLAnchorElement>('.console-sidebar a[href="#/apps/cas_two/overview"]')!;
     await user.click(otherLink);
-    expect(await screen.findByText("Loading app…")).toBeVisible();
+    const loading = await screen.findByRole("status");
+    expect(loading).toHaveTextContent("Loading App");
+    expect(loading).toHaveTextContent("Navigation stays available while settings load.");
+    expect(loading).toHaveAttribute("aria-busy", "true");
+    expect(loading).toHaveClass("console-loading-state");
     expect(screen.queryByLabelText("Description")).not.toBeInTheDocument();
     await act(async () => { resolveOther(json(other)); });
     expect(await screen.findByLabelText("Description")).toHaveValue("Second description");
@@ -149,15 +127,16 @@ describe("current App shell", () => {
       }
       if (url.pathname === "/admin/apps") return json({ items: created ? [currentApp] : [] });
       if (url.pathname === `/admin/apps/${currentApp.appId}`) return json(currentApp);
-      if (url.pathname.endsWith("/managed-issuer")) return json(managedIssuer());
       if (url.pathname.endsWith("/oauth-issuer")) return json(null);
       throw new Error(`Unexpected request: ${url.pathname}`);
     }));
     const user = userEvent.setup();
     render(<App />);
     expect(await screen.findByText("0 App memberships")).toBeVisible();
-    expect(screen.getByRole("region", { name: "Get started" })).toHaveTextContent("Select an App");
-    await user.click(screen.getByTitle("Create App"));
+    expect(screen.getByRole("region", { name: "Get started" })).toHaveTextContent("choose Create App in the Apps section");
+    const createApp = screen.getByRole("button", { name: "Create App" });
+    expect(createApp).toHaveClass("console-sidebar-create-button");
+    await user.click(createApp);
     await user.type(screen.getByLabelText("App display name"), currentApp.displayName);
     await user.keyboard("{Enter}");
     expect(await screen.findByText("1 App membership")).toBeVisible();
@@ -204,7 +183,6 @@ describe("current App shell", () => {
     expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual([
       "Overview", "Members", "Change Logs",
     ]);
-    expect(screen.getByRole("heading", { name: "Managed issuer" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Custom OAuth authorization server" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Usage" })).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Members" }));
@@ -253,7 +231,6 @@ describe("current App shell", () => {
         return new Response(null, { status: 204 });
       }
       if (url.pathname === "/admin/apps/cas_one") return json(app);
-      if (url.pathname.endsWith("/managed-issuer")) return json(managedIssuer());
       if (url.pathname.endsWith("/oauth-issuer")) return json(null);
       throw new Error(`Unexpected request: ${url.pathname}${url.search}`);
     }));

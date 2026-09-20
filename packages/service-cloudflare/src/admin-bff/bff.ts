@@ -28,7 +28,6 @@ import type {
 import type {
   ControlSessionRepository,
   AccountRepository,
-  AccountManagedCapabilityIssuer,
   OAuthDiscoveryPort,
   EmailChallengeRepository,
   PlatformInvitationRepository,
@@ -89,7 +88,6 @@ export interface CreateAdminBffOptions {
   readonly peopleRepository?: PeopleRepository;
   readonly providerRegistry?: ProviderRegistry;
   readonly accountRepository?: AccountRepository;
-  readonly managedOAuthIssuer?: AccountManagedCapabilityIssuer;
   readonly oauthDiscovery?: OAuthDiscoveryPort;
   readonly oauthResourcePublicOrigin?: string;
   readonly emailChallengeRepository?: EmailChallengeRepository;
@@ -136,7 +134,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
   const sessionStore = options.sessionStore;
   const sessionCrypto = new SessionCrypto(config.sessionEncryptionKeys);
   const accountService = options.accountRepository
-    ? new AccountService(options.accountRepository, now, options.managedOAuthIssuer ?? null, {
+    ? new AccountService(options.accountRepository, now, {
       oauthDiscovery: options.oauthDiscovery,
       oauthResourcePublicOrigin: options.oauthResourcePublicOrigin ?? config.publicOrigin,
     })
@@ -302,12 +300,6 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       return handleAccountAuditRead(request, url, appRoute);
     }
     if (appRoute?.operation === "listPeople") return handlePeople(request, appRoute.appId);
-    if (appRoute?.operation === "mintManagedCapability") {
-      return handleManagedSpaceCapability(request, appRoute.appId);
-    }
-    if (appRoute?.operation === "getManagedIssuer" || appRoute?.operation === "patchManagedIssuer") {
-      return handleAccountManagedIssuer(request, appRoute.appId, appRoute.operation);
-    }
     if (appRoute?.operation === "getOAuthIssuer") {
       return handleAccountOAuthIssuer(request, url, appRoute.appId);
     }
@@ -343,7 +335,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       const path = `/admin/auth/start/${provider.kind}`;
       const providerUrl = new URL(path, config.publicOrigin);
       if (returnTo) providerUrl.searchParams.set("returnTo", returnTo);
-      return `<a class="btn${configuredProviders.length === 1 ? " btn-primary" : ""}" href="${providerUrl.pathname}${providerUrl.search}">Continue with ${escapeHtml(provider.displayName)}</a>`;
+      return providerLink(provider.kind, provider.displayName, `${providerUrl.pathname}${providerUrl.search}`, configuredProviders.length === 1);
     }).join("\n          ");
     const retryUrl = new URL(
       googleOnly ? "/admin/auth/start/google" : "/admin/auth/login",
@@ -360,28 +352,24 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Sign in - CAS Admin</title>
+  <title>Sign in - UniCAS</title>
   <link rel="stylesheet" href="/admin/assets/index.css?v=${ADMIN_ASSET_CACHE_BUSTER}" />
 </head>
 <body>
-  <header class="app-header">
-    <span class="brand"><span class="brand-mark">U</span><span>UniCAS</span></span>
-  </header>
   <main class="login-shell">
     <section class="login-panel${accessRestricted ? " login-panel-restricted" : ""}">
+      <div class="login-panel-header">
+        <span class="brand"><span class="brand-mark">U</span><span>UniCAS</span></span>
+        <p class="login-eyebrow">${accessRestricted ? "Access restricted" : "Restricted console"}</p>
+      </div>
       ${accessRestricted ? `
-        <div class="login-status-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        </div>
-        <p class="login-eyebrow">UniCAS Admin</p>
         <h1>No management access</h1>
         <p class="login-copy" role="alert">This ${googleOnly ? "Google account" : "login"} does not have management access to UniCAS. Sign in with another ${googleOnly ? "Google account" : "method"} or contact the UniCAS team.</p>
         <div class="login-actions">
           <a class="btn" href="${retryUrl.pathname}${retryUrl.search}">Sign in with another ${googleOnly ? "Google account" : "method"}</a>
         </div>` : `
-        <p class="login-eyebrow">Restricted console</p>
         <h1>Sign in to UniCAS</h1>
-        <p class="login-copy">${googleOnly ? "Use an approved Google account" : "Choose a configured login method"} to continue.</p>
+        <p class="login-copy login-copy-short">Choose a sign-in method.</p>
         ${errorMessage ? `<div class="state error" role="alert">${errorMessage}</div>` : ""}
         <div class="login-actions">
           ${providerButtons}
@@ -987,7 +975,10 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
 <body>
   <main class="login-shell">
     <section class="login-panel">
-      <p class="login-eyebrow">Invitation verification</p>
+      <div class="login-panel-header">
+        <span class="brand"><span class="brand-mark">U</span><span>UniCAS</span></span>
+        <p class="login-eyebrow">Invitation verification</p>
+      </div>
       <h1>Check your email</h1>
       <p class="login-copy">Enter the six-digit code sent to <strong>${escapeHtml(maskedEmail)}</strong>.</p>
       <form id="email-challenge-form" class="login-actions">
@@ -1188,7 +1179,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       const target = new URL(url);
       target.search = "";
       target.searchParams.set("provider", provider.kind);
-      return `<a class="btn" href="${target.pathname}${target.search}">Continue with ${escapeHtml(provider.displayName)}</a>`;
+      return providerLink(provider.kind, provider.displayName, `${target.pathname}${target.search}`);
     }).join("\n          ");
     return new Response(`<!doctype html>
 <html lang="en">
@@ -1201,6 +1192,10 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
 <body>
   <main class="login-shell">
     <section class="login-panel">
+      <div class="login-panel-header">
+        <span class="brand"><span class="brand-mark">U</span><span>UniCAS</span></span>
+        <p class="login-eyebrow">Invitation access</p>
+      </div>
       <h1>Continue to UniCAS</h1>
       <p class="login-copy">${escapeHtml(copy)}</p>
       <div class="login-actions">${buttons}</div>
@@ -2072,79 +2067,6 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     });
   }
 
-  async function handleManagedSpaceCapability(request: Request, appId: string): Promise<Response> {
-    const auth = await requireAuthenticated(request);
-    if (auth instanceof Response) return auth;
-    if (!(await passCsrf(request, auth.payload))) return csrfRejected();
-    if (!accountService || !auth.payload.accountId || !auth.payload.externalIdentityId) {
-      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
-    }
-    try {
-      const result = await accountService.mintManagedSpaceCapability({
-        actorAccountId: auth.payload.accountId,
-        actorExternalIdentityId: auth.payload.externalIdentityId,
-        appId,
-      });
-      const response = json(result, 201);
-      response.headers.set("Cache-Control", "no-store");
-      return response;
-    } catch (error) {
-      if (error instanceof AccountServiceError) {
-        const status = error.code === "APP_MEMBERSHIP_REQUIRED" || error.code === "APP_SUSPENDED"
-          || error.code === "ACCOUNT_BLOCKED" ? 403
-          : error.code === "INVALID_REQUEST" ? 400
-            : error.code === "SERVICE_UNAVAILABLE" ? 503
-              : 401;
-        const response = json({ error: error.code }, status);
-        response.headers.set("Cache-Control", "no-store");
-        return response;
-      }
-      throw error;
-    }
-  }
-
-  async function handleAccountManagedIssuer(
-    request: Request,
-    appId: string,
-    operation: "getManagedIssuer" | "patchManagedIssuer",
-  ): Promise<Response> {
-    const auth = await requireAuthenticated(request);
-    if (auth instanceof Response) return auth;
-    if (!accountService || !auth.payload.accountId) {
-      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "Account service is unavailable");
-    }
-    try {
-      if (operation === "getManagedIssuer") {
-        return jsonWithEtag(await accountService.getManagedOAuthIssuer(auth.payload.accountId, appId));
-      }
-      if (!auth.payload.externalIdentityId) return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED);
-      if (!(await passCsrf(request, auth.payload))) return csrfRejected();
-      const body = await readJsonBody<{ enabled?: unknown }>(request);
-      if (!body || typeof body.enabled !== "boolean") return invalidRequest("enabled must be a boolean");
-      return jsonWithEtag(await accountService.patchManagedOAuthIssuer({
-        actorAccountId: auth.payload.accountId,
-        actorExternalIdentityId: auth.payload.externalIdentityId,
-        appId,
-        enabled: body.enabled,
-        ifMatch: request.headers.get("If-Match") ?? undefined,
-        requestId: request.headers.get("X-Request-Id") ?? undefined,
-        traceId: request.headers.get("X-Trace-Id") ?? undefined,
-        callerChannel: "admin-webui",
-      }));
-    } catch (error) {
-      if (error instanceof AccountServiceError) {
-        const status = error.code === "APP_MEMBERSHIP_REQUIRED" || error.code === "ACCOUNT_BLOCKED" ? 403
-          : error.code === "PRECONDITION_REQUIRED" ? 428
-            : error.code === "REVISION_MISMATCH" ? 412
-              : error.code === "INVALID_REQUEST" ? 400
-                : error.code === "NOT_FOUND" ? 404
-                  : 401;
-        return json({ error: error.code }, status);
-      }
-      throw error;
-    }
-  }
-
   async function handleAccountOAuthIssuer(request: Request, url: URL, appId: string): Promise<Response> {
     const auth = await requireAuthenticated(request);
     if (auth instanceof Response) return auth;
@@ -2416,6 +2338,16 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
 
 function parseProviderKind(value: string): ProviderKind | null {
   return value === "google" || value === "microsoft" || value === "github" ? value : null;
+}
+
+function providerLink(kind: ProviderKind, displayName: string, href: string, primary = false): string {
+  return `<a class="btn login-provider${primary ? " btn-primary" : ""}" href="${escapeHtml(href)}"><span class="login-provider-icon login-provider-icon-${kind}" aria-hidden="true">${providerMark(kind)}</span><span class="login-provider-label">Continue with ${escapeHtml(displayName)}</span></a>`;
+}
+
+function providerMark(kind: ProviderKind): string {
+  if (kind === "google") return `<svg viewBox="0 0 18 18" focusable="false"><path fill="#4285f4" d="M17.64 9.205c0-.638-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.797 2.716v2.258h2.909c1.702-1.567 2.684-3.877 2.684-6.614z"/><path fill="#34a853" d="M9 18c2.43 0 4.468-.806 5.956-2.18l-2.91-2.259c-.805.54-1.835.86-3.046.86-2.344 0-4.328-1.585-5.037-3.714H.956v2.332A9 9 0 0 0 9 18z"/><path fill="#fbbc05" d="M3.963 10.707A5.41 5.41 0 0 1 3.682 9c0-.592.102-1.168.281-1.707V4.961H.956A9 9 0 0 0 0 9c0 1.452.347 2.827.956 4.039l3.007-2.332z"/><path fill="#ea4335" d="M9 3.58c1.322 0 2.508.455 3.441 1.346l2.582-2.582C13.463.892 11.425 0 9 0A9 9 0 0 0 .956 4.961l3.007 2.332C4.672 5.164 6.656 3.58 9 3.58z"/></svg>`;
+  if (kind === "microsoft") return `<svg viewBox="0 0 23 23" focusable="false"><path fill="#f35325" d="M1 1h10v10H1z"/><path fill="#81bc06" d="M12 1h10v10H12z"/><path fill="#05a6f0" d="M1 12h10v10H1z"/><path fill="#ffba08" d="M12 12h10v10H12z"/></svg>`;
+  return `<svg viewBox="0 0 24 24" focusable="false"><path fill="currentColor" d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.418-1.305.762-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>`;
 }
 
 function escapeHtml(value: string): string {

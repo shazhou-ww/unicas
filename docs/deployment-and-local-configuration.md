@@ -31,7 +31,7 @@ It starts:
 Host-mode Miniflare state persists under `.wrangler/miniflare`. Stop the environment
 with Ctrl+C; restarting `pnpm dev` reuses that state.
 
-Vite proxies Space, managed-issuer, and discovery routes to the direct edge so
+Vite proxies Space and discovery routes to the direct edge so
 the local browser topology matches production's single public origin.
 
 The local runtime uses its mock OIDC provider by default. To use Google OIDC,
@@ -53,11 +53,6 @@ Other local settings:
 | `UNICAS_LOCAL_HOST` | `127.0.0.1` | Host interface for Miniflare and Vite |
 | `UNICAS_LOCAL_PUBLIC_HOST` | Same as `UNICAS_LOCAL_HOST` | Browser-visible host for local OIDC endpoints; Docker sets `localhost` |
 | `UNICAS_ADMIN_ORIGIN` | `http://localhost:4070` | Browser-facing administrator origin |
-
-To exercise managed issuers locally, set both
-`MANAGED_ISSUER_PRIVATE_KEY_PKCS8` and `MANAGED_ISSUER_KEY_ID` before startup.
-Host and Docker modes forward the pair together; supplying only one leaves the
-managed issuer unavailable.
 
 ### Docker
 
@@ -145,14 +140,9 @@ Additional features require these secrets:
 | --- | --- |
 | `CAS_R2_ACCESS_KEY_ID` | Presigned direct R2 uploads |
 | `CAS_R2_SECRET_ACCESS_KEY` | Presigned direct R2 uploads |
-| `MANAGED_ISSUER_PRIVATE_KEY_PKCS8` | UniCAS-managed App issuers |
 | `CAS_AUDIT_READER_KEY` | Protected physical audit-reader RPC |
 | `OAUTH_MICROSOFT_CLIENT_SECRET` | Microsoft personal-account administrator login |
 | `OAUTH_GITHUB_CLIENT_SECRET` | GitHub administrator login and verified Emails API lookup |
-
-`MANAGED_ISSUER_KEY_ID` is the corresponding non-secret key ID in
-`wrangler.toml`. The current implementation exposes one managed signing key;
-add key-ring overlap support before rotating it in production.
 
 Optional OIDC/session variables include `OIDC_ISSUER`, `OIDC_DISCOVERY_URL`,
 `SESSION_TTL_MS`, `SESSION_COOKIE_NAME`, `SESSION_COOKIE_SECURE`, and
@@ -315,7 +305,7 @@ The release workflow copies the three provider client secrets from the
 protected GitHub Environment into Cloudflare. Internal session and OAuth-state
 encryption keys remain provisioned only in Cloudflare: the production deploy
 creates them when absent and preserves them on later releases. Do not copy R2
-credentials, managed-issuer keys, the audit-reader key, or other Worker runtime
+credentials, retired first-party issuer keys, the audit-reader key, or other Worker runtime
 secrets into GitHub for routine deployment.
 
 The production smoke App uses the dedicated external issuer
@@ -324,8 +314,7 @@ metadata from `/.well-known/oauth-authorization-server/deploy-smoke` and its
 public JWKS from `/deploy-smoke/jwks.json`; both paths return JSON directly
 without redirects. Only public keys belong in those tracked assets. The
 matching private key is a separate deployment credential and must never be
-derived from, copied from, or replaced with
-`MANAGED_ISSUER_PRIVATE_KEY_PKCS8`.
+derived from or copied from any retired first-party issuer key.
 
 Initial provisioning is an explicit bootstrap operation:
 

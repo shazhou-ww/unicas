@@ -20,7 +20,6 @@ import type {
   CasRefChanges,
   ExternalIdentityDetail,
   ExternalIdentitySummary,
-  ManagedSpaceCapability,
   PlatformAccountSummary,
   PlatformAccountDetail,
   PlatformAccountAuditEvent,
@@ -225,7 +224,6 @@ const AppOAuthIssuerShape = {
 
 export const AppOAuthIssuerSchema: z.ZodType<AppOAuthIssuer> = z.object({
   ...AppOAuthIssuerShape,
-  mode: z.enum(["managed", "external"]),
   status: z.enum(["pending", "active", "stale", "incompatible", "disabled"]),
   verifiedAt: TimestampSchema.nullable(),
   lastRefreshAt: TimestampSchema.nullable(),
@@ -246,17 +244,6 @@ export const AppOAuthIssuerInspectionSchema: z.ZodType<AppOAuthIssuerInspection>
     algorithm: NonEmptyStringSchema,
   }).readonly()).readonly(),
 }).strict().readonly().meta({ id: "AppOAuthIssuerInspection" });
-
-export const ManagedSpaceCapabilitySchema: z.ZodType<ManagedSpaceCapability> = z.object({
-  accessToken: NonEmptyStringSchema,
-  tokenType: z.literal("Bearer"),
-  expiresIn: z.number().int().positive(),
-  expiresAt: TimestampSchema,
-  issuer: z.url(),
-  audience: NonEmptyStringSchema,
-  spaceId: NonEmptyStringSchema,
-  permissions: z.array(NonEmptyStringSchema).readonly(),
-}).readonly().meta({ id: "ManagedSpaceCapability" });
 
 export const AppRefDomainSchema: z.ZodType<AppRefDomain> = z.object({
   appId: AppIdSchema,

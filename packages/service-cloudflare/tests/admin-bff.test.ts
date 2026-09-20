@@ -10,7 +10,6 @@ import type {
   EmailChallengeBinding,
   EmailChallengeRecord,
   EmailChallengeRepository,
-  AccountManagedCapabilityIssuer,
   AccountRecord,
   AccountRepository,
   OAuthDiscoveryPort,
@@ -505,7 +504,6 @@ function memoryAccountRepository(
   const profiles = new Map<string, { accountId: string; displayName: string | null; avatarUrl: string | null; displayNameSource: string | null; avatarSource: string | null; updatedAt: number }>();
   const identities = new Map<string, ExternalIdentityRecord>();
   const identityKeys = new Map<string, ExternalIdentityRecord>();
-  const managedIssuerStates = new Map<string, { status: "active" | "disabled"; revision: number }>();
   const externalIssuers = new Map<string, Awaited<ReturnType<AccountRepository["getAppOAuthIssuer"]>>>();
   const issuerInspections = new Map<string, Parameters<AccountRepository["commitInspectAccountOAuthIssuer"]>[0]["inspection"]>();
   const issuerInspectionKeys = new Map<string, Parameters<AccountRepository["commitInspectAccountOAuthIssuer"]>[0]["keys"]>();
@@ -749,44 +747,6 @@ function memoryAccountRepository(
         ? "recorded"
         : "account-unavailable";
     },
-    getManagedOAuthIssuer: async appId => {
-      if (!fakeStacks.has(appId)) return null;
-      const state = managedIssuerStates.get(appId) ?? { status: "active" as const, revision: 1 };
-      return {
-        appId,
-        mode: "managed",
-        issuer: `${PUBLIC_ORIGIN}/managed-issuers/${appId}`,
-        audience: `${PUBLIC_ORIGIN}/stacks/${appId}`,
-        metadataUrl: `${PUBLIC_ORIGIN}/managed-issuers/${appId}/.well-known/oauth-authorization-server`,
-        metadataType: "oauth",
-        authorizationEndpoint: `${PUBLIC_ORIGIN}/managed-issuers/${appId}/authorize`,
-        tokenEndpoint: `${PUBLIC_ORIGIN}/managed-issuers/${appId}/token`,
-        jwksUri: `${PUBLIC_ORIGIN}/managed-issuers/${appId}/jwks.json`,
-        registrationEndpoint: null,
-        scopesSupported: ["cas:read", "cas:write", "cas:manage"],
-        codeChallengeMethodsSupported: ["S256"],
-        status: state.status,
-        verifiedAt: 1,
-        lastRefreshAt: 1,
-        lastRefreshError: null,
-        jwksDigest: "digest",
-        capabilityMaxLifetimeSeconds: 3600,
-        revision: state.revision,
-      };
-    },
-    commitPatchAccountManagedOAuthIssuer: async input => {
-      const identity = identities.get(input.actorExternalIdentityId);
-      const app = fakeStacks.get(input.appId);
-      if (!identity || identity.accountId !== input.actorAccountId
-        || !app?.members.has(`${identity.issuer}\n${identity.subject}`)) return "actor-not-member";
-      const state = managedIssuerStates.get(input.appId) ?? { status: "active" as const, revision: 1 };
-      if (state.revision !== input.expectedRevision) return "revision-mismatch";
-      managedIssuerStates.set(input.appId, {
-        status: input.enabled ? "active" : "disabled",
-        revision: input.nextRevision,
-      });
-      return "updated";
-    },
     commitPatchAccountApp: async input => {
       const identity = identities.get(input.actorExternalIdentityId);
       const app = fakeStacks.get(input.app.appId);
@@ -871,7 +831,6 @@ async function createBff(
   _platformAuditRepository?: unknown,
   peopleRepository?: PeopleRepository,
   accountRepository?: AccountRepository,
-  managedOAuthIssuer?: AccountManagedCapabilityIssuer,
   oauthDiscovery?: OAuthDiscoveryPort,
 ): Promise<(request: Request) => Promise<Response>> {
   const providerFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -930,7 +889,6 @@ async function createBff(
     platformInvitationRepository,
     peopleRepository,
     accountRepository: accountRepository ?? memoryAccountRepository(accountPlatform, "google-user-123"),
-    managedOAuthIssuer,
     oauthDiscovery,
   });
 }
@@ -1075,9 +1033,14 @@ describe("cas-admin-webui BFF", () => {
     expect(login.headers.get("Location")).toBeNull();
     expect(login.headers.get("Set-Cookie")).toBeNull();
     const html = await login.text();
-    expect(html).toContain("Sign in");
+    expect(html).toContain("<title>Sign in - UniCAS</title>");
+    expect(html).toContain('class="login-panel-header"');
+    expect(html).toContain("Restricted console");
+    expect(html).toContain("Choose a sign-in method.");
     expect(html).toContain("/admin/auth/start/google?returnTo=%2Fadmin%2F");
     expect(html).toContain("Continue with Google");
+    expect(html).toContain("login-provider-icon-google");
+    expect(html).toContain("login-provider-label");
     expect(html).toContain("/admin/assets/index.css?v=issuer-discovery-v1");
   });
 
@@ -1133,6 +1096,8 @@ describe("cas-admin-webui BFF", () => {
     expect(html).toContain("Continue with Google");
     expect(html).toContain("Continue with Microsoft");
     expect(html).not.toContain("Continue with GitHub");
+    expect(html).toContain("login-provider-icon-google");
+    expect(html).toContain("login-provider-icon-microsoft");
 
     const started = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/start/microsoft`));
     const preLoginCookie = cookieFrom(started)!;
@@ -1761,6 +1726,8 @@ describe("cas-admin-webui BFF", () => {
 
     const deniedPage = await bff(new Request(`${PUBLIC_ORIGIN}${callback.headers.get("Location")!}`));
     const deniedHtml = await deniedPage.text();
+    expect(deniedHtml).toContain('class="login-panel login-panel-restricted"');
+    expect(deniedHtml).toContain("Access restricted");
     expect(deniedHtml).toContain("No management access");
     expect(deniedHtml).toContain("Sign in with another Google account");
     expect(deniedHtml).not.toContain("Continue with Google");
@@ -1998,58 +1965,6 @@ describe("cas-admin-webui BFF", () => {
     expect(ok.headers.get("ETag")).toBe('"1"');
   });
 
-  test("managed App issuer reads and updates use Account membership", async () => {
-    const provider = await createMockProvider();
-    const platform = new MemoryPlatformAccessRepository();
-    platform.grant(ISSUER, "google-user-123");
-    const accounts = memoryAccountRepository(platform, "google-user-123");
-    const legacyGet = vi.fn(async () => {
-      throw new Error("legacy managed issuer read must not be called");
-    });
-    const legacyPatch = vi.fn(async () => {
-      throw new Error("legacy managed issuer update must not be called");
-    });
-    const bff = await createBff(
-      provider,
-      undefined,
-      {},
-      platform,
-      {
-        ...fakeControlPlane(),
-        getManagedOAuthIssuer: legacyGet,
-        patchManagedOAuthIssuer: legacyPatch,
-      },
-      undefined,
-      undefined,
-      undefined,
-      accounts,
-    );
-    const { cookie, csrf } = await signIn(bff, provider);
-    const appId = await createStack(bff, cookie, csrf, "Managed App");
-    const path = `/admin/apps/${appId}/managed-issuer`;
-
-    const current = await authRequest(bff, path, cookie);
-    expect(current.status).toBe(200);
-    expect(current.headers.get("ETag")).toBe('"1"');
-    expect(await current.json()).toMatchObject({ appId, mode: "managed", status: "active", revision: 1 });
-    expect((await authRequest(bff, path, cookie, {
-      method: "PATCH",
-      headers: { "If-Match": '"1"', "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled: false }),
-    })).status).toBe(403);
-
-    const updated = await authRequest(bff, path, cookie, {
-      method: "PATCH",
-      headers: { "If-Match": '"1"', "X-CSRF-Token": csrf, "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled: false }),
-    });
-    expect(updated.status).toBe(200);
-    expect(updated.headers.get("ETag")).toBe('"2"');
-    expect(await updated.json()).toMatchObject({ appId, status: "disabled", revision: 2 });
-    expect(legacyGet).not.toHaveBeenCalled();
-    expect(legacyPatch).not.toHaveBeenCalled();
-  });
-
   test("external App issuer reads use Account membership", async () => {
     const provider = await createMockProvider();
     const platform = new MemoryPlatformAccessRepository();
@@ -2078,7 +1993,6 @@ describe("cas-admin-webui BFF", () => {
     expect((await authRequest(bff, path, cookie)).status).toBe(404);
     accountIssuer.mockResolvedValue({
       appId,
-      mode: "external",
       issuer: "https://issuer.example",
       audience: "https://api.example/app",
       metadataUrl: "https://issuer.example/.well-known/openid-configuration",
@@ -2141,7 +2055,6 @@ describe("cas-admin-webui BFF", () => {
       undefined,
       undefined,
       accounts,
-      undefined,
       oauthDiscovery,
     );
     const { cookie, csrf } = await signIn(bff, provider);
@@ -2301,79 +2214,6 @@ describe("cas-admin-webui BFF", () => {
     expect(response.headers.get("Cache-Control")).toBe("no-store, no-transform");
     expect(await response.text()).toBe("");
     expect(fakeStacks.get(appId)?.status).toBe("suspended");
-  });
-
-  test("managed Space capability mint uses the v2 operation and response", async () => {
-    const provider = await createMockProvider();
-    const platform = new MemoryPlatformAccessRepository();
-    platform.grant(ISSUER, "google-user-123");
-    const accounts = memoryAccountRepository(platform, "google-user-123");
-    const legacyMint = vi.fn(async () => {
-      throw new Error("legacy managed capability path must not be called");
-    });
-    const issueAccountSpace = vi.fn(async ({ app, accountId }) => ({
-      accessToken: "short-lived-space-token",
-      tokenType: "Bearer" as const,
-      expiresIn: 120,
-      expiresAt: Date.now() + 120_000,
-      issuer: `${PUBLIC_ORIGIN}/managed-issuers/${app.appId}`,
-      audience: `${PUBLIC_ORIGIN}/stacks/${app.appId}`,
-      spaceId: `member_${accountId.slice(5)}`,
-      permissions: [`spaces:member_${accountId.slice(5)}:cas:manage`],
-    }));
-    const managedOAuthIssuer: AccountManagedCapabilityIssuer = {
-      provision: async appId => (await accounts.getManagedOAuthIssuer(appId))!,
-      issueAccountSpace,
-    };
-    const bff = await createBff(
-      provider,
-      undefined,
-      {},
-      platform,
-      { ...fakeControlPlane(), mintManagedSpaceCapability: legacyMint },
-      undefined,
-      undefined,
-      undefined,
-      accounts,
-      managedOAuthIssuer,
-    );
-    const { cookie, csrf } = await signIn(bff, provider);
-    const appId = await createStack(bff, cookie, csrf, "Managed App");
-
-    const rejected = await authRequest(bff, `/admin/apps/${appId}/managed-capabilities`, cookie, {
-      method: "POST",
-    });
-    expect(rejected.status).toBe(403);
-
-    const minted = await authRequest(bff, `/admin/apps/${appId}/managed-capabilities`, cookie, {
-      method: "POST",
-      headers: { "X-CSRF-Token": csrf },
-    });
-    expect(minted.status).toBe(201);
-    expect(minted.headers.get("Cache-Control")).toBe("no-store");
-    expect(await minted.json()).toMatchObject({
-      accessToken: "short-lived-space-token",
-      spaceId: `member_${testAccountId("google-user-123").slice(5)}`,
-    });
-    expect(issueAccountSpace).toHaveBeenCalledWith(expect.objectContaining({
-      accountId: testAccountId("google-user-123"),
-      app: expect.objectContaining({ appId }),
-    }));
-    expect(legacyMint).not.toHaveBeenCalled();
-  });
-
-  test("retired Playground file-root APIs return 404", async () => {
-    const provider = await createMockProvider();
-    const bff = await createBff(provider);
-    const { cookie, csrf } = await signIn(bff, provider);
-    const stackId = await createStack(bff, cookie, csrf, "Files");
-    for (const prefix of ["/admin/apps"]) {
-      const path = `${prefix}/${stackId}/playground/file-roots`;
-      expect((await authRequest(bff, path, cookie)).status).toBe(404);
-      expect((await authRequest(bff, path, cookie, { method: "POST", headers: { "X-CSRF-Token": csrf } })).status).toBe(404);
-      expect((await authRequest(bff, `${path}/root-1`, cookie, { method: "PATCH", headers: { "X-CSRF-Token": csrf } })).status).toBe(404);
-      expect((await authRequest(bff, `${path}/root-1`, cookie, { method: "DELETE", headers: { "X-CSRF-Token": csrf } })).status).toBe(404);
-    }
   });
 
   test("email-bound App invitation grants only exact acceptance, then rotates to a full membership session", async () => {

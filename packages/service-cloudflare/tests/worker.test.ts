@@ -167,8 +167,7 @@ describe("service-cloudflare public routing", () => {
   test("publishes RFC 9728 metadata only for stacks with an active OAuth issuer", async () => {
     const all = vi.fn(async () => ({
       results: [
-        { issuer: "https://gateway.example/oauth", priority: 0 },
-        { issuer: "https://cas.example/managed-issuers/cas_stack_a", priority: 1 },
+        { issuer: "https://gateway.example/oauth" },
       ]
     }));
     const metadataEnv = {
@@ -185,7 +184,6 @@ describe("service-cloudflare public routing", () => {
       resource: "https://cas.example/stacks/cas_stack_a",
       authorization_servers: [
         "https://gateway.example/oauth",
-        "https://cas.example/managed-issuers/cas_stack_a",
       ],
       scopes_supported: ["cas:read", "cas:write", "cas:manage"],
     });

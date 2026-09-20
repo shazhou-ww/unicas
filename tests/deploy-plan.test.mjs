@@ -620,9 +620,7 @@ describe("standalone deployment plan", () => {
   test("the smoke reset bounds compound inventory queries for remote D1", () => {
     const queries = [...SCOPED_INVENTORY_QUERIES.control, ...SCOPED_INVENTORY_QUERIES.data];
     expect(queries).toHaveLength(4);
-    for (const query of queries) {
-      expect(query.match(/\bSELECT\b/g)).toHaveLength(4);
-    }
+    expect(queries.map(query => query.match(/\bSELECT\b/g)?.length)).toEqual([4, 3, 4, 4]);
     const catalog = queries.join("\n");
     for (const table of [
       "cas_apps",
@@ -647,7 +645,6 @@ describe("standalone deployment plan", () => {
     for (const retired of [
       "cas_platform_principals",
       "cas_operator_identities",
-      "cas_playground_file_roots",
       "cas_control_idempotency",
     ]) expect(rendered).toContain(`DROP TABLE IF EXISTS ${retired}`);
     expect(rendered).toContain("--binding OAUTH_KV --remote");

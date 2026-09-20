@@ -33,7 +33,6 @@ export type {
   AppOAuthIssuer,
   AppOAuthIssuerInspection,
   AppRefDomain,
-  ManagedSpaceCapability,
   Principal,
   Profile,
   AccountSelf,

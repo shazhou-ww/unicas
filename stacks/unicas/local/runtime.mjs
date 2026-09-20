@@ -120,10 +120,6 @@ export async function startLocalUnicasRuntime({
           MCP_ALLOWED_ORIGIN_HOSTNAMES: "",
           MCP_MUTATIONS_ENABLED: "true",
           OAUTH_STATE_ENCRYPTION_KEY: SESSION_KEY,
-          ...(process.env.MANAGED_ISSUER_PRIVATE_KEY_PKCS8 && process.env.MANAGED_ISSUER_KEY_ID ? {
-            MANAGED_ISSUER_PRIVATE_KEY_PKCS8: process.env.MANAGED_ISSUER_PRIVATE_KEY_PKCS8,
-            MANAGED_ISSUER_KEY_ID: process.env.MANAGED_ISSUER_KEY_ID,
-          } : {}),
         },
         durableObjects: {
           CAS_DO: { className: "CasDurableObject" },
