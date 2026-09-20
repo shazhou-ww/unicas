@@ -67,6 +67,7 @@ Cache-Control: no-store
 {
   "state": "upload_required",
   "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "reason": "node_missing",
   "upload": {
     "method": "PUT",
     "url": "https://presigned-upload-target.example/...",
@@ -85,6 +86,42 @@ HTTP 200 rather than 202.
 
 The response contains no upload ID, temporary object key, storage credential,
 or App capability.
+
+`reason` explains why this particular upload target was issued:
+
+- `node_missing`: no prior upload generation existed;
+- `upload_pending`: the current generation has no visible object yet;
+- `upload_expired`: the prior generation expired and was replaced; or
+- `previous_upload_rejected`: the prior object failed validation and was
+  replaced.
+
+For `previous_upload_rejected`, the response also carries an explicit,
+publish-safe rejection:
+
+```json
+{
+  "state": "upload_required",
+  "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "reason": "previous_upload_rejected",
+  "rejection": {
+    "code": "NODE_DIGEST_MISMATCH",
+    "message": "Uploaded canonical bytes did not match the requested node hash"
+  },
+  "upload": {
+    "method": "PUT",
+    "url": "https://replacement-upload-target.example/...",
+    "expiresAt": 1760000600000,
+    "headers": {
+      "Content-Type": "application/vnd.unidocs.cas-node.v1",
+      "If-None-Match": "*"
+    }
+  }
+}
+```
+
+The replacement target uses a new internal generation and a new temporary
+object key. The caller can therefore correct and upload the bytes immediately;
+it is never asked to overwrite the rejected write-once object.
 
 ## Sequence
 
@@ -110,9 +147,15 @@ sequenceDiagram
         CAS->>State: Resolve current generation
         CAS->>R2: Inspect uploaded object
         CAS->>CAS: Validate canonical node once
-        CAS->>State: Atomically publish metadata, edges, and lease
-        CAS->>R2: Delete temporary object
-        CAS-->>App: 200 ready + lease
+        alt Canonical node is valid
+            CAS->>State: Atomically publish metadata, edges, and lease
+            CAS->>R2: Delete temporary object
+            CAS-->>App: 200 ready + lease
+        else Canonical node is invalid
+            CAS->>State: Retire generation and create replacement
+            CAS->>R2: Delete rejected temporary object
+            CAS-->>App: 200 upload_required + rejection + new signed PUT
+        end
     end
 ```
 
@@ -192,8 +235,14 @@ if object is absent:
     return freshly signed upload instructions for the current key
 
 if object is present:
-    reject and clean it when its size exceeds 32 MiB
-    validate and publish it exactly once
+    validate its size, digest, and canonical structure
+    if those immutable checks fail:
+        retire the current generation
+        create a replacement generation and temporary key
+        return upload_required with rejection details and the new target
+    if a child is not ready:
+        retain the validated object and return a retryable dependency error
+    publish it exactly once
     establish the requested lease
     return ready
 ```
@@ -223,6 +272,21 @@ operations do not parse or hash the canonical bytes again.
 
 The validation scope is `(appId, spaceId, hash)`. This design does not introduce
 global cross-Space validation or deduplication.
+
+An immutable validation failure must not strand the caller behind the
+write-once temporary key. In the same serialized lease operation, UniCAS
+retires the rejected generation, creates a new generation and key, schedules
+the rejected object for deletion, and returns `upload_required` with both the
+rejection and replacement instructions. The replacement is durable before the
+response is returned, so retrying the lease cannot rediscover the rejected
+generation as current.
+
+Child readiness is different from an invalid upload. The canonical bytes may
+be valid while a referenced child is still being published. UniCAS retains the
+validated temporary object and returns a retryable
+`NODE_DEPENDENCY_NOT_READY` conflict. After the child becomes ready, repeating
+the same parent lease request resumes publication without uploading the parent
+again.
 
 ## Root Ref boundary
 
@@ -274,9 +338,9 @@ upload-time object-store limit unless the provider enforces it.
 | Concurrent lease after upload | One request publishes; others join or observe ready. |
 | Expired generation without an object | Rotate generation and return a new URL. |
 | Expired generation with an object | Do not publish it; rotate and schedule the old key for cleanup. |
-| Oversized or malformed object | Reject publication, retire the generation, and delete the object. |
-| Digest mismatch | Reject publication, retire the generation, and delete the object. |
-| Child not ready | Reject publication and retire the uploaded object; caller rebuilds bottom-up. |
+| Oversized or malformed object | Retire the generation and return `upload_required` with rejection details and a new write-once target. |
+| Digest mismatch | Retire the generation and return `upload_required` with rejection details and a new write-once target. |
+| Child not ready | Retain the validated object and return retryable `NODE_DEPENDENCY_NOT_READY`; repeating lease resumes publication without re-upload. |
 | Failure after canonical R2 publication but before D1 commit | A later lease validates or adopts the verified canonical orphan. |
 | Failure after D1 ready commit | A later lease observes ready; temporary cleanup is retried asynchronously. |
 
@@ -322,6 +386,19 @@ type LeaseNodeResult =
   | {
       readonly state: "upload_required";
       readonly hash: string;
+      readonly reason:
+        | "node_missing"
+        | "upload_pending"
+        | "upload_expired"
+        | "previous_upload_rejected";
+      readonly rejection?: {
+        readonly code:
+          | "NODE_TOO_LARGE"
+          | "NODE_DIGEST_MISMATCH"
+          | "INVALID_CANONICAL_NODE"
+          | "NODE_CONFLICT";
+        readonly message: string;
+      };
       readonly upload: {
         readonly method: "PUT";
         readonly url: string;
@@ -340,6 +417,7 @@ convenience loop:
 ```text
 lease(hash)
 if upload_required:
+    surface any previous-upload rejection to the caller
     obtain or construct canonical bytes
     PUT using returned instructions
     lease(hash)

@@ -119,6 +119,9 @@ The proposed replacement is specified in
       limit is enforced only at publication.
 - [ ] Expired, abandoned, invalid, replayed, and superseded uploads have bounded
       storage lifetime and tested cleanup behavior.
+- [ ] A rejected write-once upload cannot strand the node: the detecting lease
+      call reports the rejection, durably rotates the internal generation, and
+      returns a fresh upload target that can accept corrected bytes.
 - [ ] Concurrent callers for the same node converge on one immutable ready node
       and receive valid leases without client-visible coordination.
 - [ ] Inline upload and the legacy upload headers and client configuration are
