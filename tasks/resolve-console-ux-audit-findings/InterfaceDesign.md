@@ -110,6 +110,9 @@ fallback under `prefers-reduced-motion`.
   border and surface at rest, then strengthen the background and border on hover
   and keyboard focus. Keep the painted control compact rather than rendering a
   touch-sized toolbar button in a pointer-oriented layout.
+- When actions share a toolbar row with inputs or selects, match the visible
+  control height and baseline of those fields. Compact standalone actions such
+  as sidebar Create App may remain smaller.
 
 ## People and Change Logs
 
