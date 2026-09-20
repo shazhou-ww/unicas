@@ -284,6 +284,46 @@ before the D1 ready transition. It is a recovery condition, not a normal client
 state. A ready record whose canonical object is missing is an integrity fault
 and must not transition back to an upload state.
 
+### Concrete predicates for diagram states
+
+The state names in the diagram are shorthand for the following storage
+conditions. `upload record valid` means that the current D1 upload-
+authorization row is generation-current and its signing deadline is later than
+the lease evaluation time.
+
+| Diagram state | D1 node record | D1 upload-authorization record | R2 objects | Additional condition |
+| --- | --- | --- | --- | --- |
+| `NoAuthorization` | Absent, or `ready = false` without validation evidence | Absent, superseded, or expired | No current temporary object and no canonical object | There is no completed upload to validate. The next lease creates a generation and signed target. |
+| `AwaitingUpload` | Absent, or `ready = false` without validation evidence | Present, current, and valid | Current temporary object absent; canonical object absent | A PUT may not have started or may still be in progress. R2 does not expose a partial object. |
+| `UploadedUnvalidated` | Absent, or `ready = false` without validation evidence | Present and current; it may now be valid or expired | Current temporary object present; canonical object absent | Immutable size, digest, envelope, metadata, and refs have not yet been durably accepted. |
+| `ValidatedWaitingChildren` | Present with `ready = false` | Present and tied to the same current generation | Validated temporary object present, or an equivalent recoverable canonical object | Generation-fenced immutable metadata and ordered refs are durable, and at least one referenced child is not ready. |
+| `CanonicalOrphan` | Absent, or present with `ready = false` and an incomplete publication transition | May be present, expired, or already cleared | Canonical hash-addressed object present | Immutable publication reached R2, but the D1 ready transition did not commit. |
+| `Ready` | Present with `ready = true`; immutable metadata and ordered edges committed | Irrelevant and eligible for cleanup | Canonical hash-addressed object present | Child readiness and child-count updates were committed before or with `ready = true`. |
+
+Two exceptional observations are transitions or faults rather than stable
+diagram states:
+
+- **Rejected uploaded object:** D1 is not ready, the current temporary object
+  exists, and immutable validation fails. The same lease retires that
+  generation, creates a new upload record and temporary key, and returns the
+  rejection with replacement upload instructions.
+- **Storage inconsistency:** D1 says `ready = true`, but the canonical R2 object
+  is absent. Lease returns a storage-integrity error and alerts; it does not
+  create an upload authorization.
+
+When facts overlap, lease evaluates them in this order:
+
+1. ready-record/canonical-object consistency;
+2. recoverable canonical orphan;
+3. durable validation evidence waiting on children;
+4. current temporary object awaiting immutable validation;
+5. valid upload authorization awaiting PUT; and
+6. absence of usable authorization.
+
+This precedence prevents an expired URL from hiding an already uploaded object
+and prevents a stale upload record from overriding a ready or recoverable
+canonical node.
+
 ## Canonical object
 
 The direct PUT contains the complete canonical CAS node block:
