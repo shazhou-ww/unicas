@@ -29,9 +29,9 @@ tasks:
     createdAt: "2026-09-15T07:50:34Z"
     updatedAt: "2026-09-19T05:12:49Z"
   document-app-user-api:
-    state: ongoing
+    state: completed
     createdAt: "2026-09-20T02:02:51Z"
-    updatedAt: "2026-09-20T04:01:42Z"
+    updatedAt: "2026-09-20T04:27:25Z"
   document-worktree-identity-config:
     state: completed
     createdAt: "2026-09-15T04:09:43Z"
