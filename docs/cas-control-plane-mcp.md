@@ -83,7 +83,7 @@ App read tools:
 
 - `get_current_account`
 - `list_apps`, `get_app`, `list_app_members`
-- `get_app_oauth_issuer`, `get_app_managed_issuer`
+- `get_app_oauth_issuer`
 - `list_app_ref_domains`, `list_app_control_audit_events`
 - `list_space_root_domain_refs`, `list_space_root_domain_events`
 
@@ -102,7 +102,6 @@ App security tools:
 - `list_app_member_invitations`, `revoke_app_member_invitation`
 - `invite_app_member`, `accept_app_member_invitation`, `remove_app_member`
 - `inspect_app_oauth_issuer`, `activate_app_oauth_issuer`
-- `update_app_managed_issuer`, `mint_managed_space_capability`
 
 Platform tools (`control:security` plus current `platform.admin`):
 

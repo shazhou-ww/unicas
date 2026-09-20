@@ -831,7 +831,6 @@ async function createBff(
   _platformAuditRepository?: unknown,
   peopleRepository?: PeopleRepository,
   accountRepository?: AccountRepository,
-  _unusedManagedOAuthIssuer?: unknown,
   oauthDiscovery?: OAuthDiscoveryPort,
 ): Promise<(request: Request) => Promise<Response>> {
   const providerFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -1957,23 +1956,6 @@ describe("cas-admin-webui BFF", () => {
     expect(ok.headers.get("ETag")).toBe('"1"');
   });
 
-  test("retired managed issuer Admin endpoints return 404", async () => {
-    const provider = await createMockProvider();
-    const bff = await createBff(provider);
-    const { cookie, csrf } = await signIn(bff, provider);
-    const appId = await createStack(bff, cookie, csrf, "Managed App");
-    expect((await authRequest(bff, `/admin/apps/${appId}/managed-issuer`, cookie)).status).toBe(404);
-    expect((await authRequest(bff, `/admin/apps/${appId}/managed-issuer`, cookie, {
-      method: "PATCH",
-      headers: { "If-Match": '"1"', "X-CSRF-Token": csrf, "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled: false }),
-    })).status).toBe(404);
-    expect((await authRequest(bff, `/admin/apps/${appId}/managed-capabilities`, cookie, {
-      method: "POST",
-      headers: { "X-CSRF-Token": csrf },
-    })).status).toBe(404);
-  });
-
   test("external App issuer reads use Account membership", async () => {
     const provider = await createMockProvider();
     const platform = new MemoryPlatformAccessRepository();
@@ -2002,7 +1984,6 @@ describe("cas-admin-webui BFF", () => {
     expect((await authRequest(bff, path, cookie)).status).toBe(404);
     accountIssuer.mockResolvedValue({
       appId,
-      mode: "external",
       issuer: "https://issuer.example",
       audience: "https://api.example/app",
       metadataUrl: "https://issuer.example/.well-known/openid-configuration",
@@ -2065,7 +2046,6 @@ describe("cas-admin-webui BFF", () => {
       undefined,
       undefined,
       accounts,
-      undefined,
       oauthDiscovery,
     );
     const { cookie, csrf } = await signIn(bff, provider);
@@ -2225,20 +2205,6 @@ describe("cas-admin-webui BFF", () => {
     expect(response.headers.get("Cache-Control")).toBe("no-store, no-transform");
     expect(await response.text()).toBe("");
     expect(fakeStacks.get(appId)?.status).toBe("suspended");
-  });
-
-  test("retired Playground file-root APIs return 404", async () => {
-    const provider = await createMockProvider();
-    const bff = await createBff(provider);
-    const { cookie, csrf } = await signIn(bff, provider);
-    const stackId = await createStack(bff, cookie, csrf, "Files");
-    for (const prefix of ["/admin/apps"]) {
-      const path = `${prefix}/${stackId}/playground/file-roots`;
-      expect((await authRequest(bff, path, cookie)).status).toBe(404);
-      expect((await authRequest(bff, path, cookie, { method: "POST", headers: { "X-CSRF-Token": csrf } })).status).toBe(404);
-      expect((await authRequest(bff, `${path}/root-1`, cookie, { method: "PATCH", headers: { "X-CSRF-Token": csrf } })).status).toBe(404);
-      expect((await authRequest(bff, `${path}/root-1`, cookie, { method: "DELETE", headers: { "X-CSRF-Token": csrf } })).status).toBe(404);
-    }
   });
 
   test("email-bound App invitation grants only exact acceptance, then rotates to a full membership session", async () => {

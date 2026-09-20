@@ -259,7 +259,6 @@ describe("Account service", () => {
     vi.mocked(repository.hasAppMembership).mockResolvedValue(true);
     vi.mocked(repository.getAppOAuthIssuer).mockResolvedValue({
       appId: "cas_app_a",
-      mode: "external",
       issuer: "https://issuer.example",
       audience: "https://api.example/app",
       metadataUrl: "https://issuer.example/.well-known/openid-configuration",

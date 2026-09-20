@@ -53,9 +53,7 @@ export class RootRefDomainDurableObject { fetch() { return unavailable(); } }
 const CONTROL_TABLES = [
   "cas_oauth_issuer_inspection_keys",
   "cas_oauth_issuer_inspections",
-  "cas_app_managed_issuers",
   "cas_app_oauth_issuers",
-  "cas_playground_file_roots",
   "cas_app_member_invitations",
   "cas_app_members",
   "cas_account_app_invitation_idempotency",
@@ -106,7 +104,6 @@ export const SCOPED_INVENTORY_QUERIES = {
       UNION ALL SELECT 'cas_app_member_invitations', app_id FROM cas_app_member_invitations GROUP BY app_id
       UNION ALL SELECT 'cas_account_app_invitation_idempotency', app_id FROM cas_account_app_invitation_idempotency GROUP BY app_id`,
     `SELECT 'cas_app_oauth_issuers' AS source, app_id AS stack_id FROM cas_app_oauth_issuers GROUP BY app_id
-     UNION ALL SELECT 'cas_app_managed_issuers', app_id FROM cas_app_managed_issuers GROUP BY app_id
      UNION ALL SELECT 'cas_oauth_issuer_inspections', app_id FROM cas_oauth_issuer_inspections GROUP BY app_id
      UNION ALL SELECT 'cas_control_audit_events', app_id FROM cas_control_audit_events WHERE app_id IS NOT NULL GROUP BY app_id`,
   ],

@@ -369,7 +369,6 @@ export class D1AccountRepository implements AccountRepository {
     ).bind(appId).first<AppOAuthIssuerRow>();
     return row ? {
       appId: row.app_id,
-      mode: "external",
       issuer: row.issuer,
       audience: row.audience,
       metadataUrl: row.metadata_url,

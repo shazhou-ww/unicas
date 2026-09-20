@@ -148,7 +148,6 @@ export interface AppMemberInvitation {
 
 export interface AppOAuthIssuer {
   readonly appId: AppId;
-  readonly mode: "managed" | "external";
   readonly issuer: string;
   readonly audience: string;
   readonly metadataUrl: string;

@@ -271,7 +271,6 @@ describe("D1 Account repository", () => {
     });
     expect(replayed.appId).toBe(created.appId);
     expect(await db.prepare("SELECT COUNT(*) AS count FROM cas_apps").first()).toEqual({ count: 1 });
-    expect(await db.prepare("SELECT COUNT(*) AS count FROM cas_app_managed_issuers").first()).toEqual({ count: 0 });
     expect(await db.prepare("SELECT account_id FROM cas_app_members WHERE app_id = ?").bind(created.appId).first())
       .toEqual({ account_id: actor.account.accountId });
     expect(await db.prepare(

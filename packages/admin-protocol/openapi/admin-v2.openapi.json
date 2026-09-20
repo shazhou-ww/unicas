@@ -5729,13 +5729,6 @@
                           },
                           "readOnly": true
                         },
-                        "mode": {
-                          "enum": [
-                            "managed",
-                            "external"
-                          ],
-                          "type": "string"
-                        },
                         "status": {
                           "enum": [
                             "pending",
@@ -5811,7 +5804,6 @@
                         "registrationEndpoint",
                         "scopesSupported",
                         "codeChallengeMethodsSupported",
-                        "mode",
                         "status",
                         "verifiedAt",
                         "lastRefreshAt",

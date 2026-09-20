@@ -32,39 +32,14 @@ The generated documentation site is a second assets-only Worker under
 gitignored static output and fails on unresolved local links. Its deployment
 owns only `docs.unicas.work` and has no service bindings or secrets.
 
-## Managed issuer
+## OAuth issuers
 
-When the Worker has both managed-issuer bindings, every newly created App
-receives an active, UniCAS-managed issuer. The issuer URL is logically unique:
+Apps use independently operated external OAuth authorization servers. An App
+administrator inspects and activates an issuer through the control plane; the
+data plane then resolves the active issuer metadata and verifies its JWT
+capabilities. UniCAS does not provision an issuer, issue access tokens, or
+derive a personal Space from App membership.
 
-```text
-https://<public-origin>/managed-issuers/<appId>
-```
-
-The URL is server-derived and cannot be changed. Existing Apps that predate
-managed issuers expose the same fixed URL in a disabled revision-zero state;
-their first enable provisions the binding atomically.
-
-The deployment uses one ES256 signing key across those logical issuers. Set
-`MANAGED_ISSUER_KEY_ID` as a non-secret Wrangler var and
-`MANAGED_ISSUER_PRIVATE_KEY_PKCS8` as a Wrangler secret. A local key can be
-generated with `pnpm keys:local`; use the resulting `kid` and
-`privateKeyPkcs8` fields without committing the generated file.
-
-Only current App members can mint managed capabilities through the admin BFF.
-Each `(App, Principal issuer, subject)` maps to a stable isolated personal
-Space. Capabilities expire after one hour and include read, write, and manage
-for that Space. The Playground keeps the bearer only in React state.
-
-Managed issuer metadata and JWKS are public only while that issuer remains
-active for the App. A custom issuer has an independent lifecycle and can be
-active at the same time. Protected-resource discovery lists the active custom
-issuer first, so CLI login prefers it, then lists the managed issuer as the
-fallback. Disabling managed issuance stops new managed capabilities
-immediately, while already issued tokens age out according to their expiry and
-verifier cache bounds.
-
-Rotate the deployment signing key with overlap: deploy a JWKS/key-ring capable
-revision before switching `MANAGED_ISSUER_KEY_ID`. The current implementation
-holds one active managed key, so a no-downtime production rotation requires
-adding key-ring support before changing the configured key.
+The one-time production procedure for removing the retired first-party issuer
+is documented in
+[`docs/managed-issuer-retirement.md`](../../docs/managed-issuer-retirement.md).

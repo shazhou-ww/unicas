@@ -70,16 +70,9 @@ function readIssuer(db: D1Database, issuer: string): Promise<IssuerRow | null> {
         FROM cas_app_oauth_issuers AS issuer_record
         JOIN cas_apps AS app ON app.app_id = issuer_record.app_id
         WHERE issuer_record.issuer = ? AND issuer_record.status = 'active' AND issuer_record.mode = 'external'
-       UNION ALL
-        SELECT issuer_record.app_id, issuer_record.issuer, issuer_record.audience,
-              issuer_record.jwks_uri, issuer_record.capability_max_lifetime_seconds,
-              app.status AS app_status
-        FROM cas_app_managed_issuers AS issuer_record
-        JOIN cas_apps AS app ON app.app_id = issuer_record.app_id
-        WHERE issuer_record.issuer = ? AND issuer_record.status = 'active'
        LIMIT 1`,
     )
-    .bind(issuer, issuer)
+    .bind(issuer)
     .first<IssuerRow>();
 }
 

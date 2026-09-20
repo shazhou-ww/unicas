@@ -66,12 +66,6 @@ describe("App admin routes", () => {
     expect(matchAppAdminRoute("GET", "/v2/apps/a/spaces/s/cas/usage")).toBeNull();
     expect(matchAppAdminRoute("GET", "/admin/apps/%ZZ")).toBeNull();
     expect(matchAppAdminRoute("POST", appAdminRoutes.me())).toBeNull();
-    expect(matchAppAdminRoute("GET", "/admin/apps/a/managed-issuer")).toBeNull();
-    expect(matchAppAdminRoute("PATCH", "/admin/apps/a/managed-issuer")).toBeNull();
     expect(matchAppAdminRoute("POST", "/admin/apps/a/managed-capabilities")).toBeNull();
-    expect(matchAppAdminRoute("GET", "/admin/apps/a/playground/file-roots")).toBeNull();
-    expect(matchAppAdminRoute("POST", "/admin/apps/a/playground/file-roots")).toBeNull();
-    expect(matchAppAdminRoute("PATCH", "/admin/apps/a/playground/file-roots/r")).toBeNull();
-    expect(matchAppAdminRoute("DELETE", "/admin/apps/a/playground/file-roots/r")).toBeNull();
   });
 });

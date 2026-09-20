@@ -224,7 +224,6 @@ const AppOAuthIssuerShape = {
 
 export const AppOAuthIssuerSchema: z.ZodType<AppOAuthIssuer> = z.object({
   ...AppOAuthIssuerShape,
-  mode: z.enum(["managed", "external"]),
   status: z.enum(["pending", "active", "stale", "incompatible", "disabled"]),
   verifiedAt: TimestampSchema.nullable(),
   lastRefreshAt: TimestampSchema.nullable(),

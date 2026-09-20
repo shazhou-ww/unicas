@@ -73,10 +73,10 @@ Only one external issuer is active at a time. The old issuer stops resolving
 at commit; previously cached authority is refreshed after 30 seconds and fails
 closed at the 60-second hard stale bound if the registry is unavailable.
 There is no token-lifetime-long overlap. Coordinate downstream token issuance
-and discovery refresh with that cutover. The managed issuer is independent
-and remains unchanged. Rollback is another inspection/proof/conditional
-replacement of the previous issuer, not a direct database edit or candidate
-reuse. No live domain or frozen legacy deployment is changed automatically.
+and discovery refresh with that cutover. Rollback is another
+inspection/proof/conditional replacement of the previous issuer, not a direct
+database edit or candidate reuse. No live domain or frozen legacy deployment
+is changed automatically.
 
 ## Frozen UniDocs v1 migration status (2026-09-08)
 

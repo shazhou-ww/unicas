@@ -266,7 +266,6 @@ class MockAdminService {
     }
     const appIssuer = {
       appId: APP,
-      mode: "external",
       issuer: "https://issuer.example/oauth",
       audience: `https://cas.example/stacks/${APP}`,
       metadataUrl: "https://cas.example/metadata",

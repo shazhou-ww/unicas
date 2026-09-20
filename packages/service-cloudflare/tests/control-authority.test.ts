@@ -111,18 +111,10 @@ describe("AppAuthorityRepository", () => {
     });
   });
 
-  test.each(["external", "managed"])("tracks suspension and restoration for %s issuers", async (mode) => {
+  test("tracks suspension and restoration for external issuers", async () => {
     const legacy = await createRepository();
-    const issuer = `https://${mode}.example`;
+    const issuer = "https://external.example";
     await db!.batch(oauthIssuerInserts([{ stackId: "cas_status", issuer }]));
-    if (mode === "managed") {
-      await db!.batch([
-        db!.prepare(
-          "INSERT INTO cas_app_managed_issuers (app_id, issuer, audience, metadata_url, authorization_endpoint, token_endpoint, jwks_uri, status, verified_at, jwks_digest, capability_max_lifetime_seconds) SELECT app_id, issuer, audience, metadata_url, authorization_endpoint, token_endpoint, jwks_uri, status, 0, jwks_digest, capability_max_lifetime_seconds FROM cas_app_oauth_issuers WHERE app_id = 'cas_status'",
-        ),
-        db!.prepare("UPDATE cas_app_oauth_issuers SET status = 'disabled' WHERE app_id = 'cas_status'"),
-      ]);
-    }
     const repository = new AppAuthorityRepository(db!);
     await expect(repository.resolveIssuer(issuer)).resolves.toMatchObject({ appStatus: "active" });
     await db!.prepare("UPDATE cas_apps SET status = 'suspended' WHERE app_id = 'cas_status'").run();

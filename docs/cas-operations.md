@@ -14,7 +14,7 @@ Runbooks, SLOs, and alerting for the independently deployed CAS middleware
 
 Secrets live only as Worker secrets (Google, Microsoft, and GitHub client secrets,
 `SESSION_ENCRYPTION_KEYS`, `OAUTH_STATE_ENCRYPTION_KEY`,
-`CAS_AUDIT_READER_KEY`, managed issuer private keys) — never
+`CAS_AUDIT_READER_KEY`) — never
 in vars or source. Deployment credentials are supplied through
 `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN`; see
 [Deployment and local configuration](deployment-and-local-configuration.md).
@@ -251,18 +251,17 @@ with `412 REVISION_MISMATCH`. Actual transitions append `app.suspended` or
 
 Suspension rejects reads, metadata reads, leases, Root Ref reads/updates,
 usage, and GC with `403 APP_SUSPENDED` once the verifier observes the change.
-External and managed capabilities issued before suspension are both covered.
+Capabilities issued before suspension are covered.
 Issuer authority refreshes after 30 seconds and fails closed at 60 seconds
 since its last successful read if registry refresh fails. Failure must never
 preserve old access beyond that hard bound; requests then fail with registry
 unavailability until current state can be read. An in-flight operation already
 authorized before the boundary is not rolled back.
 
-Protected-resource metadata and managed issuer metadata/JWKS are served only
-for active Apps; suspended Apps return an unavailable-issuer response. Prior
-positive discovery responses may remain cached for at most their 60-second
-max-age, but do not override capability verification. Managed Space capability
-issuance rejects suspended Apps immediately on its authoritative App read.
+Protected-resource metadata is served only for active Apps; suspended Apps
+return an unavailable-issuer response. Prior positive discovery responses may
+remain cached for at most their 60-second max-age, but do not override
+capability verification.
 
 App administrator reads and recovery mutations remain available, including
 metadata repair, membership and invitation administration, issuer repair,
@@ -331,9 +330,8 @@ node stacks/unicas/deploy/reset-smoke.mjs `
 
 This is a physical pre-cutover tool: its Stack/Tenant flags and output match the
 current D1/R2 schema and are not v2 aliases. The command refuses inventories
-containing another physical partition in any scoped control or data table, an
-unexpected object-key shape, or a managed issuer not bound to
-`api.unicas.work`. The rendered D1 commands drop the legacy physical tables;
+containing another physical partition in any scoped control or data table or
+an unexpected object-key shape. The rendered D1 commands drop the legacy physical tables;
 they do not merely delete rows, because retained `stack_id`/`tenant_id` columns
 would block the new Worker from creating the clean App/Space schema.
 

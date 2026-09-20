@@ -10,7 +10,7 @@ workflows, and documentation by origin:
 | Origin | Audience | Owned surface |
 | --- | --- | --- |
 | `https://unicas.work` | Developers and evaluators | Product overview, quick start, and links to source, console, and docs |
-| `https://api.unicas.work` | Services, SDKs, CLIs, and agents | App/Space data API, managed issuers, OAuth/MCP, discovery, and health |
+| `https://api.unicas.work` | Services, SDKs, CLIs, and agents | App/Space data API, OAuth/MCP, discovery, and health |
 | `https://console.unicas.work` | App administrators and Platform Admins | Administrator WebUI, BFF, invitations, Platform Administration, and CLI login |
 | `https://docs.unicas.work` | Developers and operators | Product, protocol, deployment, and operations documentation |
 
@@ -33,8 +33,8 @@ MCP_PUBLIC_ORIGIN=https://api.unicas.work
 ADMIN_PUBLIC_ORIGIN=https://console.unicas.work
 ```
 
-- App audiences, Space routes, protected-resource metadata, and managed
-  issuers use `CAS_PUBLIC_ORIGIN`.
+- App audiences, Space routes, and protected-resource metadata use
+  `CAS_PUBLIC_ORIGIN`.
 - MCP resource metadata, OAuth endpoints, consent forms, and token audiences
   use `MCP_PUBLIC_ORIGIN`.
 - Administrator callbacks, invitations, sessions, CSRF checks, and CLI login
@@ -50,7 +50,7 @@ this host/path matrix:
 
 | Host | Allowed paths |
 | --- | --- |
-| `api.unicas.work` | `/health`, `/.well-known/*`, `/v2/apps/*`, `/managed-issuers/*`, `/mcp`, `/oauth/*` |
+| `api.unicas.work` | `/health`, `/.well-known/*`, `/v2/apps/*`, `/mcp`, `/oauth/*` |
 | `console.unicas.work` | `/`, `/admin/*` |
 
 Wrong-host requests fail closed. Do not rely on redirects for

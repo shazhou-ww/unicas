@@ -78,8 +78,7 @@ unicas app-oauth-issuer activate <appId> <inspectionId> --activation-proof <jws>
 ```
 
 Session commands are `unicas login`, `unicas logout`, and `unicas status`.
-Run `unicas mcp` to expose the complete App catalog over stdio, including
-Playground and managed Space capability operations that have no plain command.
+Run `unicas mcp` to expose the complete App catalog over stdio.
 
 The old `whoami`, `stacks`, `members`, `oauth-issuer`, `ref-domains`, and
 `audit` commands are frozen v1 compatibility surfaces. Use them only when the

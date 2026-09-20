@@ -815,7 +815,6 @@ export class AccountService {
     }
     const issuer: AccountOAuthIssuerRecord = {
       ...inspection,
-      mode: "external",
       status: "active",
       verifiedAt: now,
       lastRefreshAt: now,

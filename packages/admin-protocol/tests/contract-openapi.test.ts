@@ -121,7 +121,6 @@ describe("CAS admin schemas", () => {
   test("defines issuer and audit resources for the complete App contract", () => {
     const issuer: AppOAuthIssuer = {
       appId: "app-1",
-      mode: "managed",
       issuer: "https://issuer.example",
       audience: "https://api.unicas.work/v2/apps/app-1",
       metadataUrl: "https://issuer.example/.well-known/oauth-authorization-server",
@@ -193,7 +192,6 @@ describe("App admin OpenAPI", () => {
     const serialized = JSON.stringify(document);
     expect(Object.keys(document.paths ?? {})).toHaveLength(26);
     expect(allOperations).toHaveLength(34);
-    expect(Object.keys(document.paths ?? {}).some(path => path.includes("/playground/"))).toBe(false);
     expect(document.paths?.["/admin/account"]?.get?.operationId).toBe("getCurrentAccount");
     expect(document.paths?.["/admin/account/profile"]?.patch?.operationId).toBe("patchCurrentAccountProfile");
     expect(document.paths?.["/admin/account/identities"]?.get?.operationId).toBe("listCurrentAccountIdentities");
@@ -231,7 +229,6 @@ describe("App admin OpenAPI", () => {
     const activate = document.paths?.["/admin/apps/{appId}/oauth-issuer"]?.put;
     expect(activate?.responses?.["204"]).toHaveProperty("headers.ETag.required", true);
     expect(activate?.responses?.["204"]).not.toHaveProperty("content");
-    expect(document.paths?.["/admin/apps/{appId}/managed-issuer"]).toBeUndefined();
     expect(document.paths?.["/admin/apps/{appId}/managed-capabilities"]).toBeUndefined();
     expect(serialized).not.toMatch(/stackId|tenantId|Stack|Tenant/);
   });

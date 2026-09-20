@@ -367,7 +367,7 @@ describe("adapter-hosted control-plane MCP server", () => {
     })).structuredContent).toEqual({ etag: '"2"' });
   });
 
-  test("serves Account-keyed App memberships without retired Playground tools", async () => {
+  test("serves Account-keyed App memberships", async () => {
     const accountService = new AccountService(new D1AccountRepository(db), () => 1000);
     const aliceAccount = await accountService.createForExternalIdentity({
       provider: "google",
@@ -436,12 +436,6 @@ describe("adapter-hosted control-plane MCP server", () => {
     })).structuredContent).toEqual({ ok: true });
     expect((await callTool(aliceHandler, "list_app_members", { appId, limit: 10 })).structuredContent)
       .toMatchObject({ items: [{ account: { accountId: aliceAccount.account.accountId } }] });
-    expect(APP_ADMIN_MCP_TOOL_LIST.map(tool => tool.name)).not.toEqual(expect.arrayContaining([
-      "list_app_playground_file_roots",
-      "create_app_playground_file_root",
-      "update_app_playground_file_root",
-      "delete_app_playground_file_root",
-    ]));
   });
 
   test("maps physical audit dimensions to App and Space MCP output", async () => {

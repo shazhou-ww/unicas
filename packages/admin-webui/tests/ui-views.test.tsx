@@ -242,7 +242,6 @@ describe("PlatformAuditView", () => {
 function externalIssuer() {
   return {
     appId: STACK,
-    mode: "external",
     issuer: "https://issuer.example",
     audience: `https://cas.example/stacks/${STACK}`,
     metadataUrl: "https://cas.example/metadata",
