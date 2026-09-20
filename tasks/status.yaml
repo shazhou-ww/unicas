@@ -61,9 +61,9 @@ tasks:
     createdAt: "2026-09-15T14:26:52Z"
     updatedAt: "2026-09-19T05:12:49Z"
   replace-playground-with-reference-app:
-    state: backlog
+    state: abandoned
     createdAt: "2026-09-17T04:40:22Z"
-    updatedAt: "2026-09-19T05:12:49Z"
+    updatedAt: "2026-09-20T02:29:31Z"
   resolve-console-ux-audit-findings:
     state: ongoing
     createdAt: "2026-09-20T01:51:55Z"
