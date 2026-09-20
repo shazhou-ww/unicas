@@ -30,8 +30,16 @@ external application.
 
 - Choose and review the repository, package, and deployment boundary for a
   separately deployed first-party file upload smoke App.
+- Build the App as a Cloudflare full-stack service deployed at
+  `spaces.unicas.work`, with a responsive user interface that follows the
+  existing UniCAS Console visual language without importing administrator UI
+  workflows or data-plane credentials.
 - Give the App ownership of its OAuth issuer, end-user or smoke principal,
   Principal-to-Space mapping, capability issuance, and file-root catalog.
+- Design authentication around provider-neutral external identities for
+  Google, Microsoft, and GitHub. Implement Google sign-in for the MVP and keep
+  Microsoft and GitHub unavailable until their reviewed integrations are
+  implemented; do not expose either as an enabled login path.
 - Use only documented public UniCAS packages and App/Space HTTP routes. Do not
   import service implementation modules, use administrator sessions as data
   credentials, access UniCAS D1/R2 bindings, or add a privileged smoke-only
@@ -77,6 +85,13 @@ external application.
 - [ ] The reviewed architecture places the App in an independently deployable
       boundary and mechanically prevents private UniCAS implementation imports
       or direct storage bindings.
+- [ ] `spaces.unicas.work` serves the independently deployed Cloudflare App,
+  and its responsive shell and interaction styling are consistent with the
+  current Console without importing administrator workflows.
+- [ ] The authentication model can bind Google, Microsoft, and GitHub external
+  identities to an App Principal without provider-derived Space identity;
+  the MVP implements and validates Google while leaving the other providers
+  unavailable rather than presenting non-functional login paths.
 - [ ] A dedicated external OAuth issuer authenticates the smoke principal and
       issues least-privileged, Space-scoped capabilities without a UniCAS admin
       session or managed issuer.
