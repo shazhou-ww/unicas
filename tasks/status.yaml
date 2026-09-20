@@ -1,4 +1,4 @@
-version: 1
+version: 2
 tasks:
   add-platform-access-management:
     state: completed

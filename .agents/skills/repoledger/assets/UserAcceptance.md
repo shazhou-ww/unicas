@@ -13,8 +13,8 @@ State the user-visible behavior or decision this guide validates.
 
 ## Test target
 
-- Published implementation: `<remote>/<primary-branch>` and release, build, or
-  deployment identifier when applicable.
+- Published implementation: `<primary-repository>#<primary-branch>` and
+  release, build, or deployment identifier when applicable.
 - Environment or entry point: Exact location the user should open or operate.
 
 Use a file-relative link for any target stored in this task directory.

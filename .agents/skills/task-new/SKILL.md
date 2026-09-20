@@ -7,7 +7,7 @@ user-invocable: true
 
 # New Repository Task
 
-Load `repository-task-ledger`, repository instructions, and the repository task
+Load `repoledger`, repository instructions, and the repository task
 profile. If the core is unavailable, stop without changing task state.
 
 1. Require explicit `task-new` invocation. Never invoke it because work looks

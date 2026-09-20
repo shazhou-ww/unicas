@@ -13,23 +13,23 @@
       "skillPath": ".github/skills/publish/SKILL.md",
       "computedHash": "6f8a76bfdfed46d502b3119b3557be2eb7221d84e46f18bdd309519db3c239a1"
     },
-    "repository-task-ledger": {
+    "repoledger": {
       "source": "shazhou-ww/skills",
       "sourceType": "github",
-      "skillPath": "skills/repository-task-ledger/SKILL.md",
-      "computedHash": "083658a6f1671547221c749eadd522f32e75a256da1bb7350ee5ac24cc6a4703"
+      "skillPath": "skills/repoledger/SKILL.md",
+      "computedHash": "eb14529a04a694a435e25e30cf88f15da0364854d474f84fba2b302979b57088"
     },
     "task-exec": {
       "source": "shazhou-ww/skills",
       "sourceType": "github",
       "skillPath": "skills/task-exec/SKILL.md",
-      "computedHash": "f29cd438be807880b7f5b2fbe34c9e10032278977aaf578b38aa00807c5cde94"
+      "computedHash": "551dc3435cd24416c4324a376dcbd30c5a3af288194b87d9dc0e3fb7be77fc18"
     },
     "task-new": {
       "source": "shazhou-ww/skills",
       "sourceType": "github",
       "skillPath": "skills/task-new/SKILL.md",
-      "computedHash": "733c20e6c5ca1138e83751290c240329cb26288964223e26b296941da511d4a2"
+      "computedHash": "fc4a618ae2dd53b2b83437da50bb1d9670f980ca15319b13ba726bd65d52d2b7"
     },
     "ui-change-review": {
       "source": "shazhou-ww/skills",

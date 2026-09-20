@@ -1,4 +1,4 @@
-version: 1
+version: 2
 tasksDirectory: tasks
-remote: origin
+primaryRepository: https://github.com/shazhou-ww/unicas.git
 primaryBranch: main
