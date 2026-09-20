@@ -1213,6 +1213,7 @@
     }
 
     @media (max-width: 900px) {
+
       .review-header,
       .decision,
       .scenario-heading {
@@ -1239,6 +1240,7 @@
     }
 
     @media (max-width: 540px) {
+
       .review-header,
       main,
       .review-footer {
@@ -1289,6 +1291,7 @@
     }
 
     @media (prefers-reduced-motion: reduce) {
+
       *,
       *::before,
       *::after {
@@ -1349,8 +1352,7 @@
       </div>
     </div>
 
-    <section class="scenario" id="scenario-entry" role="tabpanel" aria-labelledby="tab-entry"
-      data-scenario="entry">
+    <section class="scenario" id="scenario-entry" role="tabpanel" aria-labelledby="tab-entry" data-scenario="entry">
       <header class="scenario-heading">
         <div>
           <h2>Authentication entry</h2>
@@ -1364,7 +1366,8 @@
       </header>
       <div class="comparison-grid">
         <article class="compare-frame before" aria-labelledby="entry-before-title">
-          <header class="frame-heading"><span class="phase">Before</span><strong id="entry-before-title">Loose controls on the grid</strong></header>
+          <header class="frame-heading"><span class="phase">Before</span><strong id="entry-before-title">Loose controls
+              on the grid</strong></header>
           <div class="mock-viewport">
             <div class="auth-before-brand"><span class="brand-mark">U</span><span>UniCAS</span></div>
             <div class="auth-stage">
@@ -1383,7 +1386,8 @@
         </article>
 
         <article class="compare-frame after" aria-labelledby="entry-after-title">
-          <header class="frame-heading"><span class="phase">After</span><strong id="entry-after-title">One trusted authentication surface</strong></header>
+          <header class="frame-heading"><span class="phase">After</span><strong id="entry-after-title">One trusted
+              authentication surface</strong></header>
           <div class="mock-viewport">
             <div class="auth-stage">
               <section class="auth-card" aria-label="Proposed sign-in illustration">
@@ -1392,11 +1396,15 @@
                 <h3>Sign in to UniCAS</h3>
                 <p>Choose a login method configured for this environment.</p>
                 <div class="provider-stack">
-                  <button class="provider-button" type="button"><span class="provider-mark">G</span>Continue with Google</button>
-                  <button class="provider-button" type="button"><span class="provider-mark">M</span>Continue with Microsoft</button>
-                  <button class="provider-button" type="button"><span class="provider-mark">GH</span>Continue with GitHub</button>
+                  <button class="provider-button" type="button"><span class="provider-mark">G</span>Continue with
+                    Google</button>
+                  <button class="provider-button" type="button"><span class="provider-mark">M</span>Continue with
+                    Microsoft</button>
+                  <button class="provider-button" type="button"><span class="provider-mark">GH</span>Continue with
+                    GitHub</button>
                 </div>
-                <p class="auth-note">Access is checked after authentication. No provider credential is shared with UniCAS.</p>
+                <p class="auth-note">Access is checked after authentication. No provider credential is shared with
+                  UniCAS.</p>
               </section>
             </div>
           </div>
@@ -1419,21 +1427,27 @@
       </header>
       <div class="comparison-grid">
         <article class="compare-frame before" aria-labelledby="loading-before-title">
-          <header class="frame-heading"><span class="phase">Before</span><strong id="loading-before-title">Spinner inherits the page corner</strong></header>
+          <header class="frame-heading"><span class="phase">Before</span><strong id="loading-before-title">Spinner
+              inherits the page corner</strong></header>
           <div class="mock-viewport loading-stage">
-            <div class="corner-loader" role="status"><span class="spinner" aria-hidden="true"></span>Loading app...</div>
+            <div class="corner-loader" role="status"><span class="spinner" aria-hidden="true"></span>Loading app...
+            </div>
           </div>
         </article>
 
         <article class="compare-frame after" aria-labelledby="loading-after-title">
-          <header class="frame-heading"><span class="phase">After</span><strong id="loading-after-title">Destination stays legible</strong></header>
+          <header class="frame-heading"><span class="phase">After</span><strong id="loading-after-title">Destination
+              stays legible</strong></header>
           <div class="mock-viewport loading-shell">
             <aside class="mini-sidebar" aria-label="Preserved navigation illustration">
               <div class="mock-brand"><span class="brand-mark">U</span><span>UniCAS</span></div>
-              <div class="nav-line"></div><div class="nav-line short"></div>
+              <div class="nav-line"></div>
+              <div class="nav-line short"></div>
             </aside>
             <section class="loading-content" aria-label="Loading App overview illustration">
-              <div class="loading-content-header"><h3 class="mock-screen-heading">Production Smoke</h3><span class="badge">Overview</span></div>
+              <div class="loading-content-header">
+                <h3 class="mock-screen-heading">Production Smoke</h3><span class="badge">Overview</span>
+              </div>
               <div class="bounded-loader">
                 <div class="status-panel" role="status">
                   <span class="spinner" aria-hidden="true"></span>
@@ -1462,40 +1476,54 @@
       </header>
       <div class="comparison-grid">
         <article class="compare-frame before" aria-labelledby="navigation-before-title">
-          <header class="frame-heading"><span class="phase">Before</span><strong id="navigation-before-title">Trigger and profile float over the flow</strong></header>
+          <header class="frame-heading"><span class="phase">Before</span><strong id="navigation-before-title">Trigger
+              and profile float over the flow</strong></header>
           <div class="mock-viewport mobile-stage">
             <section class="mobile-page" aria-label="Current mobile content illustration">
               <h3 class="mock-screen-heading">Account</h3>
-              <div class="mock-card"><h4>Login methods</h4><p class="muted">Google</p><p class="tiny muted">Current session</p></div>
+              <div class="mock-card">
+                <h4>Login methods</h4>
+                <p class="muted">Google</p>
+                <p class="tiny muted">Current session</p>
+              </div>
               <span class="covered-line" aria-hidden="true"></span>
               <button class="floating-trigger" type="button" aria-label="Current navigation trigger">Menu</button>
             </section>
             <aside class="mobile-drawer" aria-label="Current mobile drawer illustration">
               <div class="mock-brand"><span class="brand-mark">U</span><span>UniCAS</span></div>
               <div class="drawer-apps">
-                <div class="drawer-label"><span>Apps</span><button class="tiny-button" type="button" aria-label="Current Create App">+</button></div>
+                <div class="drawer-label"><span>Apps</span><button class="tiny-button" type="button"
+                    aria-label="Current Create App">+</button></div>
                 <div class="drawer-item"><span class="app-mark">PR</span><strong>Production Smoke</strong></div>
               </div>
-              <div class="drawer-profile"><span class="avatar">AM</span><span><strong>Alex Morgan</strong><br><span class="tiny muted">1 App membership</span></span></div>
+              <div class="drawer-profile"><span class="avatar">AM</span><span><strong>Alex Morgan</strong><br><span
+                    class="tiny muted">1 App membership</span></span></div>
             </aside>
           </div>
         </article>
 
         <article class="compare-frame after" aria-labelledby="navigation-after-title">
-          <header class="frame-heading"><span class="phase">After</span><strong id="navigation-after-title">Safe trigger, anchored identity</strong></header>
+          <header class="frame-heading"><span class="phase">After</span><strong id="navigation-after-title">Safe
+              trigger, anchored identity</strong></header>
           <div class="mock-viewport mobile-stage">
             <section class="mobile-page" aria-label="Proposed mobile content illustration">
               <h3 class="mock-screen-heading">Account</h3>
-              <div class="mock-card"><h4>Login methods</h4><p><strong>Google</strong> <span class="badge success">Current session</span></p><p class="tiny muted">Last used today at 10:42</p></div>
+              <div class="mock-card">
+                <h4>Login methods</h4>
+                <p><strong>Google</strong> <span class="badge success">Current session</span></p>
+                <p class="tiny muted">Last used today at 10:42</p>
+              </div>
               <button class="floating-trigger touch-target" type="button" aria-label="Open navigation">Menu</button>
             </section>
             <aside class="mobile-drawer" aria-label="Proposed mobile drawer illustration">
               <div class="mock-brand"><span class="brand-mark">U</span><span>UniCAS</span></div>
               <div class="drawer-apps">
-                <div class="drawer-label"><span>Apps</span><button class="mock-button small touch-target" type="button">Create App</button></div>
+                <div class="drawer-label"><span>Apps</span><button class="mock-button small touch-target"
+                    type="button">Create App</button></div>
                 <div class="drawer-item"><span class="app-mark">PR</span><strong>Production Smoke</strong></div>
               </div>
-              <div class="drawer-profile"><span class="avatar">AM</span><span><strong>Alex Morgan</strong><br><span class="tiny muted">Administration</span></span></div>
+              <div class="drawer-profile"><span class="avatar">AM</span><span><strong>Alex Morgan</strong><br><span
+                    class="tiny muted">Administration</span></span></div>
             </aside>
           </div>
         </article>
@@ -1517,38 +1545,107 @@
           </ul>
           <div class="record-switch" role="group" aria-label="Record type" style="margin-top: 10px; float: right;">
             <button class="record-button" type="button" aria-pressed="true" data-record-target="people">People</button>
-            <button class="record-button" type="button" aria-pressed="false" data-record-target="audit">Change Logs</button>
+            <button class="record-button" type="button" aria-pressed="false" data-record-target="audit">Change
+              Logs</button>
           </div>
         </div>
       </header>
       <div class="comparison-grid">
         <article class="compare-frame before" aria-labelledby="records-before-title">
-          <header class="frame-heading"><span class="phase">Before</span><strong id="records-before-title">Wide table inside a narrow viewport</strong></header>
+          <header class="frame-heading"><span class="phase">Before</span><strong id="records-before-title">Wide table
+              inside a narrow viewport</strong></header>
           <div class="mock-viewport record-stage">
             <div class="record-view" data-record-view="people">
-              <div class="mock-header-row"><h3 class="mock-screen-heading">Administration</h3><span class="badge">Members</span></div>
+              <div class="mock-header-row">
+                <h3 class="mock-screen-heading">Administration</h3><span class="badge">Members</span>
+              </div>
               <div class="toolbar">
-                <label class="mock-label search-field">Search<input class="mock-input" value="" placeholder="Search people"></label>
-                <label class="mock-label">Queue<select class="mock-select"><option>Current</option></select></label>
-                <label class="mock-label">Authority<select class="mock-select"><option>All authorities</option></select></label>
-                <div class="toolbar-actions wrap-break"><button class="icon-button" type="button" aria-label="Refresh people">Reload</button><button class="mock-button primary" type="button">Invite</button></div>
+                <label class="mock-label search-field">Search<input class="mock-input" value=""
+                    placeholder="Search people"></label>
+                <label class="mock-label">Queue<select class="mock-select">
+                    <option>Current</option>
+                  </select></label>
+                <label class="mock-label">Authority<select class="mock-select">
+                    <option>All authorities</option>
+                  </select></label>
+                <div class="toolbar-actions wrap-break"><button class="icon-button" type="button"
+                    aria-label="Refresh people">Reload</button><button class="mock-button primary"
+                    type="button">Invite</button></div>
               </div>
               <div class="wide-table-clip" aria-label="Current people table crop">
-                <table class="wide-table"><thead><tr><th>Account / Email</th><th>Status</th><th>Authorities</th><th>Apps</th><th>Created</th><th>Actions</th></tr></thead><tbody>
-                  <tr><td><strong>Alex Morgan</strong><br><span class="mono muted">acct_01HX8Q7...</span></td><td>active</td><td>platform.admin<br>apps.create</td><td>3</td><td>9/19/2026</td><td>Open</td></tr>
-                  <tr><td><strong>Riley Chen</strong><br><span class="mono muted">acct_01HX9K2...</span></td><td>active</td><td>apps.create</td><td>1</td><td>9/18/2026</td><td>Open</td></tr>
-                </tbody></table>
+                <table class="wide-table">
+                  <thead>
+                    <tr>
+                      <th>Account / Email</th>
+                      <th>Status</th>
+                      <th>Authorities</th>
+                      <th>Apps</th>
+                      <th>Created</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>Alex Morgan</strong><br><span class="mono muted">acct_01HX8Q7...</span></td>
+                      <td>active</td>
+                      <td>platform.admin<br>apps.create</td>
+                      <td>3</td>
+                      <td>9/19/2026</td>
+                      <td>Open</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Riley Chen</strong><br><span class="mono muted">acct_01HX9K2...</span></td>
+                      <td>active</td>
+                      <td>apps.create</td>
+                      <td>1</td>
+                      <td>9/18/2026</td>
+                      <td>Open</td>
+                    </tr>
+                  </tbody>
+                </table>
                 <div class="fake-scrollbar" aria-label="Horizontal scrollbar appears after the result set"></div>
               </div>
             </div>
             <div class="record-view" data-record-view="audit" hidden>
-              <div class="mock-header-row"><h3 class="mock-screen-heading">Change Logs</h3><span class="badge">12 events</span></div>
-              <div class="toolbar"><label class="mock-label search-field">Action<select class="mock-select"><option>All actions</option></select></label><label class="mock-label">Actor ID<input class="mock-input"></label><div class="toolbar-actions"><button class="mock-button primary" type="button">Apply</button></div></div>
+              <div class="mock-header-row">
+                <h3 class="mock-screen-heading">Change Logs</h3><span class="badge">12 events</span>
+              </div>
+              <div class="toolbar"><label class="mock-label search-field">Action<select class="mock-select">
+                    <option>All actions</option>
+                  </select></label><label class="mock-label">Actor ID<input class="mock-input"></label>
+                <div class="toolbar-actions"><button class="mock-button primary" type="button">Apply</button></div>
+              </div>
               <div class="wide-table-clip" aria-label="Current audit table crop">
-                <table class="wide-table"><thead><tr><th>Time</th><th>Action</th><th>Actor</th><th>Target</th><th>Result</th><th>Request</th></tr></thead><tbody>
-                  <tr><td>9/19/2026, 9:38 PM</td><td class="mono">platform_access.restored</td><td>Alex Morgan<br><span class="mono muted">acct_01HX8Q7...</span></td><td class="mono">acct_01HX9K2...</td><td>succeeded</td><td>-</td></tr>
-                  <tr><td>9/19/2026, 9:37 PM</td><td class="mono">platform_access.blocked</td><td>Alex Morgan</td><td class="mono">acct_01HX9K2...</td><td>succeeded</td><td>-</td></tr>
-                </tbody></table>
+                <table class="wide-table">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Action</th>
+                      <th>Actor</th>
+                      <th>Target</th>
+                      <th>Result</th>
+                      <th>Request</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>9/19/2026, 9:38 PM</td>
+                      <td class="mono">platform_access.restored</td>
+                      <td>Alex Morgan<br><span class="mono muted">acct_01HX8Q7...</span></td>
+                      <td class="mono">acct_01HX9K2...</td>
+                      <td>succeeded</td>
+                      <td>-</td>
+                    </tr>
+                    <tr>
+                      <td>9/19/2026, 9:37 PM</td>
+                      <td class="mono">platform_access.blocked</td>
+                      <td>Alex Morgan</td>
+                      <td class="mono">acct_01HX9K2...</td>
+                      <td>succeeded</td>
+                      <td>-</td>
+                    </tr>
+                  </tbody>
+                </table>
                 <div class="fake-scrollbar" aria-label="Horizontal scrollbar appears after the result set"></div>
               </div>
             </div>
@@ -1556,35 +1653,148 @@
         </article>
 
         <article class="compare-frame after" aria-labelledby="records-after-title">
-          <header class="frame-heading"><span class="phase">After</span><strong id="records-after-title">Desktop table, mobile record summaries</strong></header>
+          <header class="frame-heading"><span class="phase">After</span><strong id="records-after-title">Desktop table,
+              mobile record summaries</strong></header>
           <div class="mock-viewport record-stage">
             <div class="record-view" data-record-view="people">
-              <div class="mock-header-row"><h3 class="mock-screen-heading">Administration</h3><span class="badge">Members</span></div>
-              <div class="toolbar">
-                <label class="mock-label search-field">Search<input class="mock-input" value="" placeholder="Name, email, or Account ID"></label>
-                <label class="mock-label">Queue<select class="mock-select"><option>Accounts</option></select></label>
-                <label class="mock-label">Access<select class="mock-select"><option>All access</option></select></label>
-                <div class="toolbar-actions"><button class="icon-button" type="button" aria-label="Refresh people">Reload</button><button class="mock-button primary touch-target" type="button">Invite</button></div>
+              <div class="mock-header-row">
+                <h3 class="mock-screen-heading">Administration</h3><span class="badge">Members</span>
               </div>
-              <table class="responsive-table desktop-only"><thead><tr><th>Account</th><th>Access</th><th>Authorities</th><th>Apps</th><th>Updated</th><th>Action</th></tr></thead><tbody>
-                <tr><td><strong>Alex Morgan</strong><br><span class="mono muted">acct_01HX8Q7...</span></td><td><span class="badge success">Active</span></td><td>Platform admin, Create Apps</td><td>3</td><td>Sep 19, 9:38 PM</td><td><button class="mock-button small" type="button">View</button></td></tr>
-                <tr><td><strong>Riley Chen</strong><br><span class="mono muted">acct_01HX9K2...</span></td><td><span class="badge success">Active</span></td><td>Create Apps</td><td>1</td><td>Sep 18, 3:57 PM</td><td><button class="mock-button small" type="button">View</button></td></tr>
-              </tbody></table>
+              <div class="toolbar">
+                <label class="mock-label search-field">Search<input class="mock-input" value=""
+                    placeholder="Name, email, or Account ID"></label>
+                <label class="mock-label">Queue<select class="mock-select">
+                    <option>Accounts</option>
+                  </select></label>
+                <label class="mock-label">Access<select class="mock-select">
+                    <option>All access</option>
+                  </select></label>
+                <div class="toolbar-actions"><button class="icon-button" type="button"
+                    aria-label="Refresh people">Reload</button><button class="mock-button primary touch-target"
+                    type="button">Invite</button></div>
+              </div>
+              <table class="responsive-table desktop-only">
+                <thead>
+                  <tr>
+                    <th>Account</th>
+                    <th>Access</th>
+                    <th>Authorities</th>
+                    <th>Apps</th>
+                    <th>Updated</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>Alex Morgan</strong><br><span class="mono muted">acct_01HX8Q7...</span></td>
+                    <td><span class="badge success">Active</span></td>
+                    <td>Platform admin, Create Apps</td>
+                    <td>3</td>
+                    <td>Sep 19, 9:38 PM</td>
+                    <td><button class="mock-button small" type="button">View</button></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Riley Chen</strong><br><span class="mono muted">acct_01HX9K2...</span></td>
+                    <td><span class="badge success">Active</span></td>
+                    <td>Create Apps</td>
+                    <td>1</td>
+                    <td>Sep 18, 3:57 PM</td>
+                    <td><button class="mock-button small" type="button">View</button></td>
+                  </tr>
+                </tbody>
+              </table>
               <div class="record-cards mobile-only">
-                <article class="record-card"><div class="card-topline"><strong>Alex Morgan</strong><span class="badge success">Active</span></div><div class="mono muted">acct_01HX8Q7...</div><dl><dt>Authorities</dt><dd>Platform admin, Create Apps</dd><dt>Apps</dt><dd>3</dd><dt>Updated</dt><dd>Sep 19, 9:38 PM</dd></dl><button class="mock-button touch-target" type="button">View account</button></article>
-                <article class="record-card"><div class="card-topline"><strong>Riley Chen</strong><span class="badge success">Active</span></div><div class="mono muted">acct_01HX9K2...</div><dl><dt>Authorities</dt><dd>Create Apps</dd><dt>Apps</dt><dd>1</dd></dl><button class="mock-button touch-target" type="button">View account</button></article>
+                <article class="record-card">
+                  <div class="card-topline"><strong>Alex Morgan</strong><span class="badge success">Active</span></div>
+                  <div class="mono muted">acct_01HX8Q7...</div>
+                  <dl>
+                    <dt>Authorities</dt>
+                    <dd>Platform admin, Create Apps</dd>
+                    <dt>Apps</dt>
+                    <dd>3</dd>
+                    <dt>Updated</dt>
+                    <dd>Sep 19, 9:38 PM</dd>
+                  </dl><button class="mock-button touch-target" type="button">View account</button>
+                </article>
+                <article class="record-card">
+                  <div class="card-topline"><strong>Riley Chen</strong><span class="badge success">Active</span></div>
+                  <div class="mono muted">acct_01HX9K2...</div>
+                  <dl>
+                    <dt>Authorities</dt>
+                    <dd>Create Apps</dd>
+                    <dt>Apps</dt>
+                    <dd>1</dd>
+                  </dl><button class="mock-button touch-target" type="button">View account</button>
+                </article>
               </div>
             </div>
             <div class="record-view" data-record-view="audit" hidden>
-              <div class="mock-header-row"><h3 class="mock-screen-heading">Change Logs</h3><span class="badge">12 events</span></div>
-              <div class="toolbar"><label class="mock-label search-field">Action<select class="mock-select"><option>All actions</option></select></label><label class="mock-label">Actor ID<input class="mock-input" placeholder="acct_..."></label><div class="toolbar-actions"><button class="mock-button primary" type="button">Apply filters</button></div></div>
-              <table class="responsive-table desktop-only"><thead><tr><th>Time</th><th>Change</th><th>Actor</th><th>Target</th><th>Result</th><th>Details</th></tr></thead><tbody>
-                <tr><td>Sep 19, 9:38 PM</td><td><strong>Access restored</strong><br><span class="mono muted">platform_access.restored</span></td><td>Alex Morgan</td><td class="mono">acct_01HX9K2...</td><td><span class="badge success">Succeeded</span></td><td><button class="mock-button small" type="button">View</button></td></tr>
-                <tr><td>Sep 19, 9:37 PM</td><td><strong>Access blocked</strong><br><span class="mono muted">platform_access.blocked</span></td><td>Alex Morgan</td><td class="mono">acct_01HX9K2...</td><td><span class="badge success">Succeeded</span></td><td><button class="mock-button small" type="button">View</button></td></tr>
-              </tbody></table>
+              <div class="mock-header-row">
+                <h3 class="mock-screen-heading">Change Logs</h3><span class="badge">12 events</span>
+              </div>
+              <div class="toolbar"><label class="mock-label search-field">Action<select class="mock-select">
+                    <option>All actions</option>
+                  </select></label><label class="mock-label">Actor ID<input class="mock-input"
+                    placeholder="acct_..."></label>
+                <div class="toolbar-actions"><button class="mock-button primary" type="button">Apply filters</button>
+                </div>
+              </div>
+              <table class="responsive-table desktop-only">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Change</th>
+                    <th>Actor</th>
+                    <th>Target</th>
+                    <th>Result</th>
+                    <th>Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Sep 19, 9:38 PM</td>
+                    <td><strong>Access restored</strong><br><span class="mono muted">platform_access.restored</span>
+                    </td>
+                    <td>Alex Morgan</td>
+                    <td class="mono">acct_01HX9K2...</td>
+                    <td><span class="badge success">Succeeded</span></td>
+                    <td><button class="mock-button small" type="button">View</button></td>
+                  </tr>
+                  <tr>
+                    <td>Sep 19, 9:37 PM</td>
+                    <td><strong>Access blocked</strong><br><span class="mono muted">platform_access.blocked</span></td>
+                    <td>Alex Morgan</td>
+                    <td class="mono">acct_01HX9K2...</td>
+                    <td><span class="badge success">Succeeded</span></td>
+                    <td><button class="mock-button small" type="button">View</button></td>
+                  </tr>
+                </tbody>
+              </table>
               <div class="record-cards mobile-only">
-                <article class="record-card"><div class="card-topline"><strong>Access restored</strong><span class="badge success">Succeeded</span></div><div class="tiny muted">Sep 19, 9:38 PM</div><dl><dt>Actor</dt><dd>Alex Morgan</dd><dt>Target</dt><dd class="mono">acct_01HX9K2...</dd><dt>Event</dt><dd class="mono">platform_access.restored</dd></dl><button class="mock-button touch-target" type="button">View event details</button></article>
-                <article class="record-card"><div class="card-topline"><strong>Access blocked</strong><span class="badge success">Succeeded</span></div><div class="tiny muted">Sep 19, 9:37 PM</div><dl><dt>Actor</dt><dd>Alex Morgan</dd><dt>Target</dt><dd class="mono">acct_01HX9K2...</dd></dl><button class="mock-button touch-target" type="button">View event details</button></article>
+                <article class="record-card">
+                  <div class="card-topline"><strong>Access restored</strong><span class="badge success">Succeeded</span>
+                  </div>
+                  <div class="tiny muted">Sep 19, 9:38 PM</div>
+                  <dl>
+                    <dt>Actor</dt>
+                    <dd>Alex Morgan</dd>
+                    <dt>Target</dt>
+                    <dd class="mono">acct_01HX9K2...</dd>
+                    <dt>Event</dt>
+                    <dd class="mono">platform_access.restored</dd>
+                  </dl><button class="mock-button touch-target" type="button">View event details</button>
+                </article>
+                <article class="record-card">
+                  <div class="card-topline"><strong>Access blocked</strong><span class="badge success">Succeeded</span>
+                  </div>
+                  <div class="tiny muted">Sep 19, 9:37 PM</div>
+                  <dl>
+                    <dt>Actor</dt>
+                    <dd>Alex Morgan</dd>
+                    <dt>Target</dt>
+                    <dd class="mono">acct_01HX9K2...</dd>
+                  </dl><button class="mock-button touch-target" type="button">View event details</button>
+                </article>
               </div>
             </div>
           </div>
@@ -1592,8 +1802,8 @@
       </div>
     </section>
 
-    <section class="scenario" id="scenario-access" role="tabpanel" aria-labelledby="tab-access"
-      data-scenario="access" hidden>
+    <section class="scenario" id="scenario-access" role="tabpanel" aria-labelledby="tab-access" data-scenario="access"
+      hidden>
       <header class="scenario-heading">
         <div>
           <h2>Errors and privileged decisions</h2>
@@ -1607,20 +1817,61 @@
       </header>
       <div class="comparison-grid">
         <article class="compare-frame before" aria-labelledby="access-before-title">
-          <header class="frame-heading"><span class="phase">Before</span><strong id="access-before-title">Codes and controls without consequences</strong></header>
+          <header class="frame-heading"><span class="phase">Before</span><strong id="access-before-title">Codes and
+              controls without consequences</strong></header>
           <div class="mock-viewport access-stage">
-            <section class="access-panel"><h4>Managed issuer</h4><p>UniCAS built-in authorization server.</p><div class="raw-error" role="alert">NOT_FOUND</div><button class="mock-button" type="button" disabled>Inspect issuer</button></section>
-            <section class="access-panel"><h4>Invite App member</h4><label class="mock-label">Email constraint (optional)<input class="mock-input" type="email"></label><div class="action-row" style="margin-top: 12px; justify-content: end;"><button class="mock-button primary" type="button">Create invitation</button></div></section>
-            <section class="access-panel"><h4>Account Details</h4><p class="mono">acct_01HX9K2...</p><div class="authority-row"><span>platform.admin</span><input type="checkbox"></div><div class="authority-row"><span>apps.create</span><input type="checkbox" checked></div><p style="margin-top: 12px;">App Memberships (0)</p></section>
+            <section class="access-panel">
+              <h4>Managed issuer</h4>
+              <p>UniCAS built-in authorization server.</p>
+              <div class="raw-error" role="alert">NOT_FOUND</div><button class="mock-button" type="button"
+                disabled>Inspect issuer</button>
+            </section>
+            <section class="access-panel">
+              <h4>Invite App member</h4><label class="mock-label">Email constraint (optional)<input class="mock-input"
+                  type="email"></label>
+              <div class="action-row" style="margin-top: 12px; justify-content: end;"><button
+                  class="mock-button primary" type="button">Create invitation</button></div>
+            </section>
+            <section class="access-panel">
+              <h4>Account Details</h4>
+              <p class="mono">acct_01HX9K2...</p>
+              <div class="authority-row"><span>platform.admin</span><input type="checkbox"></div>
+              <div class="authority-row"><span>apps.create</span><input type="checkbox" checked></div>
+              <p style="margin-top: 12px;">App Memberships (0)</p>
+            </section>
           </div>
         </article>
 
         <article class="compare-frame after" aria-labelledby="access-after-title">
-          <header class="frame-heading"><span class="phase">After</span><strong id="access-after-title">Cause, effect, and next action</strong></header>
+          <header class="frame-heading"><span class="phase">After</span><strong id="access-after-title">Cause, effect,
+              and next action</strong></header>
           <div class="mock-viewport access-stage">
-            <section class="access-panel"><h4>Managed issuer unavailable</h4><div class="actionable-error" role="alert"><strong>Settings could not be loaded</strong>The issuer may not be configured, or the request failed. Retry before editing.</div><button class="mock-button" type="button">Retry</button></section>
-            <section class="access-panel"><h4>Who can accept?</h4><div class="choice-list"><label class="choice"><input type="radio" name="invite-scope" checked><span><strong>Only this email</strong><br><span class="muted">Recipient must sign in with a matching verified address.</span></span></label><label class="choice"><input type="radio" name="invite-scope"><span><strong>Anyone with the one-time link</strong><br><span class="muted">Treat the link like a credential.</span></span></label></div><button class="mock-button primary" type="button">Create invitation</button></section>
-            <section class="access-panel"><h4>Alex Morgan</h4><p class="mono">acct_01HX9K2...</p><p class="tiny">Changes apply immediately.</p><div class="authority-row"><span><strong>Platform administration</strong><br><span class="tiny muted">Manage platform access</span></span><input type="checkbox"></div><div class="authority-row"><span><strong>Create Apps</strong><br><span class="tiny muted">Register new Apps</span></span><input type="checkbox" checked></div><p style="margin-top: 12px;"><strong>No App memberships</strong><br><span class="tiny muted">This Account does not administer an App.</span></p></section>
+            <section class="access-panel">
+              <h4>Managed issuer unavailable</h4>
+              <div class="actionable-error" role="alert"><strong>Settings could not be loaded</strong>The issuer may not
+                be configured, or the request failed. Retry before editing.</div><button class="mock-button"
+                type="button">Retry</button>
+            </section>
+            <section class="access-panel">
+              <h4>Who can accept?</h4>
+              <div class="choice-list"><label class="choice"><input type="radio" name="invite-scope"
+                    checked><span><strong>Only this email</strong><br><span class="muted">Recipient must sign in with a
+                      matching verified address.</span></span></label><label class="choice"><input type="radio"
+                    name="invite-scope"><span><strong>Anyone with the one-time link</strong><br><span
+                      class="muted">Treat the link like a credential.</span></span></label></div><button
+                class="mock-button primary" type="button">Create invitation</button>
+            </section>
+            <section class="access-panel">
+              <h4>Alex Morgan</h4>
+              <p class="mono">acct_01HX9K2...</p>
+              <p class="tiny">Changes apply immediately.</p>
+              <div class="authority-row"><span><strong>Platform administration</strong><br><span
+                    class="tiny muted">Manage platform access</span></span><input type="checkbox"></div>
+              <div class="authority-row"><span><strong>Create Apps</strong><br><span class="tiny muted">Register new
+                    Apps</span></span><input type="checkbox" checked></div>
+              <p style="margin-top: 12px;"><strong>No App memberships</strong><br><span class="tiny muted">This Account
+                  does not administer an App.</span></p>
+            </section>
           </div>
         </article>
       </div>
@@ -1641,24 +1892,57 @@
       </header>
       <div class="comparison-grid">
         <article class="compare-frame before" aria-labelledby="handoff-before-title">
-          <header class="frame-heading"><span class="phase">Before</span><strong id="handoff-before-title">Competing prompts, bare callback</strong></header>
+          <header class="frame-heading"><span class="phase">Before</span><strong id="handoff-before-title">Competing
+              prompts, bare callback</strong></header>
           <div class="mock-viewport handoff-stage">
-            <section class="handoff-dialog"><h4>Connect an AI tool</h4><p>Use the server URL directly, or paste a prompt into your AI tool.</p><div class="prompt-columns"><div><strong class="tiny">Configuration prompt</strong><pre class="prompt-box">Add a remote MCP server named
+            <section class="handoff-dialog">
+              <h4>Connect an AI tool</h4>
+              <p>Use the server URL directly, or paste a prompt into your AI tool.</p>
+              <div class="prompt-columns">
+                <div><strong class="tiny">Configuration prompt</strong>
+                  <pre class="prompt-box">Add a remote MCP server named
 "UniCAS" with this URL:
-https://console.unicas.work/mcp</pre></div><div><strong class="tiny">CLI prompt</strong><pre class="prompt-box">Install the UniCAS CLI and its
+https://console.unicas.work/mcp</pre>
+                </div>
+                <div><strong class="tiny">CLI prompt</strong>
+                  <pre class="prompt-box">Install the UniCAS CLI and its
 agent skill, then operate the
 control plane with it:
 1. Install the CLI...
-2. Log in once...</pre></div></div></section>
-            <section class="callback-page bare-callback" aria-label="Current authorization result illustration"><h4>Authorization complete</h4><p>You can close this window and return to the terminal.</p></section>
+2. Log in once...</pre>
+                </div>
+              </div>
+            </section>
+            <section class="callback-page bare-callback" aria-label="Current authorization result illustration">
+              <h4>Authorization complete</h4>
+              <p>You can close this window and return to the terminal.</p>
+            </section>
           </div>
         </article>
 
         <article class="compare-frame after" aria-labelledby="handoff-after-title">
-          <header class="frame-heading"><span class="phase">After</span><strong id="handoff-after-title">Focused setup, clear completion</strong></header>
+          <header class="frame-heading"><span class="phase">After</span><strong id="handoff-after-title">Focused setup,
+              clear completion</strong></header>
           <div class="mock-viewport handoff-stage">
-            <section class="handoff-dialog"><h4>Connect an AI tool</h4><p>Choose the setup supported by your tool.</p><div class="setup-choice" aria-label="Illustrative setup choice"><button type="button">Remote MCP</button><button type="button">CLI / stdio</button></div><div class="field-row" style="margin-bottom: 10px;"><code class="mono" style="flex: 1;">https://console.unicas.work/mcp</code><button class="mock-button small" type="button">Copy URL</button></div><pre class="single-prompt">Add a remote MCP server named "UniCAS" using Streamable HTTP. Authentication opens in your browser; no API key is required.</pre><div class="action-row" style="justify-content: end; margin-top: 10px;"><button class="mock-button" type="button">Copy setup prompt</button></div></section>
-            <section class="callback-page polished" aria-label="Proposed authorization result illustration"><div class="success-mark" aria-hidden="true">OK</div><h4>Authorization complete</h4><p>UniCAS is connected. Return to your terminal or AI tool to continue.</p><span class="badge success">You can close this window</span></section>
+            <section class="handoff-dialog">
+              <h4>Connect an AI tool</h4>
+              <p>Choose the setup supported by your tool.</p>
+              <div class="setup-choice" aria-label="Illustrative setup choice"><button type="button">Remote
+                  MCP</button><button type="button">CLI / stdio</button></div>
+              <div class="field-row" style="margin-bottom: 10px;"><code class="mono"
+                  style="flex: 1;">https://console.unicas.work/mcp</code><button class="mock-button small"
+                  type="button">Copy URL</button></div>
+              <pre
+                class="single-prompt">Add a remote MCP server named "UniCAS" using Streamable HTTP. Authentication opens in your browser; no API key is required.</pre>
+              <div class="action-row" style="justify-content: end; margin-top: 10px;"><button class="mock-button"
+                  type="button">Copy setup prompt</button></div>
+            </section>
+            <section class="callback-page polished" aria-label="Proposed authorization result illustration">
+              <div class="success-mark" aria-hidden="true">OK</div>
+              <h4>Authorization complete</h4>
+              <p>UniCAS is connected. Return to your terminal or AI tool to continue.</p><span class="badge success">You
+                can close this window</span>
+            </section>
           </div>
         </article>
       </div>
@@ -1666,7 +1950,8 @@ control plane with it:
   </main>
 
   <footer class="review-footer">
-    <p>This standalone file is an illustrative review aid, not production UI or a behavior contract. It uses synthetic identities and no production credentials.</p>
+    <p>This standalone file is an illustrative review aid, not production UI or a behavior contract. It uses synthetic
+      identities and no production credentials.</p>
     <a href="./Task.md">Open the normative task</a>
   </footer>
 
