@@ -95,6 +95,11 @@ fallback under `prefers-reduced-motion`.
   anchored to the drawer bottom independently of App-list length.
 - Use at least 44-by-44px targets for the trigger, close, create, and other
   primary mobile controls.
+- Prefer familiar glyph-only controls for established compact actions such as
+  open navigation, close, create/add, refresh, copy, and row menus. Preserve a
+  clear accessible name and a hover/focus tooltip. Keep visible text for
+  unfamiliar commands, consequential decisions, and destructive actions whose
+  meaning should not depend on icon recognition.
 
 ## People and Change Logs
 
