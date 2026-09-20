@@ -45,7 +45,7 @@ Cache-Control: no-store
 
 ```json
 {
-  "ready": true,
+  "state": "ready",
   "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "leaseStartedAt": 1760000000000,
   "leaseExpiresAt": 1760000900000
@@ -55,7 +55,7 @@ Cache-Control: no-store
 This result means the node is validated, readable, referenceable by later
 nodes, and protected from collection until the returned deadline.
 
-### Upload required
+### Awaiting upload
 
 ```http
 HTTP/1.1 200 OK
@@ -65,7 +65,7 @@ Cache-Control: no-store
 
 ```json
 {
-  "ready": false,
+  "state": "awaiting_upload",
   "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "reason": "node_missing",
   "upload": {
@@ -80,7 +80,7 @@ Cache-Control: no-store
 }
 ```
 
-`upload_required` is a successful lease negotiation result that requires
+`awaiting_upload` is a successful lease negotiation result that requires
 caller action, not an asynchronously executing server job. It therefore uses
 HTTP 200 rather than 202.
 
@@ -100,7 +100,7 @@ publish-safe rejection:
 
 ```json
 {
-  "ready": false,
+  "state": "awaiting_upload",
   "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "reason": "previous_upload_rejected",
   "rejection": {
@@ -121,9 +121,10 @@ publish-safe rejection:
 
 The replacement target uses a new internal generation and a new temporary
 object key. The caller can therefore correct and upload the bytes immediately;
-it is never asked to overwrite the rejected write-once object.
+it is never asked to overwrite the rejected write-once object. The rejection
+is context for the transition back to `awaiting_upload`, not a separate state.
 
-### Waiting for children
+### Validated, waiting for children
 
 Canonical bytes can be valid while one of their referenced children is not yet
 ready. This is not an upload rejection and does not require the parent to be
@@ -131,7 +132,7 @@ uploaded again:
 
 ```json
 {
-  "ready": false,
+  "state": "validated_waiting_children",
   "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "blocked": {
     "code": "NODE_DEPENDENCY_NOT_READY",
@@ -143,6 +144,28 @@ uploaded again:
 UniCAS retains the uploaded and structurally validated parent object. After the
 child becomes ready, the caller repeats the same lease request and publication
 continues without another parent PUT.
+
+### Response and state correspondence
+
+Every successful response names the derived state that remains after the
+lease operation has evaluated and advanced the state machine. Wire values use
+snake case while the state diagram uses matching PascalCase labels.
+
+| State observed when lease begins | Lease action | Successful response state |
+| --- | --- | --- |
+| `NoAuthorization` | Create an upload generation and authorize its temporary object. | `awaiting_upload` |
+| `AwaitingUpload` | Retain a live generation, or rotate an expired generation that has no object. | `awaiting_upload` |
+| `UploadedUnvalidated` | Validate the object, then publish it, retain it for children, or replace a rejected generation. | `ready`, `validated_waiting_children`, or `awaiting_upload` |
+| `ValidatedWaitingChildren` | Recheck child readiness without rehashing or reparsing. | `validated_waiting_children` or `ready` |
+| `CanonicalOrphan` | Resume the interrupted publication. | `ready` |
+| `Ready` | Confirm canonical storage and extend the lease. | `ready` |
+
+`NoAuthorization`, `UploadedUnvalidated`, and `CanonicalOrphan` are internal
+pre-evaluation states. UniCAS must not return them because the active lease
+operation can advance them immediately. A ready D1 record without its
+canonical object is a storage-integrity fault rather than a successful state;
+it returns the standard HTTP 500 `INTERNAL_ERROR` response and emits an
+operational alert.
 
 ## Sequence
 
@@ -158,10 +181,10 @@ sequenceDiagram
     CAS->>State: Read ready node and current upload generation
     alt Node is ready
         CAS->>State: Extend lease
-        CAS-->>App: 200 ready + lease
+        CAS-->>App: 200 state=ready + lease
     else Node is absent and upload is incomplete
         CAS->>State: Create or retain internal generation
-        CAS-->>App: 200 upload_required + signed PUT
+        CAS-->>App: 200 state=awaiting_upload + signed PUT
         App->>R2: PUT complete canonical node block
         R2-->>App: Success or write-once replay
         App->>CAS: POST lease(HASH)
@@ -171,11 +194,11 @@ sequenceDiagram
         alt Canonical node is valid
             CAS->>State: Atomically publish metadata, edges, and lease
             CAS->>R2: Delete temporary object
-            CAS-->>App: 200 ready + lease
+            CAS-->>App: 200 state=ready + lease
         else Canonical node is invalid
             CAS->>State: Retire generation and create replacement
             CAS->>R2: Delete rejected temporary object
-            CAS-->>App: 200 upload_required + rejection + new signed PUT
+            CAS-->>App: 200 state=awaiting_upload + rejection + new signed PUT
         end
     end
 ```
@@ -233,8 +256,8 @@ The effective state is derived from those facts on every lease request.
 
 | Ready | Current upload record | Current temporary object | Durable validation evidence | Derived condition | Lease behavior |
 | --- | --- | --- | --- | --- | --- |
-| `true` | Irrelevant | Irrelevant | Present | Ready | Confirm canonical object presence, extend lease, return `ready: true`. |
-| `false` or absent | Absent or expired | Absent | Absent | No usable upload authorization | Create a generation and return `ready: false` with upload instructions. |
+| `true` | Irrelevant | Irrelevant | Present | Ready | Confirm canonical object presence, extend lease, return `state: "ready"`. |
+| `false` or absent | Absent or expired | Absent | Absent | No usable upload authorization | Create a generation and return `state: "awaiting_upload"` with upload instructions. |
 | `false` or absent | Valid | Absent | Absent | Upload authorized but incomplete | Return upload instructions for the current generation. |
 | `false` or absent | Valid or expired | Present | Absent | Uploaded and not yet validated | Perform immutable validation once. |
 | `false` | Present | Present | Present | Structurally valid, waiting for children | Recheck only child readiness; do not rehash, reparse, or re-upload. |
@@ -390,7 +413,7 @@ For each request, UniCAS performs:
 if a ready D1 node exists:
     verify its canonical object is present using the normal ready fast path
     extend the lease
-    return ready
+    return state=ready
 
 session = current internal upload state for (App, Space, hash)
 
@@ -413,12 +436,12 @@ if object is present:
     if those immutable checks fail:
         retire the current generation
         create a replacement generation and temporary key
-        return upload_required with rejection details and the new target
+        return state=awaiting_upload with rejection details and the new target
     if a child is not ready:
-        retain the validated object and return ready=false with dependency details
+        retain the validated object and return state=validated_waiting_children with dependency details
     publish it exactly once
     establish the requested lease
-    return ready
+    return state=ready
 
 if a canonical object exists without a completed ready record:
     resume or adopt the interrupted publication
@@ -461,14 +484,14 @@ global cross-Space validation or deduplication.
 An immutable validation failure must not strand the caller behind the
 write-once temporary key. In the same serialized lease operation, UniCAS
 retires the rejected generation, creates a new generation and key, schedules
-the rejected object for deletion, and returns `upload_required` with both the
-rejection and replacement instructions. The replacement is durable before the
+the rejected object for deletion, and returns `state: "awaiting_upload"` with
+both the rejection and replacement instructions. The replacement is durable before the
 response is returned, so retrying the lease cannot rediscover the rejected
 generation as current.
 
 Child readiness is different from an invalid upload. The canonical bytes may
 be valid while a referenced child is still being published. UniCAS retains the
-validated temporary object and returns `ready: false` with
+validated temporary object and returns `state: "validated_waiting_children"` with
 `NODE_DEPENDENCY_NOT_READY` details. After the child becomes ready, repeating
 the same parent lease request resumes publication without uploading the parent
 again.
@@ -520,18 +543,18 @@ upload-time object-store limit unless the provider enforces it.
 
 | Situation | Lease result or action |
 | --- | --- |
-| Ready node | Extend lease and return `ready`. |
-| Missing temporary object | Return a newly signed URL for the current generation. |
-| Successful PUT followed by process failure | Repeating lease observes and publishes the object. |
+| Ready node | Extend lease and return `state: "ready"`. |
+| Missing temporary object | Return `state: "awaiting_upload"` with a newly signed URL for the current generation. |
+| Successful PUT followed by process failure | Repeating lease observes the object and returns `state: "ready"` after publication, or another state dictated by validation. |
 | Repeated PUT to the same generation | Object store returns its write-once result; caller repeats lease. |
-| Concurrent lease after upload | One request publishes; others join or observe ready. |
-| Expired generation without an object | Rotate generation and return a new URL. |
-| Expired signing URL with an object | Validate and publish the completed object; URL expiry only prevents another PUT. |
-| Oversized or malformed object | Retire the generation and return `upload_required` with rejection details and a new write-once target. |
-| Digest mismatch | Retire the generation and return `upload_required` with rejection details and a new write-once target. |
-| Child not ready | Retain the validated object and return `ready: false` with `NODE_DEPENDENCY_NOT_READY`; repeating lease resumes publication without re-upload. |
-| Failure after canonical R2 publication but before D1 commit | A later lease validates or adopts the verified canonical orphan. |
-| Failure after D1 ready commit | A later lease observes ready; temporary cleanup is retried asynchronously. |
+| Concurrent lease after upload | One request publishes; others join or return `state: "ready"`. |
+| Expired generation without an object | Rotate generation and return `state: "awaiting_upload"` with a new URL. |
+| Expired signing URL with an object | Validate the completed object and return the resulting state; URL expiry only prevents another PUT. |
+| Oversized or malformed object | Retire the generation and return `state: "awaiting_upload"` with rejection details and a new write-once target. |
+| Digest mismatch | Retire the generation and return `state: "awaiting_upload"` with rejection details and a new write-once target. |
+| Child not ready | Retain the validated object and return `state: "validated_waiting_children"` with `NODE_DEPENDENCY_NOT_READY`; repeating lease resumes publication without re-upload. |
+| Failure after canonical R2 publication but before D1 commit | A later lease adopts the verified canonical orphan and returns `state: "ready"`. |
+| Failure after D1 ready commit | A later lease returns `state: "ready"`; temporary cleanup is retried asynchronously. |
 | Ready record without canonical content | Return a storage-integrity error and alert; never present the node as uploadable. |
 
 The client can recover from every interruption using only the node hash and,
@@ -569,13 +592,13 @@ interface LeaseNodeOptions {
 
 type LeaseNodeResult =
   | {
-      readonly ready: true;
+  readonly state: "ready";
       readonly hash: string;
       readonly leaseStartedAt: number;
       readonly leaseExpiresAt: number;
     }
   | {
-      readonly ready: false;
+      readonly state: "awaiting_upload";
       readonly hash: string;
       readonly reason:
         | "node_missing"
@@ -598,7 +621,7 @@ type LeaseNodeResult =
       };
     }
   | {
-      readonly ready: false;
+      readonly state: "validated_waiting_children";
       readonly hash: string;
       readonly blocked: {
         readonly code: "NODE_DEPENDENCY_NOT_READY";
@@ -615,15 +638,15 @@ convenience loop:
 
 ```text
 lease(hash)
-if not ready and upload instructions are present:
+if state is awaiting_upload:
     surface any previous-upload rejection to the caller
     obtain or construct canonical bytes
     PUT using returned instructions
     lease(hash)
-if not ready and child dependency details are present:
+if state is validated_waiting_children:
     make the child ready
     lease(hash)
-require ready
+require state is ready
 ```
 
 Keeping the direct PUT outside the transport client's lease operation makes
