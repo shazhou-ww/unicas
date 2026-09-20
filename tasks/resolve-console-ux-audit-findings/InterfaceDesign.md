@@ -75,8 +75,8 @@ fallback under `prefers-reduced-motion`.
   and static. It must not create a radial or radar-like scan across the content.
 - Under `prefers-reduced-motion`, replace the moving highlight with a static
   emphasized outline.
-- Loading and retry semantics for cached App and issuer data remain coordinated
-  with `adopt-admin-webui-query-cache`; this design does not introduce another
+- Loading and retry semantics for cached App data remain coordinated with
+  `adopt-admin-webui-query-cache`; this design does not introduce another
   request lifecycle.
 
 ## Mobile navigation
@@ -132,13 +132,10 @@ fallback under `prefers-reduced-motion`.
 - Initial loading, retained-data refresh, empty results, errors, and load-more
   progress are distinct states and use appropriate live-region semantics.
 
-## App overview and access decisions
+## App and access decisions
 
 - Preserve a compact App identity summary and reduce repeated explanatory copy
   so configuration remains scannable on narrow screens.
-- Never present `NOT_FOUND` or another transport/backend code as the sole issuer
-  message. State what could not be loaded, why controls are unavailable when
-  known, and offer the valid retry or setup action.
 - Before creating an App invitation, require an explicit choice between an
   email-constrained invitation and an unconstrained one-time bearer link.
   Explain the redemption consequence next to the choice.
@@ -147,6 +144,10 @@ fallback under `prefers-reduced-motion`.
   and state whether changes apply immediately or require an explicit save.
 - Empty membership and unavailable unlink states explain why the action or data
   is unavailable and what can change that state.
+
+Managed issuer presentation is not part of this design. The active
+`retire-playground-and-managed-issuer` task owns removal of that UI and its
+loading/error states; this task must not add a replacement treatment.
 
 ## Account identity
 
@@ -166,6 +167,11 @@ fallback under `prefers-reduced-motion`.
 - CLI/MCP loopback success, failure, missing-code, state-mismatch, and not-found
   pages use a small self-contained UniCAS status page with a document title,
   viewport metadata, clear outcome, and explicit next step.
+- Reuse the sign-in panel hierarchy for these result pages: UniCAS branding at
+  the upper-left, a concise outcome label at the upper-right, and left-aligned
+  title and explanation. Center the compact closing guidance below the content
+  as the completion affordance. Do not introduce a separate oversized success
+  or error icon.
 - Loopback pages must not require remote assets or scripts. Continue escaping
   provider-supplied text, and never display authorization codes, state,
   credentials, or secrets.

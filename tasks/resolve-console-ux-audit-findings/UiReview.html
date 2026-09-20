@@ -1145,7 +1145,7 @@
     .access-stage {
       display: grid;
       min-height: 500px;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 12px;
       align-content: start;
       padding: 18px;
@@ -1168,23 +1168,6 @@
       margin: 0 0 10px;
       color: var(--muted);
       font-size: 12px;
-    }
-
-    .raw-error,
-    .actionable-error {
-      margin: 12px 0;
-      padding: 10px;
-      color: var(--danger);
-      background: var(--danger-soft);
-      border: 1px solid #f1b8b2;
-      border-radius: 6px;
-      font-size: 12px;
-    }
-
-    .actionable-error strong {
-      display: block;
-      margin-bottom: 3px;
-      color: #7f1d1d;
     }
 
     .choice-list {
@@ -1334,19 +1317,25 @@
     }
 
     .callback-page.polished {
-      text-align: center;
+      text-align: left;
     }
 
-    .success-mark {
-      display: grid;
-      width: 42px;
-      height: 42px;
-      place-items: center;
-      margin: 0 auto 12px;
-      color: #fff;
-      background: var(--accent);
-      border-radius: 50%;
-      font-weight: 800;
+    .callback-brand-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .callback-status {
+      padding-top: 1px;
+      color: var(--accent);
+    }
+
+    .callback-next-step {
+      display: flex;
+      margin-inline: auto;
     }
 
     body[data-size="mobile"] .handoff-stage {
@@ -2108,26 +2097,20 @@
       hidden>
       <header class="scenario-heading">
         <div>
-          <h2>Errors and privileged decisions</h2>
+          <h2>Privileged decisions</h2>
           <p>Explain consequences before action and keep diagnostic identifiers available as secondary detail.</p>
         </div>
         <ul class="change-list" aria-label="Planned access-state changes">
-          <li>Actionable issuer errors</li>
           <li>Explicit invitation scope</li>
+          <li>Named Account context</li>
           <li>Human-readable authorities</li>
         </ul>
       </header>
       <div class="comparison-grid">
         <article class="compare-frame before" aria-labelledby="access-before-title">
-          <header class="frame-heading"><span class="phase">Before</span><strong id="access-before-title">Codes and
-              controls without consequences</strong></header>
+          <header class="frame-heading"><span class="phase">Before</span><strong id="access-before-title">Ambiguous
+              choices and raw authorities</strong></header>
           <div class="mock-viewport access-stage">
-            <section class="access-panel">
-              <h4>Managed issuer</h4>
-              <p>UniCAS built-in authorization server.</p>
-              <div class="raw-error" role="alert">NOT_FOUND</div><button class="mock-button" type="button"
-                disabled>Inspect issuer</button>
-            </section>
             <section class="access-panel">
               <h4>Invite App member</h4><label class="mock-label">Email constraint (optional)<input class="mock-input"
                   type="email"></label>
@@ -2145,15 +2128,9 @@
         </article>
 
         <article class="compare-frame after" aria-labelledby="access-after-title">
-          <header class="frame-heading"><span class="phase">After</span><strong id="access-after-title">Cause, effect,
-              and next action</strong></header>
+          <header class="frame-heading"><span class="phase">After</span><strong id="access-after-title">Explicit scope
+              and authority effects</strong></header>
           <div class="mock-viewport access-stage">
-            <section class="access-panel">
-              <h4>Managed issuer unavailable</h4>
-              <div class="actionable-error" role="alert"><strong>Settings could not be loaded</strong>The issuer may not
-                be configured, or the request failed. Retry before editing.</div><button class="mock-button"
-                type="button">Retry</button>
-            </section>
             <section class="access-panel">
               <h4>Who can accept?</h4>
               <div class="choice-list"><label class="choice"><input type="radio" name="invite-scope"
@@ -2240,10 +2217,13 @@ control plane with it:
                   type="button">Copy setup prompt</button></div>
             </section>
             <section class="callback-page polished" aria-label="Proposed authorization result illustration">
-              <div class="success-mark" aria-hidden="true">OK</div>
+              <div class="callback-brand-row">
+                <div class="mock-brand"><span class="brand-mark">U</span><span>UniCAS</span></div>
+                <span class="eyebrow callback-status">Connected</span>
+              </div>
               <h4>Authorization complete</h4>
-              <p>UniCAS is connected. Return to your terminal or AI tool to continue.</p><span class="badge success">You
-                can close this window</span>
+              <p>UniCAS is connected. Return to your terminal or AI tool to continue.</p><span
+                class="badge success callback-next-step">You can close this window</span>
             </section>
           </div>
         </article>

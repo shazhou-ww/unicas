@@ -37,10 +37,6 @@ The walkthrough found these reproducible issues:
   drawer, the profile block follows the App list instead of remaining anchored
   to the bottom. The Create App control measured 24 by 24px, the drawer close
   control 16 by 16px, and the floating navigation control 40 by 40px.
-- **P1 - A recoverable issuer failure is presented as a dead end.** App
-  Overview rendered the raw `NOT_FOUND` code under Managed issuer while the
-  related issuer controls were disabled, without explaining the failed
-  resource, cause, permission/configuration state, retry, or next action.
 - **P2 - People tables hide context and actions on narrow screens.** At 370px,
   the App Members table was 538px wide and the Administration Members table
   was 686px wide inside 338px containers. Dates, authorities, and row actions
@@ -92,11 +88,17 @@ The walkthrough found these reproducible issues:
   scrolling dialog on mobile, while alternating between `MCP prompt` and
   `Configuration prompt` terminology.
 
-The existing `adopt-admin-webui-query-cache` backlog task owns cached App and
-issuer reads, background revalidation, and replacement of blocking App
-navigation loads. This task owns the interaction, responsive presentation, and
-state communication findings above; it must coordinate with that task rather
-than duplicate its data-fetching work.
+The walkthrough also observed a raw `NOT_FOUND` Managed issuer failure. That
+surface is intentionally excluded here because
+[`retire-playground-and-managed-issuer`](/tasks/retire-playground-and-managed-issuer/Task.md)
+owns its removal. This task must not redesign or preserve a UI that the owning
+task is retiring.
+
+The existing `adopt-admin-webui-query-cache` backlog task owns cached App reads,
+background revalidation, and replacement of blocking App navigation loads.
+This task owns the remaining interaction, responsive presentation, and state
+communication findings above; it must coordinate with that task rather than
+duplicate its data-fetching work.
 
 ## Scope
 
@@ -112,10 +114,10 @@ than duplicate its data-fetching work.
   restore the bottom-anchored profile block in the mobile drawer, honor safe
   areas, and provide at least 44 by 44px touch targets for primary mobile
   controls.
-- Replace raw or ambiguous issuer, people, and audit loading/error/empty states
-  with distinct, accessible messages that identify what happened and offer an
-  appropriate retry or next step. Coordinate App/issuer fetch lifecycle changes
-  with the query-cache task.
+- Replace ambiguous people and audit loading/error/empty states with distinct,
+  accessible messages that identify what happened and offer an appropriate
+  retry or next step. Coordinate App fetch lifecycle changes with the
+  query-cache task.
 - Give session, App, Account, and other route-level loading states a stable,
   intentionally positioned content region so indicators do not fall into a
   page corner or cause avoidable layout shifts.
@@ -143,8 +145,11 @@ than duplicate its data-fetching work.
 
 - Changing admin protocol routes, response schemas, OAuth behavior, App/Space
   authorization, authority names, invitation semantics, or production data.
-- Implementing the query cache, stale-while-revalidate behavior, or App/issuer
-  request deduplication owned by `adopt-admin-webui-query-cache`.
+- Implementing the query cache, stale-while-revalidate behavior, or App request
+  deduplication owned by `adopt-admin-webui-query-cache`.
+- Redesigning, repairing, preserving, or testing the Managed issuer UI and its
+  error/loading states; removal of that surface belongs to
+  `retire-playground-and-managed-issuer`.
 - Restoring the retired Console Playground or implementing the reference file
   App owned by `replace-playground-with-reference-app`.
 - Rebranding UniCAS, replacing the existing component system, redesigning
@@ -171,10 +176,6 @@ than duplicate its data-fetching work.
       access at the bottom, its controls meet touch-target and safe-area
       requirements, and its trigger has a non-obscuring placement or reserves
       enough content space on every reviewed route and overlay.
-- [ ] Managed issuer failures never expose `NOT_FOUND` or another backend code
-      as the sole message; the UI distinguishes absent configuration,
-      authorization, loading, and request failure and offers the valid retry or
-      next action while explaining disabled controls.
 - [ ] Session, App, Account, people, and audit loading indicators appear inside
   a stable, intentional status region rather than at a viewport or content
   corner; status text is announced, motion honors reduced-motion settings,
@@ -220,7 +221,7 @@ than duplicate its data-fetching work.
 - Use the existing React, Radix, shadcn-style component, and CSS conventions;
   add a shared responsive list/table abstraction only if it removes repeated
   interaction complexity across the people and audit views.
-- Coordinate loading and error ownership with
+- Coordinate App loading and error ownership with
   `adopt-admin-webui-query-cache`; do not add a second cache or competing
   request lifecycle.
 - Validate destructive and permission-changing flows with local fixtures or
@@ -242,7 +243,7 @@ work begins.
 | --- | --- | --- | --- | --- |
 | Scope | Required | User or accountable product owner | This production audit, prioritized findings, scope boundaries, constraints, acceptance criteria, and coordination with adjacent backlog work. | Substantive implementation. |
 | Interface | Required | User or delegated Console product owner | Task-owned before/after HTML review covering sign-in/provider selection, global loading states, home, navigation, Overview, people, audit, Account, invitation/account-detail overlays, Connect AI tools, and CLI/MCP authorization results at mobile, tablet, and desktop widths, including loading, empty, error, long-content, and destructive-action states. | Implementing the affected interaction and responsive presentation. |
-| Business and data model | Not applicable: the task preserves existing App, account, authority, invitation, audit, issuer, and identity semantics and changes only their presentation. | Not applicable | Not applicable | Not applicable |
+| Business and data model | Not applicable: the task preserves existing App, account, authority, invitation, audit, and identity semantics and changes only their presentation. | Not applicable | Not applicable | Not applicable |
 | Architecture | Assess during execution: required if implementation introduces a shared responsive data-view or authentication-page abstraction, a new UI dependency, cross-package runtime code sharing, or changes state ownership across views. | User or delegated architecture owner | Proposed component ownership, dependency impact, state boundaries, and package placement for any shared abstraction. | Adding that abstraction/dependency, sharing runtime presentation code across packages, or moving state ownership. |
 | Delivery acceptance | Required | User or accountable product owner | Integrated revision, focused automated results, responsive screenshots at 375px, 768px, and 1280px, keyboard and assistive-state checks, and read-only production smoke results. | Running `task complete` for the exact approved primary commit. |
 
@@ -263,5 +264,5 @@ work begins.
 - [Platform account editor](/packages/admin-webui/src/ui/views/platform/account-editor.tsx)
 - [Connect AI tools dialog](/packages/admin-webui/src/ui/mcp-configuration-dialog.tsx)
 - [Related query-cache task](/tasks/adopt-admin-webui-query-cache/Task.md)
+- [Managed issuer retirement task](/tasks/retire-playground-and-managed-issuer/Task.md)
 - [Completed navigation task whose mobile footer behavior must remain true](/tasks/simplify-console-administration-navigation/Task.md)
-- [Related reference App task](/tasks/replace-playground-with-reference-app/Task.md)
