@@ -106,9 +106,10 @@ fallback under `prefers-reduced-motion`.
   clear accessible name and a hover/focus tooltip. Keep visible text for
   unfamiliar commands, consequential decisions, and destructive actions whose
   meaning should not depend on icon recognition.
-- On desktop, compact glyph actions such as Create App are borderless at rest
-  and use a restrained background highlight on hover and keyboard focus. Do not
-  render a touch-sized bordered button in a pointer-oriented toolbar.
+- On desktop, compact glyph actions such as Create App use a light neutral
+  border and surface at rest, then strengthen the background and border on hover
+  and keyboard focus. Keep the painted control compact rather than rendering a
+  touch-sized toolbar button in a pointer-oriented layout.
 
 ## People and Change Logs
 
