@@ -6,6 +6,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>UniCAS Console UX review</title>
   <style>
+    @property --loading-angle {
+      syntax: "<angle>";
+      initial-value: 0deg;
+      inherits: false;
+    }
+
     :root {
       --canvas: #f6f6f7;
       --surface: #ffffff;
@@ -658,6 +664,15 @@
       border-radius: 7px;
     }
 
+    .status-panel.loading-outline {
+      border-color: transparent;
+      border-style: solid;
+      background:
+        linear-gradient(rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.92)) padding-box,
+        conic-gradient(from var(--loading-angle), var(--border) 0deg 270deg, #80bdb6 310deg, var(--accent) 330deg, var(--border) 360deg) border-box;
+      animation: outline-spin 1800ms linear infinite;
+    }
+
     .status-panel p {
       margin: 0;
       color: var(--muted);
@@ -1212,6 +1227,12 @@
       }
     }
 
+    @keyframes outline-spin {
+      to {
+        --loading-angle: 360deg;
+      }
+    }
+
     @media (max-width: 900px) {
 
       .review-header,
@@ -1291,6 +1312,12 @@
     }
 
     @media (prefers-reduced-motion: reduce) {
+
+      .status-panel.loading-outline {
+        background: rgba(255, 255, 255, 0.92);
+        border-color: #80bdb6;
+        animation: none !important;
+      }
 
       *,
       *::before,
@@ -1449,8 +1476,7 @@
                 <h3 class="mock-screen-heading">Production Smoke</h3><span class="badge">Overview</span>
               </div>
               <div class="bounded-loader">
-                <div class="status-panel" role="status">
-                  <span class="spinner" aria-hidden="true"></span>
+                <div class="status-panel loading-outline" role="status">
                   <strong>Loading App overview</strong>
                   <p>Navigation stays available while settings load.</p>
                 </div>
