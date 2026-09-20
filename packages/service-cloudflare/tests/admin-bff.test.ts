@@ -1033,9 +1033,14 @@ describe("cas-admin-webui BFF", () => {
     expect(login.headers.get("Location")).toBeNull();
     expect(login.headers.get("Set-Cookie")).toBeNull();
     const html = await login.text();
-    expect(html).toContain("Sign in");
+    expect(html).toContain("<title>Sign in - UniCAS</title>");
+    expect(html).toContain('class="login-panel-header"');
+    expect(html).toContain("Restricted console");
+    expect(html).toContain("Choose a sign-in method.");
     expect(html).toContain("/admin/auth/start/google?returnTo=%2Fadmin%2F");
     expect(html).toContain("Continue with Google");
+    expect(html).toContain("login-provider-icon-google");
+    expect(html).toContain("login-provider-label");
     expect(html).toContain("/admin/assets/index.css?v=issuer-discovery-v1");
   });
 
@@ -1091,6 +1096,8 @@ describe("cas-admin-webui BFF", () => {
     expect(html).toContain("Continue with Google");
     expect(html).toContain("Continue with Microsoft");
     expect(html).not.toContain("Continue with GitHub");
+    expect(html).toContain("login-provider-icon-google");
+    expect(html).toContain("login-provider-icon-microsoft");
 
     const started = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/start/microsoft`));
     const preLoginCookie = cookieFrom(started)!;
@@ -1719,6 +1726,8 @@ describe("cas-admin-webui BFF", () => {
 
     const deniedPage = await bff(new Request(`${PUBLIC_ORIGIN}${callback.headers.get("Location")!}`));
     const deniedHtml = await deniedPage.text();
+    expect(deniedHtml).toContain('class="login-panel login-panel-restricted"');
+    expect(deniedHtml).toContain("Access restricted");
     expect(deniedHtml).toContain("No management access");
     expect(deniedHtml).toContain("Sign in with another Google account");
     expect(deniedHtml).not.toContain("Continue with Google");

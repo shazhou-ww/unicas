@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
@@ -156,12 +156,12 @@ describe("Platform Accounts PeopleView", () => {
     openAccount.focus();
     await user.keyboard("{Enter}");
     expect(await screen.findByText("app-1")).toBeInTheDocument();
-    await user.click(within(screen.getByRole("dialog", { name: "Account Details" })).getByRole("button", { name: "Close" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Developer" })).getByRole("button", { name: "Close" }));
     await user.click(screen.getByRole("button", { name: "Load more" }));
     await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => String(path).includes("cursor=next-page"))).toBe(true));
     expect(fetchMock.mock.calls.some(([path]) => String(path).includes("after=next-page"))).toBe(false);
     await user.type(screen.getByLabelText("Search people"), "developer");
-    await user.click(screen.getByRole("button", { name: "Apply" }));
+    await user.click(screen.getByRole("button", { name: "Apply filters" }));
     await waitFor(() => expect(fetchMock.mock.calls.some(([path]) => String(path).includes("query=developer"))).toBe(true));
   });
 
@@ -188,13 +188,13 @@ describe("Platform Accounts PeopleView", () => {
     render(<PeopleView scope={{ platform: true }} />);
 
     await user.click(await screen.findByRole("button", { name: "Open Account details for Developer" }));
-    await user.click(await screen.findByLabelText("apps.create"));
+    await user.click(await screen.findByLabelText(/^Create Apps/));
     expect(await screen.findByRole("dialog", { name: "Confirm Platform Access change" })).toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
 
-    await user.click(screen.getByLabelText("apps.create"));
+    await user.click(screen.getByLabelText(/^Create Apps/));
     await user.click(screen.getByRole("button", { name: "Confirm change" }));
     await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(true));
     const command = fetchMock.mock.calls.find(([, init]) => init?.method === "DELETE");
@@ -224,11 +224,15 @@ describe("PlatformAuditView", () => {
     const user = userEvent.setup();
     render(<PlatformAuditView />);
 
-    await screen.findByText("No changes yet.");
-    expect(screen.getByRole("table")).toBeVisible();
+    await screen.findByText("No changes found.");
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Change Logs" }).querySelector(".bg-card")).toBeNull();
-    await user.type(screen.getByLabelText("Actor Account ID"), ACCOUNT_ID);
-    await user.click(screen.getByRole("button", { name: "Apply" }));
+    const actorFilter = screen.getByLabelText("Actor Account ID");
+    expect(actorFilter).toHaveAttribute("name", "actorAccountId");
+    expect(actorFilter).toHaveAttribute("autocomplete", "off");
+    await user.type(actorFilter, ACCOUNT_ID);
+    await user.click(screen.getByRole("button", { name: "Apply filters" }));
+    expect(await screen.findByText("Platform invitation created")).toBeInTheDocument();
     expect(await screen.findByText("platform_invitation.created")).toBeInTheDocument();
     expect(within(screen.getByRole("region", { name: "Change Logs" })).getByRole("table")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Load more" }));
@@ -236,6 +240,53 @@ describe("PlatformAuditView", () => {
     const pagedPath = String(fetchMock.mock.calls.at(-1)?.[0]);
     expect(pagedPath).toContain(`actorAccountId=${ACCOUNT_ID}`);
     expect(pagedPath).toContain("cursor=audit-next");
+  });
+
+  test("renders complete mobile audit summaries without a wide table", async () => {
+    const previousWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    const event = {
+      eventId: "event-mobile",
+      action: "platform_access.restored",
+      actorAccount: accountSummary("Admin", "admin@example.com"),
+      authenticatedIdentity: { externalIdentityId: "ext-admin", provider: "google", accountHint: null, linkedAt: 1, lastAuthenticatedAt: 1, currentLogin: false, issuer: "https://accounts.example", subject: "admin" },
+      targetAccount: accountSummary("Developer", "developer@example.com"),
+      targetInvitationId: null,
+      result: "succeeded",
+      requestId: "request-mobile",
+      createdAt: 1,
+      details: {},
+    };
+    fetchMock.mockResolvedValueOnce(json({ items: [event], nextCursor: null }));
+    try {
+      render(<PlatformAuditView />);
+      const item = await screen.findByRole("listitem", { name: "Account access restored, succeeded" });
+      expect(within(item).getByText("platform_access.restored")).toBeVisible();
+      expect(within(item).getByText("Admin")).toBeVisible();
+      expect(within(item).getByText(ACCOUNT_ID)).toBeVisible();
+      expect(within(item).getByRole("button", { name: /Copy Request ID request-mobile/ })).toBeVisible();
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: previousWidth });
+    }
+  });
+
+  test("ignores a stale platform audit response after filters change", async () => {
+    let resolveOld!: (response: Response) => void;
+    const oldRequest = new Promise<Response>(resolve => { resolveOld = resolve; });
+    const identity = { externalIdentityId: "ext-admin", provider: "google", accountHint: null, linkedAt: 1, lastAuthenticatedAt: 1, currentLogin: false, issuer: "https://accounts.example", subject: "admin" };
+    const oldEvent = { eventId: "old", action: "platform_access.blocked", actorAccount: accountSummary("Old Admin"), authenticatedIdentity: identity, targetAccount: accountSummary("Developer"), targetInvitationId: null, result: "succeeded", requestId: null, createdAt: 1, details: {} };
+    const newEvent = { ...oldEvent, eventId: "new", action: "platform_access.restored", actorAccount: accountSummary("New Admin") };
+    fetchMock.mockImplementationOnce(() => oldRequest).mockResolvedValueOnce(json({ items: [newEvent], nextCursor: null }));
+    const user = userEvent.setup();
+    render(<PlatformAuditView />);
+
+    await user.type(screen.getByLabelText("Actor Account ID"), ACCOUNT_ID);
+    await user.click(screen.getByRole("button", { name: "Apply filters" }));
+    expect(await screen.findByText("Account access restored")).toBeVisible();
+    await act(async () => resolveOld(json({ items: [oldEvent], nextCursor: null })));
+    expect(screen.queryByText("Account access blocked")).not.toBeInTheDocument();
+    expect(screen.getByText("New Admin")).toBeVisible();
   });
 });
 
@@ -285,10 +336,10 @@ describe("MembersView", () => {
     expect(new Headers(deletion?.[1]?.headers).get("If-Match")).toBe('"7"');
     expect(fetchMock.mock.calls[1][0]).toContain("cursor=page-2");
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    screen.getByRole("combobox", { name: "People filter" }).focus();
+    screen.getByRole("combobox", { name: "People collection" }).focus();
     await user.keyboard("{Enter}");
     await user.click(await screen.findByRole("option", { name: "Invitation history" }));
-    await user.click(screen.getByRole("button", { name: "Apply" }));
+    await user.click(screen.getByRole("button", { name: "Apply filters" }));
     expect(await screen.findByText("No people found.")).toBeInTheDocument();
     expect(fetchMock.mock.calls.at(-1)?.[0]).toContain("filter=history");
   });
@@ -301,6 +352,7 @@ describe("MembersView", () => {
     const user = userEvent.setup();
     const { rerender } = render(<MembersView appId={STACK} appRevision={1} onChanged={() => undefined} />);
     await user.click(screen.getByRole("button", { name: "Invite" }));
+    await user.click(screen.getByRole("radio", { name: /Anyone with the one-time link/ }));
     await user.click(screen.getByRole("button", { name: "Create invitation" }));
     expect(await screen.findByText("https://console.example.test/synthetic-once")).toBeInTheDocument();
     rerender(<MembersView appId="other-app" appRevision={1} onChanged={() => undefined} />);
@@ -328,6 +380,7 @@ describe("MembersView", () => {
     render(<MembersView appId={STACK} appRevision={1} onChanged={() => undefined} />);
     await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "Invite" }));
+    await user.click(screen.getByRole("radio", { name: /Anyone with the one-time link/ }));
     await user.click(screen.getByRole("button", { name: "Create invitation" }));
     await waitFor(() => expect(screen.getByText(/Share this one-time URL/)).toBeInTheDocument());
     expect(screen.getByText("https://cas.example/admin/invitations/token-xyz")).toBeInTheDocument();
@@ -493,10 +546,51 @@ describe("ControlAuditView", () => {
     const user = userEvent.setup();
     render(<ControlAuditView appId={STACK} />);
     await waitFor(() => expect(screen.getByText("app.created")).toBeInTheDocument());
+    expect(screen.getByText("App created")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Copy Request ID r1" })).toBeVisible();
     expect(screen.getByText("Legacy")).toHaveAttribute("title", "Historical action from the retired issuer-key API");
     await user.click(screen.getByRole("button", { name: "Load more" }));
     await waitFor(() => expect(screen.getByText("member.invited")).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: "Load more" })).not.toBeInTheDocument();
+  });
+
+  test("renders complete mobile App audit summaries without a wide table", async () => {
+    const previousWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    const auditIdentity = { externalIdentityId: "ext-alice", provider: "google", accountHint: null, linkedAt: 1, lastAuthenticatedAt: 1, currentLogin: false, issuer: "iss", subject: "alice" };
+    fetchMock.mockResolvedValueOnce(json({
+      items: [{ eventId: "evt_mobile", appId: STACK, actorAccount: accountSummary("Alice"), authenticatedIdentity: auditIdentity, targetAccount: null, action: "member.invited", target: "inv_1", requestId: "r-mobile", traceId: null, caller: null, createdAt: 1 }],
+      nextCursor: null,
+    }));
+    try {
+      render(<ControlAuditView appId={STACK} />);
+      const item = await screen.findByRole("listitem", { name: "Member invited" });
+      expect(within(item).getByText("member.invited")).toBeVisible();
+      expect(within(item).getByText("Alice")).toBeVisible();
+      expect(within(item).getByText("inv_1")).toBeVisible();
+      expect(within(item).getByRole("button", { name: "Copy Request ID r-mobile" })).toBeVisible();
+      expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: previousWidth });
+    }
+  });
+
+  test("ignores a stale App audit response after filters change", async () => {
+    let resolveOld!: (response: Response) => void;
+    const oldRequest = new Promise<Response>(resolve => { resolveOld = resolve; });
+    const identity = { externalIdentityId: "ext-alice", provider: "google", accountHint: null, linkedAt: 1, lastAuthenticatedAt: 1, currentLogin: false, issuer: "iss", subject: "alice" };
+    const oldEvent = { eventId: "old", appId: STACK, actorAccount: accountSummary("Old Admin"), authenticatedIdentity: identity, targetAccount: null, action: "app.suspended", target: STACK, requestId: null, traceId: null, caller: null, createdAt: 1 };
+    const newEvent = { ...oldEvent, eventId: "new", actorAccount: accountSummary("New Admin"), action: "app.restored" };
+    fetchMock.mockImplementationOnce(() => oldRequest).mockResolvedValueOnce(json({ items: [newEvent], nextCursor: null }));
+    const user = userEvent.setup();
+    render(<ControlAuditView appId={STACK} />);
+
+    await user.type(screen.getByLabelText("Actor Account ID"), ACCOUNT_ID);
+    await user.click(screen.getByRole("button", { name: "Apply filters" }));
+    expect(await screen.findByText("App restored")).toBeVisible();
+    await act(async () => resolveOld(json({ items: [oldEvent], nextCursor: null })));
+    expect(screen.queryByText("App suspended")).not.toBeInTheDocument();
+    expect(screen.getByText("New Admin")).toBeVisible();
   });
 });
 

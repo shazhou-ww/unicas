@@ -1,6 +1,6 @@
 # Console interface design intent
 
-Status: Pending interface approval
+Status: Approved 2026-09-20
 
 This document records the intended interaction and presentation behavior for
 the Console UX work. [`Task.md`](./Task.md) owns scope and acceptance criteria.

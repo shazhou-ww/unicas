@@ -85,7 +85,7 @@ export function createOAuthAuthorizationHandler(options: OAuthAuthorizationHandl
       if (url.pathname === "/oauth/authorize" && request.method === "POST") {
         return finishConsent(request, env, options);
       }
-      return new Response("Not Found", { status: 404 });
+      return authFailure("This authorization page is not available.", 404);
     },
   };
 }
@@ -110,13 +110,14 @@ async function startAuthorization(
   const registry = providerRegistry(env, options);
   const requestedProvider = new URL(request.url).searchParams.get("provider");
   if (requestedProvider === null && registry.list().length > 1) {
-    const links = registry.list().map(provider => {
-      const target = new URL(request.url);
-      target.searchParams.set("provider", provider.kind);
-      return `<a href="${escapeHtml(target.pathname + target.search)}">Continue with ${escapeHtml(provider.displayName)}</a>`;
-    }).join("");
-    return new Response(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in - UniCAS</title><style>body{margin:0;background:#f8f8f9;color:#18181b;font:14px/1.5 'Aptos','Segoe UI',sans-serif;letter-spacing:0}main{max-width:380px;margin:18vh auto;padding:24px}h1{font-size:24px}a{display:block;margin:12px 0;padding:12px;border:1px solid #d4d4d8;border-radius:6px;background:white;color:inherit;text-decoration:none;text-align:center}a:focus-visible{outline:2px solid #18181b;outline-offset:2px}</style></head><body><main><h1>Sign in to UniCAS</h1>${links}</main></body></html>`, {
-      headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" },
+    return new Response(renderProviderSelection(new URL(request.url), registry.list()), {
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
+        "Referrer-Policy": "no-referrer",
+        "X-Content-Type-Options": "nosniff",
+      },
     });
   }
   const selected = requestedProvider ?? registry.list()[0]?.kind;
@@ -471,6 +472,62 @@ export function renderConsent(pending: PendingConsent, consentId: string, public
 </html>`;
 }
 
+function renderProviderSelection(
+  requestUrl: URL,
+  providers: readonly Pick<ProviderAdapter, "kind" | "displayName">[],
+): string {
+  const links = providers.map(provider => {
+    const target = new URL(requestUrl);
+    target.searchParams.set("provider", provider.kind);
+    return `<a class="provider" href="${escapeHtml(target.pathname + target.search)}"><span class="provider-icon provider-icon-${provider.kind}" aria-hidden="true">${mcpProviderMark(provider.kind)}</span><span class="provider-label">Continue with ${escapeHtml(provider.displayName)}</span></a>`;
+  }).join("\n");
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Sign in - UniCAS</title>
+  <style>
+    :root { color-scheme: light; font-family: "Aptos", "Segoe UI Variable Text", "Segoe UI", sans-serif; color: #18181b; font-synthesis: none; }
+    * { box-sizing: border-box; }
+    body { min-width: 320px; min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 24px; background-color: #f6f6f7; background-image: linear-gradient(rgba(24,24,27,.024) 1px, transparent 1px), linear-gradient(90deg, rgba(24,24,27,.024) 1px, transparent 1px); background-size: 28px 28px; font-size: 14px; line-height: 1.5; }
+    main { width: min(380px, 100%); padding: 24px; background: #fff; border: 1px solid #dddde0; border-radius: 8px; box-shadow: 0 14px 38px rgba(24,24,27,.09); }
+    header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+    .brand { display: inline-flex; align-items: center; gap: 9px; font-weight: 700; }
+    .brand-mark { display: grid; width: 30px; height: 30px; place-items: center; color: #fff; background: #263746; border-radius: 6px; font-size: 11px; font-weight: 800; }
+    .eyebrow { margin: 0; color: #66666f; font-size: 11px; font-weight: 750; line-height: 1.3; text-transform: uppercase; white-space: nowrap; }
+    h1 { margin: 0 0 7px; font-size: 21px; line-height: 1.25; }
+    .intro { margin: 0 0 16px; color: #66666f; }
+    .providers { display: grid; gap: 8px; }
+    .provider { position: relative; display: flex; min-height: 44px; align-items: center; justify-content: center; padding: 8px 44px; color: inherit; background: #fff; border: 1px solid #cfcfd4; border-radius: 6px; font-weight: 650; text-decoration: none; }
+    .provider:hover { background: #f1f1f3; border-color: #b9b9c0; }
+    .provider:focus-visible { outline: 2px solid #52525b; outline-offset: 2px; }
+    .provider-icon { position: absolute; left: 13px; width: 18px; height: 18px; }
+    .provider-icon svg { display: block; width: 100%; height: 100%; }
+    .provider-label { min-width: 0; text-align: center; }
+    .footnote { margin: 16px 0 0; padding-top: 14px; color: #66666f; border-top: 1px solid #dddde0; font-size: 12px; }
+    @media (max-width: 420px) { body { padding: 16px; } main { padding: 20px; } }
+  </style>
+</head>
+<body>
+  <main aria-labelledby="sign-in-title">
+    <header><span class="brand"><span class="brand-mark">U</span><span>UniCAS</span></span><p class="eyebrow">Restricted console</p></header>
+    <h1 id="sign-in-title">Sign in to UniCAS</h1>
+    <p class="intro">Choose a sign-in method.</p>
+    <div class="providers">${links}</div>
+    <p class="footnote">Access is checked after authentication. No provider credential is shared with UniCAS.</p>
+  </main>
+</body>
+</html>`;
+}
+
+function mcpProviderMark(kind: ProviderKind): string {
+  if (kind === "google") return `<svg viewBox="0 0 18 18" focusable="false"><path fill="#4285f4" d="M17.64 9.205c0-.638-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.797 2.716v2.258h2.909c1.702-1.567 2.684-3.877 2.684-6.614z"/><path fill="#34a853" d="M9 18c2.43 0 4.468-.806 5.956-2.18l-2.91-2.259c-.805.54-1.835.86-3.046.86-2.344 0-4.328-1.585-5.037-3.714H.956v2.332A9 9 0 0 0 9 18z"/><path fill="#fbbc05" d="M3.963 10.707A5.41 5.41 0 0 1 3.682 9c0-.592.102-1.168.281-1.707V4.961H.956A9 9 0 0 0 0 9c0 1.452.347 2.827.956 4.039l3.007-2.332z"/><path fill="#ea4335" d="M9 3.58c1.322 0 2.508.455 3.441 1.346l2.582-2.582C13.463.892 11.425 0 9 0A9 9 0 0 0 .956 4.961l3.007 2.332C4.672 5.164 6.656 3.58 9 3.58z"/></svg>`;
+  if (kind === "microsoft") return `<svg viewBox="0 0 23 23" focusable="false"><path fill="#f35325" d="M1 1h10v10H1z"/><path fill="#81bc06" d="M12 1h10v10H12z"/><path fill="#05a6f0" d="M1 12h10v10H1z"/><path fill="#ffba08" d="M12 12h10v10H12z"/></svg>`;
+  return `<svg viewBox="0 0 24 24" focusable="false"><path fill="currentColor" d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.418-1.305.762-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>`;
+}
+
 function scopeDetail(scope: string): {
   readonly title: string;
   readonly description: string;
@@ -519,9 +576,46 @@ function oauthErrorRedirect(request: AuthRequest, code: string, description?: st
 }
 
 function authFailure(message: string, status = 400): Response {
-  return Response.json({ error: "AUTHORIZATION_FAILED", message }, {
+  const notFound = status === 404;
+  const title = notFound ? "Page not found" : "Authorization failed";
+  const statusLabel = notFound ? "Not found" : "Failed";
+  return new Response(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>${title} - UniCAS</title>
+  <style>
+    :root { color-scheme: light; font-family: "Aptos", "Segoe UI Variable Text", "Segoe UI", sans-serif; color: #18181b; font-synthesis: none; }
+    * { box-sizing: border-box; }
+    body { min-width: 320px; min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 24px; background-color: #f6f6f7; background-image: linear-gradient(rgba(24,24,27,.024) 1px, transparent 1px), linear-gradient(90deg, rgba(24,24,27,.024) 1px, transparent 1px); background-size: 28px 28px; font-size: 14px; line-height: 1.5; }
+    main { width: min(380px, 100%); padding: 24px; background: #fff; border: 1px solid #dddde0; border-radius: 8px; box-shadow: 0 14px 38px rgba(24,24,27,.09); }
+    header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+    .brand { display: inline-flex; align-items: center; gap: 9px; font-weight: 700; }
+    .brand-mark { display: grid; width: 30px; height: 30px; place-items: center; color: #fff; background: #263746; border-radius: 6px; font-size: 11px; font-weight: 800; }
+    .status { padding-top: 1px; color: #b42318; font-size: 11px; font-weight: 750; text-transform: uppercase; white-space: nowrap; }
+    h1 { margin: 0 0 8px; font-size: 21px; line-height: 1.25; }
+    p { margin: 0; color: #66666f; }
+    .next-step { display: flex; width: fit-content; min-height: 22px; align-items: center; margin: 18px auto 0; padding: 2px 8px; color: #7f1d1d; background: #fff1f0; border: 1px solid #f1b8b2; border-radius: 999px; font-size: 11px; font-weight: 650; white-space: nowrap; }
+    @media (max-width: 420px) { body { padding: 16px; } main { padding: 20px; } }
+  </style>
+</head>
+<body>
+  <main aria-labelledby="result-title">
+    <header><span class="brand"><span class="brand-mark">U</span><span>UniCAS</span></span><span class="status">${statusLabel}</span></header>
+    <div role="alert"><h1 id="result-title">${title}</h1><p>${escapeHtml(message)}</p><p class="next-step">Return to your AI tool and start authorization again</p></div>
+  </main>
+</body>
+</html>`, {
     status,
-    headers: { "Cache-Control": "no-store" },
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
+      "Referrer-Policy": "no-referrer",
+      "X-Content-Type-Options": "nosniff",
+    },
   });
 }
 

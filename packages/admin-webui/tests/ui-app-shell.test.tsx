@@ -104,7 +104,11 @@ describe("current App shell", () => {
     await user.type(await screen.findByLabelText("Description"), "unsaved first App draft");
     const otherLink = document.querySelector<HTMLAnchorElement>('.console-sidebar a[href="#/apps/cas_two/overview"]')!;
     await user.click(otherLink);
-    expect(await screen.findByText("Loading app…")).toBeVisible();
+    const loading = await screen.findByRole("status");
+    expect(loading).toHaveTextContent("Loading App");
+    expect(loading).toHaveTextContent("Navigation stays available while settings load.");
+    expect(loading).toHaveAttribute("aria-busy", "true");
+    expect(loading).toHaveClass("console-loading-state");
     expect(screen.queryByLabelText("Description")).not.toBeInTheDocument();
     await act(async () => { resolveOther(json(other)); });
     expect(await screen.findByLabelText("Description")).toHaveValue("Second description");
@@ -129,8 +133,10 @@ describe("current App shell", () => {
     const user = userEvent.setup();
     render(<App />);
     expect(await screen.findByText("0 App memberships")).toBeVisible();
-    expect(screen.getByRole("region", { name: "Get started" })).toHaveTextContent("Select an App");
-    await user.click(screen.getByTitle("Create App"));
+    expect(screen.getByRole("region", { name: "Get started" })).toHaveTextContent("choose Create App in the Apps section");
+    const createApp = screen.getByRole("button", { name: "Create App" });
+    expect(createApp).toHaveClass("console-sidebar-create-button");
+    await user.click(createApp);
     await user.type(screen.getByLabelText("App display name"), currentApp.displayName);
     await user.keyboard("{Enter}");
     expect(await screen.findByText("1 App membership")).toBeVisible();

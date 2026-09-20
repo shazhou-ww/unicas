@@ -14,6 +14,7 @@ export function McpConfigurationDialog({ open, onClose }: {
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState<"url" | "prompt" | "cli" | null>(null);
+  const [method, setMethod] = useState<"remote" | "cli">("remote");
   const copyTimerRef = useRef<number | null>(null);
   const serverUrl = `${window.location.origin}/mcp`;
   const skillUrl = `${window.location.origin}/admin/assets/skills/unicas-cli/SKILL.md`;
@@ -33,6 +34,10 @@ Use Streamable HTTP. Authentication is handled with OAuth in the browser; no API
     if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
   }, []);
 
+  useEffect(() => {
+    if (open) setMethod("remote");
+  }, [open]);
+
   async function copy(value: string, target: "url" | "prompt" | "cli") {
     await navigator.clipboard.writeText(value);
     setCopied(target);
@@ -46,42 +51,45 @@ Use Streamable HTTP. Authentication is handled with OAuth in the browser; no API
         <DialogHeader>
           <DialogTitle>Connect an AI tool</DialogTitle>
           <DialogDescription>
-            Use the server URL directly, or paste a prompt into your AI tool — the MCP prompt for
-            tools that manage MCP connections, or the CLI prompt for tools that cannot handle
-            OAuth MCP.
+            Choose the setup supported by your tool.
           </DialogDescription>
         </DialogHeader>
-        <Button
-          variant="outline"
-          className="h-auto w-full justify-between whitespace-normal break-all py-3 text-left font-mono text-xs"
-          aria-label="Copy MCP server URL"
-          onClick={() => void copy(serverUrl, "url")}
-        >
-          <span>{serverUrl}</span>
-          {copied === "url" ? <Check size={14} /> : <Copy size={14} />}
-        </Button>
-        <div className="grid gap-5 md:grid-cols-2">
-          <section className="min-w-0 space-y-2">
+        <div className="grid grid-cols-2 gap-1 rounded-md border bg-muted/50 p-1" role="group" aria-label="Connection method">
+          <Button type="button" size="sm" variant={method === "remote" ? "secondary" : "ghost"} aria-pressed={method === "remote"} onClick={() => setMethod("remote")}>Remote MCP</Button>
+          <Button type="button" size="sm" variant={method === "cli" ? "secondary" : "ghost"} aria-pressed={method === "cli"} onClick={() => setMethod("cli")}>CLI / stdio</Button>
+        </div>
+        {method === "remote" ? (
+          <section className="min-w-0 space-y-3" aria-labelledby="remote-mcp-prompt-heading">
+            <Button
+              variant="outline"
+              className="h-auto w-full justify-between whitespace-normal break-all py-3 text-left font-mono text-xs"
+              aria-label="Copy MCP server URL"
+              onClick={() => void copy(serverUrl, "url")}
+            >
+              <span>{serverUrl}</span>
+              {copied === "url" ? <Check size={14} /> : <Copy size={14} />}
+            </Button>
             <div className="flex items-center justify-between gap-3">
-              <code className="text-xs">Configuration prompt</code>
+              <h3 id="remote-mcp-prompt-heading" className="text-sm font-medium">Remote MCP prompt</h3>
               <Button type="button" size="sm" variant="outline" onClick={() => void copy(configurationPrompt, "prompt")}>
                 {copied === "prompt" ? <Check size={14} /> : <Copy size={14} />}
                 <span>{copied === "prompt" ? "Prompt copied" : "Copy prompt"}</span>
               </Button>
             </div>
-            <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md border bg-muted/40 p-3 text-xs"><code>{configurationPrompt}</code></pre>
+            <pre className="whitespace-pre-wrap break-words rounded-md border bg-muted/40 p-3 text-xs"><code>{configurationPrompt}</code></pre>
           </section>
-          <section className="min-w-0 space-y-2">
+        ) : (
+          <section className="min-w-0 space-y-3" aria-labelledby="cli-prompt-heading">
             <div className="flex items-center justify-between gap-3">
-              <code className="text-xs">CLI prompt</code>
+              <h3 id="cli-prompt-heading" className="text-sm font-medium">CLI / stdio prompt</h3>
               <Button type="button" size="sm" variant="outline" onClick={() => void copy(cliPrompt, "cli")}>
                 {copied === "cli" ? <Check size={14} /> : <Copy size={14} />}
                 <span>{copied === "cli" ? "CLI prompt copied" : "Copy CLI prompt"}</span>
               </Button>
             </div>
-            <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md border bg-muted/40 p-3 text-xs"><code>{cliPrompt}</code></pre>
+            <pre className="whitespace-pre-wrap break-words rounded-md border bg-muted/40 p-3 text-xs"><code>{cliPrompt}</code></pre>
           </section>
-        </div>
+        )}
         <div className="rounded-md border bg-muted/30 p-3 text-sm">
           <p className="font-medium">No API key required</p>
           <p className="text-muted-foreground">On first use, your AI tool opens a browser and asks you to approve UniCAS access.</p>

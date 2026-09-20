@@ -119,7 +119,15 @@ describe("control-plane MCP OAuth authorization", () => {
     });
     const selector = await handler.fetch(new Request("https://cas.example/oauth/authorize"), fixture.env);
     expect(selector.status).toBe(200);
-    expect(await selector.text()).toContain("Continue with Microsoft");
+    const selectorHtml = await selector.text();
+    expect(selectorHtml).toContain("<title>Sign in - UniCAS</title>");
+    expect(selectorHtml).toContain("Restricted console");
+    expect(selectorHtml).toContain("Choose a sign-in method.");
+    expect(selectorHtml).toContain("Continue with Microsoft");
+    expect(selectorHtml).toContain("Continue with GitHub");
+    expect(selectorHtml).toContain("provider-icon-microsoft");
+    expect(selectorHtml).toContain("provider-icon-github");
+    expect(selector.headers.get("Content-Security-Policy")).toContain("default-src 'none'");
     const start = await handler.fetch(new Request(`https://cas.example/oauth/authorize?provider=${kind}`), fixture.env);
     const state = new URL(start.headers.get("Location")!).searchParams.get("state");
     const callback = await handler.fetch(new Request(`https://cas.example/oauth/callback/${kind}?state=${state}&code=code`, {
@@ -145,6 +153,11 @@ describe("control-plane MCP OAuth authorization", () => {
       headers: { Cookie: cookieFrom(second) },
     }), fixture.env);
     expect(wrong.status).toBe(400);
+    const wrongHtml = await wrong.text();
+    expect(wrongHtml).toContain("<title>Authorization failed - UniCAS</title>");
+    expect(wrongHtml).toContain("Invalid or expired authorization state");
+    expect(wrongHtml).not.toContain(String(wrongState));
+    expect(wrong.headers.get("Content-Security-Policy")).toContain("default-src 'none'");
   });
 
   test.each([false, true])("binds grants to Accounts and rechecks consent credential version (revoked=%s)", async revoked => {
@@ -338,8 +351,24 @@ describe("control-plane MCP OAuth authorization", () => {
       ), fixture.env);
 
       expect(callback.status).toBe(expectedStatus);
+      expect(callback.headers.get("Content-Type")).toContain("text/html");
+      const failureHtml = await callback.text();
+      expect(failureHtml).toContain("Authorization failed - UniCAS");
+      expect(failureHtml).toContain("Return to your AI tool and start authorization again");
       expect(fixture.completeAuthorization).not.toHaveBeenCalled();
     }
+  });
+
+  test("renders a branded not-found page for unknown authorization routes", async () => {
+    const fixture = createFixture();
+    const handler = createOAuthAuthorizationHandler({ oidcFactory: () => fixture.oidc });
+    const response = await handler.fetch(new Request("https://cas.example/oauth/unknown"), fixture.env);
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("Content-Type")).toContain("text/html");
+    const html = await response.text();
+    expect(html).toContain("<title>Page not found - UniCAS</title>");
+    expect(html).toContain("This authorization page is not available.");
   });
 
   test("rejects unsupported scopes before starting Google authentication", async () => {

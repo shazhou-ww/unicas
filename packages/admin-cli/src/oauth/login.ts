@@ -193,7 +193,13 @@ class LocalCallbackServer {
   #handle(rawUrl: string, response: ServerResponse): void {
     const url = new URL(rawUrl, "http://127.0.0.1");
     if (url.pathname !== "/callback") {
-      respondHtml(response, 404, "<h1>Not found</h1>");
+      respondHtml(response, 404, {
+        status: "Not found",
+        title: "Page not found",
+        message: "This authorization callback is not available.",
+        nextStep: "Return to your terminal and start sign-in again.",
+        tone: "error",
+      });
       return;
     }
     const error = url.searchParams.get("error");
@@ -201,21 +207,45 @@ class LocalCallbackServer {
     const state = url.searchParams.get("state");
     if (error) {
       const description = url.searchParams.get("error_description") ?? "";
-      respondHtml(response, 400, `<h1>Authorization failed</h1><p>${escapeHtml(error)}${description ? `: ${escapeHtml(description)}` : ""}</p>`);
+      respondHtml(response, 400, {
+        status: "Failed",
+        title: "Authorization failed",
+        message: `${error}${description ? `: ${description}` : ""}`,
+        nextStep: "Return to your terminal and start sign-in again.",
+        tone: "error",
+      });
       this.#failAll(new Error(`authorization error: ${error}${description ? ` (${description})` : ""}`));
       return;
     }
     if (!code) {
-      respondHtml(response, 400, "<h1>Authorization failed</h1><p>No authorization code returned.</p>");
+      respondHtml(response, 400, {
+        status: "Failed",
+        title: "Authorization failed",
+        message: "No authorization code was returned.",
+        nextStep: "Return to your terminal and start sign-in again.",
+        tone: "error",
+      });
       this.#failAll(new Error("authorization callback did not include a code"));
       return;
     }
     if (this.#state !== undefined && state !== this.#state) {
-      respondHtml(response, 400, "<h1>Authorization failed</h1><p>State mismatch; aborting.</p>");
+      respondHtml(response, 400, {
+        status: "Failed",
+        title: "Authorization failed",
+        message: "The authorization state did not match, so sign-in was stopped.",
+        nextStep: "Return to your terminal and start sign-in again.",
+        tone: "error",
+      });
       this.#failAll(new Error("authorization callback state mismatch"));
       return;
     }
-    respondHtml(response, 200, "<h1>Authorization complete</h1><p>You can close this window and return to the terminal.</p>");
+    respondHtml(response, 200, {
+      status: "Connected",
+      title: "Authorization complete",
+      message: "UniCAS is connected. Return to your terminal to continue.",
+      nextStep: "You can close this window",
+      tone: "success",
+    });
     this.#settleAll(code);
   }
 
@@ -242,9 +272,60 @@ interface Waiter {
   timeout?: NodeJS.Timeout;
 }
 
-function respondHtml(response: ServerResponse, status: number, body: string): void {
-  response.writeHead(status, { "Content-Type": "text/html; charset=utf-8" });
-  response.end(`<!doctype html><html><body>${body}</body></html>`);
+interface CallbackPage {
+  readonly status: string;
+  readonly title: string;
+  readonly message: string;
+  readonly nextStep: string;
+  readonly tone: "success" | "error";
+}
+
+function respondHtml(response: ServerResponse, statusCode: number, page: CallbackPage): void {
+  const title = escapeHtml(page.title);
+  response.writeHead(statusCode, {
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+  });
+  response.end(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${title} - UniCAS</title>
+  <style>
+    :root { color-scheme: light; font-family: "Aptos", "Segoe UI Variable Text", "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { min-width: 320px; min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 24px; color: #18181b; background-color: #f6f6f7; background-image: linear-gradient(rgba(24,24,27,.024) 1px, transparent 1px), linear-gradient(90deg, rgba(24,24,27,.024) 1px, transparent 1px); background-size: 28px 28px; font-size: 14px; line-height: 1.5; }
+    main { width: min(380px, 100%); padding: 24px; background: #fff; border: 1px solid #dddde0; border-radius: 8px; box-shadow: 0 14px 38px rgba(24,24,27,.09); }
+    header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+    .brand { display: inline-flex; align-items: center; gap: 9px; font-weight: 700; }
+    .brand-mark { display: grid; width: 30px; height: 30px; place-items: center; color: #fff; background: #263746; border-radius: 6px; font-size: 11px; font-weight: 800; }
+    .status { padding-top: 1px; font-size: 11px; font-weight: 750; text-transform: uppercase; white-space: nowrap; }
+    .status.success { color: #0f766e; }
+    .status.error { color: #b42318; }
+    h1 { margin: 0 0 8px; font-size: 21px; line-height: 1.25; }
+    p { margin: 0; color: #66666f; }
+    .next-step { display: flex; width: fit-content; min-height: 22px; align-items: center; margin: 18px auto 0; padding: 2px 8px; border: 1px solid #b9ddd7; border-radius: 999px; color: #115e59; background: #e8f5f2; font-size: 11px; font-weight: 650; white-space: nowrap; }
+    main.error .next-step { color: #7f1d1d; background: #fff1f0; border-color: #f1b8b2; }
+  </style>
+</head>
+<body>
+  <main class="${page.tone}" aria-labelledby="result-title">
+    <header>
+      <span class="brand"><span class="brand-mark">U</span><span>UniCAS</span></span>
+      <span class="status ${page.tone}">${escapeHtml(page.status)}</span>
+    </header>
+    <div class="content" ${page.tone === "error" ? 'role="alert"' : 'role="status"'}>
+      <h1 id="result-title">${title}</h1>
+      <p>${escapeHtml(page.message)}</p>
+      <p class="next-step">${escapeHtml(page.nextStep)}</p>
+    </div>
+  </main>
+</body>
+</html>`);
 }
 
 function escapeHtml(value: string): string {

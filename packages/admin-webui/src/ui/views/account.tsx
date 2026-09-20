@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Check,
   ChevronDown,
@@ -32,6 +32,7 @@ import { Label } from "@/components/ui/label.js";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.js";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip.js";
 import { api } from "../api.js";
+import { LoadingState } from "../components/loading-state.js";
 import { formatErrorSafe } from "./view-helpers.js";
 
 const providerNames: Record<ProviderKind, string> = {
@@ -50,6 +51,11 @@ const verificationSourceNames: Record<NonNullable<AccountSelf["primaryVerifiedEm
 
 function formatDate(value: number | null): string {
   return value === null ? "Never" : new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(value);
+}
+
+function identityActivity(identity: ExternalIdentitySummary): string {
+  if (identity.lastAuthenticatedAt !== null) return `Last used ${formatDate(identity.lastAuthenticatedAt)}`;
+  return identity.currentLogin ? "Used for current session" : "Never used";
 }
 
 function AccountAvatar({ account }: { readonly account: AccountSelf }) {
@@ -88,6 +94,8 @@ export function AccountView({
   const [linkProvider, setLinkProvider] = useState<ProviderKind | null>(null);
   const [unlinkIdentity, setUnlinkIdentity] = useState<ExternalIdentitySummary | null>(null);
   const [remainingIdentityId, setRemainingIdentityId] = useState("");
+  const linkTrigger = useRef<HTMLButtonElement>(null);
+  const unlinkTrigger = useRef<HTMLButtonElement | null>(null);
 
   async function loadAccount() {
     setLoading(true);
@@ -158,7 +166,7 @@ export function AccountView({
   }
 
   if (loading && !account) {
-    return <div className="page flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="h-4 w-4 animate-spin" />Loading Account...</div>;
+    return <LoadingState className="page" label="Loading Account" detail="Your profile and login methods are loading." />;
   }
 
   if (!account) {
@@ -193,11 +201,11 @@ export function AccountView({
           <div className="grid gap-5 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="account-display-name">Display name</Label>
-              <Input id="account-display-name" maxLength={120} value={displayName} onChange={event => setDisplayName(event.target.value)} />
+              <Input id="account-display-name" name="displayName" autoComplete="name" maxLength={120} value={displayName} onChange={event => setDisplayName(event.target.value)} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="account-avatar-source">Avatar</Label>
-              <Select value={avatarSource} onValueChange={setAvatarSource}>
+              <Select name="avatarSource" value={avatarSource} onValueChange={setAvatarSource}>
                 <SelectTrigger id="account-avatar-source"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="unchanged">Keep current avatar</SelectItem>
@@ -230,7 +238,7 @@ export function AccountView({
           {account.linkableProviders.length > 0 ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button type="button" variant="outline" disabled={startingAuth}>
+                <Button ref={linkTrigger} type="button" variant="outline" disabled={startingAuth}>
                   <Link2 className="h-4 w-4" />Link login method<ChevronDown className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -248,6 +256,7 @@ export function AccountView({
           <div className="divide-y rounded-md border">
             {account.identities.map(identity => {
               const canUnlink = account.identities.length > 1;
+              const unlinkHelpId = `unlink-help-${identity.externalIdentityId}`;
               return (
                 <div key={identity.externalIdentityId} className="flex items-center gap-4 px-4 py-3">
                   <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md border bg-muted text-xs font-semibold">
@@ -259,7 +268,8 @@ export function AccountView({
                       {identity.currentLogin ? <Badge variant="secondary"><Check className="mr-1 h-3 w-3" />Current session</Badge> : null}
                     </div>
                     <p className="truncate text-sm text-muted-foreground">{identity.accountHint ?? "Provider identity"}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">Linked {formatDate(identity.linkedAt)} · Last used {formatDate(identity.lastAuthenticatedAt)}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Linked {formatDate(identity.linkedAt)} · {identityActivity(identity)}</p>
+                    {!canUnlink ? <p id={unlinkHelpId} className="mt-1 text-xs text-muted-foreground">Add another login method before unlinking this one.</p> : null}
                   </div>
                   <TooltipProvider>
                     <Tooltip>
@@ -271,7 +281,8 @@ export function AccountView({
                             size="icon"
                             disabled={!canUnlink || startingAuth}
                             aria-label={`Unlink ${providerNames[identity.provider]}`}
-                            onClick={() => openUnlink(identity)}
+                            aria-describedby={!canUnlink ? unlinkHelpId : undefined}
+                            onClick={event => { unlinkTrigger.current = event.currentTarget; openUnlink(identity); }}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -288,7 +299,7 @@ export function AccountView({
       </Card>
 
       <Dialog open={linkProvider !== null} onOpenChange={open => { if (!open) setLinkProvider(null); }}>
-        <DialogContent>
+        <DialogContent onCloseAutoFocus={event => { event.preventDefault(); linkTrigger.current?.focus(); }}>
           <DialogHeader>
             <DialogTitle>Link {linkProvider ? providerNames[linkProvider] : "login method"}?</DialogTitle>
             <DialogDescription>
@@ -309,7 +320,7 @@ export function AccountView({
       </Dialog>
 
       <Dialog open={unlinkIdentity !== null} onOpenChange={open => { if (!open) setUnlinkIdentity(null); }}>
-        <DialogContent>
+        <DialogContent onCloseAutoFocus={event => { event.preventDefault(); unlinkTrigger.current?.focus(); }}>
           <DialogHeader>
             <DialogTitle>Unlink {unlinkIdentity ? providerNames[unlinkIdentity.provider] : "login method"}?</DialogTitle>
             <DialogDescription>

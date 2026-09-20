@@ -74,6 +74,7 @@ export function AppSidebar({
                 className="console-sidebar-create-button"
                 onClick={() => setCreatingApp(true)}
                 disabled={creatingApp}
+                aria-label="Create App"
                 title="Create App"
               >
                 <Plus className="h-4 w-4" />
@@ -142,7 +143,7 @@ export function AppSidebar({
             <Menu className="h-5 w-5" />
           </Button>
         </SheetTrigger>
-        <SheetContent side="right" className="p-0 w-[17rem]" aria-describedby={undefined}>
+        <SheetContent side="right" className="console-mobile-sidebar-sheet w-[17rem] p-0" aria-describedby={undefined}>
           <SheetTitle className="sr-only">Navigation</SheetTitle>
           {sidebarContent}
         </SheetContent>

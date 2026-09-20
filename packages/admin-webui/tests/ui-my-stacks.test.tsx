@@ -92,7 +92,7 @@ describe("MyAppsView", () => {
 
   test("shows only a starter message without fetching or duplicating sidebar controls", () => {
     render(<MyAppsView />);
-    expect(screen.getByRole("region", { name: "Get started" })).toHaveTextContent("Select an App to get started, or use + to create one.");
+    expect(screen.getByRole("region", { name: "Get started" })).toHaveTextContent("Select an App to get started, or choose Create App in the Apps section.");
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
