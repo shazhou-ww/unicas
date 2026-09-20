@@ -68,6 +68,10 @@ tasks:
     state: ongoing
     createdAt: "2026-09-20T01:51:55Z"
     updatedAt: "2026-09-20T02:04:19Z"
+  retire-playground-and-managed-issuer:
+    state: backlog
+    createdAt: "2026-09-20T02:30:21Z"
+    updatedAt: "2026-09-20T02:30:21Z"
   simplify-console-administration-navigation:
     state: completed
     createdAt: "2026-09-17T04:16:49Z"
