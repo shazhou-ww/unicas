@@ -102,7 +102,7 @@ explicitly approved before its protected step.
 
 ## References
 
-- [Pinned repoledger patch](/patches/repoledger@0.8.1.patch)
+- [Pinned repoledger patch](/patches/repoledger@0.8.2.patch)
 - [Repoledger patch fixture](/tests/repoledger-patch.test.mjs)
 - [Repository task workflow](/docs/repository-tasks.md)
 - [Repository task ledger skill](/.agents/skills/repoledger/SKILL.md)
