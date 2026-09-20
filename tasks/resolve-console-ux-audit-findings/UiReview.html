@@ -776,6 +776,44 @@
       pointer-events: none;
     }
 
+    .desktop-nav-stage {
+      display: grid;
+      min-height: 500px;
+      grid-template-columns: 190px minmax(0, 1fr);
+      background: #fafafa;
+    }
+
+    .desktop-nav-list {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      padding: 16px 12px;
+      background: rgba(255, 255, 255, 0.9);
+      border-right: 1px solid var(--border);
+    }
+
+    .desktop-nav-list .drawer-profile {
+      margin-top: auto;
+    }
+
+    .desktop-detail {
+      min-width: 0;
+      padding: 20px;
+    }
+
+    .desktop-detail-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .desktop-detail .mock-card {
+      margin-top: 18px;
+    }
+
     .drawer-topline {
       display: flex;
       align-items: center;
@@ -873,6 +911,36 @@
       stroke-width: 2;
       stroke-linecap: round;
       stroke-linejoin: round;
+    }
+
+    .compact-glyph-button {
+      position: relative;
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      padding: 0;
+      color: var(--ink);
+      background: transparent;
+      border: 0;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    .compact-glyph-button:hover,
+    .compact-glyph-button:focus-visible {
+      background: var(--surface-subtle);
+    }
+
+    body[data-size="mobile"] .compact-glyph-button {
+      width: 32px;
+      height: 32px;
+    }
+
+    body[data-size="mobile"] .compact-glyph-button::before {
+      position: absolute;
+      inset: -6px;
+      content: "";
     }
 
     .before .covered-line {
@@ -1575,20 +1643,39 @@
       data-scenario="navigation" hidden>
       <header class="scenario-heading">
         <div>
-          <h2>Mobile shell and drawer</h2>
-          <p>Keep right-handed access without covering the work or losing the profile anchor.</p>
+          <h2>Responsive shell and navigation</h2>
+          <p>Keep desktop list/detail navigation and use a non-disruptive right-side overlay only on mobile.</p>
         </div>
         <ul class="change-list" aria-label="Planned navigation changes">
-          <li>Reserved safe area</li>
-          <li>44px controls</li>
+          <li>Desktop list/detail</li>
+          <li>Mobile overlay drawer</li>
           <li>Profile anchored at bottom</li>
         </ul>
       </header>
       <div class="comparison-grid">
         <article class="compare-frame before" aria-labelledby="navigation-before-title">
-          <header class="frame-heading"><span class="phase">Before</span><strong id="navigation-before-title">Trigger
-              and profile float over the flow</strong></header>
-          <div class="mock-viewport mobile-stage">
+          <header class="frame-heading"><span class="phase">Before</span><strong id="navigation-before-title"><span
+                class="desktop-only">Current persistent list/detail</span><span class="mobile-only">Trigger and
+                profile float over the flow</span></strong></header>
+          <div class="mock-viewport desktop-nav-stage desktop-only">
+            <aside class="desktop-nav-list" aria-label="Current desktop App navigation illustration">
+              <div class="mock-brand"><span class="brand-mark">U</span><span>UniCAS</span></div>
+              <div class="drawer-apps">
+                <div class="drawer-label"><span>Apps</span><button class="tiny-button" type="button"
+                    aria-label="Current Create App">+</button></div>
+                <div class="drawer-item"><span class="app-mark">PR</span><strong>Production Smoke</strong></div>
+              </div>
+              <div class="drawer-profile"><span class="avatar">AM</span><span><strong>Alex Morgan</strong><br><span
+                    class="tiny muted">1 App membership</span></span></div>
+            </aside>
+            <section class="desktop-detail" aria-label="Current desktop App detail illustration">
+              <div class="desktop-detail-header"><h3 class="mock-screen-heading">Production Smoke</h3><span
+                  class="badge">Overview</span></div>
+              <div class="mock-card"><h4>App Identity</h4><p class="mono muted">cas_01HX8Q7...</p><p
+                  class="tiny muted">Status active &middot; Revision 1</p></div>
+            </section>
+          </div>
+          <div class="mock-viewport mobile-stage mobile-only">
             <section class="mobile-page" aria-label="Current mobile content illustration">
               <h3 class="mock-screen-heading">Account</h3>
               <div class="mock-card">
@@ -1627,9 +1714,33 @@
         </article>
 
         <article class="compare-frame after" aria-labelledby="navigation-after-title">
-          <header class="frame-heading"><span class="phase">After</span><strong id="navigation-after-title">Safe
-              trigger, anchored identity</strong></header>
-          <div class="mock-viewport mobile-stage">
+          <header class="frame-heading"><span class="phase">After</span><strong id="navigation-after-title"><span
+                class="desktop-only">Persistent list/detail retained</span><span class="mobile-only">Safe trigger,
+                anchored identity</span></strong></header>
+          <div class="mock-viewport desktop-nav-stage desktop-only">
+            <aside class="desktop-nav-list" aria-label="Proposed desktop App navigation illustration">
+              <div class="mock-brand"><span class="brand-mark">U</span><span>UniCAS</span></div>
+              <div class="drawer-apps">
+                <div class="drawer-label"><span>Apps</span><button class="compact-glyph-button" type="button"
+                    aria-label="Create App" title="Create App">
+                    <svg class="glyph-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                      <path d="M12 5v14" />
+                      <path d="M5 12h14" />
+                    </svg>
+                  </button></div>
+                <div class="drawer-item"><span class="app-mark">PR</span><strong>Production Smoke</strong></div>
+              </div>
+              <div class="drawer-profile"><span class="avatar">AM</span><span><strong>Alex Morgan</strong><br><span
+                    class="tiny muted">Administration</span></span></div>
+            </aside>
+            <section class="desktop-detail" aria-label="Proposed desktop App detail illustration">
+              <div class="desktop-detail-header"><h3 class="mock-screen-heading">Production Smoke</h3><span
+                  class="badge success">Overview</span></div>
+              <div class="mock-card"><h4>App Identity</h4><p class="mono muted">cas_01HX8Q7...</p><p
+                  class="tiny muted">Active &middot; Updated today at 10:42</p></div>
+            </section>
+          </div>
+          <div class="mock-viewport mobile-stage mobile-only">
             <section class="mobile-page" aria-label="Proposed mobile content illustration">
               <h3 class="mock-screen-heading">Account</h3>
               <div class="mock-card">
@@ -1658,7 +1769,7 @@
                 </button>
               </div>
               <div class="drawer-apps">
-                <div class="drawer-label"><span>Apps</span><button class="icon-button touch-target" type="button"
+                <div class="drawer-label"><span>Apps</span><button class="compact-glyph-button" type="button"
                     aria-label="Create App" title="Create App">
                     <svg class="glyph-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                       <path d="M12 5v14" />

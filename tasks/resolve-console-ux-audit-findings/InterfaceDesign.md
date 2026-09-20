@@ -81,8 +81,13 @@ fallback under `prefers-reduced-motion`.
 
 ## Mobile navigation
 
+- At desktop widths, retain the persistent list/detail shell: App navigation
+  and the signed-in Account remain in the left sidebar while the selected App
+  or administration detail occupies the right content region. Desktop does not
+  use the floating trigger or slide-over drawer.
 - Keep the right-handed bottom-right navigation trigger and right-side drawer.
-  The trigger uses the familiar Menu glyph, not the word `Menu`, and retains the
+  This mobile mode applies below the existing 900px shell breakpoint. The
+  trigger uses the familiar Menu glyph, not the word `Menu`, and retains the
   accessible name `Open navigation`.
 - The drawer is an overlay. Opening it must not resize, reflow, or squeeze the
   underlying main content.
@@ -93,13 +98,17 @@ fallback under `prefers-reduced-motion`.
   44-by-44px trigger never covers content, controls, or horizontal scrollbars.
 - Keep the signed-in profile and permission-aware Administration destination
   anchored to the drawer bottom independently of App-list length.
-- Use at least 44-by-44px targets for the trigger, close, create, and other
-  primary mobile controls.
+- Keep primary mobile controls effectively targetable across at least 44 by 44
+  CSS pixels. A familiar compact glyph may have a smaller painted footprint
+  when an invisible, non-overlapping hit area supplies the remaining target.
 - Prefer familiar glyph-only controls for established compact actions such as
   open navigation, close, create/add, refresh, copy, and row menus. Preserve a
   clear accessible name and a hover/focus tooltip. Keep visible text for
   unfamiliar commands, consequential decisions, and destructive actions whose
   meaning should not depend on icon recognition.
+- On desktop, compact glyph actions such as Create App are borderless at rest
+  and use a restrained background highlight on hover and keyboard focus. Do not
+  render a touch-sized bordered button in a pointer-oriented toolbar.
 
 ## People and Change Logs
 
