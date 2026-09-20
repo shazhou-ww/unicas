@@ -1,6 +1,6 @@
 # Lease-driven direct node upload
 
-Status: accepted for implementation
+Status: implemented; pending delivery acceptance
 
 Updated: 2026-09-20
 

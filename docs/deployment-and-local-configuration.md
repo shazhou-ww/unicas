@@ -151,6 +151,18 @@ policy for `PUT` with `Content-Type` and `If-None-Match`. Do not add
 the canonical SHA-256 as a full-object PutObject checksum, so UniCAS validates
 the digest and 32 MiB limit on the subsequent lease request.
 
+Deploy the lease-upload migration in this order:
+
+1. Configure the R2 signing credentials and browser CORS policy.
+2. Deploy the service so its idempotent startup migration creates
+   `cas_node_uploads`, `cas_node_upload_cleanup`, and the `cas_nodes.ready`
+   column before accepting v2 traffic.
+3. Publish protocol and client consumers together. This is an intentional v2
+   break: old clients using inline bodies or `X-CAS-Upload-*` headers are not
+   compatible with the new endpoint.
+4. Run the App/Space smoke test, which exercises lease, direct PUT, repeated
+   lease publication, readback, Root Refs, usage, GC, and Space isolation.
+
 Optional OIDC/session variables include `OIDC_ISSUER`, `OIDC_DISCOVERY_URL`,
 `SESSION_TTL_MS`, `SESSION_COOKIE_NAME`, `SESSION_COOKIE_SECURE`, and
 `SESSION_COOKIE_SAME_SITE`.

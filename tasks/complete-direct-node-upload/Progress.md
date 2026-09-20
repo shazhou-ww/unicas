@@ -4,7 +4,7 @@ Updated: 2026-09-20
 
 ## Current state
 
-The reviewed lease-driven direct upload contract is implemented across the v2
+The reviewed lease-driven direct upload contract is implemented and validated across the v2
 protocol and OpenAPI, public Space client, blob/file clients, cloud-neutral
 service kernel, Cloudflare D1/R2 adapter, smoke path, tests, and stable
 documentation. The next action is to commit and publish the validated source
@@ -42,21 +42,24 @@ branch, integrate it into primary, and request delivery acceptance.
 
 ## Validation
 
-- `pnpm build`: all workspace packages and generated service UI assets built.
+- `pnpm build`: all package build targets passed; Vite emitted only existing
+  third-party sourcemap warnings.
 - `pnpm typecheck`: all 13 package typecheck targets passed.
-- `pnpm test`: repository checks and all package suites passed before the final
-  cleanup-tombstone and request-boundary refinements.
+- Root repository checks passed 118 tests across deployment planning,
+  documentation, workspace boundaries, OpenAPI drift, and repoledger patching.
+- `pnpm test:packages`: all 13 package test suites passed.
 - The final affected-package rerun passed 35 protocol tests, 138 service tests,
-  256 Cloudflare tests, the tenant-client suite, 8 blob-client tests, and 5
-  file-client tests, including concurrency, expiry, replacement, waiting
+  the complete Cloudflare suite, the tenant-client suite, 8 blob-client tests,
+  and 5 file-client tests, including concurrency, expiry, replacement, waiting
   children, publication interruption, storage inconsistency, generation
   limits, and cleanup failure recovery.
-- Final repository integration checks passed 117 OpenAPI drift,
+- Final repository integration checks passed 118 OpenAPI drift,
   documentation-site, workspace-boundary, and deployment-plan tests.
 - `pnpm exec repoledger check complete-direct-node-upload --remote`: passed.
-- A local all-task check requires integrating the newer primary registration
-  for `split-app-space-operation-permissions`; that unrelated backlog task is
-  excluded from this implementation commit.
+- `pnpm deploy:plan`: passed without publishing and includes the service build,
+  Wrangler deployment command, package builds, and App/Space smoke command.
+- A live App/Space smoke was not run because it requires deployment credentials
+  and a deployed environment; its updated script passed build and syntax checks.
 
 ## Blockers
 
