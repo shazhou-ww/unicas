@@ -6,7 +6,6 @@ import type {
   AppMemberInvitation,
   AppMembership,
   AppOAuthIssuer,
-  ManagedSpaceCapability,
   Principal,
   Profile,
   SpaceRootRefBalance,
@@ -22,7 +21,6 @@ import {
   PatchAppRequestSchema,
   AppIssuerPreconditionSchema,
   AppOAuthIssuerInspectionSchema,
-  ManagedSpaceCapabilitySchema,
   SpaceRootRefBalanceSchema,
   appAdminApiContract,
 } from "../src/index.js";
@@ -120,7 +118,7 @@ describe("CAS admin schemas", () => {
     expect(Object.keys(appAdminApiContract.members)).toHaveLength(7);
   });
 
-  test("defines issuer, capability, and audit resources for the complete App contract", () => {
+  test("defines issuer and audit resources for the complete App contract", () => {
     const issuer: AppOAuthIssuer = {
       appId: "app-1",
       mode: "managed",
@@ -141,16 +139,6 @@ describe("CAS admin schemas", () => {
       jwksDigest: "digest",
       capabilityMaxLifetimeSeconds: 300,
       revision: 1,
-    };
-    const capability: ManagedSpaceCapability = {
-      accessToken: "secret",
-      tokenType: "Bearer",
-      expiresIn: 300,
-      expiresAt: 301,
-      issuer: issuer.issuer,
-      audience: issuer.audience,
-      spaceId: "space-1",
-      permissions: ["spaces:space-1:cas:read"],
     };
     const auditEvent: AppControlAuditEvent = {
       eventId: "event-1",
@@ -186,7 +174,6 @@ describe("CAS admin schemas", () => {
     };
 
     expect(AppOAuthIssuerSchema.safeParse(issuer).success).toBe(true);
-    expect(ManagedSpaceCapabilitySchema.safeParse(capability).success).toBe(true);
     expect(AppControlAuditEventSchema.safeParse(auditEvent).success).toBe(true);
     expect(AppControlAuditEventSchema.safeParse({
       ...auditEvent,
@@ -195,7 +182,7 @@ describe("CAS admin schemas", () => {
     expect(SpaceRootRefBalanceSchema.safeParse(balance).success).toBe(true);
     const operationCount = Object.values(appAdminApiContract)
       .reduce((count, group) => count + Object.keys(group).length, 0);
-    expect(operationCount).toBe(37);
+    expect(operationCount).toBe(34);
   });
 });
 
@@ -204,8 +191,8 @@ describe("App admin OpenAPI", () => {
     const document = await generateAppAdminOpenApiDocument();
     const allOperations = operations(document);
     const serialized = JSON.stringify(document);
-    expect(Object.keys(document.paths ?? {})).toHaveLength(28);
-    expect(allOperations).toHaveLength(37);
+    expect(Object.keys(document.paths ?? {})).toHaveLength(26);
+    expect(allOperations).toHaveLength(34);
     expect(Object.keys(document.paths ?? {}).some(path => path.includes("/playground/"))).toBe(false);
     expect(document.paths?.["/admin/account"]?.get?.operationId).toBe("getCurrentAccount");
     expect(document.paths?.["/admin/account/profile"]?.patch?.operationId).toBe("patchCurrentAccountProfile");
@@ -244,6 +231,8 @@ describe("App admin OpenAPI", () => {
     const activate = document.paths?.["/admin/apps/{appId}/oauth-issuer"]?.put;
     expect(activate?.responses?.["204"]).toHaveProperty("headers.ETag.required", true);
     expect(activate?.responses?.["204"]).not.toHaveProperty("content");
+    expect(document.paths?.["/admin/apps/{appId}/managed-issuer"]).toBeUndefined();
+    expect(document.paths?.["/admin/apps/{appId}/managed-capabilities"]).toBeUndefined();
     expect(serialized).not.toMatch(/stackId|tenantId|Stack|Tenant/);
   });
 

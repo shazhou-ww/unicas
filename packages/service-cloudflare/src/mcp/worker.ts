@@ -5,7 +5,6 @@ import { createMcpHandler } from "agents/mcp/server";
 import {
   AccountService,
   PlatformInvitationService,
-  type AccountManagedCapabilityIssuer,
   type OAuthDiscoveryPort,
 } from "@unicas/service";
 import { D1AccountRepository } from "../account-repository.js";
@@ -65,7 +64,6 @@ function attachVerifiedOAuthContext(
 export function createControlPlaneMcpWorker(
   config: ReturnType<typeof mcpConfigFromEnv>,
   database: D1Database,
-  managedOAuthIssuer?: AccountManagedCapabilityIssuer,
   oauthDiscovery?: OAuthDiscoveryPort,
   oauthResourcePublicOrigin?: string,
 ) {
@@ -85,7 +83,6 @@ export function createControlPlaneMcpWorker(
       const accountService = new AccountService(
         new D1AccountRepository(env.CAS_CONTROL_DB),
         Date.now,
-        managedOAuthIssuer ?? null,
         { oauthDiscovery, oauthResourcePublicOrigin },
       );
       const platformRepository = new D1PlatformInvitationRepository(env.CAS_CONTROL_DB);

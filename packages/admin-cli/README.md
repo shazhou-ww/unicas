@@ -88,8 +88,7 @@ pnpm --filter @unicas/admin-cli unicas login --provider google
 | `unicas status` | Local session summary (no network) |
 | `unicas mcp` | Run as a stdio MCP server |
 
-MCP additionally exposes App invitation acceptance and managed issuer/capability
-operations. Retired commands (`principal`,
+MCP additionally exposes App invitation acceptance. Retired commands (`principal`,
 `whoami`, `stacks`, `members`, `oauth-issuer`, `ref-domains`, and `audit`) are
 not supported and have no compatibility aliases. Use the current commands above.
 Old credentials without Account binding require a new login instead of migration.

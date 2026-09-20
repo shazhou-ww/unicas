@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Power, Search, ShieldCheck, AlertCircle } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Search, ShieldCheck, AlertCircle } from "lucide-react";
 import type {
   AppOAuthIssuer,
   AppOAuthIssuerInspection,
@@ -8,7 +8,6 @@ import { api, ifMatch } from "../api.js";
 import { Button } from "@/components/ui/button.js";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.js";
 import { formatErrorSafe } from "./view-helpers.js";
-import { CopyBubble } from "../components/copy-bubble.js";
 
 /**
  * App OAuth issuer connection. UniCAS discovers the issuer's metadata and
@@ -16,39 +15,25 @@ import { CopyBubble } from "../components/copy-bubble.js";
  * keys: activation proves control of a key the issuer currently advertises,
  * and Space verification reads the issuer's discovered jwks_uri.
  */
-export function IssuerView(props: { appId: string; focusManagedIssuer?: boolean; onManagedIssuerChanged?: (issuer: AppOAuthIssuer) => void }) {
+export function IssuerView(props: { appId: string }) {
   return <IssuerPanel key={props.appId} {...props} />;
 }
 
-function IssuerPanel({ appId, focusManagedIssuer = false, onManagedIssuerChanged }: { appId: string; focusManagedIssuer?: boolean; onManagedIssuerChanged?: (issuer: AppOAuthIssuer) => void }) {
-  const managedSettingsRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    if (!focusManagedIssuer) return;
-    managedSettingsRef.current?.focus();
-    managedSettingsRef.current?.scrollIntoView?.({ block: "start" });
-  }, [appId, focusManagedIssuer]);
-
+function IssuerPanel({ appId }: { appId: string }) {
   const [oauthIssuer, setOAuthIssuer] = useState<AppOAuthIssuer | null>(null);
-  const [managedIssuer, setManagedIssuer] = useState<AppOAuthIssuer | null>(null);
   const [inspection, setInspection] = useState<AppOAuthIssuerInspection | null>(null);
   const [oauthIssuerUrl, setOAuthIssuerUrl] = useState("");
   const [activationProof, setActivationProof] = useState("");
   const [inspecting, setInspecting] = useState(false);
   const [activating, setActivating] = useState(false);
-  const [togglingManaged, setTogglingManaged] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [oauthResult, managedResult] = await Promise.all([
-        api<AppOAuthIssuer | null>(`/admin/apps/${encodeURIComponent(appId)}/oauth-issuer?optional=true`),
-        api<AppOAuthIssuer>(`/admin/apps/${encodeURIComponent(appId)}/managed-issuer`),
-      ]);
+      const oauthResult = await api<AppOAuthIssuer | null>(`/admin/apps/${encodeURIComponent(appId)}/oauth-issuer?optional=true`);
       setOAuthIssuer(oauthResult);
-      setManagedIssuer(managedResult);
       setLoaded(true);
       if (oauthResult) {
         setOAuthIssuerUrl(oauthResult.issuer);
@@ -104,74 +89,11 @@ function IssuerPanel({ appId, focusManagedIssuer = false, onManagedIssuerChanged
     }
   }
 
-  async function toggleManagedIssuer() {
-    if (!managedIssuer) return;
-    setTogglingManaged(true);
-    setError(null);
-    try {
-      const enabled = managedIssuer.status !== "active";
-      const updated = await api<AppOAuthIssuer>(`/admin/apps/${encodeURIComponent(appId)}/managed-issuer`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", ...ifMatch(managedIssuer.revision) },
-        body: JSON.stringify({ enabled }),
-      });
-      setManagedIssuer(updated);
-      onManagedIssuerChanged?.(updated);
-    } catch (caught) {
-      setError(formatErrorSafe(caught));
-    } finally {
-      setTogglingManaged(false);
-    }
-  }
-
   const configured = oauthIssuer !== null;
   const canInspect = loaded && !activating && !inspecting;
 
   return (
-    <>
-      <section
-        aria-label="Managed issuer settings"
-        tabIndex={-1}
-        ref={managedSettingsRef}
-      >
-        <Card>
-          <CardHeader>
-            <CardTitle>Managed issuer</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Admin sign-in grants App management access, not access to Space data.
-              The managed issuer is UniCAS's built-in authorization server: it issues short-lived
-              Space capabilities and gives each App member an isolated personal Space.
-              Applications using a custom OAuth issuer do not need to enable it.
-            </p>
-            {error ? (
-              <div className="flex items-center gap-2 text-sm text-destructive">
-                <AlertCircle className="h-4 w-4" />
-                <span>{error}</span>
-              </div>
-            ) : null}
-            {managedIssuer ? (
-              <>
-                <p className="text-sm text-muted-foreground">
-                  Status: <strong>{managedIssuer.status}</strong> · Revision {managedIssuer.revision}
-                </p>
-                {managedIssuer.status === "active" ? (
-                  <div className="flex min-w-0 flex-col items-start gap-2">
-                    <span className="text-sm text-muted-foreground">Managed issuer URL</span>
-                    <CopyBubble label="Managed issuer URL" value={managedIssuer.issuer} className="justify-start text-left" />
-                  </div>
-                ) : null}
-                <Button onClick={() => void toggleManagedIssuer()} disabled={togglingManaged}>
-                  <Power className="mr-2 h-4 w-4" />
-                  {togglingManaged ? "Updating…" : managedIssuer.status === "active" ? "Disable managed issuer" : "Enable managed issuer"}
-                </Button>
-              </>
-            ) : null}
-          </CardContent>
-        </Card>
-      </section>
-      <Card>
+    <Card>
         <CardHeader>
           <CardTitle>Custom OAuth authorization server</CardTitle>
         </CardHeader>
@@ -179,8 +101,14 @@ function IssuerPanel({ appId, focusManagedIssuer = false, onManagedIssuerChanged
           <p className="text-sm text-muted-foreground">
             Connect a standards-based authorization server through RFC 8414 or OpenID discovery.
             UniCAS validates its metadata and JWKS, then requires a signed control challenge before
-            activation. When active, this issuer is listed before the managed issuer and is the CLI login default.
+            activation.
           </p>
+          {error ? (
+            <div className="flex items-center gap-2 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4" />
+              <span>{error}</span>
+            </div>
+          ) : null}
           {configured ? (
             <p className="text-sm text-muted-foreground">
               Mode: <strong>{oauthIssuer!.mode}</strong> · Status: <strong>{oauthIssuer!.status}</strong> · Metadata: {oauthIssuer!.metadataType} · Revision {oauthIssuer!.revision}
@@ -221,7 +149,6 @@ function IssuerPanel({ appId, focusManagedIssuer = false, onManagedIssuerChanged
             </div>
           ) : null}
         </CardContent>
-      </Card>
-    </>
+    </Card>
   );
 }

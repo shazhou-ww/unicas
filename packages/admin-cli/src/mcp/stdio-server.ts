@@ -317,24 +317,6 @@ const TOOL_HANDLERS = {
     return result;
   },
 
-  async get_app_managed_issuer(admin, args) {
-    const result = await admin.getAppManagedIssuer({ appId: str(args.appId) });
-    return { ...result.value, etag: result.etag };
-  },
-
-  async update_app_managed_issuer(admin, args) {
-    const result = await admin.patchAppManagedIssuer(
-      { appId: str(args.appId) },
-      { enabled: args.enabled === true },
-      str(args.etag),
-    );
-    return { ...result.value, etag: result.etag };
-  },
-
-  async mint_managed_space_capability(admin, args) {
-    return admin.mintManagedSpaceCapability({ appId: str(args.appId) });
-  },
-
   async list_app_ref_domains(admin, args) {
     return admin.listAppRefDomains({ appId: str(args.appId) });
   },

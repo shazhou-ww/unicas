@@ -266,8 +266,8 @@ class MockAdminService {
     }
     const appIssuer = {
       appId: APP,
-      mode: "managed",
-      issuer: `https://cas.example/managed-issuers/${APP}`,
+      mode: "external",
+      issuer: "https://issuer.example/oauth",
       audience: `https://cas.example/stacks/${APP}`,
       metadataUrl: "https://cas.example/metadata",
       metadataType: "oauth",
@@ -299,24 +299,6 @@ class MockAdminService {
         challenge: "challenge",
         expiresAt: 1000,
         keys: [],
-      }, { status: 201 });
-    }
-    if (path === appAdminRoutes.managedIssuer({ appId: APP }) && request.method === "GET") {
-      return Response.json(appIssuer, { headers: { ETag: '"4"' } });
-    }
-    if (path === appAdminRoutes.managedIssuer({ appId: APP }) && request.method === "PATCH") {
-      return Response.json({ ...appIssuer, revision: 5 }, { headers: { ETag: '"5"' } });
-    }
-    if (path === appAdminRoutes.managedCapability({ appId: APP }) && request.method === "POST") {
-      return Response.json({
-        accessToken: "space-token",
-        tokenType: "Bearer",
-        expiresIn: 3600,
-        expiresAt: 3_600_000,
-        issuer: `https://cas.example/managed-issuers/${APP}`,
-        audience: `https://cas.example/stacks/${APP}`,
-        spaceId: "member_test",
-        permissions: ["spaces:member_test:cas:manage"],
       }, { status: 201 });
     }
     if (path === appAdminRoutes.refDomains({ appId: APP }) && request.method === "GET") {
@@ -399,7 +381,7 @@ describe("functional admin client", () => {
     expect(apps.nextCursor).toBeNull();
   });
 
-  it("uses explicit App operations for shared routes and managed Space issuance", async () => {
+  it("uses explicit App operations for shared routes", async () => {
     service.appVocabulary = true;
     const current = await client.getCurrentAdministrator();
     expect(current.account.displayName).toBe("Alice");
@@ -410,19 +392,10 @@ describe("functional admin client", () => {
     const membership = await client.acceptAppMemberInvitation({ token: "invite-1" });
     expect(membership).toEqual({ appId: APP });
 
-    const capability = await client.mintManagedSpaceCapability({ appId: APP });
-    expect(capability).toMatchObject({
-      spaceId: "member_test",
-      permissions: ["spaces:member_test:cas:manage"],
-    });
     expect(service.requests.filter((request) => request.method === "POST"))
       .toEqual(expect.arrayContaining([
         expect.objectContaining({
           path: appAdminRoutes.acceptMemberInvitation({ token: "invite-1" }),
-          csrf: "csrf-1",
-        }),
-        expect.objectContaining({
-          path: appAdminRoutes.managedCapability({ appId: APP }),
           csrf: "csrf-1",
         }),
       ]));
@@ -543,10 +516,6 @@ describe("functional admin client", () => {
   it("transports App issuer operations with ETags and CSRF", async () => {
     expect(await client.getAppOAuthIssuer({ appId: APP }, { optional: true }))
       .toMatchObject({ value: { appId: APP, status: "active" }, etag: '"4"' });
-    expect(await client.getAppManagedIssuer({ appId: APP }))
-      .toMatchObject({ value: { appId: APP, mode: "managed" }, etag: '"4"' });
-    expect(await client.patchAppManagedIssuer({ appId: APP }, { enabled: false }, '"4"'))
-      .toMatchObject({ value: { revision: 5 }, etag: '"5"' });
     expect(await client.inspectAppOAuthIssuer(
       { appId: APP },
       { issuer: "https://issuer.example/oauth" },
@@ -560,7 +529,6 @@ describe("functional admin client", () => {
     expect(service.requests.at(-1)).toMatchObject({ ifMatch: null, ifNoneMatch: "*" });
     expect(service.requests).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: `/admin/apps/${APP}/oauth-issuer`, search: "?optional=true" }),
-      expect.objectContaining({ path: `/admin/apps/${APP}/managed-issuer`, method: "PATCH", csrf: "csrf-1", ifMatch: '"4"' }),
       expect.objectContaining({ path: `/admin/apps/${APP}/oauth-issuer/inspections`, method: "POST", csrf: "csrf-1" }),
     ]));
   });

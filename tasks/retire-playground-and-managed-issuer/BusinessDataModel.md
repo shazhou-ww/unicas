@@ -1,6 +1,7 @@
 # Business and data model review
 
-Status: Proposed
+Status: Approved by the requesting user on 2026-09-20 for primary commit
+`6c831d7`.
 
 ## Decision requested
 

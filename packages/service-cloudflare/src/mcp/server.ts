@@ -148,18 +148,6 @@ export function createControlPlaneMcpServer(
   );
 
   server.registerTool(
-    APP_ADMIN_MCP_TOOLS.get_app_managed_issuer.name,
-    APP_ADMIN_MCP_TOOLS.get_app_managed_issuer.registration,
-    async ({ appId }) => {
-      const grant = requireGrantScope("control:read");
-      return accountToolResult(async () => {
-        const actor = await requireGrantAccount(grant, options);
-        return withEtag(await options.accountService!.getManagedOAuthIssuer(actor.account.accountId, appId));
-      });
-    },
-  );
-
-  server.registerTool(
     APP_ADMIN_MCP_TOOLS.list_app_ref_domains.name,
     APP_ADMIN_MCP_TOOLS.list_app_ref_domains.registration,
     async ({ appId }) => {
@@ -580,43 +568,6 @@ export function createControlPlaneMcpServer(
           toolName: "activate_app_oauth_issuer",
         });
         return { etag: formatCasAdminETag(revision) };
-      });
-    },
-  );
-
-  server.registerTool(
-    APP_ADMIN_MCP_TOOLS.update_app_managed_issuer.name,
-    APP_ADMIN_MCP_TOOLS.update_app_managed_issuer.registration,
-    async ({ appId, enabled, etag }) => {
-      const grant = requireMutation("control:security", options);
-      return accountToolResult(async () => {
-        const actor = await requireGrantAccount(grant, options);
-        return withEtag(await options.accountService!.patchManagedOAuthIssuer({
-          actorAccountId: actor.account.accountId,
-          actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
-          appId,
-          enabled,
-          ifMatch: etag,
-          callerChannel: "mcp",
-          oauthClientHandle: grant.oauthClientHandle,
-          toolName: "update_app_managed_issuer",
-        }));
-      });
-    },
-  );
-
-  server.registerTool(
-    APP_ADMIN_MCP_TOOLS.mint_managed_space_capability.name,
-    APP_ADMIN_MCP_TOOLS.mint_managed_space_capability.registration,
-    async ({ appId }) => {
-      const grant = requireMutation("control:security", options);
-      return accountToolResult(async () => {
-        const actor = await requireGrantAccount(grant, options);
-        return options.accountService!.mintManagedSpaceCapability({
-          actorAccountId: actor.account.accountId,
-          actorExternalIdentityId: actor.authenticatedIdentity.externalIdentityId,
-          appId,
-        });
       });
     },
   );

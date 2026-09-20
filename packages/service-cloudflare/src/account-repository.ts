@@ -43,7 +43,7 @@ interface ExternalIdentityRow {
   avatar_url: string | null;
 }
 
-interface ManagedOAuthIssuerRow {
+interface OAuthIssuerBaseRow {
   readonly app_id: string;
   readonly issuer: string;
   readonly audience: string;
@@ -60,7 +60,7 @@ interface ManagedOAuthIssuerRow {
   readonly revision: number;
 }
 
-interface AppOAuthIssuerRow extends ManagedOAuthIssuerRow {
+interface AppOAuthIssuerRow extends OAuthIssuerBaseRow {
   readonly metadata_type: AccountOAuthIssuerRecord["metadataType"];
   readonly registration_endpoint: string | null;
   readonly last_refresh_at: number | null;
@@ -354,36 +354,6 @@ export class D1AccountRepository implements AccountRepository {
       description: row.description,
       status: row.status,
       createdAt: row.created_at,
-      revision: row.revision,
-    } : null;
-  }
-
-  async getManagedOAuthIssuer(appId: AppId): Promise<AccountOAuthIssuerRecord | null> {
-    const row = await this.db.prepare(
-      `SELECT app_id, issuer, audience, metadata_url, authorization_endpoint,
-        token_endpoint, jwks_uri, scopes_supported, code_challenge_methods_supported,
-        status, verified_at, jwks_digest, capability_max_lifetime_seconds, revision
-       FROM cas_app_managed_issuers WHERE app_id = ?`,
-    ).bind(appId).first<ManagedOAuthIssuerRow>();
-    return row ? {
-      appId: row.app_id,
-      mode: "managed",
-      issuer: row.issuer,
-      audience: row.audience,
-      metadataUrl: row.metadata_url,
-      metadataType: "oauth",
-      authorizationEndpoint: row.authorization_endpoint,
-      tokenEndpoint: row.token_endpoint,
-      jwksUri: row.jwks_uri,
-      registrationEndpoint: null,
-      scopesSupported: JSON.parse(row.scopes_supported) as string[],
-      codeChallengeMethodsSupported: JSON.parse(row.code_challenge_methods_supported) as string[],
-      status: row.status,
-      verifiedAt: row.verified_at,
-      lastRefreshAt: row.verified_at,
-      lastRefreshError: null,
-      jwksDigest: row.jwks_digest,
-      capabilityMaxLifetimeSeconds: row.capability_max_lifetime_seconds,
       revision: row.revision,
     } : null;
   }
@@ -837,84 +807,6 @@ export class D1AccountRepository implements AccountRepository {
     return (result.meta.changes ?? 0) === 1 ? "recorded" : "account-unavailable";
   }
 
-  async commitPatchAccountManagedOAuthIssuer(
-    input: Parameters<AccountRepository["commitPatchAccountManagedOAuthIssuer"]>[0],
-  ): Promise<"updated" | "actor-not-member" | "not-found" | "revision-mismatch"> {
-    const requireActor = this.db.prepare(
-      `SELECT CASE WHEN
-         EXISTS (SELECT 1 FROM cas_accounts WHERE account_id = ? AND blocked_at IS NULL)
-         AND EXISTS (SELECT 1 FROM cas_external_identities
-           WHERE external_identity_id = ? AND account_id = ? AND unlinked_at IS NULL)
-         AND EXISTS (SELECT 1 FROM cas_app_members WHERE app_id = ? AND account_id = ?)
-       THEN 1 ELSE json_extract('invalid', '$') END AS allowed`,
-    ).bind(
-      input.actorAccountId,
-      input.actorExternalIdentityId,
-      input.actorAccountId,
-      input.appId,
-      input.actorAccountId,
-    );
-    const update = this.db.prepare(
-      "UPDATE cas_app_managed_issuers SET status = ?, revision = ? WHERE app_id = ? AND revision = ?",
-    ).bind(
-      input.enabled ? "active" : "disabled",
-      input.nextRevision,
-      input.appId,
-      input.expectedRevision,
-    );
-    const requireUpdated = this.db.prepare(
-      "SELECT CASE WHEN changes() = 1 THEN 1 ELSE json_extract('invalid', '$') END AS updated",
-    );
-    const audit = this.db.prepare(
-      `INSERT INTO cas_control_audit_events
-        (event_id, app_id, action, target, request_id,
-         trace_id, caller_channel, oauth_client_handle, tool_name, created_at,
-         original_account_id, external_identity_id, target_account_id)
-       SELECT ?, ?, ?, issuer.issuer, ?, ?, ?,
-         ?, ?, ?, ?, ?, NULL
-       FROM cas_external_identities AS identity
-       JOIN cas_app_managed_issuers AS issuer ON issuer.app_id = ?
-       WHERE identity.external_identity_id = ? AND identity.account_id = ?
-         AND identity.unlinked_at IS NULL`,
-    ).bind(
-      input.eventId,
-      input.appId,
-      input.enabled ? "managed_issuer.enabled" : "managed_issuer.disabled",
-      input.requestId ?? null,
-      input.traceId ?? null,
-      input.callerChannel ?? null,
-      input.oauthClientHandle ?? null,
-      input.toolName ?? null,
-      input.now,
-      input.actorAccountId,
-      input.actorExternalIdentityId,
-      input.appId,
-      input.actorExternalIdentityId,
-      input.actorAccountId,
-    );
-    try {
-      await this.db.batch([
-        requireActor,
-        update,
-        requireUpdated,
-        audit,
-        this.db.prepare("INSERT OR IGNORE INTO cas_control_meta (key, value) VALUES ('snapshot', 0)"),
-        this.db.prepare("UPDATE cas_control_meta SET value = value + 1 WHERE key = 'snapshot'"),
-      ]);
-      return "updated";
-    } catch (error) {
-      if (!isJsonFailure(error)) throw error;
-      const account = await this.getAccount(input.actorAccountId);
-      const identity = await this.getIdentity(input.actorExternalIdentityId);
-      if (!account || account.blockedAt !== null || !identity
-        || identity.accountId !== input.actorAccountId || identity.unlinkedAt !== null
-        || !await this.hasAppMembership(input.actorAccountId, input.appId)) {
-        return "actor-not-member";
-      }
-      return await this.getManagedOAuthIssuer(input.appId) ? "revision-mismatch" : "not-found";
-    }
-  }
-
   async commitPatchAccountApp(
     input: Parameters<AccountRepository["commitPatchAccountApp"]>[0],
   ): Promise<"updated" | "actor-not-member" | "not-found" | "revision-mismatch"> {
@@ -1020,15 +912,6 @@ export class D1AccountRepository implements AccountRepository {
         input.oauthClientHandle ?? null, input.toolName ?? null,
         input.app.createdAt, input.actorAccountId, input.actorExternalIdentityId),
     ];
-    if (input.managedIssuer) {
-      const issuer = input.managedIssuer;
-      statements.push(this.db.prepare(
-        "INSERT INTO cas_app_managed_issuers (app_id, issuer, audience, metadata_url, authorization_endpoint, token_endpoint, jwks_uri, scopes_supported, code_challenge_methods_supported, status, verified_at, jwks_digest, capability_max_lifetime_seconds, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)",
-      ).bind(issuer.appId, issuer.issuer, issuer.audience, issuer.metadataUrl,
-        issuer.authorizationEndpoint, issuer.tokenEndpoint, issuer.jwksUri,
-        JSON.stringify(issuer.scopesSupported), JSON.stringify(issuer.codeChallengeMethodsSupported),
-        issuer.verifiedAt, issuer.jwksDigest, issuer.capabilityMaxLifetimeSeconds, issuer.revision));
-    }
     if (input.idempotency) {
       statements.push(this.db.prepare(
         `INSERT INTO cas_account_app_idempotency

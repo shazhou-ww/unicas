@@ -53,30 +53,6 @@ const me = {
   }],
 };
 
-function managedIssuer(status: "active" | "disabled" = "active") {
-  return {
-    appId: currentApp.appId,
-    mode: "managed",
-    issuer: `https://cas.example/managed-issuers/${currentApp.appId}`,
-    audience: `https://cas.example/stacks/${currentApp.appId}`,
-    metadataUrl: "https://cas.example/metadata",
-    metadataType: "oauth",
-    authorizationEndpoint: "https://cas.example/authorize",
-    tokenEndpoint: "https://cas.example/token",
-    jwksUri: "https://cas.example/jwks",
-    registrationEndpoint: null,
-    scopesSupported: ["cas:manage"],
-    codeChallengeMethodsSupported: ["S256"],
-    status,
-    verifiedAt: 1,
-    lastRefreshAt: 1,
-    lastRefreshError: null,
-    jwksDigest: "digest",
-    capabilityMaxLifetimeSeconds: 3600,
-    revision: status === "active" ? 1 : 0,
-  };
-}
-
 beforeEach(() => {
   toast.dismiss();
   window.location.hash = "#/apps/cas_one/overview";
@@ -86,9 +62,7 @@ beforeEach(() => {
     if (url.pathname === "/admin/account") return json(account);
     if (url.pathname === "/admin/apps") return json({ items: [currentApp] });
     if (url.pathname === "/admin/apps/cas_one") return json(currentApp);
-    if (url.pathname.endsWith("/managed-issuer")) return json(managedIssuer());
     if (url.pathname.endsWith("/oauth-issuer")) return json(null);
-    if (url.pathname.endsWith("/file-roots")) return json({ items: [] });
     if (url.pathname.endsWith("/people")) return json({ items: [], nextCursor: null });
     throw new Error(`Unexpected request: ${url.pathname}${url.search}`);
   }));
@@ -149,7 +123,6 @@ describe("current App shell", () => {
       }
       if (url.pathname === "/admin/apps") return json({ items: created ? [currentApp] : [] });
       if (url.pathname === `/admin/apps/${currentApp.appId}`) return json(currentApp);
-      if (url.pathname.endsWith("/managed-issuer")) return json(managedIssuer());
       if (url.pathname.endsWith("/oauth-issuer")) return json(null);
       throw new Error(`Unexpected request: ${url.pathname}`);
     }));
@@ -204,7 +177,6 @@ describe("current App shell", () => {
     expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual([
       "Overview", "Members", "Change Logs",
     ]);
-    expect(screen.getByRole("heading", { name: "Managed issuer" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Custom OAuth authorization server" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Usage" })).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: "Members" }));
@@ -253,7 +225,6 @@ describe("current App shell", () => {
         return new Response(null, { status: 204 });
       }
       if (url.pathname === "/admin/apps/cas_one") return json(app);
-      if (url.pathname.endsWith("/managed-issuer")) return json(managedIssuer());
       if (url.pathname.endsWith("/oauth-issuer")) return json(null);
       throw new Error(`Unexpected request: ${url.pathname}${url.search}`);
     }));

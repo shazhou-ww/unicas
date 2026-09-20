@@ -177,17 +177,6 @@ export interface AppOAuthIssuerInspection {
   readonly keys: readonly { readonly kid: string; readonly algorithm: string }[];
 }
 
-export interface ManagedSpaceCapability {
-  readonly accessToken: string;
-  readonly tokenType: "Bearer";
-  readonly expiresIn: number;
-  readonly expiresAt: number;
-  readonly issuer: string;
-  readonly audience: string;
-  readonly spaceId: string;
-  readonly permissions: readonly string[];
-}
-
 export interface AppRefDomain {
   readonly appId: AppId;
   readonly refDomain: string;

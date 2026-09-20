@@ -39,7 +39,6 @@ import type {
   AppOAuthIssuer,
   AppOAuthIssuerInspection,
   AppRefDomain,
-  ManagedSpaceCapability,
   PlatformAccountDetail,
   PlatformAccountPage,
   PlatformAuditAction,
@@ -136,13 +135,6 @@ export interface AdminClient {
     path: { readonly appId: AppId },
     query?: { readonly optional?: boolean },
   ): Promise<AdminClientRead<AppOAuthIssuer | null>>;
-  getAppManagedIssuer(path: { readonly appId: AppId }): Promise<AdminClientRead<AppOAuthIssuer>>;
-  patchAppManagedIssuer(
-    path: { readonly appId: AppId },
-    body: { readonly enabled: boolean },
-    ifMatch: string,
-  ): Promise<AdminClientRead<AppOAuthIssuer>>;
-  mintManagedSpaceCapability(path: { readonly appId: string }): Promise<ManagedSpaceCapability>;
   inspectAppOAuthIssuer(
     path: { readonly appId: AppId },
     body: { readonly issuer: string },
@@ -475,34 +467,6 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
       return { value: await response.json(), etag: readEtag(response) };
     },
 
-    async getAppManagedIssuer(path) {
-      const response = await requireOk(
-        await request(appAdminRoutes.managedIssuer(path)),
-        "getAppManagedIssuer",
-      );
-      return { value: await response.json(), etag: readEtag(response) };
-    },
-
-    async patchAppManagedIssuer(path, body, ifMatch) {
-      const response = await requireOk(
-        await request(appAdminRoutes.managedIssuer(path), {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", ...ifMatchHeader(ifMatch) },
-          body: JSON.stringify(body),
-        }),
-        "patchAppManagedIssuer",
-      );
-      return { value: await response.json(), etag: readEtag(response) };
-    },
-
-    async mintManagedSpaceCapability(path) {
-      const response = await requireOk(
-        await request(appAdminRoutes.managedCapability(path), { method: "POST" }),
-        "mintManagedSpaceCapability",
-      );
-      return response.json();
-    },
-
     async inspectAppOAuthIssuer(path, body) {
       const response = await requireOk(
         await request(appAdminRoutes.oauthIssuerInspections(path), {
@@ -565,4 +529,3 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-

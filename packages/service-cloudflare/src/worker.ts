@@ -381,7 +381,6 @@ function adminHandlerFor(env: Env): Promise<(request: Request) => Promise<Respon
       const now = config.now ?? (() => Date.now());
       const accountRepository = new D1AccountRepository(env.CAS_CONTROL_DB);
       const platformInvitationRepository = new D1PlatformInvitationRepository(env.CAS_CONTROL_DB);
-      const managedOAuthIssuer = managedIssuerFor(env, now);
       const oauthDiscovery = new CloudflareOAuthDiscoveryPort({
         allowedOrigins: parseOriginAllowlist(env.CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS),
       });
@@ -393,7 +392,6 @@ function adminHandlerFor(env: Env): Promise<(request: Request) => Promise<Respon
         platformInvitationRepository,
         peopleRepository: new D1PeopleRepository(env.CAS_CONTROL_DB),
         accountRepository,
-        managedOAuthIssuer,
         oauthDiscovery,
         oauthResourcePublicOrigin: env.CAS_PUBLIC_ORIGIN ?? env.PUBLIC_ORIGIN,
         emailChallengeRepository: new D1EmailChallengeRepository(env.CAS_CONTROL_DB),
@@ -408,7 +406,7 @@ function adminHandlerFor(env: Env): Promise<(request: Request) => Promise<Respon
   return handler;
 }
 
-function managedIssuerFor(env: Env, now?: () => number): CloudflareManagedIssuer | undefined {
+function managedIssuerFor(env: Env): CloudflareManagedIssuer | undefined {
   if (!env.MANAGED_ISSUER_PRIVATE_KEY_PKCS8 || !env.MANAGED_ISSUER_KEY_ID) return undefined;
   const key = env as object;
   let issuer = managedIssuers.get(key);
@@ -419,7 +417,6 @@ function managedIssuerFor(env: Env, now?: () => number): CloudflareManagedIssuer
       publicOrigin,
       privateKeyPkcs8: env.MANAGED_ISSUER_PRIVATE_KEY_PKCS8,
       keyId: env.MANAGED_ISSUER_KEY_ID,
-      now,
     });
     managedIssuers.set(key, issuer);
   }
@@ -579,7 +576,6 @@ async function fetchMcp(
   const worker = createControlPlaneMcpWorker(
     mcpConfigFromEnv(env),
     env.CAS_CONTROL_DB,
-    managedIssuerFor(env),
     new CloudflareOAuthDiscoveryPort({
       allowedOrigins: parseOriginAllowlist(env.CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS),
     }),

@@ -21,9 +21,6 @@ describe("App admin routes", () => {
     ["GET", appAdminRoutes.oauthIssuer({ appId: "app/a" }), "getOAuthIssuer"],
     ["PUT", appAdminRoutes.oauthIssuer({ appId: "app/a" }), "activateOAuthIssuer"],
     ["POST", appAdminRoutes.oauthIssuerInspections({ appId: "app/a" }), "inspectOAuthIssuer"],
-    ["GET", appAdminRoutes.managedIssuer({ appId: "app/a" }), "getManagedIssuer"],
-    ["PATCH", appAdminRoutes.managedIssuer({ appId: "app/a" }), "patchManagedIssuer"],
-    ["POST", appAdminRoutes.managedCapability({ appId: "app/a" }), "mintManagedCapability"],
     ["GET", appAdminRoutes.refDomains({ appId: "app/a" }), "listRefDomains"],
     ["GET", appAdminRoutes.controlAuditEvents({ appId: "app/a" }), "listControlAuditEvents"],
     ["GET", appAdminRoutes.rootDomainRefs({ appId: "app/a", refDomain: "doc" }), "listRootDomainRefs"],
@@ -69,7 +66,9 @@ describe("App admin routes", () => {
     expect(matchAppAdminRoute("GET", "/v2/apps/a/spaces/s/cas/usage")).toBeNull();
     expect(matchAppAdminRoute("GET", "/admin/apps/%ZZ")).toBeNull();
     expect(matchAppAdminRoute("POST", appAdminRoutes.me())).toBeNull();
-    expect(matchAppAdminRoute("GET", appAdminRoutes.managedCapability({ appId: "a" }))).toBeNull();
+    expect(matchAppAdminRoute("GET", "/admin/apps/a/managed-issuer")).toBeNull();
+    expect(matchAppAdminRoute("PATCH", "/admin/apps/a/managed-issuer")).toBeNull();
+    expect(matchAppAdminRoute("POST", "/admin/apps/a/managed-capabilities")).toBeNull();
     expect(matchAppAdminRoute("GET", "/admin/apps/a/playground/file-roots")).toBeNull();
     expect(matchAppAdminRoute("POST", "/admin/apps/a/playground/file-roots")).toBeNull();
     expect(matchAppAdminRoute("PATCH", "/admin/apps/a/playground/file-roots/r")).toBeNull();
