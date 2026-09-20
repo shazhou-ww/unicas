@@ -13,25 +13,46 @@ upload instructions.
 
 After uploading, the client repeats the exact same lease request. UniCAS
 observes its internal upload state and object storage, validates the canonical
-node once, publishes it, and returns the lease.
+node once, then returns a ready lease, all unready child hashes, or replacement
+upload instructions after rejecting the uploaded bytes.
 
-The public request contains no canonical length, upload ID, body, or upload-mode
-selector. Backward compatibility with the existing inline and header-selected
-upload modes is intentionally not preserved.
+The public request contains no canonical length, upload ID, canonical bytes,
+or upload-mode selector. Backward compatibility with the existing inline and
+header-selected upload modes is intentionally not preserved.
 
 ## API
 
 ```http
 POST /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/lease
 Authorization: Bearer <capability>
-X-CAS-Lease-Duration: 900000
+Content-Type: application/json
+
+{"leaseDurationMs":900000}
 ```
 
-The request is bodyless. `X-CAS-Lease-Duration` remains optional and is clamped
-to the supported lease interval.
+The request has one JSON property, `leaseDurationMs`. It is required on the
+wire and clamped to the supported lease interval. The public client supplies
+the documented default when its caller omits the whole options argument, so
+the request type does not need an optional property. Lease duration is an
+operation input rather than HTTP metadata and is therefore not encoded in a
+custom header.
 
 The caller needs only the node hash. It does not need to fetch metadata, know
 the canonical object's length, or declare whether it can upload the node.
+
+After path and body parsing, the service receives a fully normalized request:
+
+```ts
+interface LeaseNodeRequest {
+  readonly appId: string;
+  readonly spaceId: string;
+  readonly hash: string;
+  readonly leaseDurationMs: number;
+}
+```
+
+`leaseDurationMs` is always present here. The client-level default is applied
+before serialization rather than represented as transport absence.
 
 ## Results
 
@@ -67,7 +88,6 @@ Cache-Control: no-store
 {
   "state": "awaiting_upload",
   "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-  "reason": "node_missing",
   "upload": {
     "method": "PUT",
     "url": "https://presigned-upload-target.example/...",
@@ -87,22 +107,15 @@ HTTP 200 rather than 202.
 The response contains no upload ID, temporary object key, storage credential,
 or App capability.
 
-`reason` explains why this particular upload target was issued:
+### Awaiting replacement upload
 
-- `node_missing`: no prior upload generation existed;
-- `upload_pending`: the current generation has no visible object yet;
-- `upload_expired`: the prior generation expired and was replaced; or
-- `previous_upload_rejected`: the prior object failed validation and was
-  replaced.
-
-For `previous_upload_rejected`, the response also carries an explicit,
-publish-safe rejection:
+When the prior object failed immutable validation, lease returns a distinct
+state with an explicit, publish-safe rejection and a fresh upload target:
 
 ```json
 {
-  "state": "awaiting_upload",
+  "state": "awaiting_replacement_upload",
   "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-  "reason": "previous_upload_rejected",
   "rejection": {
     "code": "NODE_DIGEST_MISMATCH",
     "message": "Uploaded canonical bytes did not match the requested node hash"
@@ -121,8 +134,16 @@ publish-safe rejection:
 
 The replacement target uses a new internal generation and a new temporary
 object key. The caller can therefore correct and upload the bytes immediately;
-it is never asked to overwrite the rejected write-once object. The rejection
-is context for the transition back to `awaiting_upload`, not a separate state.
+it is never asked to overwrite the rejected write-once object.
+
+The replacement generation durably retains the publish-safe rejection that
+caused it. Repeating lease before a corrected PUT therefore remains
+`awaiting_replacement_upload` and returns that rejection with upload
+instructions for the current replacement generation. Expiry may rotate its
+URL and internal key, but does not erase the rejection context. This keeps the
+response stable across retries without exposing generation identity.
+`rejection.code` classifies why the bytes were rejected; it is not another
+lifecycle-state discriminator.
 
 ### Validated, waiting for children
 
@@ -132,15 +153,12 @@ uploaded again:
 
 ```json
 {
-  "state": "validated_waiting_children",
+  "state": "validated_awaiting_children",
   "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-  "blocked": {
-    "code": "NODE_DEPENDENCY_NOT_READY",
-    "childHashes": [
-      "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-      "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
-    ]
-  }
+  "childHashes": [
+    "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+    "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+  ]
 }
 ```
 
@@ -164,8 +182,9 @@ snake case while the state diagram uses matching PascalCase labels.
 | --- | --- | --- |
 | `NoAuthorization` | Create an upload generation and authorize its temporary object. | `awaiting_upload` |
 | `AwaitingUpload` | Retain a live generation, or rotate an expired generation that has no object. | `awaiting_upload` |
-| `UploadedUnvalidated` | Validate the object, then publish it, retain it for children, or replace a rejected generation. | `ready`, `validated_waiting_children`, or `awaiting_upload` |
-| `ValidatedWaitingChildren` | Recheck child readiness without rehashing or reparsing. | `validated_waiting_children` or `ready` |
+| `AwaitingReplacementUpload` | Retain or rotate the replacement generation and preserve its rejection context. | `awaiting_replacement_upload` |
+| `UploadedUnvalidated` | Validate the object, then publish it, retain it for children, or replace a rejected generation. | `ready`, `validated_awaiting_children`, or `awaiting_replacement_upload` |
+| `ValidatedAwaitingChildren` | Recheck child readiness without rehashing or reparsing. | `validated_awaiting_children` or `ready` |
 | `CanonicalOrphan` | Resume the interrupted publication. | `ready` |
 | `Ready` | Confirm canonical storage and extend the lease. | `ready` |
 
@@ -200,14 +219,17 @@ sequenceDiagram
         CAS->>State: Resolve current generation
         CAS->>R2: Inspect uploaded object
         CAS->>CAS: Validate canonical node once
-        alt Canonical node is valid
+        alt Canonical node is valid and children are ready
             CAS->>State: Atomically publish metadata, edges, and lease
             CAS->>R2: Delete temporary object
             CAS-->>App: 200 state=ready + lease
+        else Canonical node is valid but children are not ready
+          CAS->>State: Persist generation-fenced validation evidence
+          CAS-->>App: 200 state=validated_awaiting_children + child hashes
         else Canonical node is invalid
             CAS->>State: Retire generation and create replacement
             CAS->>R2: Delete rejected temporary object
-            CAS-->>App: 200 state=awaiting_upload + rejection + new signed PUT
+            CAS-->>App: 200 state=awaiting_replacement_upload + rejection + signed PUT
         end
     end
 ```
@@ -268,15 +290,18 @@ The effective state is derived from those facts on every lease request.
 | `true` | Irrelevant | Irrelevant | Present | Ready | Confirm canonical object presence, extend lease, return `state: "ready"`. |
 | `false` or absent | Absent or expired | Absent | Absent | No usable upload authorization | Create a generation and return `state: "awaiting_upload"` with upload instructions. |
 | `false` or absent | Valid | Absent | Absent | Upload authorized but incomplete | Return upload instructions for the current generation. |
+| `false` or absent | Valid with prior rejection | Absent | Absent | Replacement upload authorized but incomplete | Return `state: "awaiting_replacement_upload"` with the retained rejection and upload instructions. |
 | `false` or absent | Valid or expired | Present | Absent | Uploaded and not yet validated | Perform immutable validation once. |
 | `false` | Present | Present | Present | Structurally valid, waiting for children | Recheck only child readiness; do not rehash, reparse, or re-upload. |
 | `false` or absent | Present | Present | Rejected by this lease | Invalid uploaded object | Retire the generation, create a replacement, and return the rejection with a fresh upload target. |
 | `false` or absent | Any recoverable record | Canonical object present | Present or reconstructible | Publication interrupted | Resume or adopt the canonical object and complete the ready transition. |
 | `true` | Irrelevant | Canonical object absent | Present | Storage inconsistency | Return a storage-integrity failure and alert; never downgrade to upload required. |
 
-“Uploaded but rejected” is an observed transition rather than durable state.
-The detecting lease call atomically retires that generation and creates its
-replacement before returning.
+“Uploaded but rejected” is an observed transition. The detecting lease call
+atomically retires that generation and creates its replacement before
+returning. The resulting `AwaitingReplacementUpload` state is derived from the
+current replacement authorization carrying the publish-safe rejection; it is
+not a separately persisted state enum.
 
 “Validated but waiting for children” does require durable validation evidence
 if full validation is to occur only once. This evidence need not be a state
@@ -298,10 +323,12 @@ stateDiagram-v2
     AwaitingUpload --> AwaitingUpload: URL expires without object<br/>rotate generation
     AwaitingUpload --> UploadedUnvalidated: R2 PUT becomes visible atomically
     UploadedUnvalidated --> Ready: object valid and children ready<br/>publish + lease
-    UploadedUnvalidated --> ValidatedWaitingChildren: object valid but children not ready<br/>persist validation evidence
-    ValidatedWaitingChildren --> ValidatedWaitingChildren: lease while child remains unready
-    ValidatedWaitingChildren --> Ready: all children ready<br/>publish + lease
-    UploadedUnvalidated --> AwaitingUpload: invalid object<br/>retire generation + fresh target
+    UploadedUnvalidated --> ValidatedAwaitingChildren: object valid but children not ready<br/>persist validation evidence
+    ValidatedAwaitingChildren --> ValidatedAwaitingChildren: lease while children remain unready
+    ValidatedAwaitingChildren --> Ready: all children ready<br/>publish + lease
+    UploadedUnvalidated --> AwaitingReplacementUpload: invalid object<br/>retire generation + fresh target
+    AwaitingReplacementUpload --> AwaitingReplacementUpload: lease reissues target or rotates expired generation
+    AwaitingReplacementUpload --> UploadedUnvalidated: corrected R2 PUT becomes visible atomically
     UploadedUnvalidated --> CanonicalOrphan: canonical publish succeeds<br/>D1 transition is interrupted
     CanonicalOrphan --> Ready: later lease resumes publication
     Ready --> Ready: lease renewal
@@ -327,8 +354,9 @@ the lease evaluation time.
 | --- | --- | --- | --- | --- |
 | `NoAuthorization` | Absent, or `ready = false` without validation evidence | Absent, superseded, or expired | No current temporary object and no canonical object | There is no completed upload to validate. The next lease creates a generation and signed target. |
 | `AwaitingUpload` | Absent, or `ready = false` without validation evidence | Present, current, and valid | Current temporary object absent; canonical object absent | A PUT may not have started or may still be in progress. R2 does not expose a partial object. |
+| `AwaitingReplacementUpload` | Absent, or `ready = false` without validation evidence | Present, current, and carrying a prior rejection | Current temporary object absent; canonical object absent | A prior upload failed immutable validation. The replacement target awaits corrected bytes. |
 | `UploadedUnvalidated` | Absent, or `ready = false` without validation evidence | Present and current; it may now be valid or expired | Current temporary object present; canonical object absent | Immutable size, digest, envelope, metadata, and refs have not yet been durably accepted. |
-| `ValidatedWaitingChildren` | Present with `ready = false` | Present and tied to the same current generation | Validated temporary object present, or an equivalent recoverable canonical object | Generation-fenced immutable metadata and ordered refs are durable, and at least one referenced child is not ready. |
+| `ValidatedAwaitingChildren` | Present with `ready = false` | Present and tied to the same current generation | Validated temporary object present, or an equivalent recoverable canonical object | Generation-fenced immutable metadata and ordered refs are durable, and at least one referenced child is not ready. |
 | `CanonicalOrphan` | Absent, or present with `ready = false` and an incomplete publication transition | May be present, expired, or already cleared | Canonical hash-addressed object present | Immutable publication reached R2, but the D1 ready transition did not commit. |
 | `Ready` | Present with `ready = true`; immutable metadata and ordered edges committed | Irrelevant and eligible for cleanup | Canonical hash-addressed object present | Child readiness and child-count updates were committed before or with `ready = true`. |
 
@@ -396,6 +424,10 @@ interface InternalNodeUpload {
   readonly temporaryObjectKey: string;
   readonly createdAt: number;
   readonly expiresAt: number;
+  readonly rejection: {
+    readonly code: string;
+    readonly message: string;
+  } | null;
 }
 ```
 
@@ -434,7 +466,9 @@ object = inspect the current temporary key
 if object is absent:
     if the session or signed URL expired:
         rotate to a new generation and temporary key
-    return freshly signed upload instructions for the current key
+  if the current generation carries a prior rejection:
+    return state=awaiting_replacement_upload with rejection and upload instructions
+  return state=awaiting_upload with upload instructions
 
 if object is present:
     accept it for validation even if its signed URL has since expired
@@ -444,10 +478,10 @@ if object is present:
     validate its size, digest, and canonical structure
     if those immutable checks fail:
         retire the current generation
-        create a replacement generation and temporary key
-        return state=awaiting_upload with rejection details and the new target
+      create a replacement generation and temporary key carrying the rejection
+      return state=awaiting_replacement_upload with rejection and the new target
     if any child is not ready:
-      retain the validated object and return state=validated_waiting_children with all unready child hashes
+      retain the validated object and return state=validated_awaiting_children with all unready child hashes
     publish it exactly once
     establish the requested lease
     return state=ready
@@ -492,18 +526,19 @@ global cross-Space validation or deduplication.
 
 An immutable validation failure must not strand the caller behind the
 write-once temporary key. In the same serialized lease operation, UniCAS
-retires the rejected generation, creates a new generation and key, schedules
-the rejected object for deletion, and returns `state: "awaiting_upload"` with
-both the rejection and replacement instructions. The replacement is durable before the
-response is returned, so retrying the lease cannot rediscover the rejected
-generation as current.
+retires the rejected generation, creates a new generation and key carrying the
+publish-safe rejection, schedules the rejected object for deletion, and
+returns `state: "awaiting_replacement_upload"` with the rejection and
+replacement instructions. The replacement is durable before the response is
+returned, so retrying the lease cannot rediscover the rejected generation as
+current or lose its rejection context.
 
 Child readiness is different from an invalid upload. The canonical bytes may
 be valid while a referenced child is still being published. UniCAS retains the
-validated temporary object and returns `state: "validated_waiting_children"` with
-`NODE_DEPENDENCY_NOT_READY` details. After all listed children become ready,
-repeating the same parent lease request resumes publication without uploading
-the parent again.
+validated temporary object and returns
+`state: "validated_awaiting_children"` with all unready child hashes. After all
+listed children become ready, repeating the same parent lease request resumes
+publication without uploading the parent again.
 
 The durable validation evidence is fenced by the internal generation. If that
 generation is retired, its staged metadata and refs are deleted with it and
@@ -559,9 +594,10 @@ upload-time object-store limit unless the provider enforces it.
 | Concurrent lease after upload | One request publishes; others join or return `state: "ready"`. |
 | Expired generation without an object | Rotate generation and return `state: "awaiting_upload"` with a new URL. |
 | Expired signing URL with an object | Validate the completed object and return the resulting state; URL expiry only prevents another PUT. |
-| Oversized or malformed object | Retire the generation and return `state: "awaiting_upload"` with rejection details and a new write-once target. |
-| Digest mismatch | Retire the generation and return `state: "awaiting_upload"` with rejection details and a new write-once target. |
-| One or more children not ready | Retain the validated object and return `state: "validated_waiting_children"` with every distinct unready child hash; repeating lease resumes publication without re-upload. |
+| Oversized or malformed object | Retire the generation and return `state: "awaiting_replacement_upload"` with rejection details and a new write-once target. |
+| Digest mismatch | Retire the generation and return `state: "awaiting_replacement_upload"` with rejection details and a new write-once target. |
+| Repeated lease before corrected PUT | Return `state: "awaiting_replacement_upload"` with the retained rejection and current replacement target. |
+| One or more children not ready | Retain the validated object and return `state: "validated_awaiting_children"` with every distinct unready child hash; repeating lease resumes publication without re-upload. |
 | Failure after canonical R2 publication but before D1 commit | A later lease adopts the verified canonical orphan and returns `state: "ready"`. |
 | Failure after D1 ready commit | A later lease returns `state: "ready"`; temporary cleanup is retried asynchronously. |
 | Ready record without canonical content | Return a storage-integrity error and alert; never present the node as uploadable. |
@@ -591,13 +627,23 @@ rule must independently guarantee its eventual deletion.
 
 ## Client contract
 
-The low-level client exposes one operation:
+Request types contain no optional properties. The convenience method may omit
+the whole options object, in which case it uses the complete default value.
+Supplying an options object requires every property, including `signal: null`
+when cancellation is not needed.
 
 ```ts
+const DEFAULT_LEASE_DURATION_MS = 900_000;
+
 interface LeaseNodeOptions {
-  readonly durationMs?: number;
-  readonly signal?: AbortSignal;
+  readonly durationMs: number;
+  readonly signal: AbortSignal | null;
 }
+
+const DEFAULT_LEASE_NODE_OPTIONS: LeaseNodeOptions = {
+  durationMs: DEFAULT_LEASE_DURATION_MS,
+  signal: null,
+};
 
 type LeaseNodeResult =
   | {
@@ -609,12 +655,17 @@ type LeaseNodeResult =
   | {
       readonly state: "awaiting_upload";
       readonly hash: string;
-      readonly reason:
-        | "node_missing"
-        | "upload_pending"
-        | "upload_expired"
-        | "previous_upload_rejected";
-      readonly rejection?: {
+      readonly upload: {
+        readonly method: "PUT";
+        readonly url: string;
+        readonly expiresAt: number;
+        readonly headers: Readonly<Record<string, string>>;
+      };
+    }
+  | {
+      readonly state: "awaiting_replacement_upload";
+      readonly hash: string;
+      readonly rejection: {
         readonly code:
           | "NODE_TOO_LARGE"
           | "NODE_DIGEST_MISMATCH"
@@ -630,16 +681,24 @@ type LeaseNodeResult =
       };
     }
   | {
-      readonly state: "validated_waiting_children";
+      readonly state: "validated_awaiting_children";
       readonly hash: string;
-      readonly blocked: {
-        readonly code: "NODE_DEPENDENCY_NOT_READY";
-        readonly childHashes: readonly string[];
-      };
+      readonly childHashes: readonly string[];
     };
 
-leaseNode(hash: string, options?: LeaseNodeOptions): Promise<LeaseNodeResult>;
+interface LeaseNodeClient {
+  leaseNode(hash: string): Promise<LeaseNodeResult>;
+  leaseNode(hash: string, options: LeaseNodeOptions): Promise<LeaseNodeResult>;
+}
 ```
+
+The zero-options overload applies `DEFAULT_LEASE_NODE_OPTIONS`; the second
+overload requires a complete options value. Neither overload introduces an
+optional request property.
+
+Every response variant has only required properties. `state` is the sole
+lifecycle discriminator: data that is not valid for every state lives only in
+the corresponding union member rather than behind an optional property.
 
 The transport client does not accept a node body and does not automatically
 perform the direct PUT. A higher-level node/blob client may provide the
@@ -648,12 +707,16 @@ convenience loop:
 ```text
 lease(hash)
 if state is awaiting_upload:
-    surface any previous-upload rejection to the caller
     obtain or construct canonical bytes
     PUT using returned instructions
     lease(hash)
-if state is validated_waiting_children:
-  make every listed child ready
+if state is awaiting_replacement_upload:
+    surface the rejection to the caller
+    obtain corrected canonical bytes
+    PUT using returned instructions
+    lease(hash)
+if state is validated_awaiting_children:
+    make every listed child ready
     lease(hash)
 require state is ready
 ```
@@ -667,9 +730,10 @@ call.
 
 The redesign removes:
 
+- `X-CAS-Lease-Duration`;
 - `X-CAS-Upload-Length`;
 - `X-CAS-Upload-Id`;
-- canonical request bodies on the lease route;
+- canonical byte bodies on the lease route;
 - inline upload through the UniCAS Worker;
 - the `uploadMode: "legacy" | "direct"` client option;
 - a `CasNodeSource` parameter on the low-level `leaseNode` call; and

@@ -6,7 +6,7 @@ Revised: 2026-09-20
 
 ## Goal
 
-Replace the public v2 node upload contract with one hash-only lease operation
+Replace the public v2 node upload contract with one hash-addressed lease operation
 that lets clients optimistically reuse an existing node and, only when the node
 is absent, obtain a direct object-storage upload target. Repeating the same
 lease request after upload must let UniCAS validate and publish the node without
@@ -39,11 +39,13 @@ The proposed replacement is specified in
 
 ## Scope
 
-- Redesign the public v2 node lease operation as one bodyless, hash-addressed
-  request with an optional lease-duration header.
+- Redesign the public v2 node lease operation as one hash-addressed request
+  whose JSON body contains only a required `leaseDurationMs` property; public
+  clients apply its documented default before serialization.
 - Make the first lease attempt and the post-upload lease attempt identical.
-- Return either a ready lease or direct upload instructions as a discriminated
-  response.
+- Return a ready lease, ordinary upload instructions, replacement upload
+  instructions with rejection details, or all unready child hashes as a
+  response discriminated only by `state`.
 - Remove public upload IDs, upload-length declarations, inline canonical
   request bodies, and client-selectable upload modes.
 - Keep upload session identity, generation fencing, temporary object identity,
@@ -93,12 +95,20 @@ The proposed replacement is specified in
 
 ## Acceptance criteria
 
-- [ ] The v2 contract exposes one bodyless node lease request identified by App,
-      Space, and node hash, with no upload length, upload ID, canonical body, or
+- [ ] The v2 contract exposes one node lease request identified by App, Space,
+      and node hash, with a required JSON `leaseDurationMs` property and no
+      upload length, upload ID, canonical bytes, custom lease header, or
       upload-mode selector.
 - [ ] The same lease request returns a ready lease for an existing node,
-      upload instructions for an absent node, and a ready lease after the
-      corresponding direct upload has completed.
+      upload instructions for an absent node, all unready child hashes for a
+      validated blocked node, replacement instructions after rejecting an
+      upload, and a ready lease after a valid upload can be published.
+- [ ] Normalized request types contain only required properties; values that
+  callers may omit have documented defaults applied at the boundary.
+- [ ] Each successful lease response is a strict discriminated-union member
+  with required properties and uses `state` as its sole lifecycle
+  discriminator; no optional property, parallel `reason`, or nested status
+  code substitutes for another response variant.
 - [ ] Upload state is derived from the node ready flag, durable validation
       evidence, the current upload-authorization record, and R2 object
       presence; no separate persisted state enum is introduced.
