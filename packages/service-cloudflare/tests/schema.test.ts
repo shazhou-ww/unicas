@@ -46,6 +46,8 @@ describe("App-scoped Space schema", () => {
       "cas_root_domain_refs",
       "cas_root_domain_revisions",
       "cas_upload_reservations",
+      "cas_node_uploads",
+      "cas_node_upload_cleanup",
     ]) {
       expect(names.has(expected), `missing table ${expected}`).toBe(true);
     }
@@ -60,6 +62,7 @@ describe("App-scoped Space schema", () => {
     const pk = columns.results!.filter((column) => column.pk > 0).map((column) => column.name);
     expect(pk).toEqual(["app_id", "space_id", "hash"]);
     expect(columns.results!.some((column) => column.name === "object_format")).toBe(false);
+    expect(columns.results!.find((column) => column.name === "ready")?.dflt_value).toBe("1");
   });
 });
 

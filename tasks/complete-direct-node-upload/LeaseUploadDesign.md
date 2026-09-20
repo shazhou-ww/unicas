@@ -1,6 +1,6 @@
 # Lease-driven direct node upload
 
-Status: proposed for interface and architecture review
+Status: accepted for implementation
 
 Updated: 2026-09-20
 
@@ -224,8 +224,8 @@ sequenceDiagram
             CAS->>R2: Delete temporary object
             CAS-->>App: 200 state=ready + lease
         else Canonical node is valid but children are not ready
-          CAS->>State: Persist generation-fenced validation evidence
-          CAS-->>App: 200 state=validated_awaiting_children + child hashes
+            CAS->>State: Persist generation-fenced validation evidence
+            CAS-->>App: 200 state=validated_awaiting_children + child hashes
         else Canonical node is invalid
             CAS->>State: Retire generation and create replacement
             CAS->>R2: Delete rejected temporary object
@@ -424,9 +424,16 @@ interface InternalNodeUpload {
   readonly temporaryObjectKey: string;
   readonly createdAt: number;
   readonly expiresAt: number;
+  readonly cleanupAt: number;
   readonly rejection: {
     readonly code: string;
     readonly message: string;
+  } | null;
+  readonly validation: {
+    readonly storedBytes: number;
+    readonly contentSize: number;
+    readonly contentType: string;
+    readonly refs: readonly string[];
   } | null;
 }
 ```
@@ -478,10 +485,10 @@ if object is present:
     validate its size, digest, and canonical structure
     if those immutable checks fail:
         retire the current generation
-      create a replacement generation and temporary key carrying the rejection
-      return state=awaiting_replacement_upload with rejection and the new target
+        create a replacement generation and temporary key carrying the rejection
+        return state=awaiting_replacement_upload with rejection and the new target
     if any child is not ready:
-      retain the validated object and return state=validated_awaiting_children with all unready child hashes
+        retain the validated object and return state=validated_awaiting_children with all unready child hashes
     publish it exactly once
     establish the requested lease
     return state=ready
@@ -494,13 +501,11 @@ if a ready record exists without its canonical object:
 ```
 
 An in-instance single-flight keyed by `(appId, spaceId, hash)` joins concurrent
-publication attempts. Durable generation fencing and write-once object keys
-cover retries and process restarts.
-
-The checks and transitions that choose, retire, or publish a generation must be
-serialized for the Space. R2 reads and streaming validation may run outside the
-mutation gate, but their result must be committed only if the same generation
-is still current.
+publication attempts. The implementation serializes the complete evaluation
+under the Space mutation gate; direct PUT remains outside that gate. Durable
+generation fencing and write-once object keys cover retries and process
+restarts. A future implementation may move R2 reads outside the mutation gate
+only if it rechecks the same generation before staging or publication.
 
 ## Validation boundary
 
@@ -516,10 +521,15 @@ The first lease request that observes a complete upload performs:
 - ordered child-ref extraction and limits;
 - existing immutable metadata consistency, if applicable;
 - child readiness checks; and
-- atomic D1 node, edge, child-count, reservation, session, and lease updates.
+- atomic D1 node, edge, child-count, reservation, and lease updates.
 
 After this transition, the node is ready. Later lease and positive Root Ref
 operations do not parse or hash the canonical bytes again.
+
+The upload record remains until temporary-object deletion succeeds. Only then
+is it removed. If deletion fails after the ready commit, its `cleanupAt`
+deadline keeps the object discoverable by bounded GC without weakening ready
+state.
 
 The validation scope is `(appId, spaceId, hash)`. This design does not introduce
 global cross-Space validation or deduplication.
@@ -565,15 +575,15 @@ The target must be:
 - free of reusable object-storage credentials.
 
 The public request does not declare an exact content length. The 32 MiB limit
-is therefore guaranteed at publication, not necessarily before bytes reach
-R2. Before implementation, the R2 integration must verify whether a presigned
-PUT can bind the expected SHA-256 checksum derived from the path hash while
-remaining compatible with browser CORS and supported streaming bodies.
+is therefore guaranteed at publication, not before bytes reach R2. Cloudflare's
+R2 S3 compatibility documentation (reviewed 2026-09-20) supports `Content-MD5`
+for PutObject but not a SHA-256 `FULL_OBJECT` checksum. Because the CAS path
+hash is SHA-256 and does not determine an MD5 value, the presigned PUT cannot
+bind the canonical digest without adding another client-provided checksum.
+UniCAS therefore signs the object key, method, canonical media type, expiry,
+and `If-None-Match`, then computes SHA-256 itself on the next lease.
 
-If provider checksum binding is supported, UniCAS should require it. This binds
-the upload to the exact canonical object identity rather than only its length.
-
-If it is not supported, the accepted residual exposure is:
+The accepted residual exposure is:
 
 - a holder of a short-lived URL may transfer an oversized temporary object;
 - the object never becomes ready and is deleted when observed or expired;
@@ -618,6 +628,10 @@ Abandonment means the client stops. UniCAS expires and cleans:
 - temporary object;
 - obsolete generation objects; and
 - any canonical orphan that cannot be adopted.
+
+Before replacing a generation, UniCAS records its temporary key in a durable
+cleanup queue. The key leaves that queue only after deletion succeeds, so an
+R2 failure cannot make a superseded object unreachable to later cleanup.
 
 Cleanup must run without requiring a later request for the same hash.
 Presigned URL expiry must not exceed the corresponding internal generation

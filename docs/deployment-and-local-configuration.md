@@ -144,6 +144,13 @@ Additional features require these secrets:
 | `OAUTH_MICROSOFT_CLIENT_SECRET` | Microsoft personal-account administrator login |
 | `OAUTH_GITHUB_CLIENT_SECRET` | GitHub administrator login and verified Emails API lookup |
 
+`CAS_UPLOAD_URL_EXPIRY_SECONDS` defaults to `300` and must be an integer from
+1 through 604800. Browser upload origins must be allowed by the R2 bucket CORS
+policy for `PUT` with `Content-Type` and `If-None-Match`. Do not add
+`Authorization`: the presigned URL is the upload credential. R2 cannot enforce
+the canonical SHA-256 as a full-object PutObject checksum, so UniCAS validates
+the digest and 32 MiB limit on the subsequent lease request.
+
 Optional OIDC/session variables include `OIDC_ISSUER`, `OIDC_DISCOVERY_URL`,
 `SESSION_TTL_MS`, `SESSION_COOKIE_NAME`, `SESSION_COOKIE_SECURE`, and
 `SESSION_COOKIE_SAME_SITE`.

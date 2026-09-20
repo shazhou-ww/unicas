@@ -2,8 +2,15 @@ import { oc } from "@orpc/contract";
 import { JSON_SCHEMA_INPUT_REGISTRY } from "@orpc/zod/zod4";
 import { z } from "zod";
 import { AppIdSchema, SpaceIdSchema } from "./schemas.js";
+import type {
+  SpaceNodeLeaseRequest,
+  SpaceNodeLeaseResult,
+  SpaceNodeUploadInstructions,
+  SpaceNodeUploadRejection,
+} from "./types.js";
 
 export const SpaceApiBasePath = "/v2/apps/{appId}/spaces/{spaceId}";
+export const DefaultSpaceNodeLeaseDurationMs = 15 * 60 * 1000;
 
 const ErrorDataSchema = z.object({ message: z.string().optional() }).readonly();
 
@@ -14,6 +21,7 @@ export const SpaceApiErrorMap = {
   NOT_FOUND: { status: 404, message: "The requested CAS resource was not found", data: ErrorDataSchema },
   CONFLICT: { status: 409, message: "The CAS mutation conflicts with current state", data: ErrorDataSchema },
   PAYLOAD_TOO_LARGE: { status: 413, message: "The CAS payload exceeds the configured limit", data: ErrorDataSchema },
+  RESOURCE_EXHAUSTED: { status: 429, message: "The Space has too many active uploads", data: ErrorDataSchema },
   INTERNAL_ERROR: { status: 500, message: "The CAS operation failed", data: ErrorDataSchema },
 } as const;
 
@@ -50,31 +58,55 @@ const NodeStateSchema = z.object({
   childRefCount: z.number().int().nonnegative().describe("Stored parent edges that reference this node."),
   rootRefCount: z.number().int().describe("Aggregate business Root Ref balance for this node."),
 }).readonly().meta({ id: "SpaceNodeState" });
-const LeaseOperationResultSchema = z.union([
+const SpaceNodeLeaseRequestSchema: z.ZodType<SpaceNodeLeaseRequest> = z.object({
+  leaseDurationMs: z.number().int().positive()
+    .describe("Requested lease duration in milliseconds."),
+}).readonly().meta({ id: "SpaceNodeLeaseRequest" });
+const SpaceNodeUploadInstructionsSchema: z.ZodType<SpaceNodeUploadInstructions> = z.object({
+  method: z.literal("PUT"),
+  url: z.url(),
+  expiresAt: TimestampSchema,
+  headers: z.record(z.string(), z.string()).readonly(),
+}).readonly().meta({ id: "SpaceNodeUploadInstructions" });
+const SpaceNodeUploadRejectionSchema: z.ZodType<SpaceNodeUploadRejection> = z.object({
+  code: z.enum([
+    "NODE_TOO_LARGE",
+    "NODE_DIGEST_MISMATCH",
+    "INVALID_CANONICAL_NODE",
+    "NODE_CONFLICT",
+  ]),
+  message: z.string().min(1),
+}).readonly().meta({ id: "SpaceNodeUploadRejection" });
+const LeaseOperationResultSchema: z.ZodType<SpaceNodeLeaseResult> = z.discriminatedUnion("state", [
   z.object({
     hash: HashSchema,
-    ready: z.literal(true),
+    state: z.literal("ready"),
     leaseStartedAt: TimestampSchema,
     leaseExpiresAt: TimestampSchema,
   }).readonly(),
   z.object({
     hash: HashSchema,
-    ready: z.literal(false),
-    status: z.literal("upload_required"),
-    uploadId: z.string().min(1),
-    expiresAt: TimestampSchema,
-    upload: z.object({
-      method: z.literal("PUT"),
-      url: z.url(),
-      headers: z.record(z.string(), z.string()).readonly(),
-    }).readonly(),
+    state: z.literal("awaiting_upload"),
+    upload: SpaceNodeUploadInstructionsSchema,
+  }).readonly(),
+  z.object({
+    hash: HashSchema,
+    state: z.literal("awaiting_replacement_upload"),
+    rejection: SpaceNodeUploadRejectionSchema,
+    upload: SpaceNodeUploadInstructionsSchema,
+  }).readonly(),
+  z.object({
+    hash: HashSchema,
+    state: z.literal("validated_awaiting_children"),
+    childHashes: z.array(HashSchema).min(1).max(256).readonly(),
   }).readonly(),
 ]).meta({ id: "SpaceLeaseOperationResult" });
 const UsageSchema = z.object({
   nodeCount: z.number().int().nonnegative().describe("Node metadata rows owned by the Space."),
   readyContentBytes: z.number().int().nonnegative().describe("Logical bytes with ready canonical content."),
   readyStoredBytes: z.number().int().nonnegative().describe("Physical bytes attributed to ready content."),
-  reservedBytes: z.number().int().nonnegative().describe("Bytes reserved by incomplete uploads."),
+  reservedBytes: z.number().int().nonnegative()
+    .describe("Known bytes reserved by validated or server-mediated incomplete uploads; pre-validation direct R2 bytes are excluded."),
   notReadyNodeCount: z.number().int().nonnegative().describe("Nodes without ready canonical content."),
   leasedNodeCount: z.number().int().nonnegative().describe("Nodes protected by an unexpired lease."),
 }).readonly().meta({ id: "SpaceUsage" });
@@ -131,21 +163,14 @@ export const leaseSpaceNodeContract = spaceProcedure
     method: "POST",
     path: `${SpaceApiBasePath}/cas/nodes/{hash}/lease`,
     operationId: "leaseSpaceNode",
-    summary: "Lease or upload a node",
-    description: "Protects a node while a Root Ref commit is prepared and returns direct upload instructions when canonical content is absent.",
+    summary: "Lease a node",
+    description: "Advances the lease-driven node state machine and returns the resulting ready, upload, replacement-upload, or dependency state.",
     inputStructure: "detailed",
     tags: ["Nodes"],
   })
   .input(z.object({
     params: nodeParams,
-    headers: z.object({
-      "x-cas-lease-duration": z.number().int().positive().optional(),
-      "x-cas-upload-length": z.number().int().nonnegative().optional(),
-      "x-cas-upload-id": z.string().min(1).optional(),
-      "content-type": z.literal("application/vnd.unidocs.cas-node.v1").optional(),
-      "content-length": z.number().int().nonnegative().optional(),
-    }).readonly(),
-    body: BinaryStreamSchema.optional(),
+    body: SpaceNodeLeaseRequestSchema,
   }).readonly())
   .output(LeaseOperationResultSchema);
 

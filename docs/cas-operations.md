@@ -71,6 +71,27 @@ service request count + 5xx rate, Space 401/403 rate by error code
 
 ## Runbooks
 
+### Lease-driven upload cleanup
+
+App/Space v2 creates at most 1024 active node-upload generations per Space.
+Presigned PUT URLs default to five minutes. Uploaded or abandoned temporary
+objects remain eligible for recovery until their 24-hour cleanup deadline;
+the bounded Space GC path removes expired records, reservations, and temporary
+objects without requiring another lease for that hash.
+
+`reservedBytes` includes reservations whose byte length is known after
+validation (and retained v1 server-mediated uploads). It does not include an
+unvalidated direct R2 object because the v2 request declares no length. The
+active-generation limit, publication-time 32 MiB check, short URL lifetime,
+and cleanup deadline bound that pre-validation exposure instead.
+
+Alert on repeated `STORAGE_ERROR`, `CAS_UPLOAD_LIMIT`, or ready-record/object
+inconsistency. Never respond to a missing canonical object for a ready row by
+issuing a fresh upload target. R2 PutObject does not currently support a
+SHA-256 `FULL_OBJECT` checksum, so the 32 MiB limit and SHA-256 identity are
+enforced when the next lease validates the temporary object, not by R2 while
+receiving the PUT.
+
 ### Deploy
 
 The UniCAS service remains one application deployment unit, while a complete

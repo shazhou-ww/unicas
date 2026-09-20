@@ -112,63 +112,51 @@ and may use configured metadata caching.
 ```http
 POST /v2/apps/APP_ID/spaces/SPACE_ID/cas/nodes/HASH/lease
 Authorization: Bearer CAPABILITY
-content-type: application/vnd.unidocs.cas-node.v1
-content-length: 1024
-x-cas-lease-duration: 900000
+content-type: application/json
 
-<canonical node bytes>
+{"leaseDurationMs":900000}
 ```
 
-Optional request headers:
-
-| Header | Constraint | Purpose |
-| --- | --- | --- |
-| `x-cas-lease-duration` | Positive integer | Requested lease duration in milliseconds; service clamps it to supported bounds. |
-| `x-cas-upload-length` | Non-negative integer | Prepare a direct upload of the stated length. |
-| `x-cas-upload-id` | Non-empty string | Finalize a prepared direct upload. |
-| `content-type` | Exact canonical node media type | Identifies an inline canonical-node body. |
-| `content-length` | Non-negative integer | Required by the runtime for inline body upload. |
-
-The body is optional and, when present, is streamed.
+The JSON property is required. Published clients use 15 minutes when the
+caller omits the complete options argument; the service clamps accepted values
+to 60 seconds through 24 hours.
 
 Ready result:
 
 ```json
 {
+  "state": "ready",
   "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-  "ready": true,
   "leaseStartedAt": 1760000000000,
   "leaseExpiresAt": 1760000900000
 }
 ```
 
-Direct-upload preparation result:
+Upload result:
 
 ```json
 {
+  "state": "awaiting_upload",
   "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-  "ready": false,
-  "status": "upload_required",
-  "uploadId": "UPLOAD_ID",
-  "expiresAt": 1760000900000,
   "upload": {
     "method": "PUT",
     "url": "https://UPLOAD_TARGET",
+    "expiresAt": 1760000300000,
     "headers": {
-      "content-type": "application/vnd.unidocs.cas-node.v1"
+      "content-type": "application/vnd.unidocs.cas-node.v1",
+      "if-none-match": "*"
     }
   }
 }
 ```
 
-Use the returned method, URL, and headers exactly; then finalize with the same
-`uploadId`. Preparing the same active upload length reuses its session.
-Conflicting length is `409 CAS_UPLOAD_CONFLICT`; invalid upload identity is
-`400 CAS_UPLOAD_INVALID`; an expired session is `410 CAS_UPLOAD_EXPIRED`.
+Use the returned method, URL, and headers exactly, then repeat the same lease
+request. `awaiting_replacement_upload` additionally returns a required
+`rejection`; `validated_awaiting_children` returns every distinct unready child
+hash in canonical order and requires no second parent upload.
 
 The service validates canonical bytes against `HASH`. Ready-node calls renew
-the lease without re-uploading. Lease duration defaults to 15 minutes and is
-clamped to 60 seconds through 24 hours.
+the lease without re-uploading, parsing, or hashing.
 
 ## Get Space usage
 

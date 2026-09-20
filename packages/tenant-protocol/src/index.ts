@@ -13,6 +13,7 @@ export {
 } from "./contract.js";
 export type { CasTenantApiContract } from "./contract.js";
 export {
+  DefaultSpaceNodeLeaseDurationMs,
   SpaceApiBasePath,
   SpaceApiErrorMap,
   spaceApiContract,
@@ -38,6 +39,15 @@ export type {
   CasUsage,
   Space,
   SpaceId,
+  SpaceNodeLeaseAwaitingReplacementUploadResult,
+  SpaceNodeLeaseAwaitingUploadResult,
+  SpaceNodeLeaseReadyResult,
+  SpaceNodeLeaseRequest,
+  SpaceNodeLeaseResult,
+  SpaceNodeLeaseValidatedAwaitingChildrenResult,
+  SpaceNodeUploadInstructions,
+  SpaceNodeUploadRejection,
+  SpaceNodeUploadRejectionCode,
 } from "./types.js";
 
 export {

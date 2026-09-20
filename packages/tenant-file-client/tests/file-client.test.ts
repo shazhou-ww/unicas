@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import type { TenantCasClient } from "@unicas/tenant-client";
+import type { SpaceCasClient } from "@unicas/tenant-client";
 import type { TenantFileRootCatalog, TenantFileRootInfo } from "../src/index.js";
 
 const state = vi.hoisted(() => ({
@@ -65,7 +65,7 @@ function catalogFixture(): TenantFileRootCatalog & { readonly records: Map<strin
   };
 }
 
-function casFixture(): TenantCasClient {
+function casFixture(): SpaceCasClient {
   return {
     async readMetadata(hash) {
       const manifest = state.manifests.get(hash)!;
@@ -74,7 +74,7 @@ function casFixture(): TenantCasClient {
     async readContent(hash) {
       return new Blob([state.manifests.get(hash)!.content]).stream();
     },
-  } as TenantCasClient;
+  } as SpaceCasClient;
 }
 
 beforeEach(() => {

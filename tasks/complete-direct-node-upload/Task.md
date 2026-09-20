@@ -104,11 +104,11 @@ The proposed replacement is specified in
       validated blocked node, replacement instructions after rejecting an
       upload, and a ready lease after a valid upload can be published.
 - [ ] Normalized request types contain only required properties; values that
-  callers may omit have documented defaults applied at the boundary.
+      callers may omit have documented defaults applied at the boundary.
 - [ ] Each successful lease response is a strict discriminated-union member
-  with required properties and uses `state` as its sole lifecycle
-  discriminator; no optional property, parallel `reason`, or nested status
-  code substitutes for another response variant.
+      with required properties and uses `state` as its sole lifecycle
+      discriminator; no optional property, parallel `reason`, or nested status
+      code substitutes for another response variant.
 - [ ] Upload state is derived from the node ready flag, durable validation
       evidence, the current upload-authorization record, and R2 object
       presence; no separate persisted state enum is introduced.
@@ -154,7 +154,8 @@ The proposed replacement is specified in
 - [ ] Concurrent callers for the same node converge on one immutable ready node
       and receive valid leases without client-visible coordination.
 - [ ] Inline upload and the legacy upload headers and client configuration are
-      removed from protocol, OpenAPI, client, service, documentation, and tests.
+  removed from the App/Space v2 protocol, OpenAPI, client path, service,
+  documentation, and tests without changing frozen Stack/Tenant v1.
 - [ ] Focused protocol, client, service, Cloudflare, OpenAPI, documentation,
       concurrency, expiry, retry, and cleanup checks pass.
 - [ ] The user explicitly accepts the implemented contract for the exact

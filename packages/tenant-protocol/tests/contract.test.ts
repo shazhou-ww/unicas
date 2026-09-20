@@ -78,6 +78,18 @@ describe("CAS tenant OpenAPI", () => {
     expect(document.security).toEqual([{ spaceCapability: [] }]);
     expect(document.paths?.["/v2/apps/{appId}/spaces/{spaceId}/cas/usage"]?.get)
       .toHaveProperty("operationId", "getSpaceUsage");
+    const lease = document.paths?.["/v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/lease"]?.post;
+    const leaseJson = JSON.stringify(lease);
+    expect(lease?.parameters?.filter((parameter) => "in" in parameter && parameter.in === "header"))
+      .toEqual([]);
+    expect(lease).toHaveProperty("requestBody.required", true);
+    expect(leaseJson).toContain("leaseDurationMs");
+    expect(leaseJson).toContain("awaiting_upload");
+    expect(leaseJson).toContain("awaiting_replacement_upload");
+    expect(leaseJson).toContain("validated_awaiting_children");
+    expect(leaseJson).toContain("ready");
+    expect(leaseJson).not.toContain("uploadId");
+    expect(leaseJson).not.toContain("x-cas-upload");
     expect(serialized).not.toContain("stackId");
     expect(serialized).not.toContain("tenantId");
     expect(serialized).not.toContain("Tenant");

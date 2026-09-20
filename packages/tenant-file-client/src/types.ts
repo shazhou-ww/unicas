@@ -1,5 +1,5 @@
 import type { CasBlobSource, CasBlobWriteOptions } from "@unicas/tenant-blob-client";
-import type { TenantCasClient } from "@unicas/tenant-client";
+import type { SpaceCasClient } from "@unicas/tenant-client";
 
 export interface TenantFileRootInfo {
   readonly rootId: string;
@@ -53,7 +53,7 @@ export interface TenantFileSystem {
 }
 
 export interface TenantFileSystemOptions {
-  readonly cas: TenantCasClient;
+  readonly cas: SpaceCasClient;
   readonly catalog: TenantFileRootCatalog;
   readonly createId?: () => string;
   readonly createRequestId?: () => string;

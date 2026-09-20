@@ -160,7 +160,11 @@ async function dispatchSpaceRequest(
     context.route,
     context.platform,
     canonicalActorKey(call.appId, call.spaceId),
-    { "X-CAS-App-Id": call.appId, "X-CAS-Space-Id": call.spaceId },
+    {
+      "X-CAS-App-Id": call.appId,
+      "X-CAS-Space-Id": call.spaceId,
+      "X-CAS-Api-Version": "2",
+    },
     call.refDomain,
   );
 }
@@ -214,6 +218,27 @@ async function dispatchDataRequest(
       path = "/lease";
       method = "POST";
       headers["X-CAS-Hash"] = route.hash;
+      if (headers["X-CAS-Api-Version"] === "2") {
+        if (
+          request.headers.has(CasLeaseDurationHeader)
+          || request.headers.has(CasUploadLengthHeader)
+          || request.headers.has(CasUploadIdHeader)
+        ) {
+          return Response.json(
+            { error: "INVALID_REQUEST", message: "Legacy node lease headers are not supported by v2" },
+            { status: 400 },
+          );
+        }
+        if (request.headers.get("Content-Type")?.split(";", 1)[0]?.trim() !== "application/json") {
+          return Response.json(
+            { error: "INVALID_REQUEST", message: "v2 node lease requires application/json" },
+            { status: 400 },
+          );
+        }
+        headers["Content-Type"] = "application/json";
+        body = await request.text();
+        break;
+      }
       const duration = request.headers.get(CasLeaseDurationHeader);
       if (duration) headers[CasLeaseDurationHeader] = duration;
       const contentType = request.headers.get("Content-Type");

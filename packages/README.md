@@ -73,7 +73,7 @@ packages/                           @unicas org
 │   │     cache，以及 Root Ref 校验/幂等/投影/revision/retry 业务内核；不依赖
 │   │     Cloudflare 类型或 control-plane 实现；node GC 的候选复核、删除顺序与
 │   │     回收统计、Space node usage、node content range/metadata read，以及
-│   │     streaming/bodyless node lease 语义，同样通过 semantic repository port 执行；
+│   │     lease-driven direct node upload 语义，同样通过 semantic repository port 执行；
 │   │     控制面业务内核（App/member/invitation/issuer/audit 语义）经
 │   │     ControlPlaneAdminService 与 semantic repository port 执行
 │   └── control-auth/      @unicas/control-auth       admin 组
@@ -212,8 +212,7 @@ capability 是 JWT claim 词汇而非编码，故不进 `codec` 包。
 | **node GC 内核下沉 service** | 过期无引用候选、删除前复核、content-before-metadata 顺序与回收统计迁入 `@unicas/service`；D1/R2 adapter 保留候选 SQL、对象删除和 multiplicity-aware edge cascade |
 | **node usage 内核下沉 service** | logical/physical/reservation/readiness/lease 统计语义迁入 `@unicas/service`；D1/R2 adapter 只列 node、读取 canonical object 大小与 reservation 总量 |
 | **node read 内核下沉 service** | own-content HTTP range 解析、canonical payload offset 与 metadata/state shaping 迁入 `@unicas/service`；D1/R2 adapter 只读 node row、ordered edges 与 object range |
-| **bodyless lease 内核下沉 service** | lease duration policy、续租窗口、ready 检查与 verified canonical orphan adoption 迁入 `@unicas/service`；D1/R2 adapter 只负责 object head/prefix、lease update 与 adoption batch |
-| **streaming lease 内核下沉 service** | reservation/upload/inspect/immutability/child-readiness/commit/cleanup 编排迁入 `@unicas/service`，请求 body 仍直通平台 object store；Cloudflare adapter 只负责 R2 SHA-256 写入与 D1 batch |
+| **lease-driven upload 内核下沉 service** | v2 lease 的 generation fencing、临时对象检查、canonical validation、child readiness 与 publication 编排迁入 `@unicas/service`；Cloudflare adapter 负责 D1/R2 facts 与 presigned PUT |
 | **tenant Cloudflare 包收口** | D1/R2 repositories、tenant/domain DO、schema 与 audit RPC 迁入 `@unicas/service-cloudflare`，删除 `@unicas/server-cloudflare` |
 
 ## 待办（README 定方向）

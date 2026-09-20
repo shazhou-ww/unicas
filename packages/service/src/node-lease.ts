@@ -5,16 +5,24 @@ import {
   MAX_CANONICAL_NODE_BYTES,
   MAX_CONTENT_TYPE_LENGTH,
   MAX_NODE_REFS,
+  hashToHex,
   parseCanonicalNodeStream,
+  sha256,
   validateHash,
 } from "@unicas/codec";
-import type { CasLeaseResult } from "@unicas/tenant-protocol";
+import type {
+  CasLeaseResult,
+  SpaceNodeLeaseReadyResult,
+  SpaceNodeUploadRejection,
+} from "@unicas/tenant-protocol";
 import { NodeOpError, NodeOpErrorCodes } from "./node-errors.js";
 
 export const DEFAULT_LEASE_MS = 15 * 60 * 1000;
 export const MIN_LEASE_MS = 60 * 1000;
 export const MAX_LEASE_MS = 24 * 60 * 60 * 1000;
 export const DEFAULT_UPLOAD_SESSION_MS = 15 * 60 * 1000;
+export const DEFAULT_UPLOAD_CLEANUP_MS = 24 * 60 * 60 * 1000;
+export const DEFAULT_MAX_ACTIVE_UPLOADS = 1024;
 
 export interface NodeLeaseScope {
   readonly stackId: string;
@@ -130,6 +138,80 @@ export interface ParsedUploadedNodeMetadata {
   readonly refs: readonly string[];
 }
 
+export interface LeaseDrivenUploadValidation extends ParsedUploadedNodeMetadata {
+  readonly storedBytes: number;
+}
+
+export interface LeaseDrivenUploadRecord {
+  readonly hash: string;
+  readonly generation: string;
+  readonly temporaryObjectKey: string;
+  readonly createdAt: number;
+  readonly expiresAt: number;
+  readonly cleanupAt: number;
+  readonly rejection: SpaceNodeUploadRejection | null;
+  readonly validation: LeaseDrivenUploadValidation | null;
+}
+
+export interface LeaseDrivenUploadObject {
+  readonly storedBytes: number;
+}
+
+export interface LeaseDrivenNodeUploadRepository extends CanonicalNodeLeaseRepository {
+  countLeaseDrivenUploads(scope: NodeLeaseScope): Promise<number>;
+  readCanonicalBytes(scope: NodeLeaseScope, hash: string): Promise<Uint8Array | null>;
+  readLeaseDrivenUpload(
+    scope: NodeLeaseScope,
+    hash: string,
+  ): Promise<LeaseDrivenUploadRecord | null>;
+  replaceLeaseDrivenUpload(
+    scope: NodeLeaseScope,
+    expectedGeneration: string | null,
+    record: LeaseDrivenUploadRecord,
+  ): Promise<boolean>;
+  stageLeaseDrivenUploadValidation(
+    scope: NodeLeaseScope,
+    hash: string,
+    generation: string,
+    validation: LeaseDrivenUploadValidation,
+  ): Promise<boolean>;
+  readTemporaryUploadObject(
+    scope: NodeLeaseScope,
+    temporaryObjectKey: string,
+  ): Promise<LeaseDrivenUploadObject | null>;
+  readTemporaryUploadBytes(
+    scope: NodeLeaseScope,
+    temporaryObjectKey: string,
+  ): Promise<Uint8Array | null>;
+  deleteTemporaryUploadObject(
+    scope: NodeLeaseScope,
+    temporaryObjectKey: string,
+  ): Promise<void>;
+  deleteLeaseDrivenUpload(
+    scope: NodeLeaseScope,
+    hash: string,
+    generation: string,
+  ): Promise<void>;
+  putVerifiedCanonicalBytes(
+    scope: NodeLeaseScope,
+    hash: string,
+    bytes: Uint8Array,
+  ): Promise<void>;
+}
+
+export type LeaseDrivenNodeUploadResult =
+  | { readonly kind: "ready"; readonly result: SpaceNodeLeaseReadyResult }
+  | { readonly kind: "awaiting_upload"; readonly upload: LeaseDrivenUploadRecord }
+  | {
+    readonly kind: "awaiting_replacement_upload";
+    readonly upload: LeaseDrivenUploadRecord;
+    readonly rejection: SpaceNodeUploadRejection;
+  }
+  | {
+    readonly kind: "validated_awaiting_children";
+    readonly childHashes: readonly string[];
+  };
+
 /** Semantic persistence boundary for bodyless node renewal and orphan adoption. */
 export interface NodeLeaseRepository {
   readNodeLease(scope: NodeLeaseScope, hash: string): Promise<NodeLeaseRecord | null>;
@@ -195,6 +277,288 @@ export function nextNodeLease(
     leaseStartedAt: existing && existing.leaseExpiresAt > now ? existing.leaseStartedAt : now,
     leaseExpiresAt: Math.max(existing?.leaseExpiresAt ?? 0, now + durationMs),
   };
+}
+
+export async function leaseDrivenNodeUpload(input: {
+  readonly repository: LeaseDrivenNodeUploadRepository;
+  readonly scope: NodeLeaseScope;
+  readonly hash: string;
+  readonly leaseDurationMs: number;
+  readonly createIdentifiers: () => {
+    readonly generation: string;
+    readonly temporaryObjectKey: string;
+  };
+  readonly limits?: CanonicalNodeLimits;
+  readonly uploadSessionMs?: number;
+  readonly uploadCleanupMs?: number;
+  readonly maxActiveUploads?: number;
+  readonly now?: () => number;
+}): Promise<LeaseDrivenNodeUploadResult> {
+  validateLeaseHash(input.hash);
+  const now = (input.now ?? (() => Date.now()))();
+  const leaseDurationMs = clampLeaseDuration(input.leaseDurationMs);
+  const existing = await input.repository.readCanonicalNodeLease(input.scope, input.hash);
+  const canonical = await input.repository.readCanonicalObject(input.scope, input.hash);
+
+  if (existing !== null) {
+    if (canonical === null) {
+      throw new NodeOpError(
+        503,
+        NodeOpErrorCodes.STORAGE,
+        `Ready node ${input.hash} is missing canonical content`,
+      );
+    }
+    const lease = nextNodeLease(existing, leaseDurationMs, now);
+    await input.repository.renewNodeLease(input.scope, input.hash, lease);
+    return { kind: "ready", result: { state: "ready", hash: input.hash, ...lease } };
+  }
+
+  let upload = await input.repository.readLeaseDrivenUpload(input.scope, input.hash);
+  if (canonical !== null) {
+    if (upload === null) {
+      upload = createLeaseDrivenUpload(input, now, null);
+      await replaceLeaseDrivenUpload(input.repository, input.scope, null, upload);
+    }
+    let validation = upload.validation;
+    if (validation === null) {
+      const bytes = await input.repository.readCanonicalBytes(input.scope, input.hash);
+      if (bytes === null) {
+        throw new NodeOpError(503, NodeOpErrorCodes.STORAGE, "Canonical object disappeared during recovery");
+      }
+      const validated = await validateLeaseDrivenUpload(input.hash, bytes, input.limits);
+      if (!validated.ok) {
+        throw new NodeOpError(503, NodeOpErrorCodes.STORAGE, "Canonical orphan failed integrity validation");
+      }
+      validation = validated.validation;
+      if (!await input.repository.stageLeaseDrivenUploadValidation(
+        input.scope,
+        input.hash,
+        upload.generation,
+        validation,
+      )) {
+        throw new NodeOpError(409, NodeOpErrorCodes.CONFLICT, "Canonical upload generation changed");
+      }
+      upload = { ...upload, validation };
+    }
+    return publishValidatedLeaseDrivenUpload(input, upload, validation, leaseDurationMs, now);
+  }
+
+  if (upload === null) {
+    const activeUploads = await input.repository.countLeaseDrivenUploads(input.scope);
+    if (activeUploads >= (input.maxActiveUploads ?? DEFAULT_MAX_ACTIVE_UPLOADS)) {
+      throw new NodeOpError(429, NodeOpErrorCodes.UPLOAD_LIMIT, "Space has too many active node uploads");
+    }
+    upload = createLeaseDrivenUpload(input, now, null);
+    await replaceLeaseDrivenUpload(input.repository, input.scope, null, upload);
+  }
+
+  const temporary = await input.repository.readTemporaryUploadObject(
+    input.scope,
+    upload.temporaryObjectKey,
+  );
+  if (temporary === null) {
+    if (upload.validation !== null) {
+      throw new NodeOpError(503, NodeOpErrorCodes.STORAGE, "Validated upload content is missing");
+    }
+    if (upload.expiresAt <= now) {
+      const replacement = createLeaseDrivenUpload(input, now, upload.rejection);
+      await replaceLeaseDrivenUpload(input.repository, input.scope, upload.generation, replacement);
+      await input.repository.deleteTemporaryUploadObject(input.scope, upload.temporaryObjectKey)
+        .catch(() => undefined);
+      upload = replacement;
+    }
+    return upload.rejection === null
+      ? { kind: "awaiting_upload", upload }
+      : { kind: "awaiting_replacement_upload", upload, rejection: upload.rejection };
+  }
+
+  if (upload.validation !== null) {
+    return publishValidatedLeaseDrivenUpload(
+      input,
+      upload,
+      upload.validation,
+      leaseDurationMs,
+      now,
+    );
+  }
+
+  const maxBytes = input.limits?.maxCanonicalNodeBytes ?? MAX_CANONICAL_NODE_BYTES;
+  if (temporary.storedBytes > maxBytes) {
+    return replaceRejectedLeaseDrivenUpload(input, upload, {
+      code: "NODE_TOO_LARGE",
+      message: "Uploaded canonical node exceeds the configured size limit",
+    }, now);
+  }
+  const bytes = await input.repository.readTemporaryUploadBytes(
+    input.scope,
+    upload.temporaryObjectKey,
+  );
+  if (bytes === null) {
+    return upload.rejection === null
+      ? { kind: "awaiting_upload", upload }
+      : { kind: "awaiting_replacement_upload", upload, rejection: upload.rejection };
+  }
+  const validated = await validateLeaseDrivenUpload(input.hash, bytes, input.limits);
+  if (!validated.ok) {
+    return replaceRejectedLeaseDrivenUpload(input, upload, validated.rejection, now);
+  }
+  if (!await input.repository.stageLeaseDrivenUploadValidation(
+    input.scope,
+    input.hash,
+    upload.generation,
+    validated.validation,
+  )) {
+    throw new NodeOpError(409, NodeOpErrorCodes.CONFLICT, "Canonical upload generation changed");
+  }
+  upload = { ...upload, validation: validated.validation };
+  return publishValidatedLeaseDrivenUpload(
+    input,
+    upload,
+    validated.validation,
+    leaseDurationMs,
+    now,
+    bytes,
+  );
+}
+
+async function publishValidatedLeaseDrivenUpload(
+  input: Parameters<typeof leaseDrivenNodeUpload>[0],
+  upload: LeaseDrivenUploadRecord,
+  validation: LeaseDrivenUploadValidation,
+  leaseDurationMs: number,
+  now: number,
+  validatedBytes?: Uint8Array,
+): Promise<LeaseDrivenNodeUploadResult> {
+  const childHashes: string[] = [];
+  const seen = new Set<string>();
+  for (const childHash of validation.refs) {
+    if (seen.has(childHash)) continue;
+    seen.add(childHash);
+    if (!await input.repository.isNodeReady(input.scope, childHash)) childHashes.push(childHash);
+  }
+  if (childHashes.length > 0) {
+    return { kind: "validated_awaiting_children", childHashes };
+  }
+
+  const bytes = validatedBytes ?? await input.repository.readTemporaryUploadBytes(
+    input.scope,
+    upload.temporaryObjectKey,
+  );
+  if (bytes !== null) {
+    await input.repository.putVerifiedCanonicalBytes(input.scope, input.hash, bytes);
+  } else if (await input.repository.readCanonicalObject(input.scope, input.hash) === null) {
+    throw new NodeOpError(503, NodeOpErrorCodes.STORAGE, "Validated upload content is missing");
+  }
+
+  const lease = nextNodeLease(null, leaseDurationMs, now);
+  await input.repository.commitUploadedCanonicalNode(input.scope, {
+    kind: "new",
+    hash: input.hash,
+    contentSize: validation.contentSize,
+    contentType: validation.contentType,
+    refs: validation.refs,
+    ...lease,
+  });
+  try {
+    await input.repository.deleteTemporaryUploadObject(input.scope, upload.temporaryObjectKey);
+    await input.repository.deleteLeaseDrivenUpload(input.scope, input.hash, upload.generation);
+  } catch {
+    // The ready node is authoritative; cleanup_at keeps the temporary object bounded.
+  }
+  return { kind: "ready", result: { state: "ready", hash: input.hash, ...lease } };
+}
+
+async function replaceRejectedLeaseDrivenUpload(
+  input: Parameters<typeof leaseDrivenNodeUpload>[0],
+  upload: LeaseDrivenUploadRecord,
+  rejection: SpaceNodeUploadRejection,
+  now: number,
+): Promise<LeaseDrivenNodeUploadResult> {
+  const replacement = createLeaseDrivenUpload(input, now, rejection);
+  await replaceLeaseDrivenUpload(
+    input.repository,
+    input.scope,
+    upload.generation,
+    replacement,
+  );
+  await input.repository.deleteTemporaryUploadObject(input.scope, upload.temporaryObjectKey)
+    .catch(() => undefined);
+  return { kind: "awaiting_replacement_upload", upload: replacement, rejection };
+}
+
+function createLeaseDrivenUpload(
+  input: Parameters<typeof leaseDrivenNodeUpload>[0],
+  now: number,
+  rejection: SpaceNodeUploadRejection | null,
+): LeaseDrivenUploadRecord {
+  const identifiers = input.createIdentifiers();
+  if (identifiers.generation.length === 0 || identifiers.temporaryObjectKey.length === 0) {
+    throw new TypeError("Canonical upload identifiers must not be empty");
+  }
+  const expiresAt = now + (input.uploadSessionMs ?? DEFAULT_UPLOAD_SESSION_MS);
+  return {
+    hash: input.hash,
+    ...identifiers,
+    createdAt: now,
+    expiresAt,
+    cleanupAt: expiresAt + (input.uploadCleanupMs ?? DEFAULT_UPLOAD_CLEANUP_MS),
+    rejection,
+    validation: null,
+  };
+}
+
+async function replaceLeaseDrivenUpload(
+  repository: LeaseDrivenNodeUploadRepository,
+  scope: NodeLeaseScope,
+  expectedGeneration: string | null,
+  upload: LeaseDrivenUploadRecord,
+): Promise<void> {
+  if (!await repository.replaceLeaseDrivenUpload(scope, expectedGeneration, upload)) {
+    throw new NodeOpError(409, NodeOpErrorCodes.CONFLICT, "Canonical upload generation changed");
+  }
+}
+
+export async function validateLeaseDrivenUpload(
+  hash: string,
+  bytes: Uint8Array,
+  limits?: CanonicalNodeLimits,
+): Promise<
+  | { readonly ok: true; readonly validation: LeaseDrivenUploadValidation }
+  | { readonly ok: false; readonly rejection: SpaceNodeUploadRejection }
+> {
+  if (bytes.length > (limits?.maxCanonicalNodeBytes ?? MAX_CANONICAL_NODE_BYTES)) {
+    return {
+      ok: false,
+      rejection: { code: "NODE_TOO_LARGE", message: "Uploaded canonical node exceeds the configured size limit" },
+    };
+  }
+  if (hashToHex(await sha256(bytes)) !== hash) {
+    return {
+      ok: false,
+      rejection: { code: "NODE_DIGEST_MISMATCH", message: "Uploaded canonical bytes did not match the requested node hash" },
+    };
+  }
+  try {
+    const parsed = await parseCanonicalNodeStream(bytesToStream(bytes), bytes.length, limits);
+    await parsed.body.cancel("Canonical upload validation complete");
+    return {
+      ok: true,
+      validation: {
+        storedBytes: bytes.length,
+        contentSize: parsed.contentSize,
+        contentType: parsed.contentType,
+        refs: parsed.refs,
+      },
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      rejection: {
+        code: "INVALID_CANONICAL_NODE",
+        message: error instanceof Error ? error.message : "Uploaded canonical node is invalid",
+      },
+    };
+  }
 }
 
 export async function prepareCanonicalNodeUpload(input: {
@@ -579,6 +943,15 @@ function validateLeaseHash(hash: string): void {
 
 function sameRefs(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((hash, index) => hash === right[index]);
+}
+
+function bytesToStream(bytes: Uint8Array): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(bytes);
+      controller.close();
+    },
+  });
 }
 
 /** R2 reports checksum mismatches when the uploaded bytes do not hash to the

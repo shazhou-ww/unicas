@@ -30,7 +30,7 @@ import type {
   CasLeaseOptions,
   CasNodeRange,
   CasRootRefsResult,
-  TenantCasClient,
+  SpaceCasClient,
 } from "@unicas/tenant-client";
 import type { CasBlobRetentionUpdate } from "./types.js";
 
@@ -40,7 +40,7 @@ interface BlobTreeNode {
   readonly level: number;
 }
 
-type BlobCas = TenantCasClient;
+type BlobCas = SpaceCasClient;
 
 export function createCasBlobClient(
   cas: BlobCas,
@@ -60,7 +60,7 @@ export function createCasBlobClient(
     refs: readonly string[] = [],
     leaseOptions?: CasLeaseOptions,
   ): Promise<string> => {
-    return storeNodeContent(cas, content, contentType, refs, leaseOptions);
+    return storeNodeContent(cas, content, contentType, refs, leaseOptions, options.uploadFetcher);
   };
 
   const storeIndex = async (
@@ -304,7 +304,7 @@ export function createCasBlobClient(
 }
 
 async function updateRetention(
-  cas: TenantCasClient,
+  cas: SpaceCasClient,
   update: CasBlobRetentionUpdate,
   direction: 1 | -1,
 ): Promise<CasRootRefsResult> {

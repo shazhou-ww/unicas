@@ -13,6 +13,7 @@ export type {
   SpaceCasClient,
   SpaceCasClientConfig,
   SpaceCasNodeCacheKey,
+  SpaceNodeLeaseOptions,
   CasNodeRange,
   CasNodeSource,
   CasNodeMetadata,
@@ -26,5 +27,16 @@ export type {
   TenantCasNodeCacheKey,
 } from "./types.js";
 
-export { createSpaceCasClient, createTenantCasClient } from "./client.js";
+export type {
+  SpaceNodeLeaseResult,
+  SpaceNodeUploadInstructions,
+  SpaceNodeUploadRejection,
+  SpaceNodeUploadRejectionCode,
+} from "@unicas/tenant-protocol";
+
+export {
+  createSpaceCasClient,
+  createTenantCasClient,
+  DEFAULT_SPACE_NODE_LEASE_OPTIONS,
+} from "./client.js";
 export { CasClientError } from "./errors.js";

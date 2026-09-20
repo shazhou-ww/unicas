@@ -26,14 +26,13 @@ describe("functional tenant CAS client", () => {
     tokenCounter = 0;
   });
 
-  function createClient(uploadMode: "legacy" | "direct" = "legacy") {
+  function createClient() {
     return createTenantCasClient({
       baseUrl: "https://cas.test/",
       stackId: STACK,
       tenantId: TENANT,
       getToken: async () => `token-${++tokenCounter}`,
       fetcher: service,
-      uploadMode,
     });
   }
 
@@ -76,13 +75,40 @@ describe("functional tenant CAS client", () => {
     });
   });
 
-  it("prepares, uploads, and finalizes canonical nodes in direct mode", async () => {
-    const client = createClient("direct");
-    const hash = await storeNode(client, Uint8Array.from([1, 2, 3]), "application/octet-stream");
+  it("sends one JSON request for an App/Space node lease", async () => {
+    const requests: Request[] = [];
+    const hash = "a".repeat(64);
+    const client = createSpaceCasClient({
+      baseUrl: "https://cas.test/",
+      appId: "app-1",
+      spaceId: "space-1",
+      getToken: async () => `token-${++tokenCounter}`,
+      fetcher: {
+        async fetch(input, init) {
+          const request = input instanceof Request ? input : new Request(input, init);
+          requests.push(request);
+          return Response.json({
+            state: "awaiting_upload",
+            hash,
+            upload: {
+              method: "PUT",
+              url: "https://r2.test/upload-1",
+              expiresAt: 1234,
+              headers: { "If-None-Match": "*" },
+            },
+          });
+        },
+      },
+    });
 
-    expect(service.nodes.has(hash)).toBe(true);
-    expect(service.directUploads.size).toBe(1);
-    expect(service.tokens).toEqual(["Bearer token-1", "Bearer token-2"]);
+    await expect(client.leaseNode(hash)).resolves.toMatchObject({
+      state: "awaiting_upload",
+      hash,
+    });
+    expect(requests).toHaveLength(1);
+    expect(requests[0].headers.get("Content-Type")).toBe("application/json");
+    expect(requests[0].headers.get("X-CAS-Lease-Duration")).toBeNull();
+    await expect(requests[0].json()).resolves.toEqual({ leaseDurationMs: 900_000 });
   });
 
   it("updates roots and exposes tenant administration operations", async () => {
@@ -219,7 +245,6 @@ describe("functional tenant CAS client", () => {
           return service.fetch(req);
         },
       },
-      uploadMode: "legacy",
     });
 
     const content = new Uint8Array(128).fill(7);

@@ -224,6 +224,30 @@
               }
             }
           },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "RESOURCE_EXHAUSTED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
           "500": {
             "description": "500",
             "content": {
@@ -527,6 +551,30 @@
               }
             }
           },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "RESOURCE_EXHAUSTED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
           "500": {
             "description": "500",
             "content": {
@@ -557,8 +605,8 @@
     "/v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/lease": {
       "post": {
         "operationId": "leaseSpaceNode",
-        "summary": "Lease or upload a node",
-        "description": "Protects a node while a Root Ref commit is prepared and returns direct upload instructions when canonical content is absent.",
+        "summary": "Lease a node",
+        "description": "Advances the lease-driven node state machine and returns the resulting ready, upload, replacement-upload, or dependency state.",
         "tags": [
           "Nodes"
         ],
@@ -592,60 +640,27 @@
               "pattern": "^[0-9a-f]{64}$",
               "description": "Lowercase SHA-256 content digest."
             }
-          },
-          {
-            "name": "x-cas-lease-duration",
-            "in": "header",
-            "schema": {
-              "type": "integer",
-              "minimum": -9007199254740991,
-              "maximum": 9007199254740991,
-              "exclusiveMinimum": 0
-            }
-          },
-          {
-            "name": "x-cas-upload-length",
-            "in": "header",
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 9007199254740991
-            }
-          },
-          {
-            "name": "x-cas-upload-id",
-            "in": "header",
-            "schema": {
-              "type": "string",
-              "minLength": 1
-            }
-          },
-          {
-            "name": "content-type",
-            "in": "header",
-            "schema": {
-              "const": "application/vnd.unidocs.cas-node.v1"
-            }
-          },
-          {
-            "name": "content-length",
-            "in": "header",
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 9007199254740991
-            }
           }
         ],
         "requestBody": {
-          "required": false,
+          "required": true,
           "content": {
-            "application/vnd.unidocs.cas-node.v1": {
+            "application/json": {
               "schema": {
-                "not": {},
-                "type": "string",
-                "contentMediaType": "application/vnd.unidocs.cas-node.v1",
-                "contentEncoding": "binary"
+                "type": "object",
+                "properties": {
+                  "leaseDurationMs": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991,
+                    "exclusiveMinimum": 0,
+                    "description": "Requested lease duration in milliseconds."
+                  }
+                },
+                "required": [
+                  "leaseDurationMs"
+                ],
+                "readOnly": true
               }
             }
           }
@@ -665,8 +680,8 @@
                           "pattern": "^[0-9a-f]{64}$",
                           "description": "Lowercase hexadecimal SHA-256 digest of canonical CAS node bytes."
                         },
-                        "ready": {
-                          "const": true
+                        "state": {
+                          "const": "ready"
                         },
                         "leaseStartedAt": {
                           "type": "integer",
@@ -683,7 +698,7 @@
                       },
                       "required": [
                         "hash",
-                        "ready",
+                        "state",
                         "leaseStartedAt",
                         "leaseExpiresAt"
                       ],
@@ -697,21 +712,8 @@
                           "pattern": "^[0-9a-f]{64}$",
                           "description": "Lowercase hexadecimal SHA-256 digest of canonical CAS node bytes."
                         },
-                        "ready": {
-                          "const": false
-                        },
-                        "status": {
-                          "const": "upload_required"
-                        },
-                        "uploadId": {
-                          "type": "string",
-                          "minLength": 1
-                        },
-                        "expiresAt": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991,
-                          "description": "Unix timestamp in milliseconds since 1970-01-01T00:00:00Z."
+                        "state": {
+                          "const": "awaiting_upload"
                         },
                         "upload": {
                           "type": "object",
@@ -722,6 +724,12 @@
                             "url": {
                               "type": "string",
                               "format": "uri"
+                            },
+                            "expiresAt": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991,
+                              "description": "Unix timestamp in milliseconds since 1970-01-01T00:00:00Z."
                             },
                             "headers": {
                               "type": "object",
@@ -737,6 +745,7 @@
                           "required": [
                             "method",
                             "url",
+                            "expiresAt",
                             "headers"
                           ],
                           "readOnly": true
@@ -744,11 +753,116 @@
                       },
                       "required": [
                         "hash",
-                        "ready",
-                        "status",
-                        "uploadId",
-                        "expiresAt",
+                        "state",
                         "upload"
+                      ],
+                      "readOnly": true
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "hash": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{64}$",
+                          "description": "Lowercase hexadecimal SHA-256 digest of canonical CAS node bytes."
+                        },
+                        "state": {
+                          "const": "awaiting_replacement_upload"
+                        },
+                        "rejection": {
+                          "type": "object",
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "NODE_TOO_LARGE",
+                                "NODE_DIGEST_MISMATCH",
+                                "INVALID_CANONICAL_NODE",
+                                "NODE_CONFLICT"
+                              ],
+                              "type": "string"
+                            },
+                            "message": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "message"
+                          ],
+                          "readOnly": true
+                        },
+                        "upload": {
+                          "type": "object",
+                          "properties": {
+                            "method": {
+                              "const": "PUT"
+                            },
+                            "url": {
+                              "type": "string",
+                              "format": "uri"
+                            },
+                            "expiresAt": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991,
+                              "description": "Unix timestamp in milliseconds since 1970-01-01T00:00:00Z."
+                            },
+                            "headers": {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {
+                                "type": "string"
+                              },
+                              "readOnly": true
+                            }
+                          },
+                          "required": [
+                            "method",
+                            "url",
+                            "expiresAt",
+                            "headers"
+                          ],
+                          "readOnly": true
+                        }
+                      },
+                      "required": [
+                        "hash",
+                        "state",
+                        "rejection",
+                        "upload"
+                      ],
+                      "readOnly": true
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "hash": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{64}$",
+                          "description": "Lowercase hexadecimal SHA-256 digest of canonical CAS node bytes."
+                        },
+                        "state": {
+                          "const": "validated_awaiting_children"
+                        },
+                        "childHashes": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 256,
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{64}$",
+                            "description": "Lowercase hexadecimal SHA-256 digest of canonical CAS node bytes."
+                          },
+                          "readOnly": true
+                        }
+                      },
+                      "required": [
+                        "hash",
+                        "state",
+                        "childHashes"
                       ],
                       "readOnly": true
                     }
@@ -901,6 +1015,30 @@
               }
             }
           },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "RESOURCE_EXHAUSTED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
           "500": {
             "description": "500",
             "content": {
@@ -988,7 +1126,7 @@
                       "type": "integer",
                       "minimum": 0,
                       "maximum": 9007199254740991,
-                      "description": "Bytes reserved by incomplete uploads."
+                      "description": "Known bytes reserved by validated or server-mediated incomplete uploads; pre-validation direct R2 bytes are excluded."
                     },
                     "notReadyNodeCount": {
                       "type": "integer",
@@ -1147,6 +1285,30 @@
                       "type": "string",
                       "enum": [
                         "PAYLOAD_TOO_LARGE"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "RESOURCE_EXHAUSTED"
                       ]
                     },
                     "message": {
@@ -1401,6 +1563,30 @@
                       "type": "string",
                       "enum": [
                         "PAYLOAD_TOO_LARGE"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "RESOURCE_EXHAUSTED"
                       ]
                     },
                     "message": {
@@ -1702,6 +1888,30 @@
               }
             }
           },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "RESOURCE_EXHAUSTED"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
           "500": {
             "description": "500",
             "content": {
@@ -1955,6 +2165,30 @@
                       "type": "string",
                       "enum": [
                         "PAYLOAD_TOO_LARGE"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "429",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "RESOURCE_EXHAUSTED"
                       ]
                     },
                     "message": {

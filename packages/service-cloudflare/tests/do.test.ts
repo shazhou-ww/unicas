@@ -360,6 +360,26 @@ function blockingUploadBucket(): {
   };
 }
 
+function failFirstDeleteBucket(): R2Bucket {
+  const target = nodeHostedStreamBucket();
+  let failed = false;
+  return new Proxy(target, {
+    get(_target, property) {
+      if (property === "delete") {
+        return async (...args: Parameters<R2Bucket["delete"]>) => {
+          if (!failed) {
+            failed = true;
+            throw new Error("injected temporary-object delete failure");
+          }
+          return target.delete(...args);
+        };
+      }
+      const member = Reflect.get(target, property);
+      return typeof member === "function" ? member.bind(target) : member;
+    },
+  });
+}
+
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => {
@@ -389,6 +409,20 @@ function tenantRequest(
   });
 }
 
+function spaceLeaseRequest(hash: string, leaseDurationMs = 60_000): Request {
+  return new Request("https://tenant.internal/lease", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CAS-Api-Version": "2",
+      "X-CAS-App-Id": STACK,
+      "X-CAS-Space-Id": TENANT,
+      "X-CAS-Hash": hash,
+    },
+    body: JSON.stringify({ leaseDurationMs }),
+  });
+}
+
 describe("CasDurableObject (tenant DO) — node storage operations", () => {
   test("R2 write-once upload rejects replay without replacing content", async () => {
     await createStore();
@@ -402,7 +436,7 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
     expect(new Uint8Array(await (await bucket!.get(key))!.arrayBuffer())).toEqual(first);
   });
 
-  test("prepares and finalizes a direct R2 canonical upload", async () => {
+  test("leases, uploads, and publishes a direct R2 canonical node with identical requests", async () => {
     await createStore();
     const content = new TextEncoder().encode("direct canonical payload");
     const contentType = "application/octet-stream";
@@ -415,74 +449,62 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
     const hash = hashToHex(await sha256(canonical));
     const doInstance = tenantDo(nodeHostedStreamBucket());
 
-    const preparedResponse = await doInstance.fetch(tenantRequest("/lease", "POST", {
-      "X-CAS-Hash": hash,
-      "X-CAS-Upload-Length": String(canonical.length),
-    }));
+    const preparedResponse = await doInstance.fetch(spaceLeaseRequest(hash));
     expect(preparedResponse.status, await preparedResponse.clone().text()).toBe(200);
     const prepared = await preparedResponse.json<{
-      ready: boolean;
-      uploadId: string;
-      upload: { method: string; url: string; headers: Record<string, string> };
+      state: string;
+      upload: { method: string; url: string; expiresAt: number; headers: Record<string, string> };
     }>();
     expect(prepared).toMatchObject({
-      ready: false,
+      state: "awaiting_upload",
       upload: {
         method: "PUT",
         headers: {
-          "Content-Length": String(canonical.length),
           "Content-Type": CanonicalNodeContentType,
           "If-None-Match": "*",
         },
       },
     });
+    expect(prepared).not.toHaveProperty("uploadId");
     const session = await db!.prepare(
-      "SELECT temporary_object_key FROM cas_direct_upload_sessions WHERE app_id = ? AND space_id = ? AND hash = ?",
+      "SELECT temporary_object_key FROM cas_node_uploads WHERE app_id = ? AND space_id = ? AND hash = ?",
     ).bind(STACK, TENANT, hash).first<{ temporary_object_key: string }>();
     expect(session).not.toBeNull();
     await bucket!.put(session!.temporary_object_key, canonical);
 
-    const finalized = await doInstance.fetch(tenantRequest("/lease", "POST", {
-      "X-CAS-Hash": hash,
-      "X-CAS-Upload-Id": prepared.uploadId,
-    }));
+    const finalized = await doInstance.fetch(spaceLeaseRequest(hash));
     expect(finalized.status, await finalized.clone().text()).toBe(200);
-    expect(await finalized.json()).toMatchObject({ hash, ready: true });
+    expect(await finalized.json()).toMatchObject({ hash, state: "ready" });
     expect(await bucket!.head(session!.temporary_object_key)).toBeNull();
     expect(await db!.prepare(
-      "SELECT 1 FROM cas_direct_upload_sessions WHERE app_id = ? AND space_id = ? AND hash = ?",
+      "SELECT 1 FROM cas_node_uploads WHERE app_id = ? AND space_id = ? AND hash = ?",
     ).bind(STACK, TENANT, hash).first()).toBeNull();
     expect(new Uint8Array(await (await bucket!.get(appCanonicalNodeKey(STACK, TENANT, hash)))!.arrayBuffer()))
       .toEqual(canonical);
   });
 
-  test("rejects an incomplete direct upload and releases its reservation", async () => {
+  test("reuses one internal generation while its direct upload is absent", async () => {
     await createStore();
     const hash = "b".repeat(64);
     const doInstance = tenantDo();
-    const preparedResponse = await doInstance.fetch(tenantRequest("/lease", "POST", {
-      "X-CAS-Hash": hash,
-      "X-CAS-Upload-Length": "42",
-    }));
-    const prepared = await preparedResponse.json<{ uploadId: string }>();
+    const preparedResponse = await doInstance.fetch(spaceLeaseRequest(hash));
+    const prepared = await preparedResponse.json<{ state: string }>();
+    const before = await db!.prepare(
+      "SELECT generation, temporary_object_key FROM cas_node_uploads WHERE app_id = ? AND space_id = ? AND hash = ?",
+    ).bind(STACK, TENANT, hash).first<{ generation: string; temporary_object_key: string }>();
 
-    const finalized = await doInstance.fetch(tenantRequest("/lease", "POST", {
-      "X-CAS-Hash": hash,
-      "X-CAS-Upload-Id": prepared.uploadId,
-    }));
+    const repeated = await doInstance.fetch(spaceLeaseRequest(hash));
+    const after = await db!.prepare(
+      "SELECT generation, temporary_object_key FROM cas_node_uploads WHERE app_id = ? AND space_id = ? AND hash = ?",
+    ).bind(STACK, TENANT, hash).first<{ generation: string; temporary_object_key: string }>();
 
-    expect(finalized.status).toBe(412);
-    expect(await finalized.json()).toMatchObject({ error: NodeOpErrorCodes.UPLOAD_INCOMPLETE });
-    expect(await db!.prepare(
-      "SELECT 1 FROM cas_direct_upload_sessions WHERE app_id = ? AND space_id = ? AND hash = ?",
-    ).bind(STACK, TENANT, hash).first()).toBeNull();
-    expect(await db!.prepare(
-      "SELECT 1 FROM cas_upload_reservations WHERE app_id = ? AND space_id = ? AND hash = ?",
-    ).bind(STACK, TENANT, hash).first()).toBeNull();
-    expect(await bucket!.head(appCanonicalNodeKey(STACK, TENANT, hash))).toBeNull();
+    expect(prepared).toMatchObject({ state: "awaiting_upload" });
+    expect(repeated.status).toBe(200);
+    expect(await repeated.json()).toMatchObject({ state: "awaiting_upload", hash });
+    expect(after).toEqual(before);
   });
 
-  test("rejects a direct upload with the wrong digest and removes all upload state", async () => {
+  test("rotates a direct upload with the wrong digest and returns replacement instructions", async () => {
     await createStore();
     const content = new TextEncoder().encode("not the requested canonical node");
     const contentType = "application/octet-stream";
@@ -494,31 +516,207 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
     );
     const hash = "c".repeat(64);
     const doInstance = tenantDo(nodeHostedStreamBucket());
-    const preparedResponse = await doInstance.fetch(tenantRequest("/lease", "POST", {
-      "X-CAS-Hash": hash,
-      "X-CAS-Upload-Length": String(canonical.length),
-    }));
-    const prepared = await preparedResponse.json<{ uploadId: string }>();
+    await doInstance.fetch(spaceLeaseRequest(hash));
     const session = await db!.prepare(
-      "SELECT temporary_object_key FROM cas_direct_upload_sessions WHERE app_id = ? AND space_id = ? AND hash = ?",
+      "SELECT generation, temporary_object_key FROM cas_node_uploads WHERE app_id = ? AND space_id = ? AND hash = ?",
+    ).bind(STACK, TENANT, hash).first<{ generation: string; temporary_object_key: string }>();
+    await bucket!.put(session!.temporary_object_key, canonical);
+
+    const rejected = await doInstance.fetch(spaceLeaseRequest(hash));
+    const replacement = await db!.prepare(
+      "SELECT generation, temporary_object_key, rejection_code FROM cas_node_uploads WHERE app_id = ? AND space_id = ? AND hash = ?",
+    ).bind(STACK, TENANT, hash).first<{
+      generation: string;
+      temporary_object_key: string;
+      rejection_code: string;
+    }>();
+
+    expect(rejected.status).toBe(200);
+    expect(await rejected.json()).toMatchObject({
+      state: "awaiting_replacement_upload",
+      hash,
+      rejection: { code: "NODE_DIGEST_MISMATCH" },
+      upload: { method: "PUT" },
+    });
+    expect(replacement?.generation).not.toBe(session?.generation);
+    expect(replacement?.temporary_object_key).not.toBe(session?.temporary_object_key);
+    expect(replacement?.rejection_code).toBe("NODE_DIGEST_MISMATCH");
+    expect(await bucket!.head(session!.temporary_object_key)).toBeNull();
+    expect(await bucket!.head(appCanonicalNodeKey(STACK, TENANT, hash))).toBeNull();
+  });
+
+  test("retains a cleanup tombstone when superseded object deletion fails", async () => {
+    await createStore();
+    const hash = "9".repeat(64);
+    const doInstance = tenantDo(failFirstDeleteBucket());
+    await doInstance.fetch(spaceLeaseRequest(hash));
+    const session = await db!.prepare(
+      "SELECT temporary_object_key FROM cas_node_uploads WHERE app_id = ? AND space_id = ? AND hash = ?",
+    ).bind(STACK, TENANT, hash).first<{ temporary_object_key: string }>();
+    await bucket!.put(session!.temporary_object_key, new TextEncoder().encode("invalid"));
+
+    const rejected = await doInstance.fetch(spaceLeaseRequest(hash));
+    expect(await rejected.json()).toMatchObject({ state: "awaiting_replacement_upload" });
+    expect(await bucket!.head(session!.temporary_object_key)).not.toBeNull();
+    expect(await db!.prepare(
+      "SELECT 1 FROM cas_node_upload_cleanup WHERE app_id = ? AND space_id = ? AND temporary_object_key = ?",
+    ).bind(STACK, TENANT, session!.temporary_object_key).first()).not.toBeNull();
+
+    await db!.prepare(
+      "UPDATE cas_node_upload_cleanup SET cleanup_at = 1 WHERE app_id = ? AND space_id = ? AND temporary_object_key = ?",
+    ).bind(STACK, TENANT, session!.temporary_object_key).run();
+    const gc = await doInstance.fetch(tenantRequest(
+      "/gc",
+      "POST",
+      { "Content-Type": "application/json" },
+      new TextEncoder().encode(JSON.stringify({ maxNodes: 25 })),
+    ));
+    expect(gc.status).toBe(200);
+    expect(await bucket!.head(session!.temporary_object_key)).toBeNull();
+    expect(await db!.prepare(
+      "SELECT 1 FROM cas_node_upload_cleanup WHERE app_id = ? AND space_id = ? AND temporary_object_key = ?",
+    ).bind(STACK, TENANT, session!.temporary_object_key).first()).toBeNull();
+  });
+
+  test("returns all unready children and publishes without re-upload after they become ready", async () => {
+    await createStore();
+    const firstChild = "d".repeat(64);
+    const secondChild = "e".repeat(64);
+    const content = new TextEncoder().encode("parent");
+    const contentType = "application/octet-stream";
+    const canonical = concatenateNodeBytes(
+      encodeHeader(content.length, contentType, 3),
+      new TextEncoder().encode(contentType),
+      [hexToHash(firstChild), hexToHash(firstChild), hexToHash(secondChild)],
+      content,
+    );
+    const hash = hashToHex(await sha256(canonical));
+    const doInstance = tenantDo(nodeHostedStreamBucket());
+    await doInstance.fetch(spaceLeaseRequest(hash));
+    const session = await db!.prepare(
+      "SELECT temporary_object_key FROM cas_node_uploads WHERE app_id = ? AND space_id = ? AND hash = ?",
     ).bind(STACK, TENANT, hash).first<{ temporary_object_key: string }>();
     await bucket!.put(session!.temporary_object_key, canonical);
 
-    const finalized = await doInstance.fetch(tenantRequest("/lease", "POST", {
-      "X-CAS-Hash": hash,
-      "X-CAS-Upload-Id": prepared.uploadId,
-    }));
+    const blocked = await doInstance.fetch(spaceLeaseRequest(hash));
+    expect(await blocked.json()).toEqual({
+      state: "validated_awaiting_children",
+      hash,
+      childHashes: [firstChild, secondChild],
+    });
+    const evidence = await db!.prepare(
+      "SELECT stored_bytes, refs_json FROM cas_node_uploads WHERE app_id = ? AND space_id = ? AND hash = ?",
+    ).bind(STACK, TENANT, hash).first<{ stored_bytes: number; refs_json: string }>();
+    expect(evidence).toEqual({ stored_bytes: canonical.length, refs_json: JSON.stringify([firstChild, firstChild, secondChild]) });
 
-    expect(finalized.status).toBe(422);
-    expect(await finalized.json()).toMatchObject({ error: NodeOpErrorCodes.DIGEST_MISMATCH });
+    await seedNode(firstChild);
+    await seedNode(secondChild);
+    const ready = await doInstance.fetch(spaceLeaseRequest(hash));
+    expect(await ready.json()).toMatchObject({ state: "ready", hash });
     expect(await bucket!.head(session!.temporary_object_key)).toBeNull();
-    expect(await bucket!.head(appCanonicalNodeKey(STACK, TENANT, hash))).toBeNull();
+  });
+
+  test("does not publish a parent when a cached ready child loses canonical content", async () => {
+    await createStore();
+    const doInstance = tenantDo(nodeHostedStreamBucket());
+    const childContent = new TextEncoder().encode("child");
+    const contentType = "application/octet-stream";
+    const childCanonical = concatenateNodeBytes(
+      encodeHeader(childContent.length, contentType, 0),
+      new TextEncoder().encode(contentType),
+      [],
+      childContent,
+    );
+    const childHash = hashToHex(await sha256(childCanonical));
+    await doInstance.fetch(spaceLeaseRequest(childHash));
+    const childSession = await db!.prepare(
+      "SELECT temporary_object_key FROM cas_node_uploads WHERE app_id = ? AND space_id = ? AND hash = ?",
+    ).bind(STACK, TENANT, childHash).first<{ temporary_object_key: string }>();
+    await bucket!.put(childSession!.temporary_object_key, childCanonical);
+    await doInstance.fetch(spaceLeaseRequest(childHash));
+    await bucket!.delete(appCanonicalNodeKey(STACK, TENANT, childHash));
+
+    const parentContent = new TextEncoder().encode("parent");
+    const parentCanonical = concatenateNodeBytes(
+      encodeHeader(parentContent.length, contentType, 1),
+      new TextEncoder().encode(contentType),
+      [hexToHash(childHash)],
+      parentContent,
+    );
+    const parentHash = hashToHex(await sha256(parentCanonical));
+    await doInstance.fetch(spaceLeaseRequest(parentHash));
+    const parentSession = await db!.prepare(
+      "SELECT temporary_object_key FROM cas_node_uploads WHERE app_id = ? AND space_id = ? AND hash = ?",
+    ).bind(STACK, TENANT, parentHash).first<{ temporary_object_key: string }>();
+    await bucket!.put(parentSession!.temporary_object_key, parentCanonical);
+
+    const blocked = await doInstance.fetch(spaceLeaseRequest(parentHash));
+    expect(await blocked.json()).toEqual({
+      state: "validated_awaiting_children",
+      hash: parentHash,
+      childHashes: [childHash],
+    });
     expect(await db!.prepare(
-      "SELECT 1 FROM cas_direct_upload_sessions WHERE app_id = ? AND space_id = ? AND hash = ?",
-    ).bind(STACK, TENANT, hash).first()).toBeNull();
+      "SELECT 1 FROM cas_nodes WHERE app_id = ? AND space_id = ? AND hash = ?",
+    ).bind(STACK, TENANT, parentHash).first()).toBeNull();
+  });
+
+  test("concurrent post-upload leases converge on one ready node", async () => {
+    await createStore();
+    const content = new TextEncoder().encode("concurrent direct upload");
+    const contentType = "application/octet-stream";
+    const canonical = concatenateNodeBytes(
+      encodeHeader(content.length, contentType, 0),
+      new TextEncoder().encode(contentType),
+      [],
+      content,
+    );
+    const hash = hashToHex(await sha256(canonical));
+    const doInstance = tenantDo(nodeHostedStreamBucket());
+    await doInstance.fetch(spaceLeaseRequest(hash));
+    const session = await db!.prepare(
+      "SELECT temporary_object_key FROM cas_node_uploads WHERE app_id = ? AND space_id = ? AND hash = ?",
+    ).bind(STACK, TENANT, hash).first<{ temporary_object_key: string }>();
+    await bucket!.put(session!.temporary_object_key, canonical);
+
+    const responses = await Promise.all([
+      doInstance.fetch(spaceLeaseRequest(hash)),
+      doInstance.fetch(spaceLeaseRequest(hash)),
+    ]);
+    await expect(Promise.all(responses.map(response => response.json())))
+      .resolves.toEqual([
+        expect.objectContaining({ state: "ready", hash }),
+        expect.objectContaining({ state: "ready", hash }),
+      ]);
     expect(await db!.prepare(
-      "SELECT 1 FROM cas_upload_reservations WHERE app_id = ? AND space_id = ? AND hash = ?",
+      "SELECT COUNT(*) AS count FROM cas_nodes WHERE app_id = ? AND space_id = ? AND hash = ?",
+    ).bind(STACK, TENANT, hash).first()).toEqual({ count: 1 });
+  });
+
+  test("garbage collection removes abandoned lease-driven uploads after cleanup expiry", async () => {
+    await createStore();
+    const hash = "f".repeat(64);
+    const doInstance = tenantDo();
+    await doInstance.fetch(spaceLeaseRequest(hash));
+    const session = await db!.prepare(
+      "SELECT temporary_object_key FROM cas_node_uploads WHERE app_id = ? AND space_id = ? AND hash = ?",
+    ).bind(STACK, TENANT, hash).first<{ temporary_object_key: string }>();
+    await bucket!.put(session!.temporary_object_key, new Uint8Array([1, 2, 3]));
+    await db!.prepare(
+      "UPDATE cas_node_uploads SET cleanup_at = 1 WHERE app_id = ? AND space_id = ? AND hash = ?",
+    ).bind(STACK, TENANT, hash).run();
+
+    const gc = await doInstance.fetch(tenantRequest(
+      "/gc",
+      "POST",
+      { "Content-Type": "application/json" },
+      new TextEncoder().encode(JSON.stringify({ maxNodes: 25 })),
+    ));
+    expect(gc.status).toBe(200);
+    expect(await db!.prepare(
+      "SELECT 1 FROM cas_node_uploads WHERE app_id = ? AND space_id = ? AND hash = ?",
     ).bind(STACK, TENANT, hash).first()).toBeNull();
+    expect(await bucket!.head(session!.temporary_object_key)).toBeNull();
   });
 
   test("workerd streams a known-length request body to R2 with SHA-256 verification", async () => {
@@ -537,7 +735,7 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
     expect(new Uint8Array(await (await bucket!.get("stream-probe"))!.arrayBuffer())).toEqual(content);
   });
 
-  test("unified lease streams a complete canonical node to R2 and reads only own content", async () => {
+  test("v1 inline lease streams a complete canonical node to R2 and reads only own content", async () => {
     await createStore();
     const content = new TextEncoder().encode("canonical payload");
     const contentType = "application/octet-stream";
@@ -605,7 +803,7 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
     expect(unsatisfiable.headers.get("Content-Range")).toBe("bytes */10");
   });
 
-  test("unified lease digest failures leave no object but retain the recovery fence", async () => {
+  test("v1 inline lease digest failures leave no object but retain the recovery fence", async () => {
     await createStore();
     const content = new TextEncoder().encode("wrong hash");
     const contentType = "text/plain";
@@ -702,7 +900,7 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
     expect(rows?.count).toBe(1);
   });
 
-  test("no-body lease adopts a verified canonical R2 orphan", async () => {
+  test("v1 bodyless lease adopts a verified canonical R2 orphan", async () => {
     await createStore();
     const content = new TextEncoder().encode("orphan");
     const contentType = "text/plain";
@@ -852,7 +1050,7 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
     )).rejects.toMatchObject({ status: 400, code: NodeOpErrorCodes.INVALID_REQUEST });
   });
 
-  test("bodyless lease extends a ready lease and 404s missing nodes", async () => {
+  test("v1 bodyless lease extends a ready lease and 404s missing nodes", async () => {
     await createStore();
     const content = "abc";
     const hash = await digestOf(content);

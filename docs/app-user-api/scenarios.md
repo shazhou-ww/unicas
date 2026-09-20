@@ -77,15 +77,15 @@ sequenceDiagram
     participant CAS as UniCAS Space data plane
     participant Upload as Authorized upload target
 
-    App->>CAS: POST .../nodes/HASH/lease<br/>upload length + cas:write
+    App->>CAS: POST .../nodes/HASH/lease<br/>leaseDurationMs + cas:write
     alt Node already ready
         CAS-->>App: 200 ready lease
     else Direct upload required
-        CAS-->>App: 200 upload_required + uploadId + PUT instructions
+        CAS-->>App: 200 awaiting_upload + PUT instructions
         App->>Upload: PUT canonical bytes with returned headers
         alt Upload accepted or already present
             Upload-->>App: Success or tolerated 412
-            App->>CAS: POST .../nodes/HASH/lease<br/>uploadId to finalize
+            App->>CAS: Repeat the same POST lease(HASH)
             CAS-->>App: 200 ready lease
         else Upload or finalization fails
             Upload-->>App: Error
@@ -94,14 +94,15 @@ sequenceDiagram
     end
 ```
 
-The endpoint also supports a single request carrying the canonical bytes,
-`Content-Type`, and `Content-Length`. A missing required content length is
-rejected. Hash mismatch, malformed content, conflicting active upload length,
-expired upload session, and unready child references are explicit failures.
+The lease request never carries canonical bytes, upload length, or upload ID.
+Hash mismatch and malformed content return
+`awaiting_replacement_upload` with a fresh write-once target. A valid parent
+waiting for dependencies returns `validated_awaiting_children` with every
+distinct unready child hash.
 
-The published client supports direct prepare/upload/finalize orchestration. It
-tolerates upload `412` as an already-satisfied upload step, then finalizes. It
-does not promise general automatic retries.
+The low-level client performs one lease request. The blob client performs the
+direct PUT, tolerates `412` as an already-satisfied upload step, and repeats the
+same lease request.
 
 ## Atomically commit or release Root Refs
 
