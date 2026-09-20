@@ -468,11 +468,11 @@ describe("IssuerView", () => {
     await user.click(screen.getByRole("button", { name: "Inspect replacement" }));
     expect(await screen.findByText("candidate-challenge")).toBeInTheDocument();
     const custom = screen.getByRole("heading", { name: "Custom OAuth authorization server" }).closest<HTMLDivElement>("div[class*='bg-card']")!;
-    expect(within(custom).getByText(/Mode:/)).toHaveTextContent("https://current.example");
-    expect(within(custom).getByText(/Mode:/)).toHaveTextContent("active");
+    expect(within(custom).getByText(/Status:/)).toHaveTextContent("https://current.example");
+    expect(within(custom).getByText(/Status:/)).toHaveTextContent("active");
     await user.type(screen.getByLabelText("Activation proof (compact JWS)"), "synthetic-proof");
     await user.click(screen.getByRole("button", { name: "Verify and replace" }));
-    await waitFor(() => expect(within(custom).getByText(/Mode:/)).toHaveTextContent("https://replacement.example"));
+    await waitFor(() => expect(within(custom).getByText(/Status:/)).toHaveTextContent("https://replacement.example"));
     const update = fetchMock.mock.calls.find(([, init]) => init?.method === "PUT");
     expect(new Headers(update?.[1]?.headers).get("If-Match")).toBe('"9"');
     expect(new Headers(update?.[1]?.headers).has("If-None-Match")).toBe(false);
