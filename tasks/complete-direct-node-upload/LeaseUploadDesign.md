@@ -183,6 +183,38 @@ sequenceDiagram
 The first and post-upload lease requests are byte-for-byte equivalent apart
 from ordinary authentication-token rotation.
 
+## Signal model
+
+`lease` is the only active signal that evaluates and advances the node
+state machine.
+
+Two hidden signals can change the facts that the next lease observes:
+
+- direct `PUT` makes a temporary R2 object atomically visible; and
+- passage of time expires a presigned authorization or internal generation.
+
+Neither hidden signal publishes a node. R2 does not call back into UniCAS when
+PUT completes, and expiration does not execute a business transition by
+itself. A later lease request observes the changed facts and performs the
+necessary validation, generation rotation, publication, or renewal.
+
+Background cleanup may physically delete expired or superseded artifacts, but
+it must not make a node ready. Root Ref updates, reads, metadata requests, and
+garbage collection likewise do not advance the upload state machine.
+
+For a parent waiting on a child, the child's own upload and lease can make that
+child ready, but the parent advances only when its lease operation is invoked
+again.
+
+```text
+hidden fact changes:
+    PUT  -> temporary object becomes present
+    time -> authorization becomes expired
+
+only active transition command:
+    lease -> observe facts, apply side effects, return current outcome
+```
+
 ## Derived state model
 
 UniCAS does not persist a separate upload-state enum. It persists only the

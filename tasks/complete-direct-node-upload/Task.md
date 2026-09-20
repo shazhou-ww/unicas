@@ -102,6 +102,9 @@ The proposed replacement is specified in
 - [ ] Upload state is derived from the node ready flag, durable validation
       evidence, the current upload-authorization record, and R2 object
       presence; no separate persisted state enum is introduced.
+- [ ] `lease` is the only active state-machine signal. Direct PUT and time only
+      change observable storage or expiry facts; neither can publish a node
+      without a subsequent lease.
 - [ ] A caller that knows only an existing node hash can acquire or renew its
       lease without reading node metadata or content.
 - [ ] The client carries no upload-session identity. UniCAS safely fences stale
