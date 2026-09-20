@@ -136,14 +136,23 @@ uploaded again:
   "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "blocked": {
     "code": "NODE_DEPENDENCY_NOT_READY",
-    "childHash": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+    "childHashes": [
+      "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+    ]
   }
 }
 ```
 
 UniCAS retains the uploaded and structurally validated parent object. After the
-child becomes ready, the caller repeats the same lease request and publication
-continues without another parent PUT.
+children become ready, the caller repeats the same lease request and
+publication continues without another parent PUT.
+
+`childHashes` contains every distinct child that is not ready when the lease is
+evaluated, in first-occurrence order from the canonical refs. The canonical
+format permits at most 256 refs, so the complete dependency response is
+bounded. Returning all dependencies lets the caller make them ready in one
+round rather than discovering one child per repeated parent lease.
 
 ### Response and state correspondence
 
@@ -289,7 +298,7 @@ stateDiagram-v2
     AwaitingUpload --> AwaitingUpload: URL expires without object<br/>rotate generation
     AwaitingUpload --> UploadedUnvalidated: R2 PUT becomes visible atomically
     UploadedUnvalidated --> Ready: object valid and children ready<br/>publish + lease
-    UploadedUnvalidated --> ValidatedWaitingChildren: object valid but child not ready<br/>persist validation evidence
+    UploadedUnvalidated --> ValidatedWaitingChildren: object valid but children not ready<br/>persist validation evidence
     ValidatedWaitingChildren --> ValidatedWaitingChildren: lease while child remains unready
     ValidatedWaitingChildren --> Ready: all children ready<br/>publish + lease
     UploadedUnvalidated --> AwaitingUpload: invalid object<br/>retire generation + fresh target
@@ -437,8 +446,8 @@ if object is present:
         retire the current generation
         create a replacement generation and temporary key
         return state=awaiting_upload with rejection details and the new target
-    if a child is not ready:
-        retain the validated object and return state=validated_waiting_children with dependency details
+    if any child is not ready:
+      retain the validated object and return state=validated_waiting_children with all unready child hashes
     publish it exactly once
     establish the requested lease
     return state=ready
@@ -492,9 +501,9 @@ generation as current.
 Child readiness is different from an invalid upload. The canonical bytes may
 be valid while a referenced child is still being published. UniCAS retains the
 validated temporary object and returns `state: "validated_waiting_children"` with
-`NODE_DEPENDENCY_NOT_READY` details. After the child becomes ready, repeating
-the same parent lease request resumes publication without uploading the parent
-again.
+`NODE_DEPENDENCY_NOT_READY` details. After all listed children become ready,
+repeating the same parent lease request resumes publication without uploading
+the parent again.
 
 The durable validation evidence is fenced by the internal generation. If that
 generation is retired, its staged metadata and refs are deleted with it and
@@ -552,7 +561,7 @@ upload-time object-store limit unless the provider enforces it.
 | Expired signing URL with an object | Validate the completed object and return the resulting state; URL expiry only prevents another PUT. |
 | Oversized or malformed object | Retire the generation and return `state: "awaiting_upload"` with rejection details and a new write-once target. |
 | Digest mismatch | Retire the generation and return `state: "awaiting_upload"` with rejection details and a new write-once target. |
-| Child not ready | Retain the validated object and return `state: "validated_waiting_children"` with `NODE_DEPENDENCY_NOT_READY`; repeating lease resumes publication without re-upload. |
+| One or more children not ready | Retain the validated object and return `state: "validated_waiting_children"` with every distinct unready child hash; repeating lease resumes publication without re-upload. |
 | Failure after canonical R2 publication but before D1 commit | A later lease adopts the verified canonical orphan and returns `state: "ready"`. |
 | Failure after D1 ready commit | A later lease returns `state: "ready"`; temporary cleanup is retried asynchronously. |
 | Ready record without canonical content | Return a storage-integrity error and alert; never present the node as uploadable. |
@@ -625,7 +634,7 @@ type LeaseNodeResult =
       readonly hash: string;
       readonly blocked: {
         readonly code: "NODE_DEPENDENCY_NOT_READY";
-        readonly childHash: string;
+        readonly childHashes: readonly string[];
       };
     };
 
@@ -644,7 +653,7 @@ if state is awaiting_upload:
     PUT using returned instructions
     lease(hash)
 if state is validated_waiting_children:
-    make the child ready
+  make every listed child ready
     lease(hash)
 require state is ready
 ```

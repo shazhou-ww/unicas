@@ -128,9 +128,10 @@ The proposed replacement is specified in
 - [ ] A rejected write-once upload cannot strand the node: the detecting lease
       call reports the rejection, durably rotates the internal generation, and
       returns a fresh upload target that can accept corrected bytes.
-- [ ] A structurally valid parent whose child is not ready retains its uploaded
-      object and reports the dependency; retrying lease after the child becomes
-      ready publishes the parent without another parent upload.
+- [ ] A structurally valid parent with one or more children not ready retains
+  its uploaded object and reports every distinct unready child hash in
+  canonical first-occurrence order; retrying lease after the children
+  become ready publishes the parent without another parent upload.
 - [ ] Durable, generation-fenced validation evidence prevents rehashing or
       reparsing a valid parent while it waits for children, without allowing
       staged metadata from a retired upload to be published.
