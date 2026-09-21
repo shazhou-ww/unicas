@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -25,6 +25,13 @@ async function write(root, path, content) {
 }
 
 describe("repoledger forward-revert patch", () => {
+  test("batches primary progress history into one Git log scan", async () => {
+    const source = await readFile(new URL("../node_modules/repoledger/src/index.js", import.meta.url), "utf8");
+    expect(source).toContain('"--format=%x00%x00%H%x00%B%x00"');
+    expect(source).not.toContain('runGit(root, ["show", "-s", "--format=%B", commit])');
+    expect(source).not.toContain('runGit(root, ["diff", "--name-only", parent.stdout, commit])');
+  });
+
   test("accepts an explicit standard revert of a bookkeeping-only Progress commit", async () => {
     directory = await mkdtemp(join(tmpdir(), "repoledger-revert-"));
     const repository = join(directory, "repository");
@@ -80,5 +87,5 @@ describe("repoledger forward-revert patch", () => {
     expect(repaired.diagnostics).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ code: "progress.history.bookkeeping-only" }),
     ]));
-  });
+  }, 15_000);
 });

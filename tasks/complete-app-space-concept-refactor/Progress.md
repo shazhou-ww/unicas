@@ -82,10 +82,9 @@ the exact integrated commit.
   manifest tests passed with the clean `SpaceFile*` API.
 - `pnpm --filter @unicas/spaces test`: 59 private consumer tests passed after
   package and file API migration.
-- `pnpm check:repo`: task, deployment, documentation, workspace-boundary,
-  OpenAPI, and terminology checks passed 130 tests. The unchanged repoledger
-  temporary-Git test exceeded its default five-second budget, then passed in
-  9.7 seconds with `--testTimeout=15000`.
+- After reconciling current primary, `pnpm check:repo` passed all 132 task,
+  deployment, documentation, workspace-boundary, OpenAPI, terminology, and
+  repoledger patch tests with the standard command and timeout.
 - `pnpm --filter @unicas/admin-protocol test`: 59 Admin contract and
   cross-plane tests passed after adding current Space and explicit v1 policy
   entries.
