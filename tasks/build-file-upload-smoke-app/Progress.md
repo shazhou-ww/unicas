@@ -141,11 +141,22 @@ acceptance.
   focused client tests, including reopen/readback of `a.txt` and `B.txt`, the
   client typecheck, and 22 Spaces file-service/Worker tests pass. The failed
   upload left one valid user Root and zero pending Root releases.
+- Protected release run `35576430330` published the manifest fix at
+  `b6e33afd8e04304bc4453dfd8d43bd1533db5fdd` with immutable tag
+  `production-20260921-387`. A live mixed-case upload returned 201 with a
+  positive Root Ref, listed and downloaded exact bytes, then deleted with 204;
+  the user catalog remained at one Root with zero pending releases.
+- Authenticated latency sampling found session requests at roughly 0.7-5.6
+  seconds and Root listing at 3-15.5 seconds. The App-owned D1 primary is in
+  ENAM with read replication disabled, so dynamic requests execute several
+  remote D1 and UniCAS round trips. Smart Placement is enabled only for
+  reserved dynamic paths while SPA assets remain edge-served; the focused
+  deployment suite and Wrangler dry-run pass without the placed-assets warning.
 
 ## Blockers
 
-- The manifest ordering fix must be integrated and rerun through the protected
-  Production workflow.
+- Smart Placement must be deployed and measured after Cloudflare analyzes the
+  Worker traffic.
 - The remaining manual file workflow checks in
   [UserAcceptance](./UserAcceptance.md) remain external gates. Delivery
   acceptance cannot be requested until that evidence is attached to the exact
