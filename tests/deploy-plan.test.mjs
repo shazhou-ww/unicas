@@ -164,7 +164,7 @@ describe("standalone deployment plan", () => {
       "pnpm --filter @unicas/service-cloudflare exec wrangler d1 migrations apply SPACES_DB --remote --config ../../.wrangler/spaces/wrangler.production.json",
       "node packages/spaces/scripts/preflight.mjs",
       "pnpm --filter @unicas/service-cloudflare exec wrangler deploy --config ../../.wrangler/spaces/wrangler.production.json --secrets-file ../../.wrangler/spaces/secrets.json",
-      "pnpm spaces:smoke -- --base-url https://spaces.unicas.work",
+      "pnpm spaces:smoke --base-url https://spaces.unicas.work",
     ]);
     expect(() => spacesDeploymentPlan({ bootstrap: true, dryRun: false, production: false }, {}))
       .toThrow("SPACES_BOOTSTRAP_DEPLOY_CONFIRM=spaces.unicas.work");

@@ -51,7 +51,7 @@ export function spacesDeploymentPlan(options, environment = process.env) {
     ["pnpm", "--filter", "@unicas/service-cloudflare", "exec", "wrangler", "deploy", "--config", generatedConfig, "--secrets-file", secretsFile],
   );
   if (options.production) {
-    commands.push(["pnpm", "spaces:smoke", "--", "--base-url", "https://spaces.unicas.work"]);
+    commands.push(["pnpm", "spaces:smoke", "--base-url", "https://spaces.unicas.work"]);
   }
   return commands;
 }
