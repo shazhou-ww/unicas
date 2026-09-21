@@ -8,7 +8,7 @@ composition and the App-owned D1 migration.
 
 The browser authenticates to Spaces with Google and receives only an opaque,
 host-only App session. The Spaces Worker selects the provisioned App and Space,
-signs a short-lived capability, and uses `@unicas/tenant-file-client`. The
+signs a short-lived capability, and uses `@unicas/space-file-client`. The
 browser never receives a capability, private signing key, presigned upload URL,
 or storage object key. Microsoft and GitHub remain disabled.
 

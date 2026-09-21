@@ -11,6 +11,7 @@
 import {
   appAdminRoutes,
   AppAdminMeResponseSchema,
+  AppUsageSchema,
   CasAdminETagHeader,
   CasAdminIdempotencyKeyHeader,
   CasAdminIfMatchHeader,
@@ -39,6 +40,7 @@ import type {
   AppOAuthIssuer,
   AppOAuthIssuerInspection,
   AppRefDomain,
+  AppUsage,
   PlatformAccountDetail,
   PlatformAccountPage,
   PlatformAuditAction,
@@ -73,6 +75,7 @@ export interface AdminClient {
     headers?: CasAdminCreateHeaders,
   ): Promise<AdminClientRead<{ readonly appId: AppId }>>;
   getApp(path: { readonly appId: AppId }): Promise<AdminClientRead<App>>;
+  getAppUsage(path: { readonly appId: AppId }): Promise<AppUsage>;
   patchApp(
     path: { readonly appId: AppId },
     body: { readonly displayName?: string; readonly description?: string; readonly status?: App["status"] },
@@ -305,6 +308,16 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
     async getApp(path) {
       const response = await requireOk(await request(appAdminRoutes.app(path)), "getApp");
       return { value: await response.json(), etag: readEtag(response) };
+    },
+
+    async getAppUsage(path) {
+      const response = await requireOk(await request(appAdminRoutes.usage(path)), "getAppUsage");
+      const body: unknown = await response.json();
+      const parsed = AppUsageSchema.safeParse(body);
+      if (!parsed.success) {
+        throw new AdminClientError(502, "ADMIN_CONTRACT_MISMATCH", "App usage response was invalid");
+      }
+      return parsed.data;
     },
 
     async patchApp(path, body, ifMatch) {

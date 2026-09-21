@@ -1,7 +1,6 @@
 # Interface review
 
-Status: Console UI approved by the requesting user on 2026-09-21; API and
-metric contract pending approval.
+Status: Approved by the requesting user on 2026-09-21.
 
 ## Decision requested
 
@@ -72,7 +71,7 @@ the Space endpoint.
 | Authenticated, usable Account with App membership; suspended App | `200` aggregate usage. Administrative inspection remains available while Space operations stay blocked. |
 | App has no usage-bearing state | `200` with all six values equal to zero. |
 | No administrator session | `401 ADMIN_AUTH_REQUIRED`. |
-| Blocked Account | `403 ACCOUNT_BLOCKED`. |
+| Blocked Account | `401 ADMIN_AUTH_REQUIRED`; existing credential revalidation clears the blocked Account's session before route dispatch. |
 | Unknown App or no membership | `403 APP_MEMBERSHIP_REQUIRED`, preserving current App-read concealment behavior. |
 | Any node has never completed projection backfill, or accounting storage is unavailable | `503 SERVICE_UNAVAILABLE`; never substitute a partial or D1-only physical total. |
 

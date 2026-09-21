@@ -1,6 +1,6 @@
 import { oc } from "@orpc/contract";
 import { z } from "zod";
-import { AppIdSchema } from "@unicas/tenant-protocol";
+import { AppIdSchema } from "@unicas/space-protocol";
 import { AppPeopleQuerySchema, PlatformPeopleQuerySchema } from "./people.js";
 import {
   AccountSelfSchema,
@@ -12,6 +12,7 @@ import {
   AppOAuthIssuerSchema,
   AppRefDomainSchema,
   AppSchema,
+  AppUsageSchema,
   CasHashSchema,
   SpaceRootRefBalanceSchema,
   SpaceRootRefEventSchema,
@@ -200,6 +201,19 @@ export const getAppContract = appProcedure
   })
   .input(z.object({ params: appParams }).readonly())
   .output(AppSchema);
+
+export const getAppUsageContract = appProcedure
+  .route({
+    method: "GET",
+    path: `${AppAdminApiBasePath}/{appId}/usage`,
+    operationId: "getAppUsage",
+    summary: "Read aggregate App usage",
+    description: "Returns current CAS usage aggregated across every Space in the App. Requires current App membership and no Space capability.",
+    inputStructure: "detailed",
+    tags: ["Apps"],
+  })
+  .input(z.object({ params: appParams }).readonly())
+  .output(AppUsageSchema);
 
 export const patchAppContract = appProcedure
   .route({
@@ -471,6 +485,7 @@ export const appAdminApiContract = {
     list: listAppsContract,
     create: createAppContract,
     get: getAppContract,
+    getUsage: getAppUsageContract,
     patch: patchAppContract,
   },
   members: {

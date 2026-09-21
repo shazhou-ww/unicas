@@ -2,10 +2,7 @@ import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import type { CryptoKey } from "jose";
 import { describe, expect, test } from "vitest";
 import {
-  MaximumCapabilityLifetimeSeconds,
   SpaceCapabilityVersion,
-  casReadPermission,
-  canonicalPermissionSegment,
   spaceGcExecutePermission,
   spaceNodeLeasePermission,
   spaceNodeReadPermission,
@@ -13,15 +10,16 @@ import {
   spaceRootRefsUpdatePermission,
   spaceUsageReadPermission,
   type AppSpaceRoute,
-} from "@unicas/tenant-protocol";
+} from "@unicas/space-protocol";
+import { casReadPermission } from "@unicas/space-protocol/v1";
 import {
   AppSpaceCapabilityVerifier,
-  StackCapabilityVerifier,
+  V1StackTenantCapabilityVerifier,
   appSpacePermissionFor,
   type AppAuthorityResolver,
   type ResolvedAppAuthority,
-  type ResolvedStackAuthority,
-  type StackAuthorityResolver,
+  type ResolvedV1StackAuthority,
+  type V1StackAuthorityResolver,
 } from "../src/index.js";
 
 const ISSUER = "https://issuer.example";
@@ -36,7 +34,7 @@ const APP_ROUTE = {
   spaceId: SPACE,
   hash: "a".repeat(64),
 };
-const STACK_ROUTE = {
+const V1_ROUTE = {
   operation: "readContent" as const,
   stackId: STACK,
   tenantId: TENANT,
@@ -51,10 +49,10 @@ class StubAppAuthorityResolver implements AppAuthorityResolver {
   }
 }
 
-class StubStackAuthorityResolver implements StackAuthorityResolver {
-  constructor(readonly authority: ResolvedStackAuthority) { }
+class StubV1StackAuthorityResolver implements V1StackAuthorityResolver {
+  constructor(readonly authority: ResolvedV1StackAuthority) { }
 
-  async resolveIssuer(issuer: string): Promise<ResolvedStackAuthority | null> {
+  async resolveIssuer(issuer: string): Promise<ResolvedV1StackAuthority | null> {
     return issuer === ISSUER ? this.authority : null;
   }
 }
@@ -63,7 +61,7 @@ async function fixture(): Promise<{
   now: number;
   privateKey: CryptoKey;
   appResolver: StubAppAuthorityResolver;
-  stackResolver: StubStackAuthorityResolver;
+  v1Resolver: StubV1StackAuthorityResolver;
 }> {
   const now = 1_700_000_000_000;
   const { publicKey, privateKey } = await generateKeyPair("ES256", { extractable: true });
@@ -82,7 +80,7 @@ async function fixture(): Promise<{
       jwksUri,
       capabilityMaxLifetimeSeconds: 28_800,
     }),
-    stackResolver: new StubStackAuthorityResolver({
+    v1Resolver: new StubV1StackAuthorityResolver({
       stackId: STACK,
       issuer: ISSUER,
       audience: AUDIENCE,
@@ -111,15 +109,8 @@ async function issue(
     .sign(privateKey);
 }
 
-function legacySpacePermission(
-  spaceId: string,
-  action: "read" | "write" | "manage",
-): string {
-  return `spaces:${canonicalPermissionSegment(spaceId)}:cas:${action}`;
-}
-
 function request(token: string): Request {
-  return new Request("https://api.unicas.work/v2", {
+  return new Request("https://api.unicas.work/v1", {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
@@ -396,120 +387,52 @@ describe("AppSpaceCapabilityVerifier", () => {
     }
   });
 
-  test("accepts legacy v2 permissions only before the configured issuance cutoff", async () => {
+  test.each([2, 3])("rejects prototype Space capability version %s", async (version) => {
     const { now, privateKey, appResolver } = await fixture();
-    const legacyV2IssuedBefore = now + 1_000;
-    const compatibleVerifier = new AppSpaceCapabilityVerifier({
-      repository: appResolver,
-      now: () => now,
-      legacyV2IssuedBefore,
-    });
-    const legacyToken = await issue(privateKey, now, {
-      ver: 2,
+    const verifier = new AppSpaceCapabilityVerifier({ repository: appResolver, now: () => now });
+    const token = await issue(privateKey, now, {
+      ver: version,
       spaceId: SPACE,
-      permissions: [
-        legacySpacePermission(SPACE, "read"),
-        legacySpacePermission(SPACE, "write"),
-        legacySpacePermission(SPACE, "manage"),
-      ],
-      refDomain: "doc",
+      permissions: [spaceNodeReadPermission()],
     });
-    const routes: AppSpaceRoute[] = [
-      APP_ROUTE,
-      { ...APP_ROUTE, operation: "readMetadata" },
-      { ...APP_ROUTE, operation: "lease" },
-      { operation: "listRootRefs", appId: APP, spaceId: SPACE },
-      { operation: "updateRootRefs", appId: APP, spaceId: SPACE },
-      { operation: "usage", appId: APP, spaceId: SPACE },
-      { operation: "gc", appId: APP, spaceId: SPACE },
-    ];
-    for (const route of routes) {
-      await expect(compatibleVerifier.verify(request(legacyToken), route)).resolves.toBeDefined();
-    }
-
-    const defaultVerifier = new AppSpaceCapabilityVerifier({ repository: appResolver, now: () => now });
-    await expect(defaultVerifier.verify(request(legacyToken), APP_ROUTE))
-      .rejects.toMatchObject({ status: 401, code: "invalid_token" });
-
-    const cutoffToken = await issue(privateKey, now, {
-      ver: 2,
-      spaceId: SPACE,
-      permissions: [legacySpacePermission(SPACE, "read")],
-    }, { issuedAt: legacyV2IssuedBefore });
-    await expect(compatibleVerifier.verify(request(cutoffToken), APP_ROUTE))
+    await expect(verifier.verify(request(token), APP_ROUTE))
       .rejects.toMatchObject({ status: 401, code: "invalid_token" });
   });
 
-  test("keeps v2 and v3 permission grammars version-specific during migration", async () => {
+  test("rejects broad prototype permissions on released Space capabilities", async () => {
     const { now, privateKey, appResolver } = await fixture();
-    const verifier = new AppSpaceCapabilityVerifier({
-      repository: appResolver,
-      now: () => now,
-      legacyV2IssuedBefore: now + 1_000,
-    });
-    const v3WithLegacyPermission = await issue(privateKey, now, {
+    const verifier = new AppSpaceCapabilityVerifier({ repository: appResolver, now: () => now });
+    const token = await issue(privateKey, now, {
       ver: SpaceCapabilityVersion,
       spaceId: SPACE,
-      permissions: [legacySpacePermission(SPACE, "read")],
+      permissions: [`spaces:${SPACE}:cas:read`],
     });
-    const v2WithCurrentPermission = await issue(privateKey, now, {
-      ver: 2,
+    await expect(verifier.verify(request(token), APP_ROUTE))
+      .rejects.toMatchObject({ status: 401, code: "invalid_token" });
+  });
+
+  test("rejects version-1 claims across route families", async () => {
+    const { now, privateKey, appResolver, v1Resolver } = await fixture();
+    const appVerifier = new AppSpaceCapabilityVerifier({ repository: appResolver, now: () => now });
+    const v1Verifier = new V1StackTenantCapabilityVerifier({ repository: v1Resolver, now: () => now });
+    const tenantToken = await issue(privateKey, now, {
+      ver: 1,
+      tenantId: TENANT,
+      permissions: [casReadPermission(TENANT)],
+    });
+    const spaceToken = await issue(privateKey, now, {
+      ver: SpaceCapabilityVersion,
       spaceId: SPACE,
       permissions: [spaceNodeReadPermission()],
     });
 
-    await expect(verifier.verify(request(v3WithLegacyPermission), APP_ROUTE))
-      .rejects.toMatchObject({ status: 403, code: "insufficient_permission" });
-    await expect(verifier.verify(request(v2WithCurrentPermission), APP_ROUTE))
-      .rejects.toMatchObject({ status: 403, code: "insufficient_permission" });
-  });
-
-  test("bounds the legacy cutoff and still enforces issuer lifetime limits", async () => {
-    const { now, privateKey, appResolver } = await fixture();
-    expect(() => new AppSpaceCapabilityVerifier({
-      repository: appResolver,
-      now: () => now,
-      legacyV2IssuedBefore: now + MaximumCapabilityLifetimeSeconds * 1000 + 1,
-    })).toThrow("must not be more than seven days in the future");
-
-    const verifier = new AppSpaceCapabilityVerifier({
-      repository: appResolver,
-      now: () => now,
-      legacyV2IssuedBefore: now + 1_000,
-    });
-    const overlongToken = await issue(privateKey, now, {
-      ver: 2,
-      spaceId: SPACE,
-      permissions: [legacySpacePermission(SPACE, "read")],
-    }, { lifetimeSeconds: appResolver.authority.capabilityMaxLifetimeSeconds + 1 });
-    await expect(verifier.verify(request(overlongToken), APP_ROUTE))
+    await expect(appVerifier.verify(request(tenantToken), APP_ROUTE))
+      .rejects.toMatchObject({ status: 401, code: "invalid_token" });
+    await expect(v1Verifier.verify(request(spaceToken), V1_ROUTE))
       .rejects.toMatchObject({ status: 401, code: "invalid_token" });
   });
 
-  test("rejects v1 and v3 tokens across route families even when both scopes are present", async () => {
-    const { now, privateKey, appResolver, stackResolver } = await fixture();
-    const appVerifier = new AppSpaceCapabilityVerifier({ repository: appResolver, now: () => now });
-    const stackVerifier = new StackCapabilityVerifier({ repository: stackResolver, now: () => now });
-    const v1Token = await issue(privateKey, now, {
-      ver: 1,
-      tenantId: TENANT,
-      spaceId: SPACE,
-      permissions: [casReadPermission(TENANT), spaceNodeReadPermission()],
-    });
-    const v3Token = await issue(privateKey, now, {
-      ver: SpaceCapabilityVersion,
-      tenantId: TENANT,
-      spaceId: SPACE,
-      permissions: [casReadPermission(TENANT), spaceNodeReadPermission()],
-    });
-
-    await expect(appVerifier.verify(request(v1Token), APP_ROUTE))
-      .rejects.toMatchObject({ status: 401, code: "invalid_token" });
-    await expect(stackVerifier.verify(request(v3Token), STACK_ROUTE))
-      .rejects.toMatchObject({ status: 401, code: "invalid_token" });
-  });
-
-  test("rejects the v1 permission grammar on a v3 Space capability", async () => {
+  test("rejects the frozen Stack/Tenant permission grammar on a Space capability", async () => {
     const { now, privateKey, appResolver } = await fixture();
     const verifier = new AppSpaceCapabilityVerifier({ repository: appResolver, now: () => now });
     const token = await issue(privateKey, now, {
@@ -518,6 +441,6 @@ describe("AppSpaceCapabilityVerifier", () => {
       permissions: [casReadPermission(SPACE)],
     });
     await expect(verifier.verify(request(token), APP_ROUTE))
-      .rejects.toMatchObject({ status: 403, code: "insufficient_permission" });
+      .rejects.toMatchObject({ status: 401, code: "invalid_token" });
   });
 });

@@ -9,9 +9,8 @@ import {
   CapabilityAlgorithm,
   CapabilityAuthenticationError,
   CapabilityAuthorizationError,
-  MaximumCapabilityLifetimeSeconds,
   SpaceCapabilityVersion,
-  canonicalPermissionSegment,
+  parseSpaceCapabilityPermission,
   spaceGcExecutePermission,
   spaceNodeLeasePermission,
   spaceNodeReadPermission,
@@ -20,8 +19,8 @@ import {
   spaceUsageReadPermission,
   validateRefDomainClaim,
   type AppSpaceRoute,
-} from "@unicas/tenant-protocol";
-import type { JwksFetcher } from "./tenant-auth.js";
+} from "@unicas/space-protocol";
+import type { JwksFetcher } from "./v1/tenant-auth.js";
 
 export interface ResolvedAppAuthority {
   readonly appId: string;
@@ -53,7 +52,6 @@ export interface AppSpaceVerifierOptions {
   readonly cacheTtlMs?: number;
   readonly hardStaleBoundMs?: number;
   readonly jwksFetcher?: JwksFetcher;
-  readonly legacyV2IssuedBefore?: number;
   readonly now?: () => number;
   readonly onEvent?: (event: AppSpaceAuthEvent) => void;
 }
@@ -71,7 +69,6 @@ export interface VerifiedAppSpaceCall {
 const DEFAULT_CACHE_TTL_MS = 30_000;
 const DEFAULT_HARD_STALE_BOUND_MS = 60_000;
 const CLOCK_TOLERANCE_SECONDS = 30;
-const LEGACY_SPACE_CAPABILITY_VERSION = 2;
 
 export class AppSpaceCapabilityVerifier {
   readonly #repository: AppAuthorityResolver;
@@ -79,7 +76,6 @@ export class AppSpaceCapabilityVerifier {
   readonly #cacheTtlMs: number;
   readonly #hardStaleBoundMs: number;
   readonly #jwksFetcher: JwksFetcher | undefined;
-  readonly #legacyV2IssuedBefore: number | undefined;
   readonly #now: () => number;
   readonly #onEvent: (event: AppSpaceAuthEvent) => void;
   readonly #authorityCache = new Map<string, CachedAppAuthority>();
@@ -95,16 +91,6 @@ export class AppSpaceCapabilityVerifier {
     }
     this.#jwksFetcher = options.jwksFetcher;
     this.#now = options.now ?? (() => Date.now());
-    this.#legacyV2IssuedBefore = options.legacyV2IssuedBefore;
-    if (this.#legacyV2IssuedBefore !== undefined) {
-      if (!Number.isSafeInteger(this.#legacyV2IssuedBefore)) {
-        throw new TypeError("legacyV2IssuedBefore must be an integer Unix timestamp in milliseconds");
-      }
-      const maximumCutoff = this.#now() + MaximumCapabilityLifetimeSeconds * 1000;
-      if (this.#legacyV2IssuedBefore > maximumCutoff) {
-        throw new TypeError("legacyV2IssuedBefore must not be more than seven days in the future");
-      }
-    }
     this.#onEvent = options.onEvent ?? (() => undefined);
   }
 
@@ -193,7 +179,7 @@ export class AppSpaceCapabilityVerifier {
         currentDate: new Date(this.#now()),
         requiredClaims: ["ver", "sub", "iat", "nbf", "exp", "jti", "spaceId", "permissions"],
       });
-      payload = normalizeAppSpacePayload(result.payload, this.#legacyV2IssuedBefore);
+      payload = normalizeAppSpacePayload(result.payload);
       lifetimeSeconds = Number(result.payload.exp) - Number(result.payload.iat);
     } catch (error) {
       if (error instanceof CapabilityAuthenticationError
@@ -222,9 +208,7 @@ export class AppSpaceCapabilityVerifier {
       );
     }
 
-    const permission = payload.version === SpaceCapabilityVersion
-      ? appSpacePermissionFor(route)
-      : legacyAppSpacePermissionFor(route);
+    const permission = appSpacePermissionFor(route);
     if (!payload.permissions.includes(permission)) {
       throw new CapabilityAuthorizationError(
         "insufficient_permission",
@@ -339,28 +323,7 @@ export function appSpacePermissionFor(route: AppSpaceRoute): string {
   }
 }
 
-function legacyAppSpacePermissionFor(route: AppSpaceRoute): string {
-  let action: "read" | "write" | "manage";
-  switch (route.operation) {
-    case "readContent":
-    case "readMetadata":
-    case "listRootRefs":
-      action = "read";
-      break;
-    case "lease":
-    case "updateRootRefs":
-      action = "write";
-      break;
-    case "usage":
-    case "gc":
-      action = "manage";
-      break;
-  }
-  return `spaces:${canonicalPermissionSegment(route.spaceId)}:cas:${action}`;
-}
-
 interface VerifiedAppSpacePayload {
-  readonly version: typeof SpaceCapabilityVersion | typeof LEGACY_SPACE_CAPABILITY_VERSION;
   readonly subject: string;
   readonly jti: string;
   readonly spaceId: string;
@@ -385,14 +348,8 @@ function normalizeAppSpacePayload(payload: {
   permissions?: unknown;
   iss?: unknown;
   refDomain?: unknown;
-}, legacyV2IssuedBefore: number | undefined): Omit<VerifiedAppSpacePayload, "appId" | "kid"> {
-  const isCurrentVersion = payload.ver === SpaceCapabilityVersion;
-  const isAcceptedLegacyVersion = payload.ver === LEGACY_SPACE_CAPABILITY_VERSION
-    && legacyV2IssuedBefore !== undefined
-    && typeof payload.iat === "number"
-    && Number.isFinite(payload.iat)
-    && payload.iat * 1000 < legacyV2IssuedBefore;
-  if (!isCurrentVersion && !isAcceptedLegacyVersion) {
+}): Omit<VerifiedAppSpacePayload, "appId" | "kid"> {
+  if (payload.ver !== SpaceCapabilityVersion) {
     throw new CapabilityAuthenticationError(
       "invalid_token",
       `CAS capability version is invalid (expected ${SpaceCapabilityVersion})`,
@@ -405,6 +362,7 @@ function normalizeAppSpacePayload(payload: {
     || typeof payload.iss !== "string"
     || !Array.isArray(payload.permissions)
     || payload.permissions.some((permission) => typeof permission !== "string")
+    || payload.permissions.some((permission) => parseSpaceCapabilityPermission(permission) === null)
   ) {
     throw new CapabilityAuthenticationError("invalid_token", "CAS capability claims are invalid");
   }
@@ -413,7 +371,6 @@ function normalizeAppSpacePayload(payload: {
     throw new CapabilityAuthenticationError("invalid_token", "CAS capability refDomain is invalid");
   }
   return {
-    version: payload.ver as typeof SpaceCapabilityVersion | typeof LEGACY_SPACE_CAPABILITY_VERSION,
     subject: payload.sub,
     jti: payload.jti,
     spaceId: payload.spaceId,

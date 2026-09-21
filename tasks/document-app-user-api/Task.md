@@ -103,7 +103,7 @@ consume.
 
 - Use only the public App/Space v2 vocabulary. Physical Stack/Tenant storage
   names and frozen v1 wire names must not leak into v2 examples.
-- Treat `packages/tenant-protocol/src/space-v2-contract.ts`, its generated
+- Treat `packages/space-protocol/src/space-contract.ts`, its generated
   `openapi/space-v2.openapi.json`, and `capability.ts` as the machine-readable
   contract sources. Explain them without creating a competing schema that can
   drift.
@@ -128,9 +128,9 @@ consume.
 
 ## References
 
-- [Space v2 contract](/packages/tenant-protocol/src/space-v2-contract.ts)
-- [Space v2 OpenAPI](/packages/tenant-protocol/openapi/space-v2.openapi.json)
-- [Capability vocabulary](/packages/tenant-protocol/src/capability.ts)
+- [Current Space contract](/packages/space-protocol/src/space-contract.ts)
+- [Current Space OpenAPI](/packages/space-protocol/openapi/app-space-v1.openapi.json)
+- [Capability vocabulary](/packages/space-protocol/src/space-capability.ts)
 - [Package and access-plane boundaries](/packages/README.md)
 - [UniCAS architecture](/docs/cas-architecture.md)
 - [State protection and garbage collection](/docs/cas-state-protection-and-gc.md)

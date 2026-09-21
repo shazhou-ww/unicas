@@ -78,42 +78,27 @@ sequenceDiagram
     participant Upload as Authorized upload target
 
     App->>CAS: POST .../nodes/HASH/lease<br/>leaseDurationMs + cas:nodes:lease
-    alt state=ready
+    alt Node already ready
         CAS-->>App: 200 ready lease
-    else state=awaiting_upload
+    else Direct upload required
         CAS-->>App: 200 awaiting_upload + PUT instructions
         App->>Upload: PUT canonical bytes with returned headers
-        Upload-->>App: Success or tolerated 412
-        App->>CAS: Repeat the same POST lease(HASH)
-    else state=awaiting_replacement_upload
-        CAS-->>App: 200 rejection + replacement PUT instructions
-        App->>Upload: PUT corrected canonical bytes with returned headers
-        Upload-->>App: Success or tolerated 412
-        App->>CAS: Repeat the same POST lease(HASH)
-    else state=validated_awaiting_children
-        CAS-->>App: 200 all distinct unready child hashes
-        loop Each returned child
-            App->>CAS: Lease/upload child hash until ready
+        alt Upload accepted or already present
+            Upload-->>App: Success or tolerated 412
+            App->>CAS: Repeat the same POST lease(HASH)
+            CAS-->>App: 200 ready lease
+        else Upload or finalization fails
+            Upload-->>App: Error
+            App->>App: Keep same hash and bounded retry while session/lease is valid
         end
-        App->>CAS: Repeat the same parent lease(HASH)
     end
 ```
 
 The lease request never carries canonical bytes, upload length, or upload ID.
-Hash mismatch, malformed content, and oversized content return
-`awaiting_replacement_upload` with a fresh write-once target. Until corrected
-bytes are uploaded, repeating the lease preserves that state and rejection;
-only an expired target without an object causes its upload instructions to be
-rotated.
-
-A valid parent waiting for dependencies returns
-`validated_awaiting_children` with every distinct unready child hash in
-canonical first-occurrence order. UniCAS retains its validated bytes, so the
-App makes those children ready and repeats the parent lease without uploading,
-hashing, or parsing the parent again.
-
-For an already-ready node, repeating lease preserves the start of an active
-lease and only extends its expiry. An expired lease starts a new interval.
+Hash mismatch and malformed content return
+`awaiting_replacement_upload` with a fresh write-once target. A valid parent
+waiting for dependencies returns `validated_awaiting_children` with every
+distinct unready child hash.
 
 The low-level client performs one lease request. The blob client performs the
 direct PUT, tolerates `412` as an already-satisfied upload step, and repeats the

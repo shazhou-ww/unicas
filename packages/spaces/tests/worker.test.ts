@@ -302,7 +302,7 @@ describe("Spaces Worker", () => {
       SPACES_SMOKE_PRINCIPAL_ID: "smoke-principal",
     };
     const ensureSmokeRoot = vi.fn();
-    const fetchImpl = vi.fn(function(this: unknown) {
+    const fetchImpl = vi.fn(function (this: unknown) {
       expect(this).toBeUndefined();
       return Promise.resolve(new Response(null, { status: 204 }));
     });
@@ -311,16 +311,16 @@ describe("Spaces Worker", () => {
       createFileService: async ({ fetcher }) => {
         await fetcher?.fetch("https://upload.example.test");
         return {
-        list: vi.fn(),
-        createFolder: vi.fn(),
-        uploadFile: vi.fn(),
-        renameFile: vi.fn(),
-        deleteFile: vi.fn(),
-        download: vi.fn(),
-        cleanupPaths: vi.fn(),
-        ensureSmokeRoot,
-        releaseSmokeRoot: vi.fn(),
-        reconcilePendingReleases: vi.fn(),
+          list: vi.fn(),
+          createFolder: vi.fn(),
+          uploadFile: vi.fn(),
+          renameFile: vi.fn(),
+          deleteFile: vi.fn(),
+          download: vi.fn(),
+          cleanupPaths: vi.fn(),
+          ensureSmokeRoot,
+          releaseSmokeRoot: vi.fn(),
+          reconcilePendingReleases: vi.fn(),
         };
       },
     });

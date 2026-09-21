@@ -14,8 +14,9 @@ import type {
   CasLeaseResult,
   SpaceNodeLeaseReadyResult,
   SpaceNodeUploadRejection,
-} from "@unicas/tenant-protocol";
+} from "@unicas/space-protocol";
 import { NodeOpError, NodeOpErrorCodes } from "./node-errors.js";
+import type { AppSpaceScope } from "./space-scope.js";
 
 export const DEFAULT_LEASE_MS = 15 * 60 * 1000;
 export const MIN_LEASE_MS = 60 * 1000;
@@ -24,10 +25,7 @@ export const DEFAULT_UPLOAD_SESSION_MS = 15 * 60 * 1000;
 export const DEFAULT_UPLOAD_CLEANUP_MS = 24 * 60 * 60 * 1000;
 export const DEFAULT_MAX_ACTIVE_UPLOADS = 1024;
 
-export interface NodeLeaseScope {
-  readonly stackId: string;
-  readonly tenantId: string;
-}
+export interface NodeLeaseScope extends AppSpaceScope { }
 
 export interface NodeLeaseRecord {
   readonly leaseStartedAt: number;
@@ -115,6 +113,7 @@ export type UploadedCanonicalNodeCommit =
   | {
     readonly kind: "existing";
     readonly hash: string;
+    readonly storedBytes: number;
     readonly leaseStartedAt: number;
     readonly leaseExpiresAt: number;
   }
@@ -122,6 +121,7 @@ export type UploadedCanonicalNodeCommit =
     readonly kind: "new";
     readonly hash: string;
     readonly contentSize: number;
+    readonly storedBytes: number;
     readonly contentType: string;
     readonly refs: readonly string[];
     readonly leaseStartedAt: number;
@@ -455,6 +455,7 @@ async function publishValidatedLeaseDrivenUpload(
     kind: "new",
     hash: input.hash,
     contentSize: validation.contentSize,
+    storedBytes: validation.storedBytes,
     contentType: validation.contentType,
     refs: validation.refs,
     ...lease,
@@ -784,12 +785,14 @@ export async function finalizeCanonicalNodeLease(input: {
     kind: "new",
     hash: input.plan.hash,
     contentSize: parsed.contentSize,
+    storedBytes: input.plan.storedBytes,
     contentType: parsed.contentType,
     refs: parsed.refs,
     ...lease,
   } : {
     kind: "existing",
     hash: input.plan.hash,
+    storedBytes: input.plan.storedBytes,
     ...lease,
   });
   return { hash: input.plan.hash, ready: true, ...lease };

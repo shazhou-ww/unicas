@@ -19,14 +19,14 @@ function readPkg(name: string): {
   return JSON.parse(readFileSync(join(packagesDir, name, "package.json"), "utf8"));
 }
 
-const TENANT_CLIENT_PACKAGES = [
-  "@unicas/tenant-client",
-  "@unicas/tenant-blob-client",
-  "@unicas/tenant-file-client",
+const SPACE_CLIENT_PACKAGES = [
+  "@unicas/space-client",
+  "@unicas/space-blob-client",
+  "@unicas/space-file-client",
 ] as const;
 
-const TENANT_ONLY_PACKAGES = [
-  ...TENANT_CLIENT_PACKAGES,
+const DATA_PLANE_ONLY_PACKAGES = [
+  ...SPACE_CLIENT_PACKAGES,
   "@unicas/codec",
 ] as const;
 
@@ -36,6 +36,7 @@ describe("cross-plane separation", () => {
       appAdminRoutes.me(),
       appAdminRoutes.apps(),
       appAdminRoutes.app({ appId: "a" }),
+      appAdminRoutes.usage({ appId: "a" }),
       appAdminRoutes.members({ appId: "a" }),
       appAdminRoutes.rootDomainRefs({ appId: "a", refDomain: "doc" }),
       appAdminRoutes.rootDomainEvents({ appId: "a", refDomain: "doc" }),
@@ -47,14 +48,14 @@ describe("cross-plane separation", () => {
     }
   });
 
-  test("admin matcher never recognizes tenant data-plane paths", () => {
-    const tenantPaths = [
+  test("admin matcher never recognizes data-plane paths", () => {
+    const dataPlanePaths = [
       "/stacks/s/tenants/t/nodes/h/content",
       "/stacks/s/tenants/t/root-refs",
       "/tenants/t/cas/usage",
       "/tenants/t/_internal/root-refs",
     ];
-    for (const path of tenantPaths) {
+    for (const path of dataPlanePaths) {
       expect(matchAppAdminRoute("GET", path)).toBeNull();
       expect(matchAppAdminRoute("POST", path)).toBeNull();
     }
@@ -64,13 +65,22 @@ describe("cross-plane separation", () => {
     expect(casAuthPlanePolicy.appAdminPlane.pathPrefix).toBe("/admin");
     expect(casAuthPlanePolicy.appAdminPlane.credential).toBe("google_oidc_bff_session");
     expect(casAuthPlanePolicy.appAdminPlane.rejects).toEqual([
-      "stack_issuer_jwt_capability",
+      "app_issuer_space_capability",
+      "v1_stack_issuer_jwt_capability",
     ]);
-    expect(casAuthPlanePolicy.tenantDataPlane.pathPrefix).toBe("/stacks");
-    expect(casAuthPlanePolicy.tenantDataPlane.credential).toBe(
-      "stack_issuer_jwt_capability",
+    expect(casAuthPlanePolicy.spaceDataPlane.pathPrefix).toBe("/v1/apps");
+    expect(casAuthPlanePolicy.spaceDataPlane.credential).toBe(
+      "app_issuer_space_capability",
     );
-    expect(casAuthPlanePolicy.tenantDataPlane.rejects).toEqual([
+    expect(casAuthPlanePolicy.spaceDataPlane.rejects).toEqual([
+      "oidc_bff_session",
+      "platform_operator_session",
+    ]);
+    expect(casAuthPlanePolicy.v1StackTenantDataPlane.pathPrefix).toBe("/stacks");
+    expect(casAuthPlanePolicy.v1StackTenantDataPlane.credential).toBe(
+      "v1_stack_issuer_jwt_capability",
+    );
+    expect(casAuthPlanePolicy.v1StackTenantDataPlane.rejects).toEqual([
       "oidc_bff_session",
       "platform_operator_session",
     ]);
@@ -92,14 +102,14 @@ describe("package dependency boundaries", () => {
     expect(cloudflareService.private).toBe(true);
 
     expect(webui.dependencies?.["@unicas/admin-client"]).toBe("workspace:*");
-    expect(webui.dependencies?.["@unicas/tenant-client"]).toBeUndefined();
-    expect(webui.dependencies?.["@unicas/tenant-file-client"]).toBeUndefined();
-    expect(webui.dependencies?.["@unicas/tenant-browser-cache"]).toBeUndefined();
+    expect(webui.dependencies?.["@unicas/space-client"]).toBeUndefined();
+    expect(webui.dependencies?.["@unicas/space-file-client"]).toBeUndefined();
+    expect(webui.dependencies?.["@unicas/space-browser-cache"]).toBeUndefined();
     expect(webui.dependencies?.["@unicas/admin-protocol"]).toBeUndefined();
     expect(webui.dependencies?.["@unicas/service"]).toBeUndefined();
     expect(webui.dependencies?.["@unicas/control-plane"]).toBeUndefined();
     expect(service.dependencies?.["@unicas/admin-protocol"]).toBe("workspace:*");
-    expect(service.dependencies?.["@unicas/tenant-protocol"]).toBe("workspace:*");
+    expect(service.dependencies?.["@unicas/space-protocol"]).toBe("workspace:*");
     expect(service.dependencies?.["@unicas/codec"]).toBe("workspace:*");
     expect(cloudflareService.dependencies?.["@unicas/service"]).toBe("workspace:*");
     expect(cloudflareService.dependencies?.["@unicas/control-plane"]).toBeUndefined();
@@ -115,7 +125,7 @@ describe("package dependency boundaries", () => {
         ...pkg.dependencies,
         ...pkg.devDependencies,
       };
-      for (const forbidden of TENANT_ONLY_PACKAGES) {
+      for (const forbidden of DATA_PLANE_ONLY_PACKAGES) {
         expect(deps[forbidden], `${pkg.name} must not depend on ${forbidden}`).toBeUndefined();
       }
     }
@@ -124,7 +134,7 @@ describe("package dependency boundaries", () => {
       ...service.dependencies,
       ...service.devDependencies,
     };
-    for (const forbidden of TENANT_CLIENT_PACKAGES) {
+    for (const forbidden of SPACE_CLIENT_PACKAGES) {
       expect(serviceDeps[forbidden], `${service.name} must not depend on ${forbidden}`).toBeUndefined();
     }
 
@@ -133,21 +143,21 @@ describe("package dependency boundaries", () => {
         ...pkg.dependencies,
         ...pkg.devDependencies,
       };
-      expect(deps["@unicas/tenant-protocol"]).toBeUndefined();
+      expect(deps["@unicas/space-protocol"]).toBeUndefined();
     }
 
     expect(protocol.dependencies?.["@unicas/control-plane"]).toBeUndefined();
     expect(protocol.dependencies?.["@unicas/admin-webui"]).toBeUndefined();
   });
 
-  test("tenant-client stays on the tenant protocol only", () => {
-    const client = readPkg("tenant-client");
-    expect(client.dependencies?.["@unicas/tenant-protocol-legacy"]).toBeUndefined();
+  test("space-client stays on the tenant protocol only", () => {
+    const client = readPkg("space-client");
+    expect(client.dependencies?.["@unicas/space-protocol-legacy"]).toBeUndefined();
     expect(client.dependencies?.["@unicas/admin-protocol"]).toBeUndefined();
   });
 
   test("tenant protocol never depends on the admin protocol", () => {
-    const protocol = readPkg("tenant-protocol");
+    const protocol = readPkg("space-protocol");
     expect(protocol.dependencies?.["@unicas/admin-protocol"]).toBeUndefined();
     expect(protocol.devDependencies?.["@unicas/admin-protocol"]).toBeUndefined();
   });

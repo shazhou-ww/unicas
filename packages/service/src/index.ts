@@ -71,11 +71,11 @@ export {
 export type {
   AppAdminRequestContext,
   AuthorizedSpaceCall,
-  AuthorizedTenantCall,
+  AuthorizedV1StackTenantCall,
   HttpActor,
   ServiceContext,
   SpaceRequestContext,
-  TenantRequestContext,
+  V1StackTenantRequestContext,
   UniCasServiceRoute,
 } from "./actor.js";
 export type {
@@ -88,18 +88,19 @@ export type {
   SqlResult,
   SqlStatement,
 } from "./ports.js";
+export type { AppSpaceScope } from "./space-scope.js";
 export {
-  permissionFor,
-  StackCapabilityVerifier,
-} from "./tenant-auth.js";
+  v1PermissionFor,
+  V1StackTenantCapabilityVerifier,
+} from "./v1/tenant-auth.js";
 export type {
   JwksFetcher,
-  ResolvedStackAuthority,
-  StackAuthEvent,
-  StackAuthorityResolver,
-  StackVerifierOptions,
-  VerifiedStackCall,
-} from "./tenant-auth.js";
+  ResolvedV1StackAuthority,
+  V1StackTenantAuthEvent,
+  V1StackAuthorityResolver,
+  V1StackTenantVerifierOptions,
+  VerifiedV1StackTenantCall,
+} from "./v1/tenant-auth.js";
 export {
   appSpacePermissionFor,
   AppSpaceCapabilityVerifier,
@@ -153,6 +154,14 @@ export type {
   NodeUsageRepository,
   NodeUsageScope,
 } from "./node-usage.js";
+export {
+  AppUsageUnavailableError,
+  readAppUsage,
+} from "./app-usage.js";
+export type {
+  AppUsageProjection,
+  AppUsageRepository,
+} from "./app-usage.js";
 export { NodeOpError, NodeOpErrorCodes } from "./node-errors.js";
 export type { NodeOpErrorCode } from "./node-errors.js";
 export {
@@ -233,7 +242,7 @@ export {
   generateOAuthInspectionId,
   generatePrincipalRef,
   generateSessionId,
-  generateStackId,
+  generateAppId,
 } from "./control-ids.js";
 export {
   extractJwsPayload,
@@ -253,8 +262,8 @@ export {
   normalizeEmailConstraint,
   parseControlListLimit,
   sha256Hex,
-  stackOAuthResource,
-  STACK_ID_PATTERN,
+  v1StackOAuthResource,
+  APP_ID_PATTERN,
   SUPPORTED_KEY_ALGORITHMS,
   validateDisplayName,
   validateEmailConstraint,

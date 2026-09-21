@@ -14,6 +14,7 @@ describe("App admin routes", () => {
     ["POST", appAdminRoutes.apps(), "createApp"],
     ["GET", appAdminRoutes.app({ appId: "app/a" }), "getApp"],
     ["PATCH", appAdminRoutes.app({ appId: "app/a" }), "patchApp"],
+    ["GET", appAdminRoutes.usage({ appId: "app/a" }), "getUsage"],
     ["GET", appAdminRoutes.members({ appId: "app/a" }), "listMembers"],
     ["DELETE", appAdminRoutes.members({ appId: "app/a" }), "deleteMember"],
     ["POST", appAdminRoutes.memberInvitations({ appId: "app/a" }), "createMemberInvitation"],
@@ -63,7 +64,7 @@ describe("App admin routes", () => {
   });
 
   test("rejects data paths, malformed escapes, and wrong methods", () => {
-    expect(matchAppAdminRoute("GET", "/v2/apps/a/spaces/s/cas/usage")).toBeNull();
+    expect(matchAppAdminRoute("GET", "/v1/apps/a/spaces/s/cas/usage")).toBeNull();
     expect(matchAppAdminRoute("GET", "/admin/apps/%ZZ")).toBeNull();
     expect(matchAppAdminRoute("POST", appAdminRoutes.me())).toBeNull();
     expect(matchAppAdminRoute("POST", "/admin/apps/a/managed-capabilities")).toBeNull();

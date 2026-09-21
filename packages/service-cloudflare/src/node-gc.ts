@@ -19,7 +19,7 @@ export class CloudflareNodeGcRepository implements NodeGcRepository {
              AND reservation.expires_at > ?
          )
        LIMIT ?`,
-    ).bind(scope.stackId, scope.tenantId, expiresAtOrBefore, expiresAtOrBefore, maxNodes).all<{ hash: string }>();
+    ).bind(scope.appId, scope.spaceId, expiresAtOrBefore, expiresAtOrBefore, maxNodes).all<{ hash: string }>();
     return eligible.results.map(({ hash }) => ({ hash }));
   }
 
@@ -34,13 +34,13 @@ export class CloudflareNodeGcRepository implements NodeGcRepository {
              AND reservation.hash = cas_nodes.hash
              AND reservation.expires_at > ?
          )`,
-    ).bind(scope.stackId, scope.tenantId, hash, expiresAtOrBefore).first<{
+    ).bind(scope.appId, scope.spaceId, hash, expiresAtOrBefore).first<{
       content_size: number; child_ref_count: number; root_ref_count: number; lease_expires_at: number;
     }>();
     if (!fresh || fresh.child_ref_count > 0 || fresh.root_ref_count > 0 || fresh.lease_expires_at > expiresAtOrBefore) return null;
     const edges = await this.db.prepare(
       "SELECT child_hash, COUNT(*) as cnt FROM cas_edges WHERE app_id = ? AND space_id = ? AND parent_hash = ? GROUP BY child_hash",
-    ).bind(scope.stackId, scope.tenantId, hash).all<{ child_hash: string; cnt: number }>();
+    ).bind(scope.appId, scope.spaceId, hash).all<{ child_hash: string; cnt: number }>();
     return {
       hash,
       contentSize: fresh.content_size,
@@ -48,21 +48,25 @@ export class CloudflareNodeGcRepository implements NodeGcRepository {
     };
   }
 
-  deleteCanonicalContent(scope: NodeGcScope, hash: string): Promise<void> {
-    return this.bucket.delete(appCanonicalNodeKey(scope.stackId, scope.tenantId, hash));
+  async deleteCanonicalContent(scope: NodeGcScope, hash: string): Promise<void> {
+    await this.bucket.delete(appCanonicalNodeKey(scope.appId, scope.spaceId, hash));
+    await this.db.prepare(
+      `UPDATE cas_nodes SET canonical_stored_bytes = NULL, canonical_observed_at = ?
+       WHERE app_id = ? AND space_id = ? AND hash = ?`,
+    ).bind(Date.now(), scope.appId, scope.spaceId, hash).run();
   }
 
   async commitDeletion(scope: NodeGcScope, deletion: NodeGcDeletion): Promise<void> {
     const batch: D1PreparedStatement[] = [
       this.db.prepare("DELETE FROM cas_edges WHERE app_id = ? AND space_id = ? AND parent_hash = ?")
-        .bind(scope.stackId, scope.tenantId, deletion.hash),
+        .bind(scope.appId, scope.spaceId, deletion.hash),
       this.db.prepare("DELETE FROM cas_nodes WHERE app_id = ? AND space_id = ? AND hash = ?")
-        .bind(scope.stackId, scope.tenantId, deletion.hash),
+        .bind(scope.appId, scope.spaceId, deletion.hash),
     ];
     for (const child of deletion.childReferences) {
       batch.push(this.db.prepare(
         "UPDATE cas_nodes SET child_ref_count = child_ref_count - ? WHERE app_id = ? AND space_id = ? AND hash = ?",
-      ).bind(child.count, scope.stackId, scope.tenantId, child.hash));
+      ).bind(child.count, scope.appId, scope.spaceId, child.hash));
     }
     await this.db.batch(batch);
   }

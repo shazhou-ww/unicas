@@ -6,8 +6,8 @@ Status: frozen historical v1 requirements; not implemented and not the current
 This document is retained to preserve the August 2026 design record. Its
 Stack/Tenant routes, claims, session layout, command names, and provider
 assumptions must not be reinterpreted as App/Space. Any future data-plane debug
-tool requires a new reviewed HTTP v2 design based on `appId`, signed `spaceId`,
-capability `ver: 3`, and exact operation permissions.
+tool must use the reviewed App/Space HTTP v1 design based on `appId`, signed
+`spaceId`, family-local capability `ver: 1`, and exact operation permissions.
 
 `unicas-tenant` is the tenant-facing debug tooling for the CAS data plane
 (`/stacks/{stackId}/tenants/{tenantId}/cas/...`). It lets a tenant user query
@@ -114,13 +114,13 @@ so the later WebUI reuses the same store:
   remote change is GC deleting the origin (the local copy is kept, which is
   what a debug tool wants). No eviction in v1; `cache status` / `cache clear`.
 - **Cache policy — node granularity** (the disk cache implements
-  `CasNodeCache` from `@unicas/tenant-client`): full node reads
+  `CasNodeCache` from `@unicas/space-client`): full node reads
   (`range === undefined`) populate the cache on miss; partial reads (`--range`)
   serve from a cached full copy or pass through without populating; metadata
   (incl. `refs`) is cached so subgraphs can be walked offline. `leaseNode`
   write-through is deferred.
 - **Range contract**: the `CasNodeCache.read(key, range, load)` interface
-  comment in tenant-client is updated to state that `range === undefined`
+  comment in space-client is updated to state that `range === undefined`
   means a full read (populate) and a present range means a partial read (serve
   or bypass); the policy lives in the cache implementation.
 - **Blob layer**: `createCasBlobClient(cas, options)` is cache-agnostic and

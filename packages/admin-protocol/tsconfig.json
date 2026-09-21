@@ -15,7 +15,7 @@
   ],
   "references": [
     {
-      "path": "../tenant-protocol"
+      "path": "../space-protocol"
     }
   ]
 }

@@ -7,7 +7,7 @@ const outputDir = join(import.meta.dirname, ".docs-site-output");
 
 beforeAll(async () => {
   await buildDocsSite(outputDir);
-});
+}, 30_000);
 
 afterAll(async () => {
   await rm(outputDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
@@ -29,7 +29,7 @@ describe("documentation static site", () => {
     for (const [route, title] of [
       ["reference/packages", "Package Boundaries"],
       ["reference/admin-protocol", "Admin Protocol"],
-      ["reference/tenant-protocol", "Tenant Protocol"],
+      ["reference/space-protocol", "Space Protocol"],
       ["reference/admin-cli", "Administrator CLI"],
     ]) {
       await expect(page(route)).resolves.toContain(title);
@@ -37,6 +37,9 @@ describe("documentation static site", () => {
     }
     await expect(readFile(join(outputDir, "assets", "docs.css"), "utf8")).resolves.toContain(".article-layout");
     await expect(readFile(join(outputDir, "assets", "docs.js"), "utf8")).resolves.toContain("nav-open");
+    await expect(readFile(join(outputDir, "assets", "api-reference.js"), "utf8")).resolves.toContain("app-space-v1.openapi.json");
+    await expect(readFile(join(outputDir, "assets", "api-reference.css"), "utf8")).resolves.toContain("--scalar-color-accent");
+    await expect(readFile(join(outputDir, "openapi", "app-space-v1.openapi.json"), "utf8")).resolves.toContain("UniCAS Space API");
     await expect(readFile(join(outputDir, "404.html"), "utf8")).resolves.toContain("No document at this address");
   });
 
@@ -51,11 +54,16 @@ describe("documentation static site", () => {
     expect(appUser).toContain('href="/app-user-api/scenarios/"');
     expect(appUser).toContain('href="/reference/packages/"');
     expect(appUser).toContain("docs/app-user-api/README.md");
+
+    const apiReference = await page("app-user-api/reference");
+    expect(apiReference).toContain('id="api-reference"');
+    expect(apiReference).toContain('href="/openapi/app-space-v1.openapi.json"');
+    expect(apiReference).toContain('src="/assets/api-reference.js"');
   });
 
   test("emits a successful generated-link report", async () => {
     const report = JSON.parse(await readFile(join(outputDir, "link-check.json"), "utf8"));
-    expect(report.pages).toBe(DOCUMENTS.length + 1 + 1 + 4);
+    expect(report.pages).toBe(DOCUMENTS.length + 1 + 1 + 1 + 4);
     expect(report.failures).toEqual([]);
   });
 });

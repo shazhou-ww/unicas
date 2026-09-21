@@ -1,4 +1,5 @@
 import { validateHash } from "@unicas/codec";
+import type { AppSpaceScope } from "./space-scope.js";
 
 export const CAS_MAX_ROOT_REF_CHANGES = 1000;
 export const CAS_MAX_ROOT_REF_DELTA = 1_000_000;
@@ -43,9 +44,7 @@ export interface CanonicalRootRefsUpdate {
   readonly entries: readonly (readonly [string, number])[];
 }
 
-export interface RootRefScope {
-  readonly stackId: string;
-  readonly tenantId: string;
+export interface RootRefScope extends AppSpaceScope {
   readonly refDomain: string;
 }
 
@@ -86,11 +85,11 @@ export interface RootRefCommitPlan {
 export interface RootRefRepository {
   findRequest(scope: RootRefScope, requestId: string): Promise<RootRefRequestRecord | null>;
   readNodes(
-    scope: Pick<RootRefScope, "stackId" | "tenantId">,
+    scope: AppSpaceScope,
     hashes: readonly string[],
   ): Promise<readonly RootRefNodeState[]>;
   findUnreadyNode(
-    scope: Pick<RootRefScope, "stackId" | "tenantId">,
+    scope: AppSpaceScope,
     hashes: readonly string[],
   ): Promise<string | null>;
   readDomainState(scope: RootRefScope): Promise<RootRefDomainState>;
@@ -204,15 +203,15 @@ export async function canonicalizeRootRefsUpdate(input: {
  */
 export async function applyRootRefsUpdate(input: {
   readonly repository: RootRefRepository;
-  readonly stackId: string;
-  readonly tenantId: string;
+  readonly appId: string;
+  readonly spaceId: string;
   readonly refDomain: string;
   readonly canonical: CanonicalRootRefsUpdate;
   readonly now?: () => number;
 }): Promise<DomainUpdateResult> {
   const scope: RootRefScope = {
-    stackId: input.stackId,
-    tenantId: input.tenantId,
+    appId: input.appId,
+    spaceId: input.spaceId,
     refDomain: input.refDomain,
   };
   const { requestId, payloadHash, changesJson, entries } = input.canonical;
@@ -301,7 +300,7 @@ export async function applyRootRefsUpdate(input: {
     "Root Ref repository commit failed",
   );
   if (commitResult === "revision-conflict") {
-    throw new RootRefsRetryableError("stack-domain revision allocation lost a conflict");
+    throw new RootRefsRetryableError("App-domain revision allocation lost a conflict");
   }
   return { idempotent: false, revision };
 }

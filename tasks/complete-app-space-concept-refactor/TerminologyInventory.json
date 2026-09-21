@@ -1,0 +1,684 @@
+{
+  "entries": [
+    {
+      "path": "docs/cas-architecture.md",
+      "category": "frozen-v1",
+      "terms": [
+        "createTenantCasClient",
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Documents the explicit frozen-v1 client and its wire identifiers.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "docs/cas-architecture.md",
+      "category": "compatibility-adapter",
+      "terms": [
+        "stack_id",
+        "tenant_id"
+      ],
+      "reason": "Documents historical physical-column compatibility at the adapter boundary.",
+      "removal": "Remove when the physical compatibility description is no longer maintained."
+    },
+    {
+      "path": "docs/cas-binary-format.md",
+      "category": "compatibility-adapter",
+      "terms": [
+        "stack_id",
+        "stackId",
+        "tenant_id",
+        "tenantId"
+      ],
+      "reason": "Documents legacy physical and frozen-v1 scope examples for format compatibility.",
+      "removal": "Remove when all referenced legacy examples are retired."
+    },
+    {
+      "path": "docs/cas-control-plane-cli.md",
+      "category": "frozen-v1",
+      "terms": [
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Documents frozen-v1 CLI compatibility fields.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "docs/cas-operations.md",
+      "category": "compatibility-adapter",
+      "terms": [
+        "stack_id",
+        "tenant_id"
+      ],
+      "reason": "Documents historical physical storage names at an operations boundary.",
+      "removal": "Remove when the physical compatibility runbook is retired."
+    },
+    {
+      "path": "docs/cas-tenant-debug-tools.md",
+      "category": "frozen-v1",
+      "terms": [
+        "@path:tenant",
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Documents the frozen Stack/Tenant debug surface.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/admin-cli/tests/catalog.test.ts",
+      "category": "compatibility-adapter",
+      "terms": [
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Proves current CLI schemas reject legacy field names.",
+      "removal": "Remove when legacy-field rejection no longer needs regression coverage."
+    },
+    {
+      "path": "packages/admin-cli/tests/helpers/fake-server.ts",
+      "category": "compatibility-adapter",
+      "terms": [
+        "FakeStack",
+        "stackId"
+      ],
+      "reason": "Supports tests that exercise the legacy Admin response adapter.",
+      "removal": "Remove when the legacy Admin compatibility adapter is retired."
+    },
+    {
+      "path": "packages/admin-client/tests/functional.test.ts",
+      "category": "compatibility-adapter",
+      "terms": [
+        "stackId"
+      ],
+      "reason": "Exercises mapping and rejection of legacy Admin payload fields.",
+      "removal": "Remove when the legacy Admin compatibility adapter is retired."
+    },
+    {
+      "path": "packages/admin-protocol/src/authz.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "v1StackTenantDataPlane"
+      ],
+      "reason": "Names the explicit frozen-v1 authorization plane.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/admin-protocol/src/threat-model.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "adminSessionNeverAcceptedOnV1StackTenantRoutes",
+        "v1StackTenantCapabilityNeverAcceptedOnAdminRoutes"
+      ],
+      "reason": "Preserves explicit cross-plane denial invariants for frozen v1.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/admin-protocol/tests/contract-openapi.test.ts",
+      "category": "compatibility-adapter",
+      "terms": [
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Proves current schemas reject legacy field aliases.",
+      "removal": "Remove when legacy-field rejection no longer needs regression coverage."
+    },
+    {
+      "path": "packages/admin-protocol/tests/cross-plane.test.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "v1StackTenantDataPlane"
+      ],
+      "reason": "Tests the explicit frozen-v1 authorization plane.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/control-auth/src/index.ts",
+      "category": "external-standard",
+      "terms": [
+        "tenantId"
+      ],
+      "reason": "Represents the Microsoft Entra tenant identifier from the OIDC tid claim.",
+      "removal": "Retain while Microsoft identity metadata exposes tenant identity."
+    },
+    {
+      "path": "packages/README.md",
+      "category": "frozen-v1",
+      "terms": [
+        "createTenantCasClient",
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Documents explicit v1 entrypoints and their frozen identifiers.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/service-cloudflare/src/admin-bff/bff.ts",
+      "category": "compatibility-adapter",
+      "terms": [
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Calls the private legacy audit-reader RPC and maps its fields at the BFF boundary.",
+      "removal": "Remove when the private legacy audit-reader RPC is retired."
+    },
+    {
+      "path": "packages/service-cloudflare/src/admin-bff/providers.ts",
+      "category": "external-standard",
+      "terms": [
+        "tenantId"
+      ],
+      "reason": "Checks the Microsoft Entra tenant identifier during provider login.",
+      "removal": "Retain while Microsoft identity metadata exposes tenant identity."
+    },
+    {
+      "path": "packages/service-cloudflare/src/app-admin-adapter.ts",
+      "category": "compatibility-adapter",
+      "terms": [
+        "STACK_MEMBERSHIP_REQUIRED",
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Translates legacy Admin payloads and errors to the current App/Space contract.",
+      "removal": "Remove when the legacy Admin implementation and audit RPC are retired."
+    },
+    {
+      "path": "packages/service-cloudflare/src/audit-reads.ts",
+      "category": "compatibility-adapter",
+      "terms": [
+        "lastTenant",
+        "stackDomain",
+        "stackId",
+        "tenantFilter",
+        "tenantId"
+      ],
+      "reason": "Implements the private legacy audit-reader RPC consumed only through mapping adapters.",
+      "removal": "Remove when the private legacy audit-reader RPC is retired."
+    },
+    {
+      "path": "packages/service-cloudflare/src/control-authority.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "ResolvedV1StackAuthority",
+        "stackId",
+        "V1StackAuthorityResolver"
+      ],
+      "reason": "Resolves issuer authority for the explicitly versioned frozen-v1 verifier.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/service-cloudflare/src/mcp/server.ts",
+      "category": "compatibility-adapter",
+      "terms": [
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Calls and maps the private legacy audit-reader RPC behind App/Space MCP output.",
+      "removal": "Remove when the private legacy audit-reader RPC is retired."
+    },
+    {
+      "path": "packages/service-cloudflare/src/space-do.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "legacyStackId",
+        "legacyTenantId"
+      ],
+      "reason": "Converts one frozen-v1 header family into canonical App/Space scope at ingress.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/service-cloudflare/src/worker.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "authorizeV1StackTenantRequest",
+        "matchV1StackProtectedResourcePath",
+        "v1StackId",
+        "v1StackProtectedResourceMetadata",
+        "V1StackTenantAuthEvent",
+        "V1StackTenantCapabilityVerifier",
+        "VerifiedV1StackTenantCall"
+      ],
+      "reason": "Owns explicitly versioned frozen-v1 ingress and protected-resource metadata.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/service-cloudflare/src/worker.ts",
+      "category": "compatibility-adapter",
+      "terms": [
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Parses private legacy audit-reader parameters and frozen-v1 route identity.",
+      "removal": "Remove when both private audit compatibility and frozen v1 are retired."
+    },
+    {
+      "path": "packages/service-cloudflare/tests/admin-bff.test.ts",
+      "category": "compatibility-adapter",
+      "terms": [
+        "createStack",
+        "FakeStack",
+        "fakeStacks",
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Exercises legacy Admin and private audit response mapping to App/Space.",
+      "removal": "Remove when the legacy Admin compatibility adapter is retired."
+    },
+    {
+      "path": "packages/service-cloudflare/tests/audit-reads.test.ts",
+      "category": "compatibility-adapter",
+      "terms": [
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Tests the private legacy audit-reader RPC contract.",
+      "removal": "Remove when the private legacy audit-reader RPC is retired."
+    },
+    {
+      "path": "packages/service-cloudflare/tests/audit-rpc.test.ts",
+      "category": "compatibility-adapter",
+      "terms": [
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Tests the private legacy audit-reader RPC transport contract.",
+      "removal": "Remove when the private legacy audit-reader RPC is retired."
+    },
+    {
+      "path": "packages/service-cloudflare/tests/control-authority.test.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "stackId"
+      ],
+      "reason": "Tests frozen-v1 issuer authority resolution and isolation.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/service-cloudflare/tests/control-plane-mcp-server.test.ts",
+      "category": "compatibility-adapter",
+      "terms": [
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Proves MCP output maps private legacy audit fields to App/Space.",
+      "removal": "Remove when the private legacy audit-reader RPC is retired."
+    },
+    {
+      "path": "packages/service-cloudflare/tests/do.test.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "otherStack"
+      ],
+      "reason": "Tests frozen-v1 Stack isolation through legacy headers.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/service-cloudflare/tests/providers.test.ts",
+      "category": "external-standard",
+      "terms": [
+        "tenantId",
+        "wrongTenant"
+      ],
+      "reason": "Tests Microsoft Entra tenant identity validation.",
+      "removal": "Retain while Microsoft identity metadata exposes tenant identity."
+    },
+    {
+      "path": "packages/service-cloudflare/tests/schema.test.ts",
+      "category": "compatibility-adapter",
+      "terms": [
+        "stack_id"
+      ],
+      "reason": "Proves the obsolete physical Stack column is absent from current schema.",
+      "removal": "Remove when legacy-schema rejection no longer needs regression coverage."
+    },
+    {
+      "path": "packages/service-cloudflare/tests/worker.test.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "stackId",
+        "tenantId",
+        "V1StackTenantCapabilityVerifier"
+      ],
+      "reason": "Tests frozen-v1 verifier and route behavior beside current Space routing.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/service/src/actor.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "AuthorizedV1StackTenantCall",
+        "authorizeV1StackTenantRequest",
+        "dispatchV1StackTenantRequest",
+        "stackId",
+        "tenantId",
+        "V1StackTenantRequestContext"
+      ],
+      "reason": "Owns the explicit frozen-v1 service ingress adapter.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/service/src/control-audit.ts",
+      "category": "compatibility-adapter",
+      "terms": [
+        "legacyStackCreated",
+        "legacyStackPatched"
+      ],
+      "reason": "Names stable historical audit action strings behind explicit legacy properties.",
+      "removal": "Remove when historical Stack audit actions are no longer supported."
+    },
+    {
+      "path": "packages/service/src/control-validation.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "stackId",
+        "v1StackOAuthResource"
+      ],
+      "reason": "Builds only the explicitly versioned frozen-v1 OAuth resource.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/service/src/index.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "AuthorizedV1StackTenantCall",
+        "ResolvedV1StackAuthority",
+        "V1StackAuthorityResolver",
+        "v1StackOAuthResource",
+        "V1StackTenantAuthEvent",
+        "V1StackTenantCapabilityVerifier",
+        "V1StackTenantRequestContext",
+        "V1StackTenantVerifierOptions",
+        "VerifiedV1StackTenantCall"
+      ],
+      "reason": "Exports the visibly versioned frozen-v1 service compatibility surface.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/service/src/v1/tenant-auth.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "@path:tenant",
+        "ResolvedV1StackAuthority",
+        "stackId",
+        "tenantId",
+        "V1StackAuthorityResolver",
+        "V1StackTenantAuthEvent",
+        "V1StackTenantCapabilityVerifier",
+        "V1StackTenantVerifierOptions",
+        "VerifiedV1StackTenantCall"
+      ],
+      "reason": "Implements frozen-v1 capability verification under explicit v1 ownership.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/service/tests/actor.test.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "authorizeV1StackTenantRequest",
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Tests the explicit frozen-v1 actor ingress adapter.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/service/tests/app-space-auth.test.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "ResolvedV1StackAuthority",
+        "stackId",
+        "StubV1StackAuthorityResolver",
+        "tenantId",
+        "V1StackAuthorityResolver",
+        "V1StackTenantCapabilityVerifier"
+      ],
+      "reason": "Proves current and frozen-v1 claims cannot cross-authorize routes.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/service/tests/control-validation.test.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "v1StackOAuthResource"
+      ],
+      "reason": "Tests the explicitly versioned frozen-v1 OAuth resource helper.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/service/tests/v1-auth.test.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "ResolvedV1StackAuthority",
+        "stackId",
+        "tenantId",
+        "V1StackAuthorityResolver",
+        "V1StackTenantCapabilityVerifier"
+      ],
+      "reason": "Tests frozen-v1 capability verification and permissions.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/space-browser-cache/src/v1.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Owns the explicit frozen-v1 browser-cache key adapter.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/space-browser-cache/tests/cache.test.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Proves frozen-v1 and current cache partitions cannot collide.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/space-client/src/v1.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "createTenantCasClient"
+      ],
+      "reason": "Exports frozen-v1 client construction only from the explicit v1 subpath.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/space-client/src/v1/client.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "createTenantCasClient",
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Implements frozen-v1 client routing under explicit v1 ownership.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/space-client/src/v1/types.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Owns frozen-v1 client scope and cache-key types.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/space-client/tests/cache.test.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "createTenantCasClient",
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Tests cache behavior through the explicit frozen-v1 client entrypoint.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/space-client/tests/functional-client.test.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "createTenantCasClient",
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Tests frozen-v1 transport behavior beside current Space behavior.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/space-protocol/README.md",
+      "category": "frozen-v1",
+      "terms": [
+        "casTenantApiContract",
+        "tenantId"
+      ],
+      "reason": "Documents the explicit frozen-v1 protocol subpath and claim field.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/space-protocol/scripts/openapi.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "casTenantApiContract",
+        "stackId",
+        "tenantCapability",
+        "tenantId"
+      ],
+      "reason": "Defines generation metadata for the frozen-v1 OpenAPI artifact.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/space-protocol/src/v1.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "CasStackPath",
+        "CasTenantApiBasePath",
+        "casTenantApiContract",
+        "CasTenantApiContract",
+        "CasTenantPath"
+      ],
+      "reason": "Exports the frozen Stack/Tenant contract only from the explicit v1 subpath.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/space-protocol/src/v1/capability.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "tenantId",
+        "tenantPermission"
+      ],
+      "reason": "Implements the frozen-v1 claim and permission grammar.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/space-protocol/src/v1/contract.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "CasTenantApiBasePath",
+        "casTenantApiContract",
+        "CasTenantApiContract",
+        "stackId",
+        "tenantId",
+        "tenantParams",
+        "tenantProcedure"
+      ],
+      "reason": "Defines the frozen-v1 HTTP contract and path fields.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/space-protocol/src/v1/http.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "CasStackPath",
+        "CasTenantPath",
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Defines frozen-v1 request and response scope types.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/space-protocol/src/v1/routes.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Builds and matches only frozen-v1 Stack/Tenant routes.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/space-protocol/tests/contract.test.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "casTenantApiContract",
+        "stackId",
+        "tenantCapability",
+        "tenantId"
+      ],
+      "reason": "Tests frozen-v1 schemas and generated OpenAPI separately from current Space.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "packages/space-protocol/tests/routes.test.ts",
+      "category": "frozen-v1",
+      "terms": [
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Tests frozen-v1 routing and cross-version denial.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "scripts/cas-app-space-smoke.mjs",
+      "category": "frozen-v1",
+      "terms": [
+        "tenantId"
+      ],
+      "reason": "Constructs a frozen-v1 token only to prove cross-version rejection.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "scripts/cas-middleware-smoke.mjs",
+      "category": "frozen-v1",
+      "terms": [
+        "stackId",
+        "tenantId"
+      ],
+      "reason": "Exercises the intentionally frozen Stack/Tenant v1 service surface.",
+      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
+    },
+    {
+      "path": "stacks/unicas/deploy/reset-smoke.mjs",
+      "category": "compatibility-adapter",
+      "terms": [
+        "expectedStackId",
+        "stack_id",
+        "TENANT_DATABASE",
+        "tenantCounts",
+        "tenantFile",
+        "tenant_id",
+        "TENANT_TABLES",
+        "tenantTables"
+      ],
+      "reason": "Resets and verifies frozen legacy deployment data during controlled cleanup.",
+      "removal": "Remove after legacy deployment reset and retirement are complete."
+    },
+    {
+      "path": "tests/deploy-plan.test.mjs",
+      "category": "compatibility-adapter",
+      "terms": [
+        "expectedStackId",
+        "stack_id",
+        "stackId",
+        "tenant_id",
+        "tenantTables"
+      ],
+      "reason": "Tests legacy deployment reset and physical compatibility checks.",
+      "removal": "Remove after legacy deployment reset and retirement are complete."
+    }
+  ]
+}

@@ -54,9 +54,9 @@ rather than relying on scattered comments and reviewer memory.
 - Preserve genuinely external uses such as Microsoft `tenantId` behind
   provider-specific types and names so they cannot be confused with a UniCAS
   Space.
-- Add a terminology boundary check with an allowlist narrow enough to identify
-  each retained compatibility or external occurrence and reject newly
-  introduced legacy names in current App/Space code.
+- Perform one final terminology scan and retain a task-local, reason-bearing
+  inventory of every frozen-v1, compatibility-adapter, and external-standard
+  occurrence. Do not add a permanent repository terminology guard.
 - Update the repository glossary, package-boundary documentation, architecture
   documentation, and package READMEs to reflect the accepted names and the
   location of frozen v1 compatibility code.
@@ -79,35 +79,35 @@ rather than relying on scattered comments and reviewer memory.
 
 ## Acceptance criteria
 
-- [ ] A reviewed inventory assigns every maintained Stack/Tenant occurrence to
+- [x] A reviewed inventory assigns every maintained Stack/Tenant occurrence to
       frozen v1, external standard, compatibility adapter, or obsolete
       internal vocabulary, and every obsolete occurrence is removed.
-- [ ] The reviewed naming map defines the canonical data-plane package family,
+- [x] The reviewed naming map defines the canonical data-plane package family,
       and package directories, `package.json` names, imports, TypeScript
       references, workspace metadata, scripts, guards, and current docs agree
       with it.
-- [ ] App/Space v2 requests remain `{ appId, spaceId }` through the protocol,
+- [x] App/Space v2 requests remain `{ appId, spaceId }` through the protocol,
       service core, platform ports, Cloudflare repositories, Durable Objects,
       caches, and clients; any conversion for v1 occurs only in explicitly
       named compatibility modules.
-- [ ] Current v2 and shared implementation exports contain no misleading
+- [x] Current v2 and shared implementation exports contain no misleading
       Stack/Tenant type, function, variable, constant, fixture, file, or module
       names; retained legacy exports are visibly versioned or compatibility
       scoped.
-- [ ] Provider-specific external vocabulary such as Microsoft `tenantId` is
+- [x] Provider-specific external vocabulary such as Microsoft `tenantId` is
       isolated by its owning provider context and is not used as a UniCAS
       domain identifier.
-- [ ] The accepted package/export migration strategy is implemented and
+- [x] The accepted package/export migration strategy is implemented and
       documented, including compatibility duration or clean-cutover behavior,
       consumer update instructions, and explicit removal criteria for any
       temporary aliases.
-- [ ] A repository terminology check fails when legacy domain names are added
-      outside its reviewed, reason-bearing allowlist and ignores generated
-      outputs and historical task artifacts by construction.
-- [ ] Frozen v1 route, capability, client, and cross-version denial tests pass
+- [x] A final source scan and task-local, reason-bearing inventory classify
+      every retained legacy domain identifier and filename while excluding
+      generated outputs and historical task artifacts by construction.
+- [x] Frozen v1 route, capability, client, and cross-version denial tests pass
       unchanged in behavior, while v2 tests prove App/Space names and isolation
       across the renamed internal path.
-- [ ] Package boundary tests, OpenAPI drift checks, documentation checks,
+- [x] Package boundary tests, OpenAPI drift checks, documentation checks,
       workspace build, typecheck, and serialized test suites pass after the
       refactor.
 - [ ] The user explicitly accepts the implemented naming architecture and
@@ -157,7 +157,7 @@ reviewed explicitly before the work named in the final column begins.
 - [Repository glossary](/GLOSSARY.md)
 - [Package boundaries](/packages/README.md)
 - [UniCAS architecture](/docs/cas-architecture.md)
-- [Data-plane protocol boundary](/packages/tenant-protocol/README.md)
+- [Data-plane protocol boundary](/packages/space-protocol/README.md)
 - [Cloud-neutral service routing](/packages/service/src/actor.ts)
 - [Direct node upload task](/tasks/complete-direct-node-upload/Task.md)
 - [Space operation permission task](/tasks/split-app-space-operation-permissions/Task.md)

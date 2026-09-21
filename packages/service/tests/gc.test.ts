@@ -8,7 +8,7 @@ import {
   type NodeGcScope,
 } from "../src/index.js";
 
-const SCOPE = { stackId: "cas_stack_a", tenantId: "tenant-1" };
+const SCOPE = { appId: "cas_stack_a", spaceId: "tenant-1" };
 
 class MemoryGcRepository implements NodeGcRepository {
   candidates: NodeGcCandidate[] = [];

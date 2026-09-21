@@ -16,9 +16,9 @@ describe("Spaces boundaries", () => {
     expect(packageJson.private).toBe(true);
     expect(packageJson.publishConfig).toBeUndefined();
     expect(Object.keys(packageJson.dependencies).filter((name) => name.startsWith("@unicas/"))).toEqual([
-      "@unicas/tenant-client",
-      "@unicas/tenant-file-client",
-      "@unicas/tenant-protocol",
+      "@unicas/space-client",
+      "@unicas/space-file-client",
+      "@unicas/space-protocol",
     ]);
   });
 

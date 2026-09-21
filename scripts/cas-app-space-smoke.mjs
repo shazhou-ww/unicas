@@ -1,5 +1,5 @@
 /**
- * Smoke-test the deployed App/Space v2 contract through a machine API origin.
+ * Smoke-test the deployed App/Space v1 contract through a machine API origin.
  *
  * Usage: node scripts/cas-app-space-smoke.mjs [baseUrl]
  * Required: UNICAS_SMOKE_APP_ID/ISSUER/AUDIENCE/KID/KEY_FILE.
@@ -17,7 +17,7 @@ import {
   hashToHex,
   hexToHash,
 } from "../packages/codec/dist/index.js";
-import { createSpaceCasClient } from "../packages/tenant-client/dist/index.js";
+import { createSpaceCasClient } from "../packages/space-client/dist/index.js";
 import {
   CapabilityAlgorithm,
   CapabilityTokenType,
@@ -30,7 +30,7 @@ import {
   spaceRootRefsReadPermission,
   spaceRootRefsUpdatePermission,
   spaceUsageReadPermission,
-} from "../packages/tenant-protocol/dist/index.js";
+} from "../packages/space-protocol/dist/index.js";
 
 const BASE = normalizeSmokeBaseUrl(
   process.argv[2] ?? "https://api.unicas.work",
@@ -159,7 +159,7 @@ async function main() {
       `GC keeps current leased nodes (deleted ${gc.deleted} stale nodes)`,
     );
 
-    const prefix = `/v2/apps/${encodeURIComponent(APP_ID)}/spaces/${encodeURIComponent(SPACE_ID)}`;
+    const prefix = `/v1/apps/${encodeURIComponent(APP_ID)}/spaces/${encodeURIComponent(SPACE_ID)}`;
     const isolationToken = await issueSpace(ISOLATION_SPACE_ID);
     let response = await fetch(`${BASE}${prefix}/cas/nodes/${parent.hash}/content`, {
       headers: { Authorization: `Bearer ${isolationToken}` },
@@ -181,11 +181,11 @@ async function main() {
     response = await fetch(`${BASE}${prefix}/cas/usage`, {
       headers: { Authorization: `Bearer ${v1Token}` },
     });
-    assert(response.status === 401, `v1 token on v2 route -> ${response.status} (401)`);
+    assert(response.status === 401, `frozen token on App/Space v1 route -> ${response.status} (401)`);
     response = await fetch(`${BASE}/stacks/${encodeURIComponent(APP_ID)}/tenants/${encodeURIComponent(SPACE_ID)}/cas/usage`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    assert(response.status === 401, `v2 token on v1 route -> ${response.status} (401)`);
+    assert(response.status === 401, `Space v1 token on frozen route -> ${response.status} (401)`);
   } catch (error) {
     smokeFailure = error;
     throw error;

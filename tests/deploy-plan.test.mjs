@@ -402,11 +402,16 @@ describe("standalone deployment plan", () => {
 
   test("deploys each production Worker in order with environment-scoped credentials", () => {
     const job = productionJob();
+    const issuerCutoverDeploy = job.indexOf("Deploy API and Console for App/Space v1 issuer cutover");
+    const issuerCutover = job.indexOf("Cut over App/Space v1 issuer audiences");
     const service = job.indexOf("run: pnpm deploy:production");
     const spaces = job.indexOf("run: pnpm deploy:spaces");
     const site = job.indexOf("run: pnpm deploy:site");
     const docs = job.indexOf("run: pnpm deploy:docs");
     expect(service).toBeGreaterThan(-1);
+    expect(issuerCutoverDeploy).toBeGreaterThan(-1);
+    expect(issuerCutover).toBeGreaterThan(issuerCutoverDeploy);
+    expect(service).toBeGreaterThan(issuerCutover);
     expect(spaces).toBeGreaterThan(service);
     expect(site).toBeGreaterThan(spaces);
     expect(docs).toBeGreaterThan(site);
@@ -446,6 +451,9 @@ describe("standalone deployment plan", () => {
     expect(job).not.toContain("secrets.SESSION_ENCRYPTION_KEYS");
     expect(job).not.toContain("secrets.OAUTH_STATE_ENCRYPTION_KEY");
     expect(job).toContain('wrangler secret put "$name"');
+    expect(job).toContain("if: vars.APP_SPACE_V1_CUTOVER_ENABLED == 'true'");
+    expect(job).toContain("UNICAS_RELEASE_ADMIN_SESSION: ${{ secrets.UNICAS_RELEASE_ADMIN_SESSION }}");
+    expect(job).toContain("run: node stacks/unicas/deploy/cut-over-app-space-v1-issuers.mjs");
   });
 
   test("creates missing encryption secrets before a production deployment", () => {
@@ -643,8 +651,8 @@ describe("standalone deployment plan", () => {
     expect(appSpaceSmoke).toContain("GC keeps current leased nodes");
     expect(appSpaceSmoke).not.toContain("gc.deleted === 0");
     expect(appSpaceSmoke).toContain("cross-Space read");
-    expect(appSpaceSmoke).toContain("v1 token on v2 route");
-    expect(appSpaceSmoke).toContain("v2 token on v1 route");
+    expect(appSpaceSmoke).toContain("frozen token on App/Space v1 route");
+    expect(appSpaceSmoke).toContain("Space v1 token on frozen route");
     expect(legacySmoke).toContain("CapabilityVersion");
     expect(packageJson.scripts["smoke:v1"]).toContain("cas-middleware-smoke.mjs");
   });
@@ -785,14 +793,15 @@ describe("standalone deployment plan", () => {
 
   test("the smoke reset bounds compound inventory queries for remote D1", () => {
     const queries = [...SCOPED_INVENTORY_QUERIES.control, ...SCOPED_INVENTORY_QUERIES.data];
-    expect(queries).toHaveLength(4);
-    expect(queries.map(query => query.match(/\bSELECT\b/g)?.length)).toEqual([4, 3, 4, 4]);
+    expect(queries).toHaveLength(5);
+    expect(queries.map(query => query.match(/\bSELECT\b/g)?.length)).toEqual([4, 3, 4, 4, 1]);
     const catalog = queries.join("\n");
     for (const table of [
       "cas_apps",
       "cas_control_audit_events",
       "cas_nodes",
       "cas_direct_upload_sessions",
+      "cas_space_usage",
     ]) expect(catalog).toContain(table);
   });
 

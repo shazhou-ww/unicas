@@ -1,10 +1,9 @@
 version: 2
 tasks:
   add-app-level-usage-reporting:
-    state: ongoing
-    sourceBranch: task/add-app-level-usage-reporting
+    state: completed
     createdAt: "2026-09-21T03:45:51Z"
-    updatedAt: "2026-09-21T04:05:08Z"
+    updatedAt: "2026-09-21T06:54:43Z"
   add-platform-access-management:
     state: completed
     createdAt: "2026-09-15T14:26:52Z"
@@ -13,6 +12,10 @@ tasks:
     state: backlog
     createdAt: "2026-09-17T07:47:55Z"
     updatedAt: "2026-09-19T05:12:49Z"
+  adopt-cloudflare-performance-tracing:
+    state: backlog
+    createdAt: "2026-09-21T11:23:41Z"
+    updatedAt: "2026-09-21T11:23:41Z"
   adopt-repoledger-cli:
     state: completed
     createdAt: "2026-09-15T08:13:24Z"
@@ -26,23 +29,22 @@ tasks:
     createdAt: "2026-09-14T13:31:14Z"
     updatedAt: "2026-09-19T05:12:49Z"
   build-file-upload-smoke-app:
-    state: ongoing
-    sourceBranch: task/build-file-upload-smoke-app
+    state: completed
     createdAt: "2026-09-20T15:07:43Z"
-    updatedAt: "2026-09-20T15:15:57Z"
+    updatedAt: "2026-09-21T09:24:25Z"
   complete-app-space-concept-refactor:
-    state: ongoing
-    sourceBranch: task/complete-app-space-concept-refactor
+    state: completed
     createdAt: "2026-09-20T14:26:56Z"
-    updatedAt: "2026-09-21T03:59:06Z"
+    updatedAt: "2026-09-21T11:01:42Z"
   complete-direct-node-upload:
     state: completed
     createdAt: "2026-09-20T07:36:32Z"
     updatedAt: "2026-09-20T15:01:44Z"
   cut-over-app-space-api-to-v1:
-    state: backlog
+    state: ongoing
+    sourceBranch: task/cut-over-app-space-api-to-v1
     createdAt: "2026-09-21T03:40:24Z"
-    updatedAt: "2026-09-21T03:40:24Z"
+    updatedAt: "2026-09-21T07:38:34Z"
   deploy-documentation-site:
     state: completed
     createdAt: "2026-09-14T11:50:56Z"

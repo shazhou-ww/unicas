@@ -4,7 +4,7 @@ Status: published authorization contract
 
 ## Verification model
 
-Every v2 Space request carries a short-lived bearer JWT issued by the App's
+Every v1 Space request carries a short-lived bearer JWT issued by the App's
 configured external issuer. The UniCAS service:
 
 1. reads the unverified issuer only to locate the App authority;
@@ -24,7 +24,7 @@ boundary.
 
 | Claim | Requirement and meaning |
 | --- | --- |
-| `ver` | Space capability version `3` for the HTTP v2 API. |
+| `ver` | Space capability family-local version `1` for the HTTP v1 API. |
 | `iss` | Exact configured external issuer. It determines the App authority. |
 | `sub` | App-defined subject for audit correlation; it does not replace App or Space scope checks. |
 | `aud` | Exact resource audience configured for the App. |
@@ -116,10 +116,10 @@ Read one Space:
 
 ```json
 {
-  "ver": 3,
+  "ver": 1,
   "iss": "https://issuer.example",
   "sub": "principal-123",
-  "aud": "https://api.unicas.work",
+  "aud": "https://api.unicas.work/v1/apps/APP_ID",
   "iat": 1760000000,
   "nbf": 1760000000,
   "exp": 1760000300,
@@ -135,10 +135,10 @@ Commit roots in one domain:
 
 ```json
 {
-  "ver": 3,
+  "ver": 1,
   "iss": "https://issuer.example",
   "sub": "principal-123",
-  "aud": "https://api.unicas.work",
+  "aud": "https://api.unicas.work/v1/apps/APP_ID",
   "iat": 1760000000,
   "nbf": 1760000000,
   "exp": 1760000300,
@@ -241,24 +241,10 @@ Avoid persistent browser storage when an in-memory token is sufficient. Never
 log bearer tokens, include them in URLs, commit them as examples, or exchange an
 administrator session for data-plane authority in the browser.
 
-## Version 2 migration
+## Prototype capability rejection
 
-Legacy capability `ver: 2` used Space-scoped broad permissions:
-
-```text
-spaces:{spaceId}:cas:read
-spaces:{spaceId}:cas:write
-spaces:{spaceId}:cas:manage
-```
-
-They are not aliases for v3 permissions. UniCAS accepts them only when an
-operator configures the absolute
-`CAS_SPACE_CAPABILITY_V2_ISSUED_BEFORE` migration cutoff and the token's signed
-`iat` is earlier than that instant. The normal signature, route scope, expiry,
-and App-specific maximum-lifetime checks still apply. Without that setting,
-v2 is rejected.
-
-App issuers must switch to `ver: 3` and the exact operation vocabulary before
-the cutoff. After the cutoff plus the greatest active App issuer lifetime and
-clock tolerance, operators remove the setting. Version 3 never accepts the
-legacy strings, and version 2 never accepts the v3 strings.
+Prototype Space capability versions 2 and 3 are rejected with
+`401 invalid_token`. Broad prototype permissions are not part of the released
+grammar and are also rejected. There is no issuance cutoff or compatibility
+mode. See [Prototype v2 migration](migration-v2-to-v1.md) for the complete
+consumer cutover.

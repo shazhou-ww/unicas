@@ -17,13 +17,13 @@
   ],
   "references": [
     {
-      "path": "../tenant-client"
+      "path": "../space-client"
     },
     {
-      "path": "../tenant-file-client"
+      "path": "../space-file-client"
     },
     {
-      "path": "../tenant-protocol"
+      "path": "../space-protocol"
     }
   ]
 }

@@ -16,11 +16,11 @@ describe("cas-admin-webui package boundary", () => {
     expect(pkg.dependencies["@unicas/admin-protocol"]).toBeUndefined();
     expect(pkg.dependencies["@unicas/service"]).toBeUndefined();
     expect(pkg.dependencies["@unicas/control-plane"]).toBeUndefined();
-    expect(pkg.dependencies["@unicas/tenant-client"]).toBeUndefined();
-    expect(pkg.dependencies["@unicas/tenant-blob-client"]).toBeUndefined();
-    expect(pkg.dependencies["@unicas/tenant-file-client"]).toBeUndefined();
-    expect(pkg.dependencies["@unicas/tenant-browser-cache"]).toBeUndefined();
-    expect(pkg.dependencies["@unicas/tenant-protocol"]).toBeUndefined();
+    expect(pkg.dependencies["@unicas/space-client"]).toBeUndefined();
+    expect(pkg.dependencies["@unicas/space-blob-client"]).toBeUndefined();
+    expect(pkg.dependencies["@unicas/space-file-client"]).toBeUndefined();
+    expect(pkg.dependencies["@unicas/space-browser-cache"]).toBeUndefined();
+    expect(pkg.dependencies["@unicas/space-protocol"]).toBeUndefined();
     expect(pkg.dependencies["@unicas/codec"]).toBeUndefined();
     expect(pkg.scripts.deploy).toBeUndefined();
     // The OIDC BFF composition moved to @unicas/service-cloudflare; this

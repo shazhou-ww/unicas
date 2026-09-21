@@ -2,8 +2,8 @@
  * @unicas/codec — Wire-format encodings for the CAS tenant data plane.
  *
  * Pure encoding, no I/O, no platform binding, no HTTP contracts. Split out of
- * `@unicas/tenant-protocol` (2026-08-29) so the encoding layer can be
- * published and tested independently; `@unicas/tenant-protocol` now focuses on
+ * `@unicas/space-protocol` (2026-08-29) so the encoding layer can be
+ * published and tested independently; `@unicas/space-protocol` now focuses on
  * HTTP request/response types and does NOT re-export these symbols.
  *
  * Consumers that only need node/blob encoding depend on this package alone.

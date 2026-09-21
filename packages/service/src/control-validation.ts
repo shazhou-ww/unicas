@@ -8,7 +8,7 @@ export const CONTROL_LIST_DEFAULT_LIMIT = 50;
 export const CONTROL_LIST_MAX_LIMIT = 200;
 export const INVITATION_TTL_MS = 24 * 60 * 60 * 1000;
 
-export const STACK_ID_PATTERN = /^cas_[A-Za-z0-9_-]{8,64}$/;
+export const APP_ID_PATTERN = /^cas_[A-Za-z0-9_-]{8,64}$/;
 /** Reserved domain used only for imported migration audit baselines. */
 export const LEGACY_DOMAIN = "_legacy";
 export const SUPPORTED_KEY_ALGORITHMS = ["ES256", "RS256", "EdDSA"] as const;
@@ -27,11 +27,16 @@ export function validateDisplayName(value: unknown): string | null {
   return null;
 }
 
-/** Fixed cap for discovered Stack OAuth issuers; not administrator configurable. */
+/** Fixed cap for discovered App OAuth issuers; not administrator configurable. */
 export const OAUTH_CAPABILITY_MAX_LIFETIME_SECONDS = 30 * 60;
 
 /** Canonical OAuth resource/audience owned by this UniCAS deployment. */
-export function stackOAuthResource(publicOrigin: string, stackId: string): string {
+export function v1StackOAuthResource(publicOrigin: string, stackId: string): string {
+  const origin = oauthResourceOrigin(publicOrigin);
+  return `${origin}/stacks/${encodeURIComponent(stackId)}`;
+}
+
+function oauthResourceOrigin(publicOrigin: string): string {
   let url: URL;
   try {
     url = new URL(publicOrigin);
@@ -42,12 +47,11 @@ export function stackOAuthResource(publicOrigin: string, stackId: string): strin
     || url.username || url.password || !url.hostname) {
     throw new TypeError("OAuth resource public origin must be HTTP(S) without credentials");
   }
-  return `${url.origin}/stacks/${encodeURIComponent(stackId)}`;
+  return url.origin;
 }
 
 export function appOAuthResource(publicOrigin: string, appId: string): string {
-  const url = new URL(stackOAuthResource(publicOrigin, appId));
-  return `${url.origin}/v2/apps/${encodeURIComponent(appId)}`;
+  return `${oauthResourceOrigin(publicOrigin)}/v1/apps/${encodeURIComponent(appId)}`;
 }
 
 /** Email is display metadata; used only for invitation display constraints. */

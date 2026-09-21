@@ -56,7 +56,7 @@ this host/path matrix:
 
 | Host | Allowed paths |
 | --- | --- |
-| `api.unicas.work` | `/health`, `/.well-known/*`, `/v2/apps/*`, `/mcp`, `/oauth/*` |
+| `api.unicas.work` | `/health`, `/.well-known/*`, `/v1/apps/*`, `/mcp`, `/oauth/*` |
 | `console.unicas.work` | `/`, `/admin/*` |
 | `spaces.unicas.work` | `/`, `/files*`, `/auth/google/*`, `/api/*`, `/.well-known/*` |
 

@@ -14,7 +14,7 @@ import {
   AppSpaceCapabilityVerifier,
   createUniCasService,
   matchUniCasServiceRoute,
-  StackCapabilityVerifier,
+  V1StackTenantCapabilityVerifier,
   type BlobStore,
   type KeyedActorPort,
   type ServicePlatform,
@@ -33,6 +33,7 @@ import { D1PlatformInvitationRepository } from "./platform-invitation-repository
 import { D1PeopleRepository } from "./people-repository.js";
 import { D1AccountRepository } from "./account-repository.js";
 import { D1EmailChallengeRepository } from "./email-challenge-repository.js";
+import { CloudflareAppUsageRepository } from "./app-usage.js";
 import { CloudflareEmailChallengeSender } from "./email-challenge-sender.js";
 import { CloudflareOAuthDiscoveryPort } from "./oauth-discovery.js";
 import {
@@ -40,24 +41,28 @@ import {
   type RootRefDomainDoEnv,
 } from "./domain-do.js";
 import { migrateAppSpaceSchema } from "./schema.js";
-import { CasDurableObject, type SpaceCasDoEnv } from "./tenant-do.js";
+import {
+  DEFAULT_USAGE_RECONCILE_MAX_NODES,
+  reconcileAppUsageObservations,
+  repairOldestSpaceUsageProjection,
+} from "./usage-reconciliation.js";
+import { CasDurableObject, type SpaceCasDoEnv } from "./space-do.js";
 import { ServerTiming, type TimingSink } from "./timing.js";
 
 export { CasDurableObject, RootRefDomainDurableObject };
 
-export interface TenantEnv extends SpaceCasDoEnv, RootRefDomainDoEnv {
+export interface SpaceEnv extends SpaceCasDoEnv, RootRefDomainDoEnv {
   CAS_CONTROL_DB: D1Database;
   CAS_DO: DurableObjectNamespace;
   CAS_AUDIT_READER_KEY?: string;
 }
 
-export type Env = TenantEnv & AdminBffEnv & McpEnv & {
+export type Env = SpaceEnv & AdminBffEnv & McpEnv & {
   CAS_PUBLIC_ORIGIN?: string;
   CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS?: string;
-  CAS_SPACE_CAPABILITY_V2_ISSUED_BEFORE?: string;
 };
 
-const TENANT_STRIPPED_HEADERS = [
+const DATA_PLANE_STRIPPED_HEADERS = [
   "cookie",
   "x-internal-token",
   "x-cas-audit-reader-key",
@@ -115,11 +120,11 @@ export default {
     if (isPrefixed(pathname, "/admin/stacks")) {
       return new Response("Not Found", { status: 404 });
     }
-    const protectedResourceStackId = matchStackProtectedResourcePath(pathname);
-    if (protectedResourceStackId !== null) {
+    const v1StackId = matchV1StackProtectedResourcePath(pathname);
+    if (v1StackId !== null) {
       if (request.method !== "GET") return new Response("Method Not Allowed", { status: 405, headers: { Allow: "GET" } });
       await ensureControlSchema(env);
-      return stackProtectedResourceMetadata(env, protectedResourceStackId);
+      return v1StackProtectedResourceMetadata(env, v1StackId);
     }
     const timing = new ServerTiming();
     const platform = platformFromEnv(env, timing);
@@ -128,14 +133,14 @@ export default {
     const spaceVerifier = spaceVerifierFor(env);
     const actor = createUniCasService({
       platform,
-      authorizeTenantRequest: async ({ request: tenantRequest, route }) => {
+      authorizeV1StackTenantRequest: async ({ request: v1Request, route }) => {
         try {
           return await timing.time("cas_auth", () => verifier.verify(
-            tenantAuthorizationRequest(tenantRequest), route,
+            dataPlaneAuthorizationRequest(v1Request), route,
           ));
         } catch (error) {
           if (!(error instanceof Error) || error.name === "Error") {
-            console.error("Unexpected tenant authorization failure", error);
+            console.error("Unexpected v1 Stack/Tenant authorization failure", error);
           }
           throw error;
         }
@@ -149,7 +154,7 @@ export default {
       authorizeSpaceRequest: async ({ request: spaceRequest, route }) => {
         try {
           return await timing.time("cas_auth", () => spaceVerifier.verify(
-            tenantAuthorizationRequest(spaceRequest), route,
+            dataPlaneAuthorizationRequest(spaceRequest), route,
           ));
         } catch (error) {
           if (!(error instanceof Error) || error.name === "Error") {
@@ -162,8 +167,8 @@ export default {
 
     const serviceRoute = matchUniCasServiceRoute(request);
     if (serviceRoute) {
-      if (serviceRoute.plane === "tenant" || serviceRoute.plane === "space") {
-        await timing.time("cas_schema", () => ensureTenantSchema(env));
+      if (serviceRoute.plane === "v1-stack-tenant" || serviceRoute.plane === "space") {
+        await timing.time("cas_schema", () => ensureSpaceSchema(env));
       }
       try {
         const response = await actor.fetch(request);
@@ -201,8 +206,16 @@ export default {
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil((async () => {
       await ensureControlSchema(env);
+      await ensureSpaceSchema(env);
       await new D1EmailChallengeRepository(env.CAS_CONTROL_DB).pruneExpired(Date.now());
       await new ControlSessionStore(env.CAS_CONTROL_DB).pruneExpired();
+      const usage = await reconcileAppUsageObservations({
+        db: env.CAS_DB,
+        bucket: env.CAS_R2,
+        limit: DEFAULT_USAGE_RECONCILE_MAX_NODES,
+      });
+      const summaryRepaired = await repairOldestSpaceUsageProjection({ db: env.CAS_DB });
+      console.log(JSON.stringify({ event: "cas_usage_reconciliation", ...usage, summaryRepaired }));
     })());
   },
 } satisfies ExportedHandler<Env>;
@@ -218,6 +231,7 @@ function publicRouteOwner(pathname: string): PublicRouteOwner | null {
   ) return "mcp";
   if (
     pathname === "/health"
+    || pathname.startsWith("/v1/apps/")
     || pathname.startsWith("/stacks/")
     || pathname.startsWith("/.well-known/")
   ) return "cas";
@@ -239,7 +253,7 @@ function isOwnedPublicOrigin(requestUrl: URL, configuredOrigin: string | undefin
   }
 }
 
-function matchStackProtectedResourcePath(pathname: string): string | null {
+function matchV1StackProtectedResourcePath(pathname: string): string | null {
   const match = /^\/\.well-known\/oauth-protected-resource\/stacks\/([^/]+)$/.exec(pathname);
   if (!match) return null;
   try {
@@ -250,7 +264,7 @@ function matchStackProtectedResourcePath(pathname: string): string | null {
   }
 }
 
-async function stackProtectedResourceMetadata(env: Env, stackId: string): Promise<Response> {
+async function v1StackProtectedResourceMetadata(env: Env, stackId: string): Promise<Response> {
   const result = await env.CAS_CONTROL_DB.prepare(
     `SELECT issuer_record.issuer FROM cas_app_oauth_issuers AS issuer_record
      JOIN cas_apps AS app ON app.app_id = issuer_record.app_id
@@ -284,19 +298,19 @@ async function stackProtectedResourceMetadata(env: Env, stackId: string): Promis
   });
 }
 
-const verifiers = new WeakMap<object, StackCapabilityVerifier>();
+const verifiers = new WeakMap<object, V1StackTenantCapabilityVerifier>();
 const spaceVerifiers = new WeakMap<object, AppSpaceCapabilityVerifier>();
 const controlSchemaInitializations = new WeakMap<object, Promise<void>>();
-const tenantSchemaInitializations = new WeakMap<object, Promise<void>>();
+const spaceSchemaInitializations = new WeakMap<object, Promise<void>>();
 const adminHandlers = new WeakMap<object, Promise<(request: Request) => Promise<Response>>>();
 
-function ensureTenantSchema(env: Pick<Env, "CAS_DB">): Promise<void> {
+function ensureSpaceSchema(env: Pick<Env, "CAS_DB">): Promise<void> {
   const key = env.CAS_DB as object;
-  let initialization = tenantSchemaInitializations.get(key);
+  let initialization = spaceSchemaInitializations.get(key);
   if (!initialization) {
     initialization = migrateAppSpaceSchema(env.CAS_DB);
-    tenantSchemaInitializations.set(key, initialization);
-    void initialization.catch(() => tenantSchemaInitializations.delete(key));
+    spaceSchemaInitializations.set(key, initialization);
+    void initialization.catch(() => spaceSchemaInitializations.delete(key));
   }
   return initialization;
 }
@@ -333,6 +347,12 @@ function adminHandlerFor(env: Env): Promise<(request: Request) => Promise<Respon
         platformInvitationRepository,
         peopleRepository: new D1PeopleRepository(env.CAS_CONTROL_DB),
         accountRepository,
+        appUsageRepository: {
+          async readAppUsage(appId) {
+            await ensureSpaceSchema(env);
+            return new CloudflareAppUsageRepository(env.CAS_DB).readAppUsage(appId);
+          },
+        },
         oauthDiscovery,
         oauthResourcePublicOrigin: env.CAS_PUBLIC_ORIGIN ?? env.PUBLIC_ORIGIN,
         emailChallengeRepository: new D1EmailChallengeRepository(env.CAS_CONTROL_DB),
@@ -352,14 +372,14 @@ function parseOriginAllowlist(value: string | undefined): readonly string[] | un
   return [...new Set(value.split(",").map((origin) => origin.trim()).filter(Boolean))];
 }
 
-function verifierFor(env: Env): StackCapabilityVerifier {
+function verifierFor(env: Env): V1StackTenantCapabilityVerifier {
   const key = env as object;
   let verifier = verifiers.get(key);
   if (!verifier) {
     const jwksPort = new CloudflareOAuthDiscoveryPort({
       allowedOrigins: parseOriginAllowlist(env.CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS),
     });
-    verifier = new StackCapabilityVerifier({
+    verifier = new V1StackTenantCapabilityVerifier({
       repository: new AuthorityRepository(env.CAS_CONTROL_DB),
       jwksFetcher: async (url, options) => {
         return new URL(url).protocol === "data:"
@@ -384,9 +404,6 @@ function spaceVerifierFor(env: Env): AppSpaceCapabilityVerifier {
     });
     verifier = new AppSpaceCapabilityVerifier({
       repository: new AppAuthorityRepository(env.CAS_CONTROL_DB),
-      legacyV2IssuedBefore: parseLegacyV2IssuedBefore(
-        env.CAS_SPACE_CAPABILITY_V2_ISSUED_BEFORE,
-      ),
       jwksFetcher: async (url, options) => {
         return new URL(url).protocol === "data:"
           ? fetch(url, options)
@@ -401,52 +418,12 @@ function spaceVerifierFor(env: Env): AppSpaceCapabilityVerifier {
   return verifier;
 }
 
-function parseLegacyV2IssuedBefore(value: string | undefined): number | undefined {
-  const trimmed = value?.trim();
-  if (!trimmed) return undefined;
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(?:Z|([+-])(\d{2}):(\d{2}))$/.exec(trimmed);
-  if (!match) {
-    throw new TypeError("CAS_SPACE_CAPABILITY_V2_ISSUED_BEFORE must be an RFC 3339 timestamp");
-  }
-  const [, yearText, monthText, dayText, hourText, minuteText, secondText, fractionText, offsetSign, offsetHourText, offsetMinuteText] = match;
-  const year = Number(yearText);
-  const month = Number(monthText);
-  const day = Number(dayText);
-  const hour = Number(hourText);
-  const minute = Number(minuteText);
-  const second = Number(secondText);
-  const offsetHour = Number(offsetHourText ?? 0);
-  const offsetMinute = Number(offsetMinuteText ?? 0);
-  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  if (
-    year === 0
-    || month < 1 || month > 12
-    || day < 1 || day > daysInMonth[month - 1]!
-    || hour > 23 || minute > 59 || second > 59
-    || offsetHour > 23 || offsetMinute > 59
-    || offsetSign === "-" && offsetHour === 0 && offsetMinute === 0
-  ) {
-    throw new TypeError("CAS_SPACE_CAPABILITY_V2_ISSUED_BEFORE must be an RFC 3339 timestamp");
-  }
-  const milliseconds = `${fractionText ?? ""}000`.slice(0, 3);
-  const localTimestamp = Date.parse(
-    `${yearText}-${monthText}-${dayText}T${hourText}:${minuteText}:${secondText}.${milliseconds}Z`,
-  );
-  const offsetMs = (offsetHour * 60 + offsetMinute) * 60_000;
-  const timestamp = localTimestamp + (offsetSign === "-" ? offsetMs : offsetSign === "+" ? -offsetMs : 0);
-  if (!Number.isSafeInteger(timestamp)) {
-    throw new TypeError("CAS_SPACE_CAPABILITY_V2_ISSUED_BEFORE must be an RFC 3339 timestamp");
-  }
-  return timestamp;
-}
-
 function platformFromEnv(env: Env, timing?: TimingSink): ServicePlatform {
   return {
     controlDatabase: env.CAS_CONTROL_DB as unknown as SqlDatabase,
-    tenantDatabase: env.CAS_DB as unknown as SqlDatabase,
+    spaceDatabase: env.CAS_DB as unknown as SqlDatabase,
     blobs: env.CAS_R2 as unknown as BlobStore,
-    tenantActors: keyedActorPort(env.CAS_DO, timing),
+    spaceActors: keyedActorPort(env.CAS_DO, timing),
     refDomainActors: keyedActorPort(env.CAS_DOMAIN_DO as unknown as DurableObjectNamespace, timing),
   };
 }
@@ -466,7 +443,7 @@ function localAuditReader(env: Env): Fetcher {
       const normalized = request instanceof Request
         ? new Request(request, init)
         : new Request(request.toString(), init);
-      await ensureTenantSchema(env);
+      await ensureSpaceSchema(env);
       return handleAuditRpc(normalized, env, new URL(normalized.url));
     },
     connect() {
@@ -560,9 +537,9 @@ function stripHeaders(request: Request, names: readonly string[]): Request {
   return new Request(request, { headers });
 }
 
-function tenantAuthorizationRequest(request: Request): Request {
+function dataPlaneAuthorizationRequest(request: Request): Request {
   const headers = new Headers(request.headers);
-  for (const name of TENANT_STRIPPED_HEADERS) headers.delete(name);
+  for (const name of DATA_PLANE_STRIPPED_HEADERS) headers.delete(name);
   return new Request(request.url, { method: request.method, headers });
 }
 
@@ -597,8 +574,8 @@ function stripMcpBrowserHeaders(request: Request): Request {
   return new Request(request, { headers });
 }
 
-export { StackCapabilityVerifier, permissionFor } from "@unicas/service";
-export type { StackAuthEvent, VerifiedStackCall } from "@unicas/service";
+export { V1StackTenantCapabilityVerifier, v1PermissionFor } from "@unicas/service";
+export type { V1StackTenantAuthEvent, VerifiedV1StackTenantCall } from "@unicas/service";
 
 export { migrateAppSpaceSchema } from "./schema.js";
 

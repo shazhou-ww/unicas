@@ -1,9 +1,7 @@
-import type { CasUsage } from "@unicas/tenant-protocol";
+import type { CasUsage } from "@unicas/space-protocol";
+import type { AppSpaceScope } from "./space-scope.js";
 
-export interface NodeUsageScope {
-  readonly stackId: string;
-  readonly tenantId: string;
-}
+export interface NodeUsageScope extends AppSpaceScope { }
 
 export interface NodeUsageEntry {
   readonly hash: string;
@@ -11,7 +9,7 @@ export interface NodeUsageEntry {
   readonly leaseExpiresAt: number;
 }
 
-/** Semantic persistence boundary for tenant node usage accounting. */
+/** Semantic persistence boundary for Space node usage accounting. */
 export interface NodeUsageRepository {
   listNodes(scope: NodeUsageScope): Promise<readonly NodeUsageEntry[]>;
   readCanonicalStoredBytes(scope: NodeUsageScope, hash: string): Promise<number | null>;

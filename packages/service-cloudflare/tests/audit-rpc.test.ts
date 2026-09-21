@@ -83,8 +83,8 @@ async function createEnv(): Promise<Env> {
   await executeDomainUpdate({
     db,
     bucket,
-    stackId: STACK,
-    tenantId: "tenant-a",
+    appId: STACK,
+    spaceId: "tenant-a",
     refDomain: DOMAIN,
     canonical,
   });

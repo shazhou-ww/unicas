@@ -5,7 +5,7 @@ Runbooks, SLOs, and alerting for the independently deployed CAS middleware
 
 | Component | Worker / resource | Notes |
 |---|---|---|
-| UniCAS service (public) | `unicas` | Single `@unicas/service-cloudflare` Worker for `/v2/apps`, `/admin`, MCP/OAuth, and admin UI |
+| UniCAS service (public) | `unicas` | Single `@unicas/service-cloudflare` Worker for `/v1/apps`, `/admin`, MCP/OAuth, and admin UI |
 | Spaces file App | `unicas-spaces` | Separate `@unicas/spaces` Worker, Google user login, App-owned issuer, file catalog, and release smoke |
 | OAuth KV | dedicated `OAUTH_KV` namespace | OAuth clients, grants, token hashes, and encrypted authorization transactions |
 | Control D1 | `unicas-control` (`3a64d58d-…`) | Apps, issuers, members, and audit; physical tables still use Stack names |
@@ -26,7 +26,7 @@ in vars or source. Deployment credentials are supplied through
 | SLO | Target | Measurement | Error budget (30d) |
 |---|---|---|---|
 | Service availability | 99.9% | `/health` + Space/admin request success | 43.8 min |
-| Space + admin availability | 99.9% | `/v2/apps` + `/admin` success | 43.8 min |
+| Space + admin availability | 99.9% | `/v1/apps` + `/admin` success | 43.8 min |
 | Service p95 latency (live) | < 500 ms | Worker request duration | — |
 | Space node read p95 (cached/DB) | < 200 ms | node metadata/content reads | — |
 | Key rotation effectiveness | new key ≤ 60 s, revoked key ≤ 60 s | JWKS cache bounds (30 s TTL / 60 s hard stale) | — |
@@ -307,6 +307,29 @@ The existing authorization event stream records suspension denials without
 recording bearer capabilities. Frozen v1 issuer resolution also refuses a
 suspended owning App so it cannot bypass this operational stop.
 
+### Inspect App usage
+
+The Console App Overview reads current aggregate CAS usage through:
+
+```http
+GET /admin/apps/{appId}/usage
+Cookie: cas_admin_session=<HttpOnly OIDC-backed session>
+```
+
+Current App membership is required; no Space capability is used. Suspended
+Apps remain inspectable. The response reports node count, logical and physical
+ready bytes, upload reservations, missing-content nodes, and leased nodes
+summed across independently accounted Spaces.
+
+The read queries `cas_space_usage`, one mutable projection row per usage-
+bearing Space, and never scans App node rows or R2. Node and reservation writes
+maintain that row transactionally. Scheduled maintenance emits
+`cas_usage_reconciliation` with only examined/observed/missing/failure counts
+while it backfills and rotates through canonical-object observations. A `503
+SERVICE_UNAVAILABLE` means at least one node has not completed observation or
+the accounting store is unavailable; retry after reconciliation advances. Do
+not treat it as zero usage.
+
 ### Rollback
 
 Wrangler retains prior versions. Inspect each unit that may have changed and
@@ -456,7 +479,7 @@ Operational checks:
 
 ### Incident checklist
 
-1. Confirm service `/health`; confirm `/v2/apps` + `/admin/apps` probes.
+1. Confirm service `/health`; confirm `/v1/apps` + `/admin/apps` probes.
 2. `wrangler deployments list` for `unicas` — recent deploy?
    Rollback first, diagnose later.
 3. Grep `cas_app_authorization` (and retained v1 `cas_stack_authorization`) for `fail_closed` / `unknown_issuer` —

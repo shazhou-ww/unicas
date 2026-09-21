@@ -2,6 +2,9 @@
 
 Status: published operation reference
 
+For searchable schemas, request examples, and generated client snippets, open
+the [interactive Scalar API reference](/app-user-api/reference/).
+
 ## Common request rules
 
 Base origin: `https://api.unicas.work`
@@ -9,7 +12,7 @@ Base origin: `https://api.unicas.work`
 Every route is scoped by both `appId` and `spaceId`:
 
 ```text
-/v2/apps/{appId}/spaces/{spaceId}/...
+/v1/apps/{appId}/spaces/{spaceId}/...
 ```
 
 Send a Space capability through the HTTP bearer authentication scheme:
@@ -18,7 +21,7 @@ Send a Space capability through the HTTP bearer authentication scheme:
 Authorization: Bearer CAPABILITY
 ```
 
-The HTTP API remains v2. Its capability claim version is `3`: the signed
+The HTTP API and Space capability claim both use family-local version `1`: the signed
 `spaceId` must match the route and `permissions` must contain the operation's
 exact authority.
 
@@ -33,21 +36,21 @@ than modeling `Authorization` as an ordinary operation header.
 
 | Client operation | Method and path | Authority | Success |
 | --- | --- | --- | --- |
-| `readContent` | `GET /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/content` | `cas:nodes:read` | Streamed canonical bytes |
-| `readMetadata` | `GET /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/metadata` | `cas:nodes:read` | Metadata and retention state |
-| `leaseNode` | `POST /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/lease` | `cas:nodes:lease` | Ready lease or direct-upload instructions |
-| `usage` | `GET /v2/apps/{appId}/spaces/{spaceId}/cas/usage` | `cas:usage:read` | Space accounting |
-| `gc` | `POST /v2/apps/{appId}/spaces/{spaceId}/cas/gc` | `cas:gc:execute` | Bounded collection result |
-| `listRootRefs` | `GET /v2/apps/{appId}/spaces/{spaceId}/root-refs` | `cas:root-refs:read` + `refDomain` | Revision-stable page |
-| `updateRootRefs` | `POST /v2/apps/{appId}/spaces/{spaceId}/root-refs` | `cas:root-refs:update` + `refDomain` | Atomic commit result |
+| `readContent` | `GET /v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/content` | `cas:nodes:read` | Streamed canonical bytes |
+| `readMetadata` | `GET /v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/metadata` | `cas:nodes:read` | Metadata and retention state |
+| `leaseNode` | `POST /v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/lease` | `cas:nodes:lease` | Ready lease or direct-upload instructions |
+| `usage` | `GET /v1/apps/{appId}/spaces/{spaceId}/cas/usage` | `cas:usage:read` | Space accounting |
+| `gc` | `POST /v1/apps/{appId}/spaces/{spaceId}/cas/gc` | `cas:gc:execute` | Bounded collection result |
+| `listRootRefs` | `GET /v1/apps/{appId}/spaces/{spaceId}/root-refs` | `cas:root-refs:read` + `refDomain` | Revision-stable page |
+| `updateRootRefs` | `POST /v1/apps/{appId}/spaces/{spaceId}/root-refs` | `cas:root-refs:update` + `refDomain` | Atomic commit result |
 
-There are no other public v2 Space operations in the current generated
+There are no other public v1 Space operations in the current generated
 OpenAPI.
 
 ## Read node content
 
 ```http
-GET /v2/apps/APP_ID/spaces/SPACE_ID/cas/nodes/HASH/content
+GET /v1/apps/APP_ID/spaces/SPACE_ID/cas/nodes/HASH/content
 Authorization: Bearer CAPABILITY
 Range: bytes=0-1023
 ```
@@ -84,7 +87,7 @@ honor cancellation.
 ## Read node metadata
 
 ```http
-GET /v2/apps/APP_ID/spaces/SPACE_ID/cas/nodes/HASH/metadata
+GET /v1/apps/APP_ID/spaces/SPACE_ID/cas/nodes/HASH/metadata
 Authorization: Bearer CAPABILITY
 ```
 
@@ -114,7 +117,7 @@ and may use configured metadata caching.
 ## Lease or upload a node
 
 ```http
-POST /v2/apps/APP_ID/spaces/SPACE_ID/cas/nodes/HASH/lease
+POST /v1/apps/APP_ID/spaces/SPACE_ID/cas/nodes/HASH/lease
 Authorization: Bearer CAPABILITY
 content-type: application/json
 
@@ -124,10 +127,6 @@ content-type: application/json
 The JSON property is required. Published clients use 15 minutes when the
 caller omits the complete options argument; the service clamps accepted values
 to 60 seconds through 24 hours.
-
-The response reports the state after UniCAS evaluates the current upload and
-validation evidence. All four states below use HTTP `200`; only `ready` means
-the node is readable and can be referenced by another node.
 
 Ready result:
 
@@ -140,12 +139,7 @@ Ready result:
 }
 ```
 
-`ready` means the node is validated, readable, referenceable, and protected
-from collection until `leaseExpiresAt`. Repeating the request for an active
-lease preserves `leaseStartedAt` and never shortens `leaseExpiresAt`; an
-expired lease starts a new lease interval.
-
-Initial upload result:
+Upload result:
 
 ```json
 {
@@ -163,59 +157,10 @@ Initial upload result:
 }
 ```
 
-`awaiting_upload` is a successful negotiation that requires caller action, not
-an asynchronously running server job. Use the returned method, URL, and
-headers exactly. The response exposes no upload ID, temporary object key,
-storage credential, or App capability. After the PUT, repeat the same lease
-request using only the node hash and requested duration.
-
-Rejected upload result:
-
-```json
-{
-  "state": "awaiting_replacement_upload",
-  "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-  "rejection": {
-    "code": "NODE_DIGEST_MISMATCH",
-    "message": "Uploaded canonical bytes did not match the requested node hash"
-  },
-  "upload": {
-    "method": "PUT",
-    "url": "https://REPLACEMENT_UPLOAD_TARGET",
-    "expiresAt": 1760000600000,
-    "headers": {
-      "content-type": "application/vnd.unidocs.cas-node.v1",
-      "if-none-match": "*"
-    }
-  }
-}
-```
-
-When a lease call detects malformed, oversized, or hash-mismatched bytes, it
-retires that write-once upload and returns a replacement target. Repeating the
-lease before a corrected PUT remains `awaiting_replacement_upload`, preserves
-the rejection, and returns the current replacement target. If that target
-expires without an object, UniCAS may rotate its URL and internal generation
-while retaining the rejection.
-
-Validated parent waiting for children:
-
-```json
-{
-  "state": "validated_awaiting_children",
-  "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-  "childHashes": [
-    "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-    "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
-  ]
-}
-```
-
-`childHashes` contains every distinct child that is not ready, in canonical
-first-occurrence order. The canonical format limits the complete list to 256
-references. UniCAS retains the uploaded and structurally validated parent;
-after making the listed children ready, repeat the same lease request to
-publish it without another parent PUT, hash, or parse.
+Use the returned method, URL, and headers exactly, then repeat the same lease
+request. `awaiting_replacement_upload` additionally returns a required
+`rejection`; `validated_awaiting_children` returns every distinct unready child
+hash in canonical order and requires no second parent upload.
 
 The service validates canonical bytes against `HASH`. Ready-node calls renew
 the lease without re-uploading, parsing, or hashing.
@@ -227,7 +172,7 @@ retry the same lease after active upload work has drained.
 ## Get Space usage
 
 ```http
-GET /v2/apps/APP_ID/spaces/SPACE_ID/cas/usage
+GET /v1/apps/APP_ID/spaces/SPACE_ID/cas/usage
 Authorization: Bearer CAPABILITY
 ```
 
@@ -251,7 +196,7 @@ values may change concurrently.
 ## Run bounded garbage collection
 
 ```http
-POST /v2/apps/APP_ID/spaces/SPACE_ID/cas/gc
+POST /v1/apps/APP_ID/spaces/SPACE_ID/cas/gc
 Authorization: Bearer CAPABILITY
 Content-Type: application/json
 
@@ -283,7 +228,7 @@ client retry is defined.
 ## List Root Refs
 
 ```http
-GET /v2/apps/APP_ID/spaces/SPACE_ID/root-refs?limit=100&cursor=CURSOR
+GET /v1/apps/APP_ID/spaces/SPACE_ID/root-refs?limit=100&cursor=CURSOR
 Authorization: Bearer CAPABILITY
 ```
 
@@ -291,7 +236,7 @@ Query:
 
 | Name | Constraint |
 | --- | --- |
-| `limit` | Optional integer from 1 through 1000 |
+| `limit` | Optional integer from 1 through 200 |
 | `cursor` | Optional non-empty opaque string |
 
 `200` response:
@@ -318,7 +263,7 @@ same capability domain. Pages are revision-stable.
 ## Atomically update Root Refs
 
 ```http
-POST /v2/apps/APP_ID/spaces/SPACE_ID/root-refs
+POST /v1/apps/APP_ID/spaces/SPACE_ID/root-refs
 Authorization: Bearer CAPABILITY
 Content-Type: application/json
 
@@ -376,7 +321,7 @@ Only `error` is required by OpenAPI. The shared operation error map is:
 | `409` | `CONFLICT` |
 | `413` | `PAYLOAD_TOO_LARGE` |
 | `429` | `RESOURCE_EXHAUSTED` |
-| `500` | `INTERNAL_ERROR` |
+| `503` | `SERVICE_UNAVAILABLE` |
 
 The service returns more specific stable authorization codes such as
 `missing_token`, `invalid_token`, `unknown_issuer`, `registry_unavailable`,
@@ -389,7 +334,7 @@ treat `message` as optional diagnostic text.
 
 The current sources have known representational gaps:
 
-1. The TypeScript contract models `readSpaceContent` as
+1. The TypeScript contract models `readContent` as
    `ReadableStream<Uint8Array>` using the canonical media type, while its
    generated OpenAPI `200` response has empty `content`.
 2. Runtime and the public client support byte ranges, but the TypeScript
@@ -403,6 +348,6 @@ The current sources have known representational gaps:
    error codes.
 
 Integrators must not infer new routes or fields from these gaps. The
-[generated OpenAPI](../../packages/tenant-protocol/openapi/space-v2.openapi.json)
+[generated OpenAPI](../../packages/space-protocol/openapi/app-space-v1.openapi.json)
 remains the operation inventory, and runtime-only behavior above is supported
 by service tests.

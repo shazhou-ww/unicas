@@ -1,4 +1,4 @@
-import type { AppId } from "@unicas/tenant-protocol";
+import type { AppId } from "@unicas/space-protocol";
 import type { PlatformAuthority } from "./platform-access.js";
 
 /**
@@ -121,6 +121,15 @@ export interface App {
   readonly status: AppStatus;
   readonly createdAt: number;
   readonly revision: number;
+}
+
+export interface AppUsage {
+  readonly nodeCount: number;
+  readonly readyContentBytes: number;
+  readonly readyStoredBytes: number;
+  readonly reservedBytes: number;
+  readonly notReadyNodeCount: number;
+  readonly leasedNodeCount: number;
 }
 
 export interface AppMembership {

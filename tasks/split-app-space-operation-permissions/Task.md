@@ -140,10 +140,10 @@ protocol and lease behavior rather than duplicating or reverting its work.
 
 ## References
 
-- [Capability vocabulary](/packages/tenant-protocol/src/capability.ts)
+- [Capability vocabulary](/packages/space-protocol/src/space-capability.ts)
 - [Space capability verifier](/packages/service/src/app-space-auth.ts)
-- [Space v2 contract](/packages/tenant-protocol/src/space-v2-contract.ts)
-- [Space v2 OpenAPI](/packages/tenant-protocol/openapi/space-v2.openapi.json)
+- [Current Space contract](/packages/space-protocol/src/space-contract.ts)
+- [Current Space OpenAPI](/packages/space-protocol/openapi/app-space-v1.openapi.json)
 - [App-user authorization guide](/docs/app-user-api/authorization.md)
 - [App-user HTTP operation reference](/docs/app-user-api/http-api.md)
 - [Direct node upload task](/tasks/complete-direct-node-upload/Task.md)

@@ -15,9 +15,9 @@
     "clean": "rimraf --glob dist \"*.tsbuildinfo\""
   },
   "dependencies": {
-    "@unicas/tenant-client": "workspace:*",
-    "@unicas/tenant-file-client": "workspace:*",
-    "@unicas/tenant-protocol": "workspace:*",
+    "@unicas/space-client": "workspace:*",
+    "@unicas/space-file-client": "workspace:*",
+    "@unicas/space-protocol": "workspace:*",
     "jose": "^6.2.10",
     "lucide-react": "^1.34.0",
     "react": "^19.0.0",

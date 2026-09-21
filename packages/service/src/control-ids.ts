@@ -16,8 +16,8 @@ function randomBase64Url(byteLength: number): string {
   return out;
 }
 
-/** Stack namespace id, e.g. `cas_AbC...`. */
-export function generateStackId(): string {
+/** App namespace id, e.g. `cas_AbC...`. */
+export function generateAppId(): string {
   return `cas_${randomBase64Url(12)}`;
 }
 
