@@ -11,10 +11,10 @@ import {
 import { casTenantApiContract } from "../src/v1.js";
 import {
   generateSpaceOpenApiDocument,
-  generateTenantOpenApiDocument,
+  generateV1OpenApiDocument,
 } from "../scripts/openapi.js";
 
-describe("CAS tenant schemas", () => {
+describe("CAS frozen-v1 schemas", () => {
   test("validates hashes and signed Root Ref changes", () => {
     expect(CasHashSchema.safeParse("a".repeat(64)).success).toBe(true);
     expect(CasHashSchema.safeParse("ABC").success).toBe(false);
@@ -41,9 +41,9 @@ describe("CAS tenant schemas", () => {
   });
 });
 
-describe("CAS tenant OpenAPI", () => {
+describe("CAS frozen-v1 OpenAPI", () => {
   test("describes every operation and embeds the specification in HTML", async () => {
-    const document = await generateTenantOpenApiDocument();
+    const document = await generateV1OpenApiDocument();
     const operationIds = Object.values(document.paths ?? {}).flatMap((item) =>
       [item?.get, item?.post, item?.put, item?.patch, item?.delete]
         .flatMap((operation) => operation?.operationId ? [operation.operationId] : []),

@@ -1,7 +1,7 @@
 /**
- * Blob-layer types. The blob layer is the complete tenant-facing CAS client
+ * Blob-layer types. The blob layer is the complete Space-facing CAS client
  * surface for business users: write, read (random access, SBlobHandler-style),
- * and tenant admin (stat/usage/gc). It sits above the 1:1 HTTP node client in
+ * and Space management (stat/usage/gc). It sits above the 1:1 HTTP node client in
  * `@unicas/space-client` and is the only layer a business user needs.
  */
 
@@ -58,9 +58,9 @@ export interface CasBlobHandle {
   ): Promise<Uint8Array>;
 }
 
-/** Complete tenant data-plane CAS client surface for business users. */
+/** Complete Space data-plane CAS client surface for business users. */
 export interface CasBlobClient {
-  /** Escape hatch for node-level transport operations and tenant administration. */
+  /** Escape hatch for node-level transport operations and Space management. */
   readonly unicasClient: SpaceCasClient;
   /**
    * Write a blob, chunking it into CAS nodes behind a blob-index tree.

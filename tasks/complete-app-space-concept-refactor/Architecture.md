@@ -1,6 +1,6 @@
 # Naming architecture review
 
-Status: Pending requesting-user approval.
+Status: Approved by the requesting user on 2026-09-21.
 
 ## Decision requested
 
@@ -16,8 +16,8 @@ Approve one canonical App/Space naming architecture:
   `stackId` or `tenantId`.
 - Preserve physical schemas, object keys, Durable Object class names and
   identities, wire fields, and behavior.
-- Enforce retained legacy terminology with a narrow, reason-bearing source
-  allowlist instead of broad directory exclusions.
+- Record retained legacy terminology in one task-local, reason-bearing final
+  inventory instead of adding a permanent repository guard.
 
 Approval permits package, module, service, adapter, test, script, and current
 documentation renames only after the companion interface review is also
@@ -44,8 +44,8 @@ approved.
 ## Classified inventory
 
 The review scan found the following maintained surfaces. File counts are a
-planning baseline; the implementation-time terminology guard will produce the
-exact occurrence inventory and make it reproducible.
+planning baseline; the final one-time scan records the exact task-local
+occurrence inventory.
 
 | Surface | Baseline | Classification | Treatment |
 | --- | ---: | --- | --- |
@@ -56,9 +56,9 @@ exact occurrence inventory and make it reproducible.
 | Package manifests importing old specifiers | 9 manifests | Obsolete package references | Replace atomically and regenerate the lockfile. |
 | Current source, tests, scripts, and docs importing old specifiers | About 64 files | Obsolete package references | Replace with `@unicas/space-*`. |
 | Stack/Tenant v1 routes, headers, claims, permissions, and OpenAPI | Frozen compatibility surface | Frozen v1 | Retain unchanged behind explicit `v1` ownership. |
-| Microsoft identity `tenantId` and provider `tid` | Provider-owned vocabulary | External standard | Retain only in provider-qualified files, types, and allowlist entries. |
+| Microsoft identity `tenantId` and provider `tid` | Provider-owned vocabulary | External standard | Retain only in provider-qualified files, types, and inventory entries. |
 | Legacy control-plane payload/action translation | Narrow adapter surface | Compatibility adapter | Retain only where old control records or responses require translation. |
-| `dist`, `*.tsbuildinfo`, Wrangler state, docs-site output, generated UI assets | Generated | Excluded | Regenerate from maintained inputs; never allowlist generated text as source. |
+| `dist`, `*.tsbuildinfo`, Wrangler state, docs-site output, generated UI assets | Generated | Excluded | Regenerate from maintained inputs; do not classify generated text as source. |
 | `tasks/**` | Historical record | Excluded | Do not rewrite or scan historical task artifacts. |
 | `Error.stack` and stack traces | Language/runtime vocabulary | External standard | Match narrow runtime forms; never allow the bare word globally. |
 
@@ -66,8 +66,8 @@ Representative frozen v1 ownership:
 
 - `/packages/space-protocol/src/v1/contract.ts`, `v1/http.ts`, and the v1 portion
   of `routes.ts` and `capability.ts`.
-- `StackCapabilityVerifier` and related claims in
-  `/packages/service/src/tenant-auth.ts`.
+- `V1StackTenantCapabilityVerifier` and related claims in
+  `/packages/service/src/v1/tenant-auth.ts`.
 - `/stacks/{stackId}/tenants/{tenantId}`, `X-CAS-Stack-Id`,
   `X-CAS-Tenant-Id`, the v1 smoke path, and `tenant-v1.openapi.json`.
 
@@ -192,10 +192,10 @@ repository scope fields with `{ appId, spaceId }`, and renaming current Root
 Ref, node, usage, lease, read, and GC helpers. Provider-specific identity and
 legacy control-record translation remain in named adapters.
 
-## Terminology guard
+## Final terminology inventory
 
-Add `tests/terminology-boundary.test.mjs` and a structured,
-reason-bearing `tests/terminology-allowlist.json`.
+Run one final source and filename scan and store its structured,
+reason-bearing result in `TerminologyInventory.json` beside this review.
 
 Each retained entry records:
 
@@ -210,7 +210,7 @@ Each retained entry records:
 ```
 
 Allowed categories are `frozen-v1`, `external-standard`, and
-`compatibility-adapter`. The scanner walks maintained packages, scripts,
+`compatibility-adapter`. The one-time scanner walks maintained packages, scripts,
 stacks, tests, root configuration, and current docs; it excludes `tasks`,
 dependency directories, generated outputs, build metadata, and deployment
 state by construction. Entries are exact path plus identifier or narrow text
@@ -218,7 +218,7 @@ pattern. Whole-package and whole-directory exemptions are rejected.
 
 ## Implementation order
 
-1. Add the terminology scanner and reviewed baseline allowlist.
+1. Produce and verify the final task-local terminology inventory.
 2. Split protocol source into canonical current and explicit v1 modules.
 3. Rename all five packages, manifests, workspace dependencies, TypeScript
    references, import specifiers, lockfile entries, scripts, and build paths.
@@ -249,4 +249,4 @@ than republishing or introducing an unreviewed alias.
 
 Approve the five-package `space-*` map, explicit frozen-v1 boundary,
 App/Space-only current internals, unchanged persistence/DO identities,
-reason-bearing terminology guard, staged migration, and rollback strategy?
+reason-bearing final inventory, staged migration, and rollback strategy?

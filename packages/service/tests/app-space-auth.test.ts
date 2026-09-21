@@ -36,7 +36,7 @@ const APP_ROUTE = {
   spaceId: SPACE,
   hash: "a".repeat(64),
 };
-const STACK_ROUTE = {
+const V1_ROUTE = {
   operation: "readContent" as const,
   stackId: STACK,
   tenantId: TENANT,
@@ -63,7 +63,7 @@ async function fixture(): Promise<{
   now: number;
   privateKey: CryptoKey;
   appResolver: StubAppAuthorityResolver;
-  stackResolver: StubV1StackAuthorityResolver;
+  v1Resolver: StubV1StackAuthorityResolver;
 }> {
   const now = 1_700_000_000_000;
   const { publicKey, privateKey } = await generateKeyPair("ES256", { extractable: true });
@@ -82,7 +82,7 @@ async function fixture(): Promise<{
       jwksUri,
       capabilityMaxLifetimeSeconds: 28_800,
     }),
-    stackResolver: new StubV1StackAuthorityResolver({
+    v1Resolver: new StubV1StackAuthorityResolver({
       stackId: STACK,
       issuer: ISSUER,
       audience: AUDIENCE,
@@ -487,9 +487,9 @@ describe("AppSpaceCapabilityVerifier", () => {
   });
 
   test("rejects v1 and v3 tokens across route families even when both scopes are present", async () => {
-    const { now, privateKey, appResolver, stackResolver } = await fixture();
+    const { now, privateKey, appResolver, v1Resolver } = await fixture();
     const appVerifier = new AppSpaceCapabilityVerifier({ repository: appResolver, now: () => now });
-    const stackVerifier = new V1StackTenantCapabilityVerifier({ repository: stackResolver, now: () => now });
+    const v1Verifier = new V1StackTenantCapabilityVerifier({ repository: v1Resolver, now: () => now });
     const v1Token = await issue(privateKey, now, {
       ver: 1,
       tenantId: TENANT,
@@ -505,7 +505,7 @@ describe("AppSpaceCapabilityVerifier", () => {
 
     await expect(appVerifier.verify(request(v1Token), APP_ROUTE))
       .rejects.toMatchObject({ status: 401, code: "invalid_token" });
-    await expect(stackVerifier.verify(request(v3Token), STACK_ROUTE))
+    await expect(v1Verifier.verify(request(v3Token), V1_ROUTE))
       .rejects.toMatchObject({ status: 401, code: "invalid_token" });
   });
 

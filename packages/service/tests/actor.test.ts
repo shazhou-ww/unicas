@@ -248,11 +248,11 @@ describe("createUniCasService", () => {
       message: "CAS usage requires cas:usage:read",
     });
 
-    const tenantResponse = await actor.fetch(new Request(
+    const v1Response = await actor.fetch(new Request(
       "https://cas.example/stacks/stack-1/tenants/tenant-1/cas/usage",
     ));
-    expect(tenantResponse.status).toBe(403);
-    await expect(tenantResponse.json()).resolves.toEqual({
+    expect(v1Response.status).toBe(403);
+    await expect(v1Response.json()).resolves.toEqual({
       error: "CAS usage requires cas:usage:read",
     });
   });

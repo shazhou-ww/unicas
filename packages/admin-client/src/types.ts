@@ -1,7 +1,7 @@
 /**
  * Admin-client types. The admin client is a typed HTTP transport for the
  * `/admin` control-plane API (the BFF surface), mirroring how
- * `@unicas/space-client` wraps the tenant data-plane HTTP API: one plain
+ * `@unicas/space-client` wraps the Space data-plane HTTP API: one plain
  * function per operation, a factory binding common parameters, no encoding,
  * no business abstraction.
  *
@@ -10,7 +10,7 @@
  * CLI obtain sessions differently; both present the same cookie shape).
  */
 
-/** Fetch shape (admin packages never depend on tenant packages). */
+/** Fetch shape (admin packages never depend on Space implementation packages). */
 export type AdminHttpFetcher = typeof fetch;
 
 /** A valid BFF session: the `cas_admin_session` cookie + its CSRF token. */

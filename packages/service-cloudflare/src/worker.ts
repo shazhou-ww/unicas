@@ -51,13 +51,13 @@ import { ServerTiming, type TimingSink } from "./timing.js";
 
 export { CasDurableObject, RootRefDomainDurableObject };
 
-export interface TenantEnv extends SpaceCasDoEnv, RootRefDomainDoEnv {
+export interface SpaceEnv extends SpaceCasDoEnv, RootRefDomainDoEnv {
   CAS_CONTROL_DB: D1Database;
   CAS_DO: DurableObjectNamespace;
   CAS_AUDIT_READER_KEY?: string;
 }
 
-export type Env = TenantEnv & AdminBffEnv & McpEnv & {
+export type Env = SpaceEnv & AdminBffEnv & McpEnv & {
   CAS_PUBLIC_ORIGIN?: string;
   CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS?: string;
   CAS_SPACE_CAPABILITY_V2_ISSUED_BEFORE?: string;
@@ -301,16 +301,16 @@ async function v1StackProtectedResourceMetadata(env: Env, stackId: string): Prom
 const verifiers = new WeakMap<object, V1StackTenantCapabilityVerifier>();
 const spaceVerifiers = new WeakMap<object, AppSpaceCapabilityVerifier>();
 const controlSchemaInitializations = new WeakMap<object, Promise<void>>();
-const tenantSchemaInitializations = new WeakMap<object, Promise<void>>();
+const spaceSchemaInitializations = new WeakMap<object, Promise<void>>();
 const adminHandlers = new WeakMap<object, Promise<(request: Request) => Promise<Response>>>();
 
 function ensureSpaceSchema(env: Pick<Env, "CAS_DB">): Promise<void> {
   const key = env.CAS_DB as object;
-  let initialization = tenantSchemaInitializations.get(key);
+  let initialization = spaceSchemaInitializations.get(key);
   if (!initialization) {
     initialization = migrateAppSpaceSchema(env.CAS_DB);
-    tenantSchemaInitializations.set(key, initialization);
-    void initialization.catch(() => tenantSchemaInitializations.delete(key));
+    spaceSchemaInitializations.set(key, initialization);
+    void initialization.catch(() => spaceSchemaInitializations.delete(key));
   }
   return initialization;
 }
@@ -464,7 +464,7 @@ function parseLegacyV2IssuedBefore(value: string | undefined): number | undefine
 function platformFromEnv(env: Env, timing?: TimingSink): ServicePlatform {
   return {
     controlDatabase: env.CAS_CONTROL_DB as unknown as SqlDatabase,
-    tenantDatabase: env.CAS_DB as unknown as SqlDatabase,
+    spaceDatabase: env.CAS_DB as unknown as SqlDatabase,
     blobs: env.CAS_R2 as unknown as BlobStore,
     spaceActors: keyedActorPort(env.CAS_DO, timing),
     refDomainActors: keyedActorPort(env.CAS_DOMAIN_DO as unknown as DurableObjectNamespace, timing),

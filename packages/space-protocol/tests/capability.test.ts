@@ -41,9 +41,9 @@ describe("Space capability v3 vocabulary", () => {
   });
 
   test("keeps v1 and v3 permission parsers disjoint", () => {
-    const tenantPermission = casReadPermission("scope-a");
+    const v1Permission = casReadPermission("scope-a");
     const spacePermission = spaceNodeReadPermission();
-    expect(parseSpaceCapabilityPermission(tenantPermission)).toBeNull();
+    expect(parseSpaceCapabilityPermission(v1Permission)).toBeNull();
     expect(parseCapabilityPermission(spacePermission)).toBeNull();
   });
 });

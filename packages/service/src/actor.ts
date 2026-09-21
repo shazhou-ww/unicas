@@ -101,7 +101,7 @@ export function createUniCasService(context: ServiceContext): HttpActor {
         return context.authorizeV1StackTenantRequest(v1Context)
           .then(
             (call) => dispatchV1StackTenantRequest(v1Context, call),
-            tenantAuthorizationErrorResponse,
+            v1AuthorizationErrorResponse,
           );
       }
       if (matched.plane === "space") {
@@ -131,7 +131,7 @@ function notImplementedResponse(): Response {
   return Response.json({ error: "UniCAS v2 endpoint is not configured" }, { status: 501 });
 }
 
-function tenantAuthorizationErrorResponse(error: unknown): Response {
+function v1AuthorizationErrorResponse(error: unknown): Response {
   if (error instanceof CapabilityError) {
     return Response.json({ error: error.message }, { status: error.status });
   }

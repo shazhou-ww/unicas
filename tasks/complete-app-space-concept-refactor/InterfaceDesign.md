@@ -1,6 +1,6 @@
 # Package and export interface review
 
-Status: Pending requesting-user approval.
+Status: Approved by the requesting user on 2026-09-21.
 
 ## Decision requested
 
@@ -142,7 +142,7 @@ The repository cutover updates together:
 - package READMEs, `/packages/README.md`, `/GLOSSARY.md`, current architecture,
   operations, App-user API, debug, and smoke documentation;
 - OpenAPI generation inputs and drift tests;
-- package boundary tests and the new terminology guard.
+- package boundary tests and the final task-local terminology inventory.
 
 Tooling must not depend on compatibility filesystem paths. Generated `dist`,
 TypeScript build info, Wrangler state, docs-site output, and bundled UI source
@@ -213,7 +213,7 @@ do not migrate.
 The implementation must prove:
 
 - old package specifiers and obsolete current symbols are absent from
-  maintained source outside the reviewed allowlist;
+  maintained source outside the reviewed task-local inventory;
 - each renamed package passes directory/name, dependency/import, TypeScript
   reference, build, typecheck, and focused tests;
 - generated current OpenAPI matches source and frozen v1 OpenAPI remains

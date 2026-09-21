@@ -1,8 +1,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
-import { generateTenantOpenApiDocument } from "./openapi.js";
+import { generateV1OpenApiDocument } from "./openapi.js";
 
-const document = await generateTenantOpenApiDocument();
+const document = await generateV1OpenApiDocument();
 const jsonPath = resolve(process.cwd(), "openapi/tenant-v1.openapi.json");
 
 await mkdir(dirname(jsonPath), { recursive: true });

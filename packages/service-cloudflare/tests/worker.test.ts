@@ -5,7 +5,7 @@ import {
 } from "@unicas/space-protocol";
 
 const handlers = vi.hoisted(() => ({
-  tenant: vi.fn(async () => new Response("tenant")),
+  spaceActor: vi.fn(async () => new Response("tenant")),
   admin: vi.fn(async () => new Response("admin")),
   mcp: vi.fn(async () => new Response("mcp")),
   migrate: vi.fn(async () => undefined),
@@ -23,8 +23,8 @@ const handlers = vi.hoisted(() => ({
     leasedNodeCount: 0,
     unobservedNodeCount: 0,
   })),
-  tenantIdFromName: vi.fn((name: string) => `do:${name}`),
-  tenantGet: vi.fn((_id: string) => ({ fetch: undefined as unknown })),
+  spaceIdFromName: vi.fn((name: string) => `do:${name}`),
+  spaceGet: vi.fn((_id: string) => ({ fetch: undefined as unknown })),
   verify: vi.fn(async (_request: Request, route: { stackId: string; tenantId: string }) => ({
     stackId: route.stackId,
     tenantId: route.tenantId,
@@ -105,8 +105,8 @@ const env = {
   CAS_DB: {},
   CAS_R2: {},
   CAS_DO: {
-    idFromName: handlers.tenantIdFromName,
-    get: handlers.tenantGet,
+    idFromName: handlers.spaceIdFromName,
+    get: handlers.spaceGet,
   },
   CAS_DOMAIN_DO: {
     idFromName: (name: string) => name,
@@ -123,7 +123,7 @@ const ctx = {} as ExecutionContext;
 beforeEach(() => {
   vi.clearAllMocks();
   handlers.spaceVerifierOptions.length = 0;
-  handlers.tenantGet.mockImplementation(() => ({ fetch: handlers.tenant }));
+  handlers.spaceGet.mockImplementation(() => ({ fetch: handlers.spaceActor }));
 });
 
 describe("service-cloudflare public routing", () => {
@@ -252,7 +252,7 @@ describe("service-cloudflare public routing", () => {
   });
 
   test("routes tenant protocol requests without admin cookies or internal secrets", async () => {
-    const tenantEnv = { ...env, CAS_DB: {} } as Env;
+    const spaceEnv = { ...env, CAS_DB: {} } as Env;
     const response = await worker.fetch(new Request(
       "https://cas.example/stacks/s1/tenants/t1/cas/usage",
       {
@@ -263,7 +263,7 @@ describe("service-cloudflare public routing", () => {
           "X-Cas-Audit-Reader-Key": "reader",
         },
       },
-    ), tenantEnv, ctx);
+    ), spaceEnv, ctx);
 
     const authorizationRequest = handlers.verify.mock.calls[0]![0] as Request;
     expect(authorizationRequest.headers.get("Authorization")).toBe("Bearer tenant-capability");
@@ -271,7 +271,7 @@ describe("service-cloudflare public routing", () => {
     expect(authorizationRequest.headers.get("X-Internal-Token")).toBeNull();
     expect(authorizationRequest.headers.get("X-Cas-Audit-Reader-Key")).toBeNull();
 
-    const actorRequest = handlers.tenant.mock.calls[0]![0] as Request;
+    const actorRequest = handlers.spaceActor.mock.calls[0]![0] as Request;
     expect(actorRequest.headers.get("Authorization")).toBeNull();
     expect(actorRequest.headers.get("X-CAS-Stack-Id")).toBe("s1");
     expect(actorRequest.headers.get("X-CAS-Tenant-Id")).toBe("t1");
@@ -285,7 +285,7 @@ describe("service-cloudflare public routing", () => {
     await worker.fetch(new Request(
       "https://cas.example/stacks/s1/tenants/t1/cas/usage",
       { headers: { Authorization: "Bearer tenant-capability" } },
-    ), tenantEnv, ctx);
+    ), spaceEnv, ctx);
     expect(handlers.migrate).toHaveBeenCalledTimes(1);
   });
 
@@ -307,8 +307,8 @@ describe("service-cloudflare public routing", () => {
       { operation: "usage", appId: "app-1", spaceId: "space-1" },
     );
     expect(handlers.verify).not.toHaveBeenCalled();
-    expect(handlers.tenantIdFromName).toHaveBeenCalledWith("app-1|space-1");
-    const spaceRequest = handlers.tenant.mock.calls[0]![0] as Request;
+    expect(handlers.spaceIdFromName).toHaveBeenCalledWith("app-1|space-1");
+    const spaceRequest = handlers.spaceActor.mock.calls[0]![0] as Request;
     expect(spaceRequest.headers.get("X-CAS-App-Id")).toBe("app-1");
     expect(spaceRequest.headers.get("X-CAS-Space-Id")).toBe("space-1");
     const adminRequest = handlers.admin.mock.calls[0]![0] as Request;
@@ -393,9 +393,9 @@ describe("service-cloudflare public routing", () => {
       },
     ), env, ctx);
 
-    expect(handlers.tenantIdFromName).toHaveBeenLastCalledWith("s1|t1");
-    expect(handlers.tenantGet).toHaveBeenLastCalledWith("do:s1|t1");
-    const readRequest = handlers.tenant.mock.calls[0]![0] as Request;
+    expect(handlers.spaceIdFromName).toHaveBeenLastCalledWith("s1|t1");
+    expect(handlers.spaceGet).toHaveBeenLastCalledWith("do:s1|t1");
+    const readRequest = handlers.spaceActor.mock.calls[0]![0] as Request;
     expect(new URL(readRequest.url).pathname).toBe("/read");
     expect(readRequest.headers.get("Authorization")).toBeNull();
     expect(readRequest.headers.get("X-CAS-Stack-Id")).toBe("s1");
@@ -416,7 +416,7 @@ describe("service-cloudflare public routing", () => {
         body: "node-content",
       },
     ), env, ctx);
-    const leaseRequest = handlers.tenant.mock.calls[1]![0] as Request;
+    const leaseRequest = handlers.spaceActor.mock.calls[1]![0] as Request;
     expect(new URL(leaseRequest.url).pathname).toBe("/lease");
     expect(leaseRequest.headers.get("X-CAS-Hash")).toBe(hash);
     expect(leaseRequest.headers.get("X-CAS-Lease-Duration")).toBe("120000");
@@ -445,7 +445,7 @@ describe("service-cloudflare public routing", () => {
         body: JSON.stringify({ requestId: "r1", changes: { [hash]: 1 } }),
       },
     ), env, ctx);
-    const rootRefsRequest = handlers.tenant.mock.calls[2]![0] as Request;
+    const rootRefsRequest = handlers.spaceActor.mock.calls[2]![0] as Request;
     expect(new URL(rootRefsRequest.url).pathname).toBe("/updateRootRefs");
     expect(rootRefsRequest.headers.get("X-CAS-Stack-Id")).toBe("s1");
     expect(rootRefsRequest.headers.get("X-CAS-Tenant-Id")).toBe("t1");
@@ -475,9 +475,9 @@ describe("service-cloudflare public routing", () => {
       { headers: { Authorization: "Bearer wrong-stack-capability" } },
     ), env, ctx);
     expect(forbidden.status).toBe(403);
-    expect(handlers.tenant).not.toHaveBeenCalled();
-    expect(handlers.tenantIdFromName).not.toHaveBeenCalled();
-    expect(handlers.tenantGet).not.toHaveBeenCalled();
+    expect(handlers.spaceActor).not.toHaveBeenCalled();
+    expect(handlers.spaceIdFromName).not.toHaveBeenCalled();
+    expect(handlers.spaceGet).not.toHaveBeenCalled();
   });
 
   test("routes admin protocol and BFF requests without tenant bearer credentials", async () => {

@@ -3,7 +3,7 @@ import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 import { casTenantApiContract } from "../src/v1/contract.js";
 import { spaceApiContract } from "../src/space-v2-contract.js";
 
-export function generateTenantOpenApiDocument() {
+export function generateV1OpenApiDocument() {
   const generator = new OpenAPIGenerator({
     schemaConverters: [new ZodToJsonSchemaConverter()],
   });
