@@ -35,7 +35,7 @@ exports remain mandatory immediately before a destructive cutover.
 The current route and authorization tests intentionally freeze v1 behavior in
 [`tenant-protocol/tests/routes.test.ts`](/packages/space-protocol/tests/routes.test.ts),
 [`admin-protocol/tests/routes.test.ts`](/packages/admin-protocol/tests/routes.test.ts),
-and [`service/tests/tenant-auth.test.ts`](/packages/service/tests/tenant-auth.test.ts).
+and [`service/tests/v1-auth.test.ts`](/packages/service/tests/v1-auth.test.ts).
 There is no v2 route matcher or capability parser today, and `ver: 2` is
 currently rejected.
 

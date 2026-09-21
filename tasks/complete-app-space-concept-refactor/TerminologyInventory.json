@@ -57,20 +57,11 @@
       "path": "docs/cas-tenant-debug-tools.md",
       "category": "frozen-v1",
       "terms": [
+        "@path:tenant",
         "stackId",
         "tenantId"
       ],
       "reason": "Documents the frozen Stack/Tenant debug surface.",
-      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
-    },
-    {
-      "path": "GLOSSARY.md",
-      "category": "frozen-v1",
-      "terms": [
-        "stackId",
-        "tenantId"
-      ],
-      "reason": "Defines frozen-v1 identifiers and distinguishes them from App/Space.",
       "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
     },
     {
@@ -195,7 +186,9 @@
       "category": "compatibility-adapter",
       "terms": [
         "lastTenant",
+        "stackDomain",
         "stackId",
+        "tenantFilter",
         "tenantId"
       ],
       "reason": "Implements the private legacy audit-reader RPC consumed only through mapping adapters.",
@@ -363,6 +356,16 @@
       "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
     },
     {
+      "path": "packages/service/src/control-audit.ts",
+      "category": "compatibility-adapter",
+      "terms": [
+        "legacyStackCreated",
+        "legacyStackPatched"
+      ],
+      "reason": "Names stable historical audit action strings behind explicit legacy properties.",
+      "removal": "Remove when historical Stack audit actions are no longer supported."
+    },
+    {
       "path": "packages/service/src/control-validation.ts",
       "category": "frozen-v1",
       "terms": [
@@ -393,6 +396,7 @@
       "path": "packages/service/src/v1/tenant-auth.ts",
       "category": "frozen-v1",
       "terms": [
+        "@path:tenant",
         "ResolvedV1StackAuthority",
         "stackId",
         "tenantId",
@@ -421,7 +425,6 @@
       "category": "frozen-v1",
       "terms": [
         "ResolvedV1StackAuthority",
-        "STACK_ROUTE",
         "stackId",
         "StubV1StackAuthorityResolver",
         "tenantId",
@@ -441,7 +444,7 @@
       "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
     },
     {
-      "path": "packages/service/tests/tenant-auth.test.ts",
+      "path": "packages/service/tests/v1-auth.test.ts",
       "category": "frozen-v1",
       "terms": [
         "ResolvedV1StackAuthority",
@@ -536,21 +539,12 @@
       "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
     },
     {
-      "path": "packages/space-protocol/scripts/generate-openapi.ts",
-      "category": "frozen-v1",
-      "terms": [
-        "generateTenantOpenApiDocument"
-      ],
-      "reason": "Generates the frozen-v1 OpenAPI artifact separately from current Space output.",
-      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
-    },
-    {
       "path": "packages/space-protocol/scripts/openapi.ts",
       "category": "frozen-v1",
       "terms": [
         "casTenantApiContract",
-        "generateTenantOpenApiDocument",
         "stackId",
+        "tenantCapability",
         "tenantId"
       ],
       "reason": "Defines generation metadata for the frozen-v1 OpenAPI artifact.",
@@ -573,7 +567,8 @@
       "path": "packages/space-protocol/src/v1/capability.ts",
       "category": "frozen-v1",
       "terms": [
-        "tenantId"
+        "tenantId",
+        "tenantPermission"
       ],
       "reason": "Implements the frozen-v1 claim and permission grammar.",
       "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
@@ -586,7 +581,9 @@
         "casTenantApiContract",
         "CasTenantApiContract",
         "stackId",
-        "tenantId"
+        "tenantId",
+        "tenantParams",
+        "tenantProcedure"
       ],
       "reason": "Defines the frozen-v1 HTTP contract and path fields.",
       "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
@@ -618,8 +615,8 @@
       "category": "frozen-v1",
       "terms": [
         "casTenantApiContract",
-        "generateTenantOpenApiDocument",
         "stackId",
+        "tenantCapability",
         "tenantId"
       ],
       "reason": "Tests frozen-v1 schemas and generated OpenAPI separately from current Space.",
@@ -661,8 +658,11 @@
         "expectedStackId",
         "stack_id",
         "TENANT_DATABASE",
+        "tenantCounts",
+        "tenantFile",
         "tenant_id",
-        "TENANT_TABLES"
+        "TENANT_TABLES",
+        "tenantTables"
       ],
       "reason": "Resets and verifies frozen legacy deployment data during controlled cleanup.",
       "removal": "Remove after legacy deployment reset and retirement are complete."
@@ -674,19 +674,11 @@
         "expectedStackId",
         "stack_id",
         "stackId",
-        "tenant_id"
+        "tenant_id",
+        "tenantTables"
       ],
       "reason": "Tests legacy deployment reset and physical compatibility checks.",
       "removal": "Remove after legacy deployment reset and retirement are complete."
-    },
-    {
-      "path": "tests/openapi-drift.test.ts",
-      "category": "frozen-v1",
-      "terms": [
-        "generateTenantOpenApiDocument"
-      ],
-      "reason": "Guards the separately generated frozen-v1 OpenAPI artifact.",
-      "removal": "Remove with the dedicated Stack/Tenant v1 retirement task."
     }
   ]
 }

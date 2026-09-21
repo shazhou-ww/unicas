@@ -50,7 +50,7 @@ export interface KeyedActorPort {
 
 export interface ServicePlatform {
   readonly controlDatabase: SqlDatabase;
-  readonly tenantDatabase: SqlDatabase;
+  readonly spaceDatabase: SqlDatabase;
   readonly blobs: BlobStore;
   readonly spaceActors: KeyedActorPort;
   readonly refDomainActors: KeyedActorPort;

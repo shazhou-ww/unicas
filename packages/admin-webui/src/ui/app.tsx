@@ -8,10 +8,10 @@ import { AppDetailTabs, WorkspaceDetailHeader } from "./components/app-detail-ta
 import { CopyNotifications } from "./components/copy-bubble.js";
 import { LoadingState } from "./components/loading-state.js";
 import { McpConfigurationDialog } from "./mcp-configuration-dialog.js";
-import { MyAppsView } from "./views/my-stacks.js";
+import { MyAppsView } from "./views/my-apps.js";
 import { InvitationView } from "./views/invitations.js";
 import { LoginErrorView } from "./views/login-error.js";
-import { AppOverviewView } from "./views/stack-overview.js";
+import { AppOverviewView } from "./views/app-overview.js";
 import { IssuerView } from "./views/issuer.js";
 import { UsageView } from "./views/usage.js";
 import { PeopleView } from "./views/people.js";

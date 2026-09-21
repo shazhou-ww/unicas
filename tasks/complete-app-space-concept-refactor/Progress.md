@@ -17,9 +17,8 @@ only `{ appId, spaceId }`. The Space Durable Object keeps its deployed class
 and identity while its source module and shared actor port use Space names.
 Frozen v1 authorization, routes, claims, clients, caches, and protected-resource
 metadata are visibly versioned; private legacy Admin/audit and Microsoft OIDC
-terms remain only in classified adapters. A reason-bearing terminology guard
-rejects obsolete package identities, unclassified legacy identifiers, and
-stale allowances.
+terms remain only in classified adapters. The final task-local inventory
+records 182 exact path/term classifications from the completed one-time scan.
 
 Implementation and agent-verifiable acceptance checks are complete. The next
 action is source publication, primary integration, and delivery acceptance for
@@ -48,16 +47,16 @@ the exact integrated commit.
   Stack/Tenant keys.
 - Split capability ownership into shared mechanics, current Space vocabulary,
   and frozen-v1 vocabulary without changing error identity or token grammar.
-- Require every retained identifier to have one exact path/term allowance with
-  a category, reason, and removal condition. Exclude tasks and generated output
-  structurally rather than through broad allowances.
+- Record every retained identifier in a one-time task-local inventory with an
+  exact path/term, category, reason, and removal condition. Exclude tasks and
+  generated output structurally; do not impose a permanent terminology guard.
 
 ## Human approvals
 
 | Checkpoint | Status | Review artifact and decision evidence |
 | --- | --- | --- |
 | Scope | Approved | The requesting user reviewed [Task.md](./Task.md) and explicitly directed execution of this task on 2026-09-21. The approval was bound to primary revision `0cb717094e9cd0968a8e3c22f8c9c75e40c85e41`. |
-| Architecture | Approved | The requesting user explicitly approved [Architecture.md](./Architecture.md) on 2026-09-21 at primary revision `0cb717094e9cd0968a8e3c22f8c9c75e40c85e41`. This covers the five-package map, explicit v1 boundary, canonical App/Space internals, unchanged persistence and Durable Object identities, terminology guard, staged migration, and rollback. |
+| Architecture | Approved | The requesting user explicitly approved [Architecture.md](./Architecture.md) on 2026-09-21 at primary revision `0cb717094e9cd0968a8e3c22f8c9c75e40c85e41`, then directed the terminology check to remain a one-time task-local inventory rather than a permanent guard. |
 | Interface | Approved | The requesting user explicitly approved [InterfaceDesign.md](./InterfaceDesign.md) on 2026-09-21 at primary revision `0cb717094e9cd0968a8e3c22f8c9c75e40c85e41`. This covers clean package cutover, root and `./v1` exports, file API renames, explicit OpenAPI subpaths, no aliases, and wire compatibility. |
 | Business and data model | Not applicable | App, Space, Principal, node, lease, Root Ref, ownership, persistence, and lifecycle semantics are unchanged. |
 | Delivery acceptance | Pending | Requires the final integrated primary commit and complete validation evidence. |
@@ -82,9 +81,9 @@ the exact integrated commit.
   manifest tests passed with the clean `SpaceFile*` API.
 - `pnpm --filter @unicas/spaces test`: 59 private consumer tests passed after
   package and file API migration.
-- After reconciling current primary, `pnpm check:repo` passed all 132 task,
-  deployment, documentation, workspace-boundary, OpenAPI, terminology, and
-  repoledger patch tests with the standard command and timeout.
+- `pnpm check:repo` passed all 131 task, deployment, documentation,
+  workspace-boundary, OpenAPI, and repoledger patch tests with the standard
+  command and timeout after the acceptance cleanup.
 - `pnpm --filter @unicas/admin-protocol test`: 59 Admin contract and
   cross-plane tests passed after adding current Space and explicit v1 policy
   entries.
@@ -93,13 +92,17 @@ the exact integrated commit.
   tests after the explicit v1/Space module split.
 - `pnpm --filter @unicas/space-browser-cache test`: 12 persistence, isolation,
   invalidation, cancellation, and v1/current collision tests passed.
-- `pnpm check:terminology`: the complete maintained-source inventory passed
-  with no old package identities, unclassified identifiers, or stale entries.
+- The final one-time source and filename scan verified 182 exact task-local
+  classifications with no unclassified or stale entries.
 - `pnpm docs:check`: all three documentation inventory, anchor/link rewrite,
   and generated-link checks passed.
 - `pnpm test:packages`: all 14 workspace package test targets passed.
 - `pnpm build`: all 14 workspace package build targets passed; Vite reported
   only existing third-party sourcemap warnings.
+- A clean rebuild (`pnpm clean && pnpm build`) passed all 14 build targets.
+  The resulting 318 JavaScript/declaration files contained no removed
+  `@unicas/tenant-*` specifier or `packages/tenant-*` path; obsolete
+  `managed-issuer.js` and unversioned `tenant-auth.js` artifacts were absent.
 
 ## Blockers
 
@@ -112,5 +115,6 @@ Maintained consumers and current/shared internals now identify the public data
 plane by App and Space. Frozen Stack/Tenant compatibility remains testable and
 behaviorally unchanged behind explicit versioned imports and ingress adapters.
 Current consumers cannot accidentally import its route, claim, client, or cache
-vocabulary from a canonical package root, and CI rejects reintroduction of old
-package identities or unexplained legacy terms.
+vocabulary from a canonical package root. The task-local inventory records the
+remaining reviewed compatibility and external-standard terms without adding a
+long-lived repository policy.

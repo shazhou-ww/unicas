@@ -3,7 +3,7 @@ export const CAS_ADMIN_UI_PACKAGE = "@unicas/admin-webui/ui" as const;
 
 export { App } from "./app.js";
 export { UserMenu } from "./user-menu.js";
-export { MyAppsView } from "./views/my-stacks.js";
+export { MyAppsView } from "./views/my-apps.js";
 export { InvitationView } from "./views/invitations.js";
 export { LoginErrorView } from "./views/login-error.js";
 export { MembersView } from "./views/members.js";

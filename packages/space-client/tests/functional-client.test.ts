@@ -110,7 +110,7 @@ describe("functional tenant CAS client", () => {
     await expect(requests[0].json()).resolves.toEqual({ leaseDurationMs: 900_000 });
   });
 
-  it("updates roots and exposes tenant administration operations", async () => {
+  it("updates roots and exposes frozen-v1 management operations", async () => {
     const client = createClient();
     const hash = await storeNode(client, Uint8Array.from([1]), "application/octet-stream");
 

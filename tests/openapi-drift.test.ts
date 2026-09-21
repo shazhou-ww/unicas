@@ -6,7 +6,7 @@ import {
 } from "../packages/admin-protocol/scripts/openapi.js";
 import {
   generateSpaceOpenApiDocument,
-  generateTenantOpenApiDocument,
+  generateV1OpenApiDocument,
 } from "../packages/space-protocol/scripts/openapi.js";
 
 const ROOT = join(import.meta.dirname, "..");
@@ -26,8 +26,8 @@ describe("generated OpenAPI documents", () => {
     );
   });
 
-  test("tenant document is current", async () => {
-    expect(jsonValue(await generateTenantOpenApiDocument())).toEqual(
+  test("frozen-v1 document is current", async () => {
+    expect(jsonValue(await generateV1OpenApiDocument())).toEqual(
       await readJson("packages/space-protocol/openapi/tenant-v1.openapi.json"),
     );
   });
