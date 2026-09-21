@@ -55,6 +55,17 @@ Store only these values as GitHub `Production` environment secrets:
 | `SPACES_SIGNING_PRIVATE_KEY_PKCS8` | Active ES256 private signing key |
 | `SPACES_SMOKE_CREDENTIAL` | High-entropy credential for `/api/smoke/session` |
 
+The normal release also requires `CAS_R2_ACCESS_KEY_ID` and
+`CAS_R2_SECRET_ACCESS_KEY` as `Production` environment secrets. Use an R2
+Object Read & Write token scoped only to the production content bucket. The
+workflow synchronizes these values to the UniCAS Worker before deploying it so
+the direct-upload smoke cannot encounter an unconfigured presigner.
+
+Set `SPACES_RELEASE_ENABLED=true` as a repository variable only after every
+production prerequisite is ready. It must not be environment-scoped: GitHub
+evaluates the deployment job condition before attaching the `Production`
+environment. Leave it false or unset during one-time bootstrap.
+
 The deployment script writes secrets to `.wrangler/spaces/secrets.json` with
 owner-only permissions, passes that file to Wrangler, and deletes it in a
 `finally` path. The generated Wrangler config contains only non-secret values.

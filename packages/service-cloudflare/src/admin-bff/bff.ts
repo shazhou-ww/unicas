@@ -28,11 +28,12 @@ import type {
 import type {
   ControlSessionRepository,
   AccountRepository,
+  AppUsageRepository,
   OAuthDiscoveryPort,
   EmailChallengeRepository,
   PlatformInvitationRepository,
 } from "@unicas/service";
-import { AccountService, AccountServiceError, EMAIL_CHALLENGE_TTL_MS, EmailChallengeError, EmailChallengeService, PlatformAccessError, PlatformInvitationService, ProviderRegistry, sha256Hex } from "@unicas/service";
+import { AccountService, AccountServiceError, AppUsageUnavailableError, EMAIL_CHALLENGE_TTL_MS, EmailChallengeError, EmailChallengeService, PlatformAccessError, PlatformInvitationService, ProviderRegistry, readAppUsage, sha256Hex } from "@unicas/service";
 import type { AccountResolution, AuthenticatedProviderResult, ProviderAdapter } from "@unicas/service";
 import { requireInvitationEmailEvidence } from "@unicas/service";
 import type { AdminBffConfig } from "./config.js";
@@ -88,6 +89,7 @@ export interface CreateAdminBffOptions {
   readonly peopleRepository?: PeopleRepository;
   readonly providerRegistry?: ProviderRegistry;
   readonly accountRepository?: AccountRepository;
+  readonly appUsageRepository?: AppUsageRepository;
   readonly oauthDiscovery?: OAuthDiscoveryPort;
   readonly oauthResourcePublicOrigin?: string;
   readonly emailChallengeRepository?: EmailChallengeRepository;
@@ -288,6 +290,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     }
     if (appRoute?.operation === "getApp" || appRoute?.operation === "patchApp") {
       return handleAccountApps(request, url, appRoute.operation, appRoute.appId);
+    }
+    if (appRoute?.operation === "getUsage") {
+      return handleAccountAppUsage(request, appRoute.appId);
     }
     if (appRoute?.operation === "listMembers" || appRoute?.operation === "deleteMember") {
       return handleAccountAppMembers(request, url, appRoute.appId, appRoute.operation);
@@ -1750,6 +1755,37 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         return json({ error: error.code }, status);
       }
       throw error;
+    }
+  }
+
+  async function handleAccountAppUsage(request: Request, appId: string): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!accountService || !auth.payload.accountId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "App usage is unavailable");
+    }
+    try {
+      await accountService.requireAppMembership(auth.payload.accountId, appId);
+      if (!options.appUsageRepository) {
+        return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "App usage is unavailable");
+      }
+      return json(await readAppUsage({ repository: options.appUsageRepository, appId }), 200);
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        if (error.code === "ACCOUNT_BLOCKED") {
+          await sessionStore.delete(auth.sessionId);
+          return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED, "login required");
+        }
+        return json(
+          { error: error.code },
+          error.code === "APP_MEMBERSHIP_REQUIRED" ? 403 : 503,
+        );
+      }
+      if (error instanceof AppUsageUnavailableError) {
+        return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, error.message);
+      }
+      console.error("App usage read failed", error);
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "App usage is unavailable");
     }
   }
 

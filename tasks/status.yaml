@@ -1,9 +1,9 @@
 version: 2
 tasks:
   add-app-level-usage-reporting:
-    state: backlog
+    state: completed
     createdAt: "2026-09-21T03:45:51Z"
-    updatedAt: "2026-09-21T03:45:51Z"
+    updatedAt: "2026-09-21T06:54:43Z"
   add-platform-access-management:
     state: completed
     createdAt: "2026-09-15T14:26:52Z"

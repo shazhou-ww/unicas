@@ -72,6 +72,7 @@ App
 ├── App administrators (Account memberships)
 ├── OAuth issuer configuration
 ├── control audit
+├── aggregate usage (derived from Space summaries)
 └── Spaces
     ├── immutable CAS nodes
     ├── leases and upload reservations
@@ -101,6 +102,7 @@ AppMembership
 AppOAuthIssuer
 AppAuditEvent
 SpaceUsage
+AppUsage
 Account { accountId, blockedAt, credentialVersion }
 ExternalIdentity { provider, issuer, subject }
 Profile { displayName, avatarUrl }

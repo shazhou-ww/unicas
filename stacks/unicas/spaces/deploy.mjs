@@ -51,9 +51,18 @@ export function spacesDeploymentPlan(options, environment = process.env) {
     ["pnpm", "--filter", "@unicas/service-cloudflare", "exec", "wrangler", "deploy", "--config", generatedConfig, "--secrets-file", secretsFile],
   );
   if (options.production) {
-    commands.push(["pnpm", "spaces:smoke", "--", "--base-url", "https://spaces.unicas.work"]);
+    commands.push(["pnpm", "spaces:smoke", "--base-url", "https://spaces.unicas.work"]);
   }
   return commands;
+}
+
+export function spacesBootstrapEnvironment(environment = process.env) {
+  return {
+    ...environment,
+    SPACES_GOOGLE_CLIENT_ID: environment.SPACES_GOOGLE_CLIENT_ID || "bootstrap-disabled",
+    SPACES_GOOGLE_CLIENT_SECRET: environment.SPACES_GOOGLE_CLIENT_SECRET || "bootstrap-disabled",
+    SPACES_SMOKE_ENABLED: "false",
+  };
 }
 
 export function runSpacesCommand(command, spawn = spawnSync) {
@@ -80,11 +89,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     const options = parseSpacesDeployArgs(process.argv.slice(2));
     if (options.production || options.bootstrap) {
-      const environment = options.bootstrap
-        ? { ...process.env, SPACES_SMOKE_ENABLED: "false" }
-        : process.env;
+      const environment = options.bootstrap ? spacesBootstrapEnvironment() : process.env;
       writeProductionSpacesConfig(environment);
-      writeProductionSpacesSecrets();
+      writeProductionSpacesSecrets(environment);
     }
     try {
       for (const command of spacesDeploymentPlan(options)) runSpacesCommand(command);

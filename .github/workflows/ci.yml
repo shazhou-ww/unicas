@@ -6,6 +6,16 @@ on:
       - "**"
   pull_request:
   workflow_dispatch:
+    inputs:
+      spaces_action:
+        description: Spaces production operation
+        required: true
+        default: none
+        type: choice
+        options:
+          - none
+          - provision-deploy
+          - principals
 
 permissions:
   contents: read
@@ -65,12 +75,145 @@ jobs:
       - name: Build documentation deployment bundle
         run: pnpm deploy:docs:plan
 
+  bootstrap-spaces:
+    name: Bootstrap Spaces
+    if: >-
+      github.ref == 'refs/heads/release' &&
+      github.event_name == 'workflow_dispatch' &&
+      inputs.spaces_action != 'none'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    environment: Production
+    concurrency:
+      group: unicas-production
+      cancel-in-progress: false
+    steps:
+      - name: Check out validated revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify validated revision
+        run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+
+      - name: Provision Spaces D1
+        if: inputs.spaces_action == 'provision-deploy'
+        id: spaces-d1
+        shell: bash
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CONFIGURED_DATABASE_ID: ${{ vars.SPACES_D1_DATABASE_ID }}
+        run: |
+          set -euo pipefail
+          list_databases() {
+            pnpm --filter @unicas/service-cloudflare exec wrangler d1 list --json
+          }
+          database_id="$(D1_JSON="$(list_databases)" node -e 'const rows=JSON.parse(process.env.D1_JSON); const row=rows.find((item)=>item.name==="unicas-spaces"); process.stdout.write(row?.uuid ?? "")')"
+          if [[ -z "$database_id" ]]; then
+            pnpm --filter @unicas/service-cloudflare exec wrangler d1 create unicas-spaces --location enam
+            database_id="$(D1_JSON="$(list_databases)" node -e 'const rows=JSON.parse(process.env.D1_JSON); const row=rows.find((item)=>item.name==="unicas-spaces"); process.stdout.write(row?.uuid ?? "")')"
+          fi
+          if [[ ! "$database_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+            echo "::error::Could not resolve the unicas-spaces D1 database ID"
+            exit 1
+          fi
+          if [[ -n "${CONFIGURED_DATABASE_ID:-}" && "$CONFIGURED_DATABASE_ID" != "$database_id" ]]; then
+            echo "::error::Configured Spaces D1 ID does not match the named database"
+            exit 1
+          fi
+          echo "database_id=$database_id" >> "$GITHUB_OUTPUT"
+          echo "::notice title=Spaces D1::SPACES_D1_DATABASE_ID=$database_id"
+
+      - name: Deploy Spaces issuer bootstrap
+        if: inputs.spaces_action == 'provision-deploy'
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          SPACES_BOOTSTRAP_DEPLOY_CONFIRM: spaces.unicas.work
+          SPACES_D1_DATABASE_ID: ${{ steps.spaces-d1.outputs.database_id }}
+          SPACES_SIGNING_KID: ${{ vars.SPACES_SIGNING_KID }}
+          SPACES_SIGNING_PRIVATE_KEY_PKCS8: ${{ secrets.SPACES_SIGNING_PRIVATE_KEY_PKCS8 }}
+          SPACES_SIGNING_PUBLIC_JWKS: ${{ vars.SPACES_SIGNING_PUBLIC_JWKS }}
+          SPACES_SMOKE_CREDENTIAL: ${{ secrets.SPACES_SMOKE_CREDENTIAL }}
+          SPACES_SMOKE_PRINCIPAL_ID: ${{ vars.SPACES_SMOKE_PRINCIPAL_ID }}
+          SPACES_UNICAS_AUDIENCE: ${{ vars.SPACES_UNICAS_AUDIENCE }}
+        run: pnpm deploy:spaces:bootstrap
+
+      - name: Materialize Spaces signing key
+        if: inputs.spaces_action == 'principals'
+        shell: bash
+        env:
+          SPACES_SIGNING_PRIVATE_KEY_PKCS8: ${{ secrets.SPACES_SIGNING_PRIVATE_KEY_PKCS8 }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 .wrangler/spaces
+          umask 077
+          printf '%s\n' "$SPACES_SIGNING_PRIVATE_KEY_PKCS8" > .wrangler/spaces/bootstrap-key.pem
+          chmod 600 .wrangler/spaces/bootstrap-key.pem
+
+      - name: Bootstrap Spaces Principals
+        if: inputs.spaces_action == 'principals'
+        shell: bash
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          SPACES_BOOTSTRAP_APP_ID: ${{ vars.SPACES_BOOTSTRAP_APP_ID }}
+          SPACES_BOOTSTRAP_GOOGLE_SUBJECT: ${{ secrets.SPACES_GOOGLE_SUBJECT }}
+          SPACES_BOOTSTRAP_KEY_FILE: .wrangler/spaces/bootstrap-key.pem
+          SPACES_D1_DATABASE_ID: ${{ vars.SPACES_D1_DATABASE_ID }}
+          SPACES_GOOGLE_CLIENT_ID: bootstrap-disabled
+          SPACES_SIGNING_KID: ${{ vars.SPACES_SIGNING_KID }}
+          SPACES_SIGNING_PUBLIC_JWKS: ${{ vars.SPACES_SIGNING_PUBLIC_JWKS }}
+          SPACES_SMOKE_PRINCIPAL_ID: ${{ vars.SPACES_SMOKE_PRINCIPAL_ID }}
+          SPACES_UNICAS_AUDIENCE: ${{ vars.SPACES_UNICAS_AUDIENCE }}
+          SPACES_USER_DISPLAY_NAME: ${{ vars.SPACES_USER_DISPLAY_NAME }}
+          SPACES_USER_PRINCIPAL_ID: ${{ vars.SPACES_USER_PRINCIPAL_ID }}
+          SPACES_USER_SPACE_ID: ${{ vars.SPACES_USER_SPACE_ID }}
+          SPACES_SMOKE_SPACE_ID: ${{ vars.SPACES_SMOKE_SPACE_ID }}
+        run: |
+          set -euo pipefail
+          SPACES_BOOTSTRAP_SPACE_ID="$SPACES_USER_SPACE_ID" \
+          SPACES_BOOTSTRAP_PRINCIPAL_ID="$SPACES_USER_PRINCIPAL_ID" \
+          SPACES_BOOTSTRAP_DISPLAY_NAME="$SPACES_USER_DISPLAY_NAME" \
+          SPACES_BOOTSTRAP_REF_DOMAIN="spaces:files" \
+            pnpm spaces:bootstrap -- --mode google
+          SPACES_BOOTSTRAP_SPACE_ID="$SPACES_SMOKE_SPACE_ID" \
+          SPACES_BOOTSTRAP_PRINCIPAL_ID="$SPACES_SMOKE_PRINCIPAL_ID" \
+          SPACES_BOOTSTRAP_DISPLAY_NAME="Release smoke" \
+          SPACES_BOOTSTRAP_REF_DOMAIN="spaces:smoke" \
+            pnpm spaces:bootstrap -- --mode smoke
+
+      - name: Remove Spaces bootstrap key
+        if: ${{ always() && inputs.spaces_action == 'principals' }}
+        run: rm -f -- .wrangler/spaces/bootstrap-key.pem
+
   deploy-production:
     name: Deploy production
     if: >-
       github.ref == 'refs/heads/release' &&
+      vars.SPACES_RELEASE_ENABLED == 'true' &&
       (github.event_name == 'push' ||
-       github.event_name == 'workflow_dispatch')
+       (github.event_name == 'workflow_dispatch' &&
+        inputs.spaces_action == 'none'))
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -110,12 +253,14 @@ jobs:
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CAS_R2_ACCESS_KEY_ID: ${{ secrets.CAS_R2_ACCESS_KEY_ID }}
+          CAS_R2_SECRET_ACCESS_KEY: ${{ secrets.CAS_R2_SECRET_ACCESS_KEY }}
           OAUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.OAUTH_GOOGLE_CLIENT_SECRET }}
           OAUTH_MICROSOFT_CLIENT_SECRET: ${{ secrets.OAUTH_MICROSOFT_CLIENT_SECRET }}
           OAUTH_GITHUB_CLIENT_SECRET: ${{ secrets.OAUTH_GITHUB_CLIENT_SECRET }}
         run: |
           set -euo pipefail
-          for name in OAUTH_GOOGLE_CLIENT_SECRET OAUTH_MICROSOFT_CLIENT_SECRET OAUTH_GITHUB_CLIENT_SECRET; do
+          for name in CAS_R2_ACCESS_KEY_ID CAS_R2_SECRET_ACCESS_KEY OAUTH_GOOGLE_CLIENT_SECRET OAUTH_MICROSOFT_CLIENT_SECRET OAUTH_GITHUB_CLIENT_SECRET; do
             if [[ -z "${!name:-}" ]]; then
               echo "::error::$name is not configured in the Production environment"
               exit 1

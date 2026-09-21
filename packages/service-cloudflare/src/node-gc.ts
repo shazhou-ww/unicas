@@ -48,8 +48,12 @@ export class CloudflareNodeGcRepository implements NodeGcRepository {
     };
   }
 
-  deleteCanonicalContent(scope: NodeGcScope, hash: string): Promise<void> {
-    return this.bucket.delete(appCanonicalNodeKey(scope.stackId, scope.tenantId, hash));
+  async deleteCanonicalContent(scope: NodeGcScope, hash: string): Promise<void> {
+    await this.bucket.delete(appCanonicalNodeKey(scope.stackId, scope.tenantId, hash));
+    await this.db.prepare(
+      `UPDATE cas_nodes SET canonical_stored_bytes = NULL, canonical_observed_at = ?
+       WHERE app_id = ? AND space_id = ? AND hash = ?`,
+    ).bind(Date.now(), scope.stackId, scope.tenantId, hash).run();
   }
 
   async commitDeletion(scope: NodeGcScope, deletion: NodeGcDeletion): Promise<void> {

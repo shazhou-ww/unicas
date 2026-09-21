@@ -115,6 +115,7 @@ export type UploadedCanonicalNodeCommit =
   | {
     readonly kind: "existing";
     readonly hash: string;
+    readonly storedBytes: number;
     readonly leaseStartedAt: number;
     readonly leaseExpiresAt: number;
   }
@@ -122,6 +123,7 @@ export type UploadedCanonicalNodeCommit =
     readonly kind: "new";
     readonly hash: string;
     readonly contentSize: number;
+    readonly storedBytes: number;
     readonly contentType: string;
     readonly refs: readonly string[];
     readonly leaseStartedAt: number;
@@ -455,6 +457,7 @@ async function publishValidatedLeaseDrivenUpload(
     kind: "new",
     hash: input.hash,
     contentSize: validation.contentSize,
+    storedBytes: validation.storedBytes,
     contentType: validation.contentType,
     refs: validation.refs,
     ...lease,
@@ -784,12 +787,14 @@ export async function finalizeCanonicalNodeLease(input: {
     kind: "new",
     hash: input.plan.hash,
     contentSize: parsed.contentSize,
+    storedBytes: input.plan.storedBytes,
     contentType: parsed.contentType,
     refs: parsed.refs,
     ...lease,
   } : {
     kind: "existing",
     hash: input.plan.hash,
+    storedBytes: input.plan.storedBytes,
     ...lease,
   });
   return { hash: input.plan.hash, ready: true, ...lease };

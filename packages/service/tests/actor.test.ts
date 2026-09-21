@@ -119,6 +119,12 @@ describe("createUniCasService", () => {
       plane: "app-admin",
       route: { operation: "getApp", appId: "app-1" },
     });
+    expect(matchUniCasServiceRoute(new Request(
+      "https://console.unicas.work/admin/apps/app-1/usage",
+    ))).toEqual({
+      plane: "app-admin",
+      route: { operation: "getUsage", appId: "app-1" },
+    });
   });
 
   test("routes shared administrator paths through the App contract", () => {

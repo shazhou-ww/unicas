@@ -9,6 +9,7 @@ export type AppAdminRoute =
   | { operation: "createApp" }
   | { operation: "getApp"; appId: string }
   | { operation: "patchApp"; appId: string }
+  | { operation: "getUsage"; appId: string }
   | { operation: "listMembers"; appId: string }
   | { operation: "deleteMember"; appId: string }
   | { operation: "createMemberInvitation"; appId: string }
@@ -56,6 +57,8 @@ export const appAdminRoutes = {
   apps: () => "/admin/apps",
   app: ({ appId }: { appId: string }) =>
     `/admin/apps/${segment(appId)}`,
+  usage: ({ appId }: { appId: string }) =>
+    `/admin/apps/${segment(appId)}/usage`,
   members: ({ appId }: { appId: string }) =>
     `/admin/apps/${segment(appId)}/members`,
   memberInvitations: ({ appId }: { appId: string }) =>
@@ -152,6 +155,10 @@ export function matchAppAdminRoute(
     if (method === "GET") return { operation: "getApp", appId };
     if (method === "PATCH") return { operation: "patchApp", appId };
     return null;
+  }
+
+  if (parts.length === 4 && parts[3] === "usage" && method === "GET") {
+    return { operation: "getUsage", appId };
   }
 
   if (parts.length === 4 && parts[3] === "members") {
