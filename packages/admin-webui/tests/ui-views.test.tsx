@@ -595,8 +595,75 @@ describe("ControlAuditView", () => {
 });
 
 describe("UsageView", () => {
-  test("documents the delegated Space data-plane read", () => {
+  const usage = {
+    nodeCount: 18_420,
+    readyContentBytes: 1_932_735_283,
+    readyStoredBytes: 1_395_864_371,
+    reservedBytes: 67_108_864,
+    notReadyNodeCount: 3,
+    leasedNodeCount: 1_206,
+  };
+
+  test("renders aggregate App usage after a stable loading state", async () => {
+    fetchMock.mockResolvedValueOnce(json(usage));
     render(<UsageView appId={STACK} />);
-    expect(screen.getByText(/Usage is a Space data-plane read/)).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Loading usage" })).toBeVisible();
+    expect(await screen.findByText("1.8 GiB")).toBeVisible();
+    expect(screen.getByText("1.3 GiB")).toBeVisible();
+    expect(screen.getByText("64 MiB")).toBeVisible();
+    expect(screen.getByText("18,420")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Refresh usage" })).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/admin/apps/${STACK}/usage`,
+      expect.objectContaining({ headers: expect.any(Headers) }),
+    );
+  });
+
+  test("keeps current values visible while refreshing and reports a refresh error", async () => {
+    let resolveRefresh!: (response: Response) => void;
+    fetchMock
+      .mockResolvedValueOnce(json(usage))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveRefresh = resolve; }));
+    const user = userEvent.setup();
+    render(<UsageView appId={STACK} />);
+    expect(await screen.findByText("1.8 GiB")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Refresh usage" }));
+    expect(screen.getByText("1.8 GiB")).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent("Refreshing usage");
+    await act(async () => resolveRefresh(json({ error: "SERVICE_UNAVAILABLE", message: "Accounting is still being reconciled" }, 503)));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Accounting is still being reconciled");
+    expect(screen.getByText("1.8 GiB")).toBeVisible();
+  });
+
+  test("renders zero usage and retries an initial error", async () => {
+    fetchMock
+      .mockResolvedValueOnce(json({ error: "SERVICE_UNAVAILABLE", message: "Accounting is still being reconciled" }, 503))
+      .mockResolvedValueOnce(json(Object.fromEntries(Object.keys(usage).map((key) => [key, 0]))));
+    const user = userEvent.setup();
+    render(<UsageView appId={STACK} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Accounting is still being reconciled");
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("No storage activity yet.")).toBeVisible();
+    expect(screen.getAllByText("0 B")).toHaveLength(3);
+  });
+
+  test("ignores a stale usage response after switching Apps", async () => {
+    let resolveOld!: (response: Response) => void;
+    fetchMock
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveOld = resolve; }))
+      .mockResolvedValueOnce(json({ ...usage, readyContentBytes: 1024 }));
+    const { rerender } = render(<UsageView appId="old-app" />);
+
+    rerender(<UsageView appId="new/app" />);
+    expect(await screen.findByText("1 KiB")).toBeVisible();
+    await act(async () => resolveOld(json(usage)));
+    expect(screen.getByText("1 KiB")).toBeVisible();
+    expect(screen.queryByText("1.8 GiB")).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/admin/apps/new%2Fapp/usage",
+      expect.objectContaining({ headers: expect.any(Headers) }),
+    );
   });
 });

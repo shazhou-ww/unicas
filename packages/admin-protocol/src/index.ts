@@ -16,6 +16,7 @@ export type {
   AppOAuthIssuerInspection,
   AppRefDomain,
   AppStatus,
+  AppUsage,
   CasHash,
   CasRefChanges,
   ExternalIdentityDetail,
@@ -49,6 +50,7 @@ export {
   AppOAuthIssuerSchema,
   AppRefDomainSchema,
   AppSchema,
+  AppUsageSchema,
   CasAdminErrorResponseSchema,
   CasHashSchema,
   CasRefChangesSchema,
@@ -79,6 +81,7 @@ export {
   ActivateAppIssuerRequestSchema,
   AppIssuerPreconditionSchema,
   appAdminApiContract,
+  getAppUsageContract,
 } from "./app-v2-contract.js";
 export type { AppAdminApiContract } from "./app-v2-contract.js";
 export { AppAdminMeResponseSchema } from "./app-v2-contract.js";

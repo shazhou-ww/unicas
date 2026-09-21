@@ -33,6 +33,7 @@ import { D1PlatformInvitationRepository } from "./platform-invitation-repository
 import { D1PeopleRepository } from "./people-repository.js";
 import { D1AccountRepository } from "./account-repository.js";
 import { D1EmailChallengeRepository } from "./email-challenge-repository.js";
+import { CloudflareAppUsageRepository } from "./app-usage.js";
 import { CloudflareEmailChallengeSender } from "./email-challenge-sender.js";
 import { CloudflareOAuthDiscoveryPort } from "./oauth-discovery.js";
 import {
@@ -40,6 +41,11 @@ import {
   type RootRefDomainDoEnv,
 } from "./domain-do.js";
 import { migrateAppSpaceSchema } from "./schema.js";
+import {
+  DEFAULT_USAGE_RECONCILE_MAX_NODES,
+  reconcileAppUsageObservations,
+  repairOldestSpaceUsageProjection,
+} from "./usage-reconciliation.js";
 import { CasDurableObject, type SpaceCasDoEnv } from "./tenant-do.js";
 import { ServerTiming, type TimingSink } from "./timing.js";
 
@@ -201,8 +207,16 @@ export default {
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil((async () => {
       await ensureControlSchema(env);
+      await ensureTenantSchema(env);
       await new D1EmailChallengeRepository(env.CAS_CONTROL_DB).pruneExpired(Date.now());
       await new ControlSessionStore(env.CAS_CONTROL_DB).pruneExpired();
+      const usage = await reconcileAppUsageObservations({
+        db: env.CAS_DB,
+        bucket: env.CAS_R2,
+        limit: DEFAULT_USAGE_RECONCILE_MAX_NODES,
+      });
+      const summaryRepaired = await repairOldestSpaceUsageProjection({ db: env.CAS_DB });
+      console.log(JSON.stringify({ event: "cas_usage_reconciliation", ...usage, summaryRepaired }));
     })());
   },
 } satisfies ExportedHandler<Env>;
@@ -333,6 +347,12 @@ function adminHandlerFor(env: Env): Promise<(request: Request) => Promise<Respon
         platformInvitationRepository,
         peopleRepository: new D1PeopleRepository(env.CAS_CONTROL_DB),
         accountRepository,
+        appUsageRepository: {
+          async readAppUsage(appId) {
+            await ensureTenantSchema(env);
+            return new CloudflareAppUsageRepository(env.CAS_DB).readAppUsage(appId);
+          },
+        },
         oauthDiscovery,
         oauthResourcePublicOrigin: env.CAS_PUBLIC_ORIGIN ?? env.PUBLIC_ORIGIN,
         emailChallengeRepository: new D1EmailChallengeRepository(env.CAS_CONTROL_DB),

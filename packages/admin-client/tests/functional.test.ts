@@ -55,6 +55,7 @@ class MockAdminService {
   session = true;
   appVocabulary = false;
   appResponseEtag = '"3"';
+  invalidUsageResponse = false;
   fileRoot = {
     rootId: "root-1",
     name: "Files",
@@ -229,6 +230,17 @@ class MockAdminService {
     }
     if (path === appAdminRoutes.app({ appId: APP }) && request.method === "GET") {
       return Response.json(this.app, { headers: { ETag: this.appResponseEtag } });
+    }
+    if (path === appAdminRoutes.usage({ appId: APP }) && request.method === "GET") {
+      if (this.invalidUsageResponse) return Response.json({ nodeCount: -1 });
+      return Response.json({
+        nodeCount: 3,
+        readyContentBytes: 30,
+        readyStoredBytes: 24,
+        reservedBytes: 5,
+        notReadyNodeCount: 1,
+        leasedNodeCount: 2,
+      });
     }
     if (path === appAdminRoutes.app({ appId: APP }) && request.method === "PATCH") {
       this.app.revision += 1;
@@ -427,6 +439,14 @@ describe("functional admin client", () => {
       { idempotencyKey: "create-app-1" },
     )).toMatchObject({ value: { appId: APP }, etag: '"3"' });
     expect(await client.getApp({ appId: APP })).toMatchObject({ value: { appId: APP }, etag: '"3"' });
+    expect(await client.getAppUsage({ appId: APP })).toEqual({
+      nodeCount: 3,
+      readyContentBytes: 30,
+      readyStoredBytes: 24,
+      reservedBytes: 5,
+      notReadyNodeCount: 1,
+      leasedNodeCount: 2,
+    });
     expect(await client.patchApp({ appId: APP }, { description: "Production", status: "suspended" }, '"3"'))
       .toEqual({ etag: '"4"' });
     expect(await client.listAppMembers({ appId: APP }, { limit: 10 })).toMatchObject({
@@ -447,6 +467,7 @@ describe("functional admin client", () => {
     expect(service.requests).toEqual(expect.arrayContaining([
       expect.objectContaining({ path: "/admin/apps", search: "?limit=5&cursor=next" }),
       expect.objectContaining({ path: "/admin/apps", method: "POST", origin: "https://admin.test", csrf: "csrf-1", idempotencyKey: "create-app-1" }),
+      expect.objectContaining({ path: `/admin/apps/${APP}/usage`, method: "GET", csrf: null }),
       expect.objectContaining({
         path: `/admin/apps/${APP}`,
         method: "PATCH",
@@ -460,6 +481,14 @@ describe("functional admin client", () => {
         ifMatch: null,
       }),
     ]));
+  });
+
+  it("rejects a malformed successful App usage response", async () => {
+    service.invalidUsageResponse = true;
+    await expect(client.getAppUsage({ appId: APP })).rejects.toMatchObject({
+      status: 502,
+      code: "ADMIN_CONTRACT_MISMATCH",
+    });
   });
 
   it("normalizes a transfer-weakened numeric revision ETag before reuse", async () => {

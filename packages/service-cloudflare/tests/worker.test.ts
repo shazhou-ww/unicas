@@ -10,6 +10,19 @@ const handlers = vi.hoisted(() => ({
   mcp: vi.fn(async () => new Response("mcp")),
   migrate: vi.fn(async () => undefined),
   migrateControl: vi.fn(async () => undefined),
+  pruneEmailChallenges: vi.fn(async () => 0),
+  pruneSessions: vi.fn(async () => 0),
+  reconcileUsage: vi.fn(async () => ({ examined: 0, observed: 0, missing: 0, failed: 0, backfill: false })),
+  repairUsage: vi.fn(async () => false),
+  readAppUsage: vi.fn(async () => ({
+    nodeCount: 0,
+    readyContentBytes: 0,
+    readyStoredBytes: 0,
+    reservedBytes: 0,
+    notReadyNodeCount: 0,
+    leasedNodeCount: 0,
+    unobservedNodeCount: 0,
+  })),
   tenantIdFromName: vi.fn((name: string) => `do:${name}`),
   tenantGet: vi.fn((_id: string) => ({ fetch: undefined as unknown })),
   verify: vi.fn(async (_request: Request, route: { stackId: string; tenantId: string }) => ({
@@ -38,7 +51,18 @@ vi.mock("../src/control-schema.js", () => ({
   migrateControlSchema: handlers.migrateControl,
 }));
 vi.mock("../src/control-sessions.js", () => ({
-  ControlSessionStore: class { },
+  ControlSessionStore: class { pruneExpired = handlers.pruneSessions; },
+}));
+vi.mock("../src/email-challenge-repository.js", () => ({
+  D1EmailChallengeRepository: class { pruneExpired = handlers.pruneEmailChallenges; },
+}));
+vi.mock("../src/usage-reconciliation.js", () => ({
+  DEFAULT_USAGE_RECONCILE_MAX_NODES: 100,
+  reconcileAppUsageObservations: handlers.reconcileUsage,
+  repairOldestSpaceUsageProjection: handlers.repairUsage,
+}));
+vi.mock("../src/app-usage.js", () => ({
+  CloudflareAppUsageRepository: class { readAppUsage = handlers.readAppUsage; },
 }));
 vi.mock("@unicas/service", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@unicas/service")>();
@@ -103,6 +127,28 @@ beforeEach(() => {
 });
 
 describe("service-cloudflare public routing", () => {
+  test("runs bounded usage reconciliation during scheduled maintenance", async () => {
+    const scheduledEnv = { ...env, CAS_CONTROL_DB: {}, CAS_DB: {}, CAS_R2: {} } as Env;
+    const pending: Promise<unknown>[] = [];
+    await worker.scheduled(
+      {} as ScheduledController,
+      scheduledEnv,
+      { waitUntil: promise => pending.push(promise) } as ExecutionContext,
+    );
+    await Promise.all(pending);
+
+    expect(handlers.migrateControl).toHaveBeenCalledOnce();
+    expect(handlers.migrate).toHaveBeenCalledOnce();
+    expect(handlers.pruneEmailChallenges).toHaveBeenCalledOnce();
+    expect(handlers.pruneSessions).toHaveBeenCalledOnce();
+    expect(handlers.reconcileUsage).toHaveBeenCalledWith({
+      db: scheduledEnv.CAS_DB,
+      bucket: scheduledEnv.CAS_R2,
+      limit: 100,
+    });
+    expect(handlers.repairUsage).toHaveBeenCalledWith({ db: scheduledEnv.CAS_DB });
+  });
+
   test("enforces the configured host/path matrix", async () => {
     const splitEnv = {
       ...env,
@@ -206,6 +252,7 @@ describe("service-cloudflare public routing", () => {
   });
 
   test("routes tenant protocol requests without admin cookies or internal secrets", async () => {
+    const tenantEnv = { ...env, CAS_DB: {} } as Env;
     const response = await worker.fetch(new Request(
       "https://cas.example/stacks/s1/tenants/t1/cas/usage",
       {
@@ -216,7 +263,7 @@ describe("service-cloudflare public routing", () => {
           "X-Cas-Audit-Reader-Key": "reader",
         },
       },
-    ), env, ctx);
+    ), tenantEnv, ctx);
 
     const authorizationRequest = handlers.verify.mock.calls[0]![0] as Request;
     expect(authorizationRequest.headers.get("Authorization")).toBe("Bearer tenant-capability");
@@ -238,7 +285,7 @@ describe("service-cloudflare public routing", () => {
     await worker.fetch(new Request(
       "https://cas.example/stacks/s1/tenants/t1/cas/usage",
       { headers: { Authorization: "Bearer tenant-capability" } },
-    ), env, ctx);
+    ), tenantEnv, ctx);
     expect(handlers.migrate).toHaveBeenCalledTimes(1);
   });
 
@@ -434,6 +481,7 @@ describe("service-cloudflare public routing", () => {
   });
 
   test("routes admin protocol and BFF requests without tenant bearer credentials", async () => {
+    const adminEnv = { ...env, CAS_CONTROL_DB: {}, CAS_DB: {} } as Env;
     for (const path of ["/admin/me", "/admin/auth/login"]) {
       await worker.fetch(new Request(`https://cas.example${path}`, {
         headers: {
@@ -441,7 +489,7 @@ describe("service-cloudflare public routing", () => {
           Cookie: "cas_admin_session=secret",
           "X-Cas-Audit-Reader-Key": "reader",
         },
-      }), env, ctx);
+      }), adminEnv, ctx);
     }
 
     for (const call of handlers.admin.mock.calls) {
@@ -453,6 +501,14 @@ describe("service-cloudflare public routing", () => {
     expect(handlers.migrateControl).toHaveBeenCalledTimes(1);
     expect(handlers.migrateControl.mock.invocationCallOrder[0])
       .toBeLessThan(handlers.admin.mock.invocationCallOrder[0]!);
+    expect(handlers.migrate).not.toHaveBeenCalled();
+
+    const options = vi.mocked(createAdminBff).mock.calls.at(-1)![0] as {
+      appUsageRepository: { readAppUsage(appId: string): Promise<unknown> };
+    };
+    await options.appUsageRepository.readAppUsage("app-1");
+    expect(handlers.migrate).toHaveBeenCalledOnce();
+    expect(handlers.readAppUsage).toHaveBeenCalledWith("app-1");
   });
 
   test("retries control schema initialization after a failed admin dispatch", async () => {

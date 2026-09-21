@@ -14,6 +14,7 @@ describe("App admin routes", () => {
     ["POST", appAdminRoutes.apps(), "createApp"],
     ["GET", appAdminRoutes.app({ appId: "app/a" }), "getApp"],
     ["PATCH", appAdminRoutes.app({ appId: "app/a" }), "patchApp"],
+    ["GET", appAdminRoutes.usage({ appId: "app/a" }), "getUsage"],
     ["GET", appAdminRoutes.members({ appId: "app/a" }), "listMembers"],
     ["DELETE", appAdminRoutes.members({ appId: "app/a" }), "deleteMember"],
     ["POST", appAdminRoutes.memberInvitations({ appId: "app/a" }), "createMemberInvitation"],

@@ -13,7 +13,7 @@ afterEach(async () => {
   db = undefined;
 });
 
-async function createDb(): Promise<D1Database> {
+async function createRawDb(): Promise<D1Database> {
   miniflare = new Miniflare(convertV4MiniflareOptions({
     workers: [{
       name: "task5-test",
@@ -25,6 +25,11 @@ async function createDb(): Promise<D1Database> {
   }));
   await miniflare.ready;
   db = await miniflare.getD1Database("DB", "task5-test");
+  return db;
+}
+
+async function createDb(): Promise<D1Database> {
+  const db = await createRawDb();
   await migrateAppSpaceSchema(db);
   return db;
 }
@@ -48,6 +53,8 @@ describe("App-scoped Space schema", () => {
       "cas_upload_reservations",
       "cas_node_uploads",
       "cas_node_upload_cleanup",
+      "cas_space_usage",
+      "cas_usage_projection_migrations",
     ]) {
       expect(names.has(expected), `missing table ${expected}`).toBe(true);
     }
@@ -63,6 +70,49 @@ describe("App-scoped Space schema", () => {
     expect(pk).toEqual(["app_id", "space_id", "hash"]);
     expect(columns.results!.some((column) => column.name === "object_format")).toBe(false);
     expect(columns.results!.find((column) => column.name === "ready")?.dflt_value).toBe("1");
+    expect(columns.results!.map((column) => column.name)).toEqual(expect.arrayContaining([
+      "canonical_stored_bytes",
+      "canonical_observed_at",
+    ]));
+  });
+
+  test("backfills legacy nodes and reservations exactly once", async () => {
+    const database = await createRawDb();
+    await database.exec(
+      "CREATE TABLE cas_nodes (app_id TEXT NOT NULL, space_id TEXT NOT NULL, hash TEXT NOT NULL, content_size INTEGER NOT NULL, content_type TEXT NOT NULL, lease_started_at INTEGER NOT NULL DEFAULT 0, lease_expires_at INTEGER NOT NULL DEFAULT 0, child_ref_count INTEGER NOT NULL DEFAULT 0, root_ref_count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (app_id, space_id, hash))",
+    );
+    await database.exec(
+      "CREATE TABLE cas_upload_reservations (app_id TEXT NOT NULL, space_id TEXT NOT NULL, hash TEXT NOT NULL, stored_bytes INTEGER NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, PRIMARY KEY (app_id, space_id, hash))",
+    );
+    await database.prepare(
+      "INSERT INTO cas_nodes (app_id, space_id, hash, content_size, content_type, lease_expires_at) VALUES ('app-a', 'space-1', ?, 10, 'text/plain', 20)",
+    ).bind("a".repeat(64)).run();
+    await database.prepare(
+      "INSERT INTO cas_upload_reservations (app_id, space_id, hash, stored_bytes, created_at, expires_at) VALUES ('app-a', 'space-1', ?, 5, 1, 2)",
+    ).bind("b".repeat(64)).run();
+
+    await Promise.all([
+      migrateAppSpaceSchema(database),
+      migrateAppSpaceSchema(database),
+    ]);
+    await migrateAppSpaceSchema(database);
+
+    expect(await database.prepare(
+      `SELECT node_count, ready_content_bytes, ready_stored_bytes, reserved_bytes,
+         not_ready_node_count, leased_node_count, unobserved_node_count
+       FROM cas_space_usage WHERE app_id = 'app-a' AND space_id = 'space-1'`,
+    ).first()).toEqual({
+      node_count: 1,
+      ready_content_bytes: 10,
+      ready_stored_bytes: 0,
+      reserved_bytes: 5,
+      not_ready_node_count: 0,
+      leased_node_count: 1,
+      unobserved_node_count: 1,
+    });
+    expect(await database.prepare(
+      "SELECT COUNT(*) AS count FROM cas_usage_projection_migrations WHERE version = 1",
+    ).first()).toEqual({ count: 1 });
   });
 });
 

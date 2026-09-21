@@ -77,6 +77,8 @@ const CONTROL_TABLES = [
 ];
 
 const TENANT_TABLES = [
+  "cas_usage_projection_migrations",
+  "cas_space_usage",
   "cas_edges",
   "cas_root_ref_requests",
   "cas_root_domain_events",
@@ -116,6 +118,7 @@ export const SCOPED_INVENTORY_QUERIES = {
      UNION ALL SELECT 'cas_root_domain_revisions', app_id, NULL FROM cas_root_domain_revisions GROUP BY app_id
      UNION ALL SELECT 'cas_upload_reservations', app_id, space_id FROM cas_upload_reservations GROUP BY app_id, space_id
      UNION ALL SELECT 'cas_direct_upload_sessions', app_id, space_id FROM cas_direct_upload_sessions GROUP BY app_id, space_id`,
+    "SELECT 'cas_space_usage' AS source, app_id AS stack_id, space_id AS tenant_id FROM cas_space_usage GROUP BY app_id, space_id",
   ],
 };
 
@@ -683,54 +686,54 @@ function printPlan(commands) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const main = async () => {
-  try {
-    const options = parseResetArgs(process.argv.slice(2));
-    if (!options.expectedStackId) {
-      console.log("No-op. Pass --expected-stack-id to print a live reset plan; use --execute for cutover or --verify-current to resume verification.");
-      process.exit(0);
-    }
-    if (options.verifyCurrent) {
-      const accountId = await verifyCurrentBootstrap(options.expectedStackId);
-      console.log(JSON.stringify({ resetVerified: true, bootstrapVerified: true, accountId, maintenanceActive: true }));
-      return;
-    }
-    const inventory = remoteInventory();
-    validateResetInventory(inventory, options.expectedStackId);
-    const backupCommands = options.backupDir ? r2BackupPlan(inventory, options.backupDir) : [];
-    const commands = resetPlan(inventory);
-    printPlan([...backupCommands, ...commands]);
-    if (options.execute) {
-      const maintenanceNonce = publishMaintenance();
-      const physicalInventory = await verifyMaintenance(maintenanceNonce);
-      validatePhysicalInventory(physicalInventory, options.expectedStackId, inventory.oauthKeys);
-      const maintainedInventory = remoteInventory();
-      validateResetInventory(maintainedInventory, options.expectedStackId);
-      if (inventoryDigest(maintainedInventory) !== inventoryDigest(inventory)) {
-        throw new Error("production inventory changed after maintenance activation");
+    try {
+      const options = parseResetArgs(process.argv.slice(2));
+      if (!options.expectedStackId) {
+        console.log("No-op. Pass --expected-stack-id to print a live reset plan; use --execute for cutover or --verify-current to resume verification.");
+        process.exit(0);
       }
-      if (options.backupDir) {
-        const d1 = executeD1Backups(options.backupDir);
-        const r2 = executeR2Backups({ objectKeys: physicalInventory.r2Keys }, options.backupDir);
-        writeFileSync(resolve(options.backupDir, "backup-manifest.json"), `${JSON.stringify({ d1, r2 }, null, 2)}\n`, { flag: "wx" });
+      if (options.verifyCurrent) {
+        const accountId = await verifyCurrentBootstrap(options.expectedStackId);
+        console.log(JSON.stringify({ resetVerified: true, bootstrapVerified: true, accountId, maintenanceActive: true }));
+        return;
       }
-      for (const command of resourceDeletePlan(physicalInventory)) run(command);
-      const emptyPhysicalInventory = await maintenanceInventory(maintenanceNonce);
-      if (emptyPhysicalInventory.r2Keys.length > 0 || emptyPhysicalInventory.kvKeys.length > 0) {
-        throw new Error("physical R2 or KV state remains after reset");
+      const inventory = remoteInventory();
+      validateResetInventory(inventory, options.expectedStackId);
+      const backupCommands = options.backupDir ? r2BackupPlan(inventory, options.backupDir) : [];
+      const commands = resetPlan(inventory);
+      printPlan([...backupCommands, ...commands]);
+      if (options.execute) {
+        const maintenanceNonce = publishMaintenance();
+        const physicalInventory = await verifyMaintenance(maintenanceNonce);
+        validatePhysicalInventory(physicalInventory, options.expectedStackId, inventory.oauthKeys);
+        const maintainedInventory = remoteInventory();
+        validateResetInventory(maintainedInventory, options.expectedStackId);
+        if (inventoryDigest(maintainedInventory) !== inventoryDigest(inventory)) {
+          throw new Error("production inventory changed after maintenance activation");
+        }
+        if (options.backupDir) {
+          const d1 = executeD1Backups(options.backupDir);
+          const r2 = executeR2Backups({ objectKeys: physicalInventory.r2Keys }, options.backupDir);
+          writeFileSync(resolve(options.backupDir, "backup-manifest.json"), `${JSON.stringify({ d1, r2 }, null, 2)}\n`, { flag: "wx" });
+        }
+        for (const command of resourceDeletePlan(physicalInventory)) run(command);
+        const emptyPhysicalInventory = await maintenanceInventory(maintenanceNonce);
+        if (emptyPhysicalInventory.r2Keys.length > 0 || emptyPhysicalInventory.kvKeys.length > 0) {
+          throw new Error("physical R2 or KV state remains after reset");
+        }
+        const bootstrap = rebuildCurrentSchemas(inventory);
+        verifyBootstrap(bootstrap, options.expectedStackId);
+        console.log(JSON.stringify({
+          resetVerified: true,
+          bootstrapVerified: true,
+          accountId: bootstrap.accountId,
+          maintenanceActive: true,
+        }));
       }
-      const bootstrap = rebuildCurrentSchemas(inventory);
-      verifyBootstrap(bootstrap, options.expectedStackId);
-      console.log(JSON.stringify({
-        resetVerified: true,
-        bootstrapVerified: true,
-        accountId: bootstrap.accountId,
-        maintenanceActive: true,
-      }));
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
     }
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exitCode = 1;
-  }
   };
   await main();
 }

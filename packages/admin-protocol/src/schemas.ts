@@ -11,6 +11,7 @@ import type {
   AccountSummary,
   App,
   AppControlAuditEvent,
+  AppUsage,
   AppMemberInvitation,
   AppMembership,
   AppOAuthIssuer,
@@ -157,6 +158,21 @@ export const AppSchema: z.ZodType<App> = z.object({
   createdAt: TimestampSchema.describe("Time at which UniCAS created the App."),
   revision: RevisionSchema.describe("Current App revision used for optimistic concurrency."),
 }).readonly().meta({ id: "App" });
+
+export const AppUsageSchema: z.ZodType<AppUsage> = z.object({
+  nodeCount: z.number().int().nonnegative()
+    .describe("Node metadata rows owned by all Spaces in the App."),
+  readyContentBytes: z.number().int().nonnegative()
+    .describe("Logical bytes attributed to App-owned node rows."),
+  readyStoredBytes: z.number().int().nonnegative()
+    .describe("Physical bytes from the latest verified canonical-object observations."),
+  reservedBytes: z.number().int().nonnegative()
+    .describe("Known bytes reserved by incomplete uploads across the App."),
+  notReadyNodeCount: z.number().int().nonnegative()
+    .describe("Nodes whose latest completed canonical-object observation found no object."),
+  leasedNodeCount: z.number().int().nonnegative()
+    .describe("Nodes carrying a nonzero lease expiry marker."),
+}).strict().readonly().meta({ id: "AppUsage" });
 
 export const AppMembershipSchema: z.ZodType<AppMembership> = z.object({
   appId: AppIdSchema.describe("App whose equal administrator authority this membership grants."),
