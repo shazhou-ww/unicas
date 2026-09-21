@@ -11,19 +11,20 @@ claim from `ver: 2` to `ver: 3`. Version 3 replaces the three broad Space
 permissions with six exact operation authorities:
 
 ```text
-spaces:{spaceId}:cas:nodes:read
-spaces:{spaceId}:cas:nodes:lease
-spaces:{spaceId}:cas:root-refs:read
-spaces:{spaceId}:cas:root-refs:update
-spaces:{spaceId}:cas:usage:read
-spaces:{spaceId}:cas:gc:execute
+cas:nodes:read
+cas:nodes:lease
+cas:root-refs:read
+cas:root-refs:update
+cas:usage:read
+cas:gc:execute
 ```
 
-The `spaceId` segment remains canonically percent encoded. Permissions are
-matched by exact string equality and never imply one another. A capability can
-carry several authorities, but every route checks only its own required
-authority. Root Ref routes additionally require the existing signed,
-validated `refDomain` claim.
+The required signed `spaceId` claim is the capability's sole Space scope and
+must match the route before permission evaluation. Permissions contain no
+resource ID, are matched by exact string equality, and never imply one
+another. A capability can carry several authorities, but every route checks
+only its own required authority. Root Ref routes additionally require the
+existing signed, validated `refDomain` claim.
 
 Version 2 broad permissions remain valid only behind an explicit, absolute
 issuance cutoff during rollout. Version 3 never accepts the old strings, the
@@ -64,16 +65,16 @@ vocabulary:
   "jti": "capability-id",
   "spaceId": "SPACE_ID",
   "permissions": [
-    "spaces:SPACE_ID:cas:nodes:read",
-    "spaces:SPACE_ID:cas:nodes:lease"
+    "cas:nodes:read",
+    "cas:nodes:lease"
   ]
 }
 ```
 
 These are decoded claims, not a bearer token or signing fixture. The App's
 configured issuer remains the authority. The verifier continues to derive the
-App from that verified issuer and to match issuer App, claim Space, permission
-Space, and route resources.
+App from that verified issuer and to match issuer App and claim Space to route
+resources before checking the exact operation permission.
 
 `SpaceCapabilityVersion` becomes `3`. `SpaceCapabilityClaims` describes only
 the current version. Stack/Tenant `CapabilityVersion` remains `1` and its
@@ -82,25 +83,31 @@ change.
 
 ## Permission grammar
 
-The current resource prefix is retained and expanded from
-`spaces:{spaceId}:cas:{broadAction}` to
-`spaces:{spaceId}:cas:{resource}:{action}`. Keeping the `cas` namespace makes
-these authorities visibly distinct from any future non-CAS Space capability,
-while the resource and action segments state the operation boundary directly.
+Version 3 uses fixed `cas:{resource}:{action}` strings. A Space capability
+contains exactly one required signed `spaceId`, so repeating that ID inside
+each permission would create two representations of the same scope without
+adding authority. The App is likewise derived from the verified issuer rather
+than repeated in permissions. Permission strings are meaningful only as part
+of the signed single-Space claim and are not independently transferable
+capabilities.
+
+Keeping the `cas` namespace makes these authorities visibly distinct from any
+future non-CAS Space capability, while the resource and action segments state
+the operation boundary directly.
 
 | Authority | Constructor | Parsed kind |
 | --- | --- | --- |
-| `spaces:{spaceId}:cas:nodes:read` | `spaceNodeReadPermission(spaceId)` | `cas:nodes:read` |
-| `spaces:{spaceId}:cas:nodes:lease` | `spaceNodeLeasePermission(spaceId)` | `cas:nodes:lease` |
-| `spaces:{spaceId}:cas:root-refs:read` | `spaceRootRefsReadPermission(spaceId)` | `cas:root-refs:read` |
-| `spaces:{spaceId}:cas:root-refs:update` | `spaceRootRefsUpdatePermission(spaceId)` | `cas:root-refs:update` |
-| `spaces:{spaceId}:cas:usage:read` | `spaceUsageReadPermission(spaceId)` | `cas:usage:read` |
-| `spaces:{spaceId}:cas:gc:execute` | `spaceGcExecutePermission(spaceId)` | `cas:gc:execute` |
+| `cas:nodes:read` | `spaceNodeReadPermission()` | `cas:nodes:read` |
+| `cas:nodes:lease` | `spaceNodeLeasePermission()` | `cas:nodes:lease` |
+| `cas:root-refs:read` | `spaceRootRefsReadPermission()` | `cas:root-refs:read` |
+| `cas:root-refs:update` | `spaceRootRefsUpdatePermission()` | `cas:root-refs:update` |
+| `cas:usage:read` | `spaceUsageReadPermission()` | `cas:usage:read` |
+| `cas:gc:execute` | `spaceGcExecutePermission()` | `cas:gc:execute` |
 
-`parseSpaceCapabilityPermission` parses only these current five-segment
-strings. It rejects unknown resource/action pairs, empty or noncanonical Space
-segments, the three broad v2 strings, and all v1 `tenants:` strings. The old
-`spaceCasReadPermission`, `spaceCasWritePermission`, and
+`parseSpaceCapabilityPermission` parses only these current three-segment
+strings. It rejects unknown resource/action pairs, all `spaces:`-scoped
+strings including the three broad v2 permissions, and all v1 `tenants:`
+strings. The old `spaceCasReadPermission`, `spaceCasWritePermission`, and
 `spaceCasManagePermission` exports are removed rather than retained as
 issuance aliases.
 
@@ -136,6 +143,17 @@ Authorization keeps the existing order:
 4. require the route's exact version-specific permission; and
 5. for either Root Ref route, validate the signed `refDomain`.
 
+For v3, the complete Space authorization predicate is the conjunction of the
+independent scope and operation checks:
+
+```text
+claims.spaceId === route.spaceId
+permissions includes requiredPermission(route.operation)
+```
+
+Neither check substitutes for the other, and a capability cannot name more
+than one Space.
+
 A valid v3 token missing the exact operation permission receives HTTP 403 with
 `error: "insufficient_permission"`. The response may include the existing safe
 diagnostic message naming the required permission. A correctly permissioned
@@ -150,7 +168,7 @@ Implementation will give v2 Space authorization its own response mapper:
 ```json
 {
   "error": "insufficient_permission",
-  "message": "CAS updateRootRefs requires spaces:SPACE_ID:cas:root-refs:update"
+  "message": "CAS updateRootRefs requires cas:root-refs:update"
 }
 ```
 
@@ -208,9 +226,11 @@ compatibility mode.
 
 With the setting present, the verifier accepts a v2 token only when
 `iat < cutoff`; ordinary signature, audience, scope, `nbf`, `exp`, and the
-App's configured maximum-lifetime checks still apply. A v2 token issued before
-the cutoff can therefore live only until its signed expiry. Backdating cannot
-extend acceptance beyond the issuer-specific lifetime bound.
+App's configured maximum-lifetime checks still apply. Its legacy scoped
+permission must also encode the same Space as the signed `spaceId` claim. A v2
+token issued before the cutoff can therefore live only until its signed
+expiry. Backdating cannot extend acceptance beyond the issuer-specific
+lifetime bound.
 
 Rollout order:
 
@@ -252,8 +272,8 @@ data-plane authorities issued by the App authority.
 
 ## Validation plan
 
-Protocol tests will prove all six canonical encodings and parser results,
-reject malformed pairings and old broad strings in the v3 parser, and keep the
+Protocol tests will prove all six fixed strings and parser results, reject
+malformed pairings and scoped or broad strings in the v3 parser, and keep the
 v1 parser behavior unchanged.
 
 Service tests will use a table covering every route with its one expected v3
@@ -286,6 +306,8 @@ interface and architecture decisions:
 
 - capability `ver: 3` on the unchanged Space HTTP v2 API;
 - the six exact wire strings and constructor names above;
+- the signed `spaceId` claim as the sole Space scope, without duplicating it in
+  v3 permission strings;
 - no permission inheritance or public legacy aliases;
 - `refDomain` as an additional signed requirement for both Root Ref routes;
 - v3-only default verification with a bounded absolute v2 issuance cutoff;

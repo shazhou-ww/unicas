@@ -37,7 +37,8 @@ protocol and lease behavior rather than duplicating or reverting its work.
 
 - Define an App/Space capability vocabulary with independent authorities for
   node reads, node lease/upload, Root Ref listing, Root Ref updates, usage
-  inspection, and garbage collection.
+  inspection, and garbage collection. Keep the required signed `spaceId` claim
+  as the sole Space scope; do not duplicate it in v3 permission strings.
 - Preserve one authority for content and metadata reads and one authority for
   the inseparable lease/direct-upload workflow; do not split individual HTTP
   steps that cannot be completed independently.
@@ -79,9 +80,9 @@ protocol and lease behavior rather than duplicating or reverting its work.
 
 ## Acceptance criteria
 
-- [ ] The published Space capability contract defines distinct, canonically
-      encoded permissions for node read, node lease/upload, Root Ref read,
-      Root Ref update, usage read, and GC execution.
+- [ ] The published Space capability contract defines distinct canonical
+  permissions for node read, node lease/upload, Root Ref read, Root Ref
+  update, usage read, and GC execution.
 - [ ] Every public v2 Space route has one documented and server-enforced exact
       permission; no operation is authorized by category inheritance or a
       different operation's permission.
@@ -114,8 +115,9 @@ protocol and lease behavior rather than duplicating or reverting its work.
 - Preserve the administrator and Space data-plane credential boundary.
 - Treat the verified issuer as the App authority and never trust permissions,
   Space identity, App identity, or `refDomain` from an unsigned request field.
-- Keep every permission scoped to the exact canonically encoded `spaceId`, and
-  continue matching issuer-derived App, claim Space, and route resources.
+- Keep every capability scoped to one exact signed `spaceId`; do not duplicate
+  `spaceId` in v3 permission strings, and continue matching issuer-derived
+  App, claim Space, and route resources.
 - Do not retain `cas:write` as an indefinite compatibility alias that grants
   both lease and Root Ref update after the migration window.
 - Do not infer backend origin from a bearer token. Backend-only-by-default is
