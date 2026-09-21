@@ -1,6 +1,7 @@
 # Interface review
 
-Status: Pending requesting-user approval.
+Status: Console UI approved by the requesting user on 2026-09-21; API and
+metric contract pending approval.
 
 ## Decision requested
 
