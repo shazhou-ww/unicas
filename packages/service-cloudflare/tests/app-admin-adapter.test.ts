@@ -58,6 +58,7 @@ describe("App admin physical compatibility adapter", () => {
   });
 
   test.each([
+    ["getUsage", "GET", "/admin/apps/app-1/usage"],
     ["getOAuthIssuer", "GET", "/admin/apps/app-1/oauth-issuer"],
     ["createMemberInvitation", "POST", "/admin/apps/app-1/member-invitations"],
     ["listMemberInvitations", "GET", "/admin/apps/app-1/member-invitations"],

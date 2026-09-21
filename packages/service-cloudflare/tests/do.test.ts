@@ -981,6 +981,19 @@ describe("CasDurableObject (tenant DO) — node storage operations", () => {
       notReadyNodeCount: 0,
       leasedNodeCount: 2,
     });
+    expect(await db!.prepare(
+      `SELECT node_count, ready_content_bytes, ready_stored_bytes, reserved_bytes,
+         not_ready_node_count, leased_node_count, unobserved_node_count
+       FROM cas_space_usage WHERE app_id = ? AND space_id = ?`,
+    ).bind(STACK, TENANT).first()).toEqual({
+      node_count: usageBody.nodeCount,
+      ready_content_bytes: usageBody.readyContentBytes,
+      ready_stored_bytes: usageBody.readyStoredBytes,
+      reserved_bytes: usageBody.reservedBytes,
+      not_ready_node_count: usageBody.notReadyNodeCount,
+      leased_node_count: usageBody.leasedNodeCount,
+      unobserved_node_count: 0,
+    });
   });
 
   test("canonical lease rejects digest mismatches and missing children", async () => {

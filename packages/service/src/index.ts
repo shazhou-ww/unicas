@@ -153,6 +153,14 @@ export type {
   NodeUsageRepository,
   NodeUsageScope,
 } from "./node-usage.js";
+export {
+  AppUsageUnavailableError,
+  readAppUsage,
+} from "./app-usage.js";
+export type {
+  AppUsageProjection,
+  AppUsageRepository,
+} from "./app-usage.js";
 export { NodeOpError, NodeOpErrorCodes } from "./node-errors.js";
 export type { NodeOpErrorCode } from "./node-errors.js";
 export {

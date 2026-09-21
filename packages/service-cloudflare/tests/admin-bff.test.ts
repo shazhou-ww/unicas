@@ -12,6 +12,8 @@ import type {
   EmailChallengeRepository,
   AccountRecord,
   AccountRepository,
+  AppUsageProjection,
+  AppUsageRepository,
   OAuthDiscoveryPort,
   ExternalIdentityRecord,
   PeopleRepository,
@@ -832,6 +834,7 @@ async function createBff(
   peopleRepository?: PeopleRepository,
   accountRepository?: AccountRepository,
   oauthDiscovery?: OAuthDiscoveryPort,
+  appUsageRepository?: AppUsageRepository,
 ): Promise<(request: Request) => Promise<Response>> {
   const providerFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? new URL(input) : input instanceof URL ? input : new URL(input.url);
@@ -889,6 +892,7 @@ async function createBff(
     platformInvitationRepository,
     peopleRepository,
     accountRepository: accountRepository ?? memoryAccountRepository(accountPlatform, "google-user-123"),
+    appUsageRepository,
     oauthDiscovery,
   });
 }
@@ -2214,6 +2218,73 @@ describe("cas-admin-webui BFF", () => {
     expect(response.headers.get("Cache-Control")).toBe("no-store, no-transform");
     expect(await response.text()).toBe("");
     expect(fakeStacks.get(appId)?.status).toBe("suspended");
+  });
+
+  test("App usage requires membership, remains readable when suspended, and fails closed while reconciling", async () => {
+    const provider = await createMockProvider();
+    const platform = new MemoryPlatformAccessRepository();
+    platform.grant(ISSUER, "google-user-123");
+    const accounts = memoryAccountRepository(platform, "google-user-123");
+    let projection: AppUsageProjection = {
+      nodeCount: 3,
+      readyContentBytes: 30,
+      readyStoredBytes: 24,
+      reservedBytes: 5,
+      notReadyNodeCount: 1,
+      leasedNodeCount: 2,
+      unobservedNodeCount: 0,
+    };
+    const readAppUsage = vi.fn(async () => projection);
+    const bff = await createBff(
+      provider,
+      undefined,
+      {},
+      platform,
+      fakeControlPlane(),
+      undefined,
+      undefined,
+      undefined,
+      accounts,
+      undefined,
+      { readAppUsage },
+    );
+    const { cookie, csrf } = await signIn(bff, provider);
+    const appId = await createStack(bff, cookie, csrf, "Usage App");
+
+    const active = await authRequest(bff, `/admin/apps/${appId}/usage`, cookie);
+    expect(active.status).toBe(200);
+    expect(active.headers.get("Cache-Control")).toBe("no-store");
+    expect(await active.json()).toEqual({
+      nodeCount: 3,
+      readyContentBytes: 30,
+      readyStoredBytes: 24,
+      reservedBytes: 5,
+      notReadyNodeCount: 1,
+      leasedNodeCount: 2,
+    });
+
+    const denied = await authRequest(bff, "/admin/apps/not-a-member/usage", cookie);
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toEqual({ error: "APP_MEMBERSHIP_REQUIRED" });
+    expect(readAppUsage).toHaveBeenCalledTimes(1);
+
+    await authRequest(bff, `/admin/apps/${appId}`, cookie, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "If-Match": '"1"', "X-CSRF-Token": csrf },
+      body: JSON.stringify({ status: "suspended" }),
+    });
+    expect((await authRequest(bff, `/admin/apps/${appId}/usage`, cookie)).status).toBe(200);
+
+    projection = { ...projection, unobservedNodeCount: 1 };
+    const reconciling = await authRequest(bff, `/admin/apps/${appId}/usage`, cookie);
+    expect(reconciling.status).toBe(503);
+    expect(await reconciling.json()).toMatchObject({ error: "SERVICE_UNAVAILABLE" });
+
+    readAppUsage.mockRejectedValueOnce(new Error("D1 unavailable"));
+    projection = { ...projection, unobservedNodeCount: 0 };
+    const unavailable = await authRequest(bff, `/admin/apps/${appId}/usage`, cookie);
+    expect(unavailable.status).toBe(503);
+    expect(await unavailable.json()).toMatchObject({ error: "SERVICE_UNAVAILABLE" });
   });
 
   test("email-bound App invitation grants only exact acceptance, then rotates to a full membership session", async () => {

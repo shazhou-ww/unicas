@@ -199,8 +199,8 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
       expires_at: number;
       cleanup_at: number;
       rejection_code: LeaseDrivenUploadRecord["rejection"] extends infer R
-        ? R extends { code: infer C } ? C : never
-        : never;
+      ? R extends { code: infer C } ? C : never
+      : never;
       rejection_message: string | null;
       stored_bytes: number | null;
       content_size: number | null;
@@ -458,8 +458,19 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
   async commitUploadedCanonicalNode(scope: NodeLeaseScope, plan: UploadedCanonicalNodeCommit): Promise<void> {
     if (plan.kind === "existing") {
       await timeOperation(this.timing, "cas_d1_commit", () => this.db.batch([
-        this.db.prepare("UPDATE cas_nodes SET lease_started_at = ?, lease_expires_at = ? WHERE app_id = ? AND space_id = ? AND hash = ?")
-          .bind(plan.leaseStartedAt, plan.leaseExpiresAt, scope.stackId, scope.tenantId, plan.hash),
+        this.db.prepare(
+          `UPDATE cas_nodes SET lease_started_at = ?, lease_expires_at = ?,
+             canonical_stored_bytes = ?, canonical_observed_at = ?
+           WHERE app_id = ? AND space_id = ? AND hash = ?`,
+        ).bind(
+          plan.leaseStartedAt,
+          plan.leaseExpiresAt,
+          plan.storedBytes,
+          Date.now(),
+          scope.stackId,
+          scope.tenantId,
+          plan.hash,
+        ),
         this.db.prepare("DELETE FROM cas_upload_reservations WHERE app_id = ? AND space_id = ? AND hash = ?")
           .bind(scope.stackId, scope.tenantId, plan.hash),
         this.db.prepare("DELETE FROM cas_direct_upload_sessions WHERE app_id = ? AND space_id = ? AND hash = ?")
@@ -488,9 +499,21 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
     const batch: D1PreparedStatement[] = [];
     if (first) batch.push(first);
     batch.push(this.db.prepare(
-      `INSERT INTO cas_nodes (app_id, space_id, hash, content_size, content_type, lease_started_at, lease_expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(scope.stackId, scope.tenantId, plan.hash, plan.contentSize, plan.contentType, plan.leaseStartedAt, plan.leaseExpiresAt));
+      `INSERT INTO cas_nodes (
+         app_id, space_id, hash, content_size, content_type, lease_started_at,
+         lease_expires_at, canonical_stored_bytes, canonical_observed_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      scope.stackId,
+      scope.tenantId,
+      plan.hash,
+      plan.contentSize,
+      plan.contentType,
+      plan.leaseStartedAt,
+      plan.leaseExpiresAt,
+      plan.storedBytes,
+      Date.now(),
+    ));
     for (let index = 0; index < plan.refs.length; index++) {
       batch.push(
         this.db.prepare("INSERT INTO cas_edges (app_id, space_id, parent_hash, ordinal, child_hash) VALUES (?, ?, ?, ?, ?)")

@@ -123,6 +123,15 @@ export interface App {
   readonly revision: number;
 }
 
+export interface AppUsage {
+  readonly nodeCount: number;
+  readonly readyContentBytes: number;
+  readonly readyStoredBytes: number;
+  readonly reservedBytes: number;
+  readonly notReadyNodeCount: number;
+  readonly leasedNodeCount: number;
+}
+
 export interface AppMembership {
   readonly appId: AppId;
   readonly account: AccountSummary;

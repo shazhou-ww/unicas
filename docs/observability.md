@@ -55,6 +55,10 @@ The current structured events are:
   Stack/Tenant capability decisions. Both payloads include the decision kind.
 - `admin_oidc_callback_failed`: administrator OIDC callback failures with a
   bounded reason such as `state_mismatch` or `id_token_invalid`.
+- `cas_usage_reconciliation`: bounded App usage maintenance counts (`examined`,
+  `observed`, `missing`, `failed`, and whether the pass served backfill). It
+  also reports whether one oldest Space summary was repaired. It contains no
+  App ID, Space ID, node hash, or usage amount.
 
 Unexpected Space authorization, service actor, Durable Object, administrator
 BFF, and R2 upload failures are written to stderr with an exception. These are

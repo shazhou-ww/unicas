@@ -307,6 +307,29 @@ The existing authorization event stream records suspension denials without
 recording bearer capabilities. Frozen v1 issuer resolution also refuses a
 suspended owning App so it cannot bypass this operational stop.
 
+### Inspect App usage
+
+The Console App Overview reads current aggregate CAS usage through:
+
+```http
+GET /admin/apps/{appId}/usage
+Cookie: cas_admin_session=<HttpOnly OIDC-backed session>
+```
+
+Current App membership is required; no Space capability is used. Suspended
+Apps remain inspectable. The response reports node count, logical and physical
+ready bytes, upload reservations, missing-content nodes, and leased nodes
+summed across independently accounted Spaces.
+
+The read queries `cas_space_usage`, one mutable projection row per usage-
+bearing Space, and never scans App node rows or R2. Node and reservation writes
+maintain that row transactionally. Scheduled maintenance emits
+`cas_usage_reconciliation` with only examined/observed/missing/failure counts
+while it backfills and rotates through canonical-object observations. A `503
+SERVICE_UNAVAILABLE` means at least one node has not completed observation or
+the accounting store is unavailable; retry after reconciliation advances. Do
+not treat it as zero usage.
+
 ### Rollback
 
 Wrangler retains prior versions. Inspect each unit that may have changed and

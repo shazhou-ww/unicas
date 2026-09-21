@@ -759,6 +759,7 @@ describe("frozen v1 inline-upload lease kernel", () => {
       kind: "new",
       hash,
       contentSize: content.length,
+      storedBytes: canonical.length,
       contentType,
       refs: [child],
       leaseStartedAt: 100,
@@ -810,6 +811,32 @@ describe("frozen v1 inline-upload lease kernel", () => {
 });
 
 describe("finalizeCanonicalNodeLease parsed-metadata path", () => {
+  test("refreshes the physical observation when a concurrent node row already exists", async () => {
+    const repository = new MemoryNodeLeaseRepository();
+    repository.canonicalLease = {
+      contentSize: 10,
+      contentType: "text/plain",
+      leaseStartedAt: 1,
+      leaseExpiresAt: 2,
+    };
+
+    await finalizeCanonicalNodeLease({
+      repository,
+      scope: SCOPE,
+      plan: { hash: "a".repeat(64), storedBytes: 100, leaseDurationMs: DURATION },
+      parsed: { contentSize: 10, contentType: "text/plain", refs: [] },
+      now: () => 100,
+    });
+
+    expect(repository.committed).toEqual({
+      kind: "existing",
+      hash: "a".repeat(64),
+      storedBytes: 100,
+      leaseStartedAt: 100,
+      leaseExpiresAt: 60_100,
+    });
+  });
+
   test("commits parsed metadata without the R2 read-back", async () => {
     const child = "b".repeat(64);
     const repository = new MemoryNodeLeaseRepository();
@@ -828,6 +855,7 @@ describe("finalizeCanonicalNodeLease parsed-metadata path", () => {
       kind: "new",
       hash: "a".repeat(64),
       contentSize: 10,
+      storedBytes: 100,
       contentType: "text/plain",
       refs: [child],
       leaseStartedAt: 100,

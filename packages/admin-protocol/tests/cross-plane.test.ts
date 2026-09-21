@@ -36,6 +36,7 @@ describe("cross-plane separation", () => {
       appAdminRoutes.me(),
       appAdminRoutes.apps(),
       appAdminRoutes.app({ appId: "a" }),
+      appAdminRoutes.usage({ appId: "a" }),
       appAdminRoutes.members({ appId: "a" }),
       appAdminRoutes.rootDomainRefs({ appId: "a", refDomain: "doc" }),
       appAdminRoutes.rootDomainEvents({ appId: "a", refDomain: "doc" }),

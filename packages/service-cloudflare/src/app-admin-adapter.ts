@@ -31,6 +31,8 @@ export function transformAppAdminResponse(route: AppAdminRoute, body: unknown): 
       return mapCreateApp(body);
     case "getApp":
       return mapApp(body);
+    case "getUsage":
+      return body;
     case "patchApp":
     case "listMemberInvitations":
     case "revokeMemberInvitation":

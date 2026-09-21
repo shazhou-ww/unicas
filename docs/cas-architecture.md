@@ -53,6 +53,8 @@ audit dimension.
 - Every public data-plane route carries both `appId` and `spaceId`.
 - Identical content in different App-and-Space partitions is stored independently.
 - Storage usage and GC are calculated per App-and-Space partition.
+- App administrators can read a derived App total through the control plane;
+  this aggregation does not expose Space identity or grant data-plane access.
 - A configured trusted JWT issuer maps to one stable App; verified Space claims,
   permissions, and path Space must agree before storage access.
 
@@ -524,6 +526,27 @@ Authorization: Bearer <CAS capability>
 
 Gateway exposure remains policy-owned. GC is advisory; triggering it does not
 guarantee that every eligible node is removed in one call.
+
+App administrators can read the same six accounting dimensions aggregated
+across the App without a Space capability:
+
+```http
+GET /admin/apps/{appId}/usage
+Cookie: cas_admin_session=<HttpOnly OIDC-backed session>
+```
+
+The read is authorized by App membership and remains available while the App
+is suspended. Each usage-bearing Space owns one mutable D1 summary row that is
+updated transactionally with node, lease, storage-observation, and upload-
+reservation changes. The App query sums only those rows, so its work scales
+with Space count rather than node count and performs no R2 or internal Space
+requests. Identical hashes in different Spaces count independently.
+
+Physical bytes and readiness reflect the latest completed service observation
+of each canonical R2 object. A bounded scheduled reconciler backfills legacy
+rows and revisits the oldest observations. Until every node in the requested
+App has a completed observation, the Admin read fails with `503
+SERVICE_UNAVAILABLE` instead of returning a partial physical total.
 
 ### 11.6 Root Refs
 

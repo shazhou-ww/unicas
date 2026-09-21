@@ -6,6 +6,7 @@ import type {
   AppMemberInvitation,
   AppMembership,
   AppOAuthIssuer,
+  AppUsage,
   Principal,
   Profile,
   SpaceRootRefBalance,
@@ -16,6 +17,7 @@ import {
   AppMembershipSchema,
   AppOAuthIssuerSchema,
   AppSchema,
+  AppUsageSchema,
   PrincipalSchema,
   ProfileSchema,
   PatchAppRequestSchema,
@@ -108,14 +110,30 @@ describe("CAS admin schemas", () => {
 
     type Client = ContractRouterClient<typeof appAdminApiContract>;
     type AppResult = Awaited<ReturnType<Client["apps"]["get"]>>;
+    type UsageResult = Awaited<ReturnType<Client["apps"]["getUsage"]>>;
     type MeResult = Awaited<ReturnType<Client["identity"]["me"]>>;
     expectTypeOf<AppResult>().toEqualTypeOf<App>();
+    expectTypeOf<UsageResult>().toEqualTypeOf<AppUsage>();
     expectTypeOf<MeResult["account"]>().toEqualTypeOf<import("../src/index.js").AccountSelf>();
     expectTypeOf<MeResult["authenticatedIdentity"]>().toEqualTypeOf<import("../src/index.js").ExternalIdentitySummary>();
     expectTypeOf<keyof MeResult>().toEqualTypeOf<"account" | "authenticatedIdentity" | "memberships">();
 
-    expect(Object.keys(appAdminApiContract.apps)).toHaveLength(4);
+    expect(Object.keys(appAdminApiContract.apps)).toHaveLength(5);
     expect(Object.keys(appAdminApiContract.members)).toHaveLength(7);
+  });
+
+  test("validates nonnegative aggregate App usage", () => {
+    const usage: AppUsage = {
+      nodeCount: 3,
+      readyContentBytes: 30,
+      readyStoredBytes: 24,
+      reservedBytes: 5,
+      notReadyNodeCount: 1,
+      leasedNodeCount: 2,
+    };
+    expect(AppUsageSchema.safeParse(usage).success).toBe(true);
+    expect(AppUsageSchema.safeParse({ ...usage, readyStoredBytes: -1 }).success).toBe(false);
+    expect(AppUsageSchema.safeParse({ ...usage, spaceId: "space-1" }).success).toBe(false);
   });
 
   test("defines issuer and audit resources for the complete App contract", () => {
@@ -181,7 +199,7 @@ describe("CAS admin schemas", () => {
     expect(SpaceRootRefBalanceSchema.safeParse(balance).success).toBe(true);
     const operationCount = Object.values(appAdminApiContract)
       .reduce((count, group) => count + Object.keys(group).length, 0);
-    expect(operationCount).toBe(34);
+    expect(operationCount).toBe(35);
   });
 });
 
@@ -190,8 +208,8 @@ describe("App admin OpenAPI", () => {
     const document = await generateAppAdminOpenApiDocument();
     const allOperations = operations(document);
     const serialized = JSON.stringify(document);
-    expect(Object.keys(document.paths ?? {})).toHaveLength(26);
-    expect(allOperations).toHaveLength(34);
+    expect(Object.keys(document.paths ?? {})).toHaveLength(27);
+    expect(allOperations).toHaveLength(35);
     expect(document.paths?.["/admin/account"]?.get?.operationId).toBe("getCurrentAccount");
     expect(document.paths?.["/admin/account/profile"]?.patch?.operationId).toBe("patchCurrentAccountProfile");
     expect(document.paths?.["/admin/account/identities"]?.get?.operationId).toBe("listCurrentAccountIdentities");
@@ -222,6 +240,7 @@ describe("App admin OpenAPI", () => {
     expect(revoke?.responses?.["204"]).not.toHaveProperty("content");
     expect(revoke?.responses).toHaveProperty("412");
     expect(document.paths?.["/admin/apps/{appId}"]?.get).toHaveProperty("operationId", "getApp");
+    expect(document.paths?.["/admin/apps/{appId}/usage"]?.get).toHaveProperty("operationId", "getAppUsage");
     const patch = document.paths?.["/admin/apps/{appId}"]?.patch;
     expect(patch?.responses?.["204"]).toHaveProperty("headers.ETag.required", true);
     expect(patch?.responses?.["204"]).not.toHaveProperty("content");

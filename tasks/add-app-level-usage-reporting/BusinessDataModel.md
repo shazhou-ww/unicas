@@ -1,6 +1,6 @@
 # Business and data model review
 
-Status: Pending requesting-user approval.
+Status: Approved by the requesting user on 2026-09-21.
 
 ## Decision requested
 
@@ -140,8 +140,8 @@ Space summary delta.
 
 The App endpoint returns `503 SERVICE_UNAVAILABLE` while any Space summary for
 that App has unobserved nodes. Empty Apps remain immediately readable as zero.
-The reconciler is idempotent, uses keyset pagination, and may safely resume
-after interruption. Periodic bounded repair recalculates one Space summary
+The reconciler is idempotent, uses an indexed bounded oldest-first scan, and
+may safely resume after interruption. Periodic bounded repair recalculates one Space summary
 from its node and reservation source rows, correcting any projection drift
 without coordinating with another Space. Rollback ignores the additive table
 and columns; no destructive data migration is required.
