@@ -1,5 +1,3 @@
-import { spawnSync } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { importPKCS8, SignJWT } from "jose";
@@ -10,10 +8,10 @@ import {
   SpaceCapabilityVersion,
   spaceRootRefsReadPermission,
 } from "@unicas/tenant-protocol";
+import { executeD1 } from "./bootstrap.mjs";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const CONFIG = resolve(ROOT, ".wrangler/spaces/wrangler.production.json");
-const QUERY_FILE = resolve(ROOT, ".wrangler/spaces/preflight.sql");
 
 export function smokePreflightQuery(principalId) {
   const value = `'${principalId.replaceAll("'", "''")}'`;
@@ -91,21 +89,7 @@ export async function runSpacesPreflight(environment = process.env, execute = ex
 }
 
 async function executeQuery(query) {
-  mkdirSync(resolve(ROOT, ".wrangler/spaces"), { recursive: true });
-  writeFileSync(QUERY_FILE, `${query}\n`, { mode: 0o600 });
-  try {
-    const executable = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-    const result = spawnSync(executable, [
-      "--filter", "@unicas/service-cloudflare", "exec", "wrangler", "d1", "execute", "SPACES_DB",
-      "--remote", "--config", CONFIG, "--file", QUERY_FILE, "--json",
-    ], { cwd: ROOT, encoding: "utf8", shell: false });
-    if (result.error || result.status !== 0) throw new Error("smoke_catalog_preflight_failed");
-    const parsed = JSON.parse(result.stdout);
-    if (!Array.isArray(parsed)) throw new Error("smoke_catalog_preflight_invalid");
-    return parsed.flatMap((entry) => Array.isArray(entry?.results) ? entry.results : []);
-  } finally {
-    rmSync(QUERY_FILE, { force: true });
-  }
+  return executeD1({ wranglerConfig: CONFIG }, query);
 }
 
 function required(value, name) {
