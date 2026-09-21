@@ -54,9 +54,9 @@ tasks:
     createdAt: "2026-09-15T14:26:52Z"
     updatedAt: "2026-09-19T05:12:49Z"
   enforce-terminal-task-artifact-consistency:
-    state: backlog
+    state: abandoned
     createdAt: "2026-09-19T14:25:40Z"
-    updatedAt: "2026-09-19T14:25:40Z"
+    updatedAt: "2026-09-21T01:16:12Z"
   extract-standalone-repository:
     state: completed
     createdAt: "2026-09-14T09:35:30Z"
