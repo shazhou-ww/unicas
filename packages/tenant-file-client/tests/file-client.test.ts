@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import type { TenantCasClient } from "@unicas/tenant-client";
+import { createCasBlobClient } from "@unicas/tenant-blob-client";
+import type { SpaceCasClient } from "@unicas/tenant-client";
 import type { TenantFileRootCatalog, TenantFileRootInfo } from "../src/index.js";
 
 const state = vi.hoisted(() => ({
@@ -65,7 +66,7 @@ function catalogFixture(): TenantFileRootCatalog & { readonly records: Map<strin
   };
 }
 
-function casFixture(): TenantCasClient {
+function casFixture(): SpaceCasClient {
   return {
     async readMetadata(hash) {
       const manifest = state.manifests.get(hash)!;
@@ -74,7 +75,7 @@ function casFixture(): TenantCasClient {
     async readContent(hash) {
       return new Blob([state.manifests.get(hash)!.content]).stream();
     },
-  } as TenantCasClient;
+  } as SpaceCasClient;
 }
 
 beforeEach(() => {
@@ -132,5 +133,13 @@ describe("tenant file system", () => {
     expect(root.dirty).toBe(false);
     expect(root.info.name).toBe("Files");
     await expect(root.stat("/temporary")).rejects.toThrow("Path not found");
+  });
+
+  test("passes bounded blob options to the public blob client", () => {
+    const cas = casFixture();
+    const blobOptions = { chunkBytes: 1024, indexFanout: 4 };
+    createTenantFileSystem({ cas, catalog: catalogFixture(), blobOptions });
+
+    expect(vi.mocked(createCasBlobClient)).toHaveBeenLastCalledWith(cas, blobOptions);
   });
 });

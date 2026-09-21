@@ -12,7 +12,7 @@ import type { D1Database } from "@cloudflare/workers-types";
 
 const TABLE_MIGRATIONS = [
   // Authoritative node rows: (appId, spaceId, hash).
-  "CREATE TABLE IF NOT EXISTS cas_nodes (app_id TEXT NOT NULL, space_id TEXT NOT NULL, hash TEXT NOT NULL, content_size INTEGER NOT NULL, content_type TEXT NOT NULL, lease_started_at INTEGER NOT NULL DEFAULT 0, lease_expires_at INTEGER NOT NULL DEFAULT 0, child_ref_count INTEGER NOT NULL DEFAULT 0 CHECK (child_ref_count >= 0), root_ref_count INTEGER NOT NULL DEFAULT 0 CHECK (root_ref_count >= 0), PRIMARY KEY (app_id, space_id, hash))",
+  "CREATE TABLE IF NOT EXISTS cas_nodes (app_id TEXT NOT NULL, space_id TEXT NOT NULL, hash TEXT NOT NULL, content_size INTEGER NOT NULL, content_type TEXT NOT NULL, lease_started_at INTEGER NOT NULL DEFAULT 0, lease_expires_at INTEGER NOT NULL DEFAULT 0, child_ref_count INTEGER NOT NULL DEFAULT 0 CHECK (child_ref_count >= 0), root_ref_count INTEGER NOT NULL DEFAULT 0 CHECK (root_ref_count >= 0), ready INTEGER NOT NULL DEFAULT 1 CHECK (ready IN (0, 1)), PRIMARY KEY (app_id, space_id, hash))",
 
   // Edges: parent -> children with ordinal.
   "CREATE TABLE IF NOT EXISTS cas_edges (app_id TEXT NOT NULL, space_id TEXT NOT NULL, parent_hash TEXT NOT NULL, ordinal INTEGER NOT NULL, child_hash TEXT NOT NULL, PRIMARY KEY (app_id, space_id, parent_hash, ordinal))",
@@ -34,12 +34,21 @@ const TABLE_MIGRATIONS = [
 
   // Direct-to-R2 upload sessions. Ready state remains represented only by cas_nodes.
   "CREATE TABLE IF NOT EXISTS cas_direct_upload_sessions (app_id TEXT NOT NULL, space_id TEXT NOT NULL, hash TEXT NOT NULL, upload_id TEXT NOT NULL, temporary_object_key TEXT NOT NULL, stored_bytes INTEGER NOT NULL CHECK (stored_bytes > 0), lease_duration_ms INTEGER NOT NULL CHECK (lease_duration_ms > 0), created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, PRIMARY KEY (app_id, space_id, hash), UNIQUE (upload_id), UNIQUE (temporary_object_key))",
+
+  // V2 lease-driven uploads. State is derived from nullable rejection and
+  // validation evidence; no persisted workflow-state enum is used.
+  "CREATE TABLE IF NOT EXISTS cas_node_uploads (app_id TEXT NOT NULL, space_id TEXT NOT NULL, hash TEXT NOT NULL, generation TEXT NOT NULL, temporary_object_key TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, cleanup_at INTEGER NOT NULL, rejection_code TEXT, rejection_message TEXT, stored_bytes INTEGER, content_size INTEGER, content_type TEXT, refs_json TEXT, PRIMARY KEY (app_id, space_id, hash), UNIQUE (temporary_object_key), CHECK ((rejection_code IS NULL) = (rejection_message IS NULL)), CHECK ((stored_bytes IS NULL) = (content_size IS NULL)), CHECK ((stored_bytes IS NULL) = (content_type IS NULL)), CHECK ((stored_bytes IS NULL) = (refs_json IS NULL)))",
+
+  // Superseded temporary keys retained until deletion succeeds.
+  "CREATE TABLE IF NOT EXISTS cas_node_upload_cleanup (app_id TEXT NOT NULL, space_id TEXT NOT NULL, temporary_object_key TEXT NOT NULL, cleanup_at INTEGER NOT NULL, PRIMARY KEY (app_id, space_id, temporary_object_key))",
 ];
 
 const INDEX_MIGRATIONS = [
   "CREATE INDEX IF NOT EXISTS cas_edges_by_child ON cas_edges(app_id, space_id, child_hash)",
   "CREATE INDEX IF NOT EXISTS cas_root_domain_events_by_request ON cas_root_domain_events(app_id, space_id, ref_domain, request_id)",
   "CREATE INDEX IF NOT EXISTS cas_root_domain_refs_by_scan ON cas_root_domain_refs(app_id, ref_domain, space_id, hash)",
+  "CREATE INDEX IF NOT EXISTS cas_node_uploads_by_cleanup ON cas_node_uploads(app_id, space_id, cleanup_at)",
+  "CREATE INDEX IF NOT EXISTS cas_node_upload_cleanup_by_deadline ON cas_node_upload_cleanup(app_id, space_id, cleanup_at)",
 ];
 
 export const APP_SPACE_SCHEMA_MIGRATIONS = [
@@ -51,5 +60,9 @@ export const APP_SPACE_SCHEMA_MIGRATIONS = [
 export async function migrateAppSpaceSchema(db: D1Database): Promise<void> {
   for (const sql of APP_SPACE_SCHEMA_MIGRATIONS) {
     await db.exec(sql);
+  }
+  const nodeColumns = await db.prepare("PRAGMA table_info(cas_nodes)").all<{ name: string }>();
+  if (!nodeColumns.results.some((column) => column.name === "ready")) {
+    await db.exec("ALTER TABLE cas_nodes ADD COLUMN ready INTEGER NOT NULL DEFAULT 1 CHECK (ready IN (0, 1))");
   }
 }

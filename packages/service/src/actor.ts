@@ -113,7 +113,7 @@ export function createUniCasService(context: ServiceContext): HttpActor {
         return context.authorizeSpaceRequest(spaceContext)
           .then(
             (call) => dispatchSpaceRequest(spaceContext, call),
-            tenantAuthorizationErrorResponse,
+            spaceAuthorizationErrorResponse,
           );
       }
       if (!context.handleAppAdminRequest) return Promise.resolve(notImplementedResponse());
@@ -133,6 +133,16 @@ function notImplementedResponse(): Response {
 function tenantAuthorizationErrorResponse(error: unknown): Response {
   if (error instanceof CapabilityError) {
     return Response.json({ error: error.message }, { status: error.status });
+  }
+  return Response.json({ error: "CAS capability validation failed" }, { status: 401 });
+}
+
+function spaceAuthorizationErrorResponse(error: unknown): Response {
+  if (error instanceof CapabilityError) {
+    return Response.json(
+      { error: error.code, message: error.message },
+      { status: error.status },
+    );
   }
   return Response.json({ error: "CAS capability validation failed" }, { status: 401 });
 }
@@ -160,7 +170,11 @@ async function dispatchSpaceRequest(
     context.route,
     context.platform,
     canonicalActorKey(call.appId, call.spaceId),
-    { "X-CAS-App-Id": call.appId, "X-CAS-Space-Id": call.spaceId },
+    {
+      "X-CAS-App-Id": call.appId,
+      "X-CAS-Space-Id": call.spaceId,
+      "X-CAS-Api-Version": "2",
+    },
     call.refDomain,
   );
 }
@@ -214,6 +228,27 @@ async function dispatchDataRequest(
       path = "/lease";
       method = "POST";
       headers["X-CAS-Hash"] = route.hash;
+      if (headers["X-CAS-Api-Version"] === "2") {
+        if (
+          request.headers.has(CasLeaseDurationHeader)
+          || request.headers.has(CasUploadLengthHeader)
+          || request.headers.has(CasUploadIdHeader)
+        ) {
+          return Response.json(
+            { error: "INVALID_REQUEST", message: "Legacy node lease headers are not supported by v2" },
+            { status: 400 },
+          );
+        }
+        if (request.headers.get("Content-Type")?.split(";", 1)[0]?.trim() !== "application/json") {
+          return Response.json(
+            { error: "INVALID_REQUEST", message: "v2 node lease requires application/json" },
+            { status: 400 },
+          );
+        }
+        headers["Content-Type"] = "application/json";
+        body = await request.text();
+        break;
+      }
       const duration = request.headers.get(CasLeaseDurationHeader);
       if (duration) headers[CasLeaseDurationHeader] = duration;
       const contentType = request.headers.get("Content-Type");

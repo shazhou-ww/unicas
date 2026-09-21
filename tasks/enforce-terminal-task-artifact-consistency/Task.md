@@ -102,8 +102,8 @@ explicitly approved before its protected step.
 
 ## References
 
-- [Pinned repoledger patch](/patches/repoledger@0.7.0.patch)
+- [Pinned repoledger patch](/patches/repoledger@0.8.2.patch)
 - [Repoledger patch fixture](/tests/repoledger-patch.test.mjs)
 - [Repository task workflow](/docs/repository-tasks.md)
-- [Repository task ledger skill](/.agents/skills/repository-task-ledger/SKILL.md)
+- [Repository task ledger skill](/.agents/skills/repoledger/SKILL.md)
 - [Reconciled identity task](/tasks/support-multi-provider-admin-identity/Task.md)

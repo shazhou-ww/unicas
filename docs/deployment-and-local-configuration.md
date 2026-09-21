@@ -144,6 +144,53 @@ Additional features require these secrets:
 | `OAUTH_MICROSOFT_CLIENT_SECRET` | Microsoft personal-account administrator login |
 | `OAUTH_GITHUB_CLIENT_SECRET` | GitHub administrator login and verified Emails API lookup |
 
+`CAS_UPLOAD_URL_EXPIRY_SECONDS` defaults to `300` and must be an integer from
+1 through 604800. Browser upload origins must be allowed by the R2 bucket CORS
+policy for `PUT` with `Content-Type` and `If-None-Match`. Do not add
+`Authorization`: the presigned URL is the upload credential. R2 cannot enforce
+the canonical SHA-256 as a full-object PutObject checksum, so UniCAS validates
+the digest and 32 MiB limit on the subsequent lease request.
+
+Deploy the lease-upload migration in this order:
+
+1. Configure the R2 signing credentials and browser CORS policy.
+2. Deploy the service so its idempotent startup migration creates
+   `cas_node_uploads`, `cas_node_upload_cleanup`, and the `cas_nodes.ready`
+   column before accepting v2 traffic.
+3. Publish protocol and client consumers together. This is an intentional v2
+   break: old clients using inline bodies or `X-CAS-Upload-*` headers are not
+   compatible with the new endpoint.
+4. Run the App/Space smoke test, which exercises lease, direct PUT, repeated
+   lease publication, readback, Root Refs, usage, GC, and Space isolation.
+
+### Space capability v3 rollout
+
+The Space HTTP API remains v2, while its capability claim advances to `ver: 3`
+with exact operation permissions. Legacy `ver: 2` broad permissions are
+disabled by default. A transition deployment may set the non-secret Worker
+text binding below to an exclusive absolute RFC 3339 issuance cutoff:
+
+```text
+CAS_SPACE_CAPABILITY_V2_ISSUED_BEFORE=2026-09-28T00:00:00Z
+```
+
+Use `Z` or a known numeric offset; RFC 3339's unknown-offset form `-00:00` is
+rejected. Fractional seconds are accepted and conservatively truncated to
+milliseconds, the runtime's comparison precision.
+
+Do not commit a temporary production cutoff to `wrangler.toml`. Configure it
+for the target Worker environment, deploy the compatible verifier, and update
+every participating App issuer to emit v3 before that instant. The cutoff can
+be no more than seven days in the future; malformed or farther-future values
+fail closed.
+
+After the cutoff, wait for the greatest `capabilityMaxLifetimeSeconds` among
+active App issuers plus 30 seconds of clock tolerance. Then remove the binding
+and redeploy. A v2 token must have `iat` before the cutoff and still pass its
+normal expiry, route scope, and issuer lifetime checks, so this process leaves
+no steady-state broad-permission path. Never move an elapsed cutoff forward
+without separate deployment review.
+
 Optional OIDC/session variables include `OIDC_ISSUER`, `OIDC_DISCOVERY_URL`,
 `SESSION_TTL_MS`, `SESSION_COOKIE_NAME`, `SESSION_COOKIE_SECURE`, and
 `SESSION_COOKIE_SAME_SITE`.
@@ -169,10 +216,12 @@ removing the existing apex callbacks:
 ```text
 https://console.unicas.work/admin/auth/callback
 https://api.unicas.work/oauth/google/callback
+https://spaces.unicas.work/auth/google/callback
 ```
 
-The first serves administrator WebUI and CLI login; the second serves remote
-MCP OAuth. `docs.unicas.work` is served by the independent assets-only
+The first serves administrator WebUI and CLI login, the second serves remote
+MCP OAuth, and the third belongs to the separately registered Spaces Google
+client. `docs.unicas.work` is served by the independent assets-only
 `unicas-docs` Worker under `stacks/unicas/docs-site`; it has no API service
 bindings or credentials. Validate and deploy it separately:
 
@@ -181,6 +230,12 @@ pnpm docs:check
 pnpm deploy:docs:plan
 pnpm deploy:docs
 ```
+
+`spaces.unicas.work` is a separately deployed full-stack App, not a route on
+the UniCAS service Worker. Its browser never receives a capability or presigned
+upload URL, so this server-mediated design does not add the Spaces origin to R2
+CORS. See [Spaces file App operations](spaces-smoke-app.md) for its dedicated
+D1, variables, secrets, one-time bootstrap, release smoke, and key rotation.
 
 The accepted origin ownership model is documented in
 [UniCAS domain topology](domain-topology.md).
@@ -197,6 +252,7 @@ Build Wrangler's actual upload bundle without contacting the deployment API:
 
 ```powershell
 pnpm --filter @unicas/service-cloudflare exec wrangler deploy --dry-run
+pnpm deploy:spaces:plan
 ```
 
 Do not run `pnpm deploy --dry-run`: pnpm can consume that argument instead of
@@ -224,6 +280,11 @@ node stacks/unicas/deploy/smoke.mjs https://staging.example.com
 
 No named environments are currently declared in `wrangler.toml`, so the example
 above is valid only after adding isolated bindings and routes.
+
+The protected release runs `pnpm deploy:spaces` after the UniCAS service smoke
+and before product or documentation promotion. It applies App-owned D1
+migrations, deploys Spaces, runs upload/commit/readback/isolation/cleanup smoke,
+and refuses an implicit or smoke-skipping production invocation.
 
 The smoke signer reads provisioned private keys from the gitignored
 `.wrangler/cas-deploy/` directory. To target one control-plane-managed App,

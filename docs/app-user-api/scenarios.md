@@ -1,6 +1,6 @@
 # Scenarios and sequences
 
-Status: Interface review draft
+Status: published integration scenarios
 
 These sequences use placeholders such as `APP_ID`, `SPACE_ID`, `ROOT_HASH`, and
 `CAPABILITY`. They contain no production identity or bearer material.
@@ -44,7 +44,7 @@ sequenceDiagram
     participant UI as App frontend
     participant CAS as UniCAS Space data plane
 
-    UI->>CAS: GET .../nodes/ROOT_HASH/metadata<br/>cas:read capability
+    UI->>CAS: GET .../nodes/ROOT_HASH/metadata<br/>cas:nodes:read capability
     alt Node is ready in the same Space
         CAS-->>UI: 200 metadata + retention state
         UI->>CAS: GET .../nodes/ROOT_HASH/content<br/>optional Range
@@ -77,31 +77,47 @@ sequenceDiagram
     participant CAS as UniCAS Space data plane
     participant Upload as Authorized upload target
 
-    App->>CAS: POST .../nodes/HASH/lease<br/>upload length + cas:write
-    alt Node already ready
+    App->>CAS: POST .../nodes/HASH/lease<br/>leaseDurationMs + cas:nodes:lease
+    alt state=ready
         CAS-->>App: 200 ready lease
-    else Direct upload required
-        CAS-->>App: 200 upload_required + uploadId + PUT instructions
+    else state=awaiting_upload
+        CAS-->>App: 200 awaiting_upload + PUT instructions
         App->>Upload: PUT canonical bytes with returned headers
-        alt Upload accepted or already present
-            Upload-->>App: Success or tolerated 412
-            App->>CAS: POST .../nodes/HASH/lease<br/>uploadId to finalize
-            CAS-->>App: 200 ready lease
-        else Upload or finalization fails
-            Upload-->>App: Error
-            App->>App: Keep same hash and bounded retry while session/lease is valid
+        Upload-->>App: Success or tolerated 412
+        App->>CAS: Repeat the same POST lease(HASH)
+    else state=awaiting_replacement_upload
+        CAS-->>App: 200 rejection + replacement PUT instructions
+        App->>Upload: PUT corrected canonical bytes with returned headers
+        Upload-->>App: Success or tolerated 412
+        App->>CAS: Repeat the same POST lease(HASH)
+    else state=validated_awaiting_children
+        CAS-->>App: 200 all distinct unready child hashes
+        loop Each returned child
+            App->>CAS: Lease/upload child hash until ready
         end
+        App->>CAS: Repeat the same parent lease(HASH)
     end
 ```
 
-The endpoint also supports a single request carrying the canonical bytes,
-`Content-Type`, and `Content-Length`. A missing required content length is
-rejected. Hash mismatch, malformed content, conflicting active upload length,
-expired upload session, and unready child references are explicit failures.
+The lease request never carries canonical bytes, upload length, or upload ID.
+Hash mismatch, malformed content, and oversized content return
+`awaiting_replacement_upload` with a fresh write-once target. Until corrected
+bytes are uploaded, repeating the lease preserves that state and rejection;
+only an expired target without an object causes its upload instructions to be
+rotated.
 
-The published client supports direct prepare/upload/finalize orchestration. It
-tolerates upload `412` as an already-satisfied upload step, then finalizes. It
-does not promise general automatic retries.
+A valid parent waiting for dependencies returns
+`validated_awaiting_children` with every distinct unready child hash in
+canonical first-occurrence order. UniCAS retains its validated bytes, so the
+App makes those children ready and repeats the parent lease without uploading,
+hashing, or parsing the parent again.
+
+For an already-ready node, repeating lease preserves the start of an active
+lease and only extends its expiry. An expired lease starts a new interval.
+
+The low-level client performs one lease request. The blob client performs the
+direct PUT, tolerates `412` as an already-satisfied upload step, and repeats the
+same lease request.
 
 ## Atomically commit or release Root Refs
 
@@ -114,7 +130,7 @@ sequenceDiagram
     participant App as App backend
     participant CAS as UniCAS Space data plane
 
-    App->>CAS: POST .../root-refs<br/>requestId + changes + cas:write + refDomain
+    App->>CAS: POST .../root-refs<br/>requestId + changes + cas:root-refs:update + refDomain
     CAS->>CAS: Validate all hashes, readiness, balances, and domain revision
     alt First successful commit
         CAS-->>App: 200 success, idempotent=false, revision
@@ -123,7 +139,7 @@ sequenceDiagram
     else Same requestId with different payload
         CAS-->>App: 409 IDEMPOTENCY_CONFLICT
     else Missing/unready node or negative aggregate
-        CAS-->>App: 404 or 409; no partial commit
+        CAS-->>App: 404 or 409, no partial commit
     else Internal revision race
         CAS->>CAS: Bounded retry with backoff
         CAS-->>App: One atomic outcome
@@ -134,22 +150,23 @@ If the client loses the response, retry the exact same canonical request with
 the same `requestId`. Never reuse a `requestId` for different changes.
 
 To inspect committed state, page through `GET .../root-refs` with a
-`cas:read` capability carrying the same `refDomain`. Pages are revision-stable;
-the response returns the domain and revision alongside the next cursor.
+`cas:root-refs:read` capability carrying the same `refDomain`. Pages are
+revision-stable; the response returns the domain and revision alongside the
+next cursor.
 
 ## Inspect usage and run bounded garbage collection
 
-Usage and collection require `cas:manage`; read or write capability alone is
-insufficient.
+Usage and collection have independent authorities. Grant either or both only
+when the operational workflow requires them.
 
 ```mermaid
 sequenceDiagram
     participant Operator as App-owned maintenance workflow
     participant CAS as UniCAS Space data plane
 
-    Operator->>CAS: GET .../cas/usage<br/>cas:manage
+    Operator->>CAS: GET .../cas/usage<br/>cas:usage:read
     CAS-->>Operator: Counts and byte accounting
-    Operator->>CAS: POST .../cas/gc<br/>{ maxNodes } + cas:manage
+    Operator->>CAS: POST .../cas/gc<br/>{ maxNodes } + cas:gc:execute
     loop Up to maxNodes candidates
         CAS->>CAS: Recheck refs and lease immediately before delete
         alt Still unreferenced and lease expired
@@ -198,6 +215,7 @@ for the full accepted model.
 | `409` upload or Root Ref conflict | Resolve the named conflict; replay only when the operation's idempotency rules allow it. |
 | `413` | Reduce payload or follow the configured upload limit; retries with the same oversized body will fail. |
 | `416` | Correct the range using the returned total size. |
+| `429 CAS_UPLOAD_LIMIT` | No upload generation was created. Back off until active upload work drains, then repeat the same lease request. |
 | `500` or transport failure | Use bounded exponential backoff and preserve operation identity. For Root Refs, retain the same `requestId`. |
 
 Authorization caches issuer authority for a short interval. A registry outage

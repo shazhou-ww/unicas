@@ -8,8 +8,8 @@ The package keeps two disjoint contracts:
 
 - frozen Stack/Tenant v1: `casTenantApiContract`, `casRoutes`, `ver: 1`,
   `tenantId`, and `tenants:` permissions;
-- App/Space v2: `spaceApiContract`, `appSpaceRoutes`, `ver: 2`, `spaceId`, and
-  `spaces:` permissions.
+- App/Space v2 HTTP API: `spaceApiContract`, `appSpaceRoutes`, capability
+  `ver: 3`, signed `spaceId`, and exact `cas:{resource}:{action}` permissions.
 
 Both cover node, lease, usage, garbage collection, and Root Ref operations.
 Binary CAS node bodies remain streamable. Neither version reinterprets claims

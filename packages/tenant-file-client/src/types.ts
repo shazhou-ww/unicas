@@ -1,5 +1,9 @@
-import type { CasBlobSource, CasBlobWriteOptions } from "@unicas/tenant-blob-client";
-import type { TenantCasClient } from "@unicas/tenant-client";
+import type {
+  CasBlobClientOptions,
+  CasBlobSource,
+  CasBlobWriteOptions,
+} from "@unicas/tenant-blob-client";
+import type { SpaceCasClient } from "@unicas/tenant-client";
 
 export interface TenantFileRootInfo {
   readonly rootId: string;
@@ -26,7 +30,7 @@ export interface TenantFileStat {
   readonly mediaType?: string;
 }
 
-export interface TenantFileWriteOptions extends CasBlobWriteOptions {}
+export interface TenantFileWriteOptions extends CasBlobWriteOptions { }
 
 /** Mutable in-memory view of one immutable manifest snapshot. */
 export interface TenantFileRoot {
@@ -53,8 +57,9 @@ export interface TenantFileSystem {
 }
 
 export interface TenantFileSystemOptions {
-  readonly cas: TenantCasClient;
+  readonly cas: SpaceCasClient;
   readonly catalog: TenantFileRootCatalog;
+  readonly blobOptions?: CasBlobClientOptions;
   readonly createId?: () => string;
   readonly createRequestId?: () => string;
 }

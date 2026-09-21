@@ -13,6 +13,7 @@ export {
 } from "./contract.js";
 export type { CasTenantApiContract } from "./contract.js";
 export {
+  DefaultSpaceNodeLeaseDurationMs,
   SpaceApiBasePath,
   SpaceApiErrorMap,
   spaceApiContract,
@@ -38,6 +39,15 @@ export type {
   CasUsage,
   Space,
   SpaceId,
+  SpaceNodeLeaseAwaitingReplacementUploadResult,
+  SpaceNodeLeaseAwaitingUploadResult,
+  SpaceNodeLeaseReadyResult,
+  SpaceNodeLeaseRequest,
+  SpaceNodeLeaseResult,
+  SpaceNodeLeaseValidatedAwaitingChildrenResult,
+  SpaceNodeUploadInstructions,
+  SpaceNodeUploadRejection,
+  SpaceNodeUploadRejectionCode,
 } from "./types.js";
 
 export {
@@ -103,9 +113,12 @@ export {
   sessionCreatePermission,
   sessionReadPermission,
   sessionWritePermission,
-  spaceCasManagePermission,
-  spaceCasReadPermission,
-  spaceCasWritePermission,
+  spaceGcExecutePermission,
+  spaceNodeLeasePermission,
+  spaceNodeReadPermission,
+  spaceRootRefsReadPermission,
+  spaceRootRefsUpdatePermission,
+  spaceUsageReadPermission,
   CapabilityAlgorithm,
   CapabilityTokenType,
   CapabilityVersion,
@@ -133,6 +146,7 @@ export type {
   SessionCapabilityClaims,
   SpaceCapabilityClaims,
   SpaceCapabilityPermission,
+  SpaceCapabilityPermissionKind,
   TenantCapabilityClaims,
   VerifiedCapability,
   VerifiedSpaceCapability,

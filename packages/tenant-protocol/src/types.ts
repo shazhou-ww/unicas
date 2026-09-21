@@ -53,6 +53,60 @@ export interface CasUploadRequiredResult {
 
 export type CasLeaseOperationResult = CasLeaseResult | CasUploadRequiredResult;
 
+export interface SpaceNodeLeaseRequest {
+  readonly leaseDurationMs: number;
+}
+
+export interface SpaceNodeUploadInstructions {
+  readonly method: "PUT";
+  readonly url: string;
+  readonly expiresAt: number;
+  readonly headers: Readonly<Record<string, string>>;
+}
+
+export type SpaceNodeUploadRejectionCode =
+  | "NODE_TOO_LARGE"
+  | "NODE_DIGEST_MISMATCH"
+  | "INVALID_CANONICAL_NODE"
+  | "NODE_CONFLICT";
+
+export interface SpaceNodeUploadRejection {
+  readonly code: SpaceNodeUploadRejectionCode;
+  readonly message: string;
+}
+
+export interface SpaceNodeLeaseReadyResult {
+  readonly state: "ready";
+  readonly hash: CasHash;
+  readonly leaseStartedAt: number;
+  readonly leaseExpiresAt: number;
+}
+
+export interface SpaceNodeLeaseAwaitingUploadResult {
+  readonly state: "awaiting_upload";
+  readonly hash: CasHash;
+  readonly upload: SpaceNodeUploadInstructions;
+}
+
+export interface SpaceNodeLeaseAwaitingReplacementUploadResult {
+  readonly state: "awaiting_replacement_upload";
+  readonly hash: CasHash;
+  readonly rejection: SpaceNodeUploadRejection;
+  readonly upload: SpaceNodeUploadInstructions;
+}
+
+export interface SpaceNodeLeaseValidatedAwaitingChildrenResult {
+  readonly state: "validated_awaiting_children";
+  readonly hash: CasHash;
+  readonly childHashes: readonly CasHash[];
+}
+
+export type SpaceNodeLeaseResult =
+  | SpaceNodeLeaseReadyResult
+  | SpaceNodeLeaseAwaitingUploadResult
+  | SpaceNodeLeaseAwaitingReplacementUploadResult
+  | SpaceNodeLeaseValidatedAwaitingChildrenResult;
+
 export type CasReferences = Readonly<Record<CasHash, number>>;
 export type CasRefChanges = Readonly<Record<CasHash, number>>;
 

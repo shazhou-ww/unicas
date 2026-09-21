@@ -4,6 +4,7 @@ import {
   admitCanonicalNodeUploadFinalization,
   finalizeCanonicalNodeLease,
   leaseCanonicalNode,
+  leaseDrivenNodeUpload,
   leaseReadyNode,
   MAX_LEASE_MS,
   nextNodeLease,
@@ -15,6 +16,8 @@ import {
   type CanonicalNodeLeaseRepository,
   type CanonicalDirectUploadSession,
   type CanonicalUploadReservation,
+  type LeaseDrivenNodeUploadRepository,
+  type LeaseDrivenUploadRecord,
   type NodeLeaseRecord,
   type NodeLeaseRepository,
   type NodeLeaseScope,
@@ -24,7 +27,7 @@ import {
 const SCOPE = { stackId: "cas_stack_a", tenantId: "tenant-1" };
 const DURATION = 60_000;
 
-class MemoryNodeLeaseRepository implements NodeLeaseRepository, CanonicalNodeLeaseRepository {
+class MemoryNodeLeaseRepository implements NodeLeaseRepository, CanonicalNodeLeaseRepository, LeaseDrivenNodeUploadRepository {
   lease: NodeLeaseRecord | null = null;
   object: CanonicalOrphanObject | null = null;
   canonical = new Uint8Array();
@@ -39,6 +42,16 @@ class MemoryNodeLeaseRepository implements NodeLeaseRepository, CanonicalNodeLea
   committed: UploadedCanonicalNodeCommit | undefined;
   prefixReads = 0;
   directUpload: CanonicalDirectUploadSession | null = null;
+  leaseDrivenUpload: LeaseDrivenUploadRecord | null = null;
+  temporaryUploads = new Map<string, Uint8Array>();
+  temporaryReads = 0;
+  validationWrites = 0;
+  activeUploadCount = 0;
+  commitFailures = 0;
+
+  async countLeaseDrivenUploads(_scope: NodeLeaseScope) {
+    return this.activeUploadCount || (this.leaseDrivenUpload === null ? 0 : 1);
+  }
 
   async readNodeLease(_scope: NodeLeaseScope, _hash: string) {
     return this.lease;
@@ -46,6 +59,10 @@ class MemoryNodeLeaseRepository implements NodeLeaseRepository, CanonicalNodeLea
 
   async readCanonicalObject(_scope: NodeLeaseScope, _hash: string) {
     return this.object;
+  }
+
+  async readCanonicalBytes(_scope: NodeLeaseScope, _hash: string) {
+    return this.object === null ? null : this.canonical;
   }
 
   async readCanonicalNodeLease(_scope: NodeLeaseScope, _hash: string) {
@@ -86,6 +103,55 @@ class MemoryNodeLeaseRepository implements NodeLeaseRepository, CanonicalNodeLea
     return this.directUpload;
   }
 
+  async readLeaseDrivenUpload(_scope: NodeLeaseScope, _hash: string) {
+    return this.leaseDrivenUpload;
+  }
+
+  async replaceLeaseDrivenUpload(
+    _scope: NodeLeaseScope,
+    expectedGeneration: string | null,
+    record: LeaseDrivenUploadRecord,
+  ) {
+    if (this.leaseDrivenUpload?.generation !== (expectedGeneration ?? undefined)) return false;
+    this.leaseDrivenUpload = record;
+    return true;
+  }
+
+  async stageLeaseDrivenUploadValidation(
+    _scope: NodeLeaseScope,
+    hash: string,
+    generation: string,
+    validation: LeaseDrivenUploadRecord["validation"] & {},
+  ) {
+    if (this.leaseDrivenUpload?.hash !== hash || this.leaseDrivenUpload.generation !== generation) return false;
+    this.validationWrites += 1;
+    this.leaseDrivenUpload = { ...this.leaseDrivenUpload, validation };
+    return true;
+  }
+
+  async readTemporaryUploadObject(_scope: NodeLeaseScope, temporaryObjectKey: string) {
+    const bytes = this.temporaryUploads.get(temporaryObjectKey);
+    return bytes === undefined ? null : { storedBytes: bytes.length };
+  }
+
+  async readTemporaryUploadBytes(_scope: NodeLeaseScope, temporaryObjectKey: string) {
+    this.temporaryReads += 1;
+    return this.temporaryUploads.get(temporaryObjectKey) ?? null;
+  }
+
+  async deleteTemporaryUploadObject(_scope: NodeLeaseScope, temporaryObjectKey: string) {
+    this.temporaryUploads.delete(temporaryObjectKey);
+  }
+
+  async deleteLeaseDrivenUpload(_scope: NodeLeaseScope, _hash: string, generation: string) {
+    if (this.leaseDrivenUpload?.generation === generation) this.leaseDrivenUpload = null;
+  }
+
+  async putVerifiedCanonicalBytes(_scope: NodeLeaseScope, hash: string, bytes: Uint8Array) {
+    this.canonical = bytes;
+    this.object = { storedBytes: bytes.length, sha256Hex: hash };
+  }
+
   async reserveCanonicalUploadSession(_scope: NodeLeaseScope, session: CanonicalDirectUploadSession) {
     this.directUpload = session;
   }
@@ -103,6 +169,7 @@ class MemoryNodeLeaseRepository implements NodeLeaseRepository, CanonicalNodeLea
     this.uploaded = true;
     const bytes = new Uint8Array(await new Response(body).arrayBuffer());
     this.canonical = bytes;
+    this.object = { storedBytes: bytes.length, sha256Hex: hash };
     if (this.readyAfterUpload) this.ready.add(hash);
   }
 
@@ -110,7 +177,21 @@ class MemoryNodeLeaseRepository implements NodeLeaseRepository, CanonicalNodeLea
     _scope: NodeLeaseScope,
     plan: UploadedCanonicalNodeCommit,
   ) {
+    if (this.commitFailures > 0) {
+      this.commitFailures -= 1;
+      throw new Error("injected commit failure");
+    }
     this.committed = plan;
+    this.lease = { leaseStartedAt: plan.leaseStartedAt, leaseExpiresAt: plan.leaseExpiresAt };
+    this.ready.add(plan.hash);
+    if (plan.kind === "new") {
+      this.canonicalLease = {
+        contentSize: plan.contentSize,
+        contentType: plan.contentType,
+        leaseStartedAt: plan.leaseStartedAt,
+        leaseExpiresAt: plan.leaseExpiresAt,
+      };
+    }
   }
 
   async commitAdoptedCanonicalNode(
@@ -121,7 +202,7 @@ class MemoryNodeLeaseRepository implements NodeLeaseRepository, CanonicalNodeLea
   }
 }
 
-describe("bodyless node lease service kernel", () => {
+describe("frozen v1 ready-node lease kernel", () => {
   test("parses and clamps lease duration policy", () => {
     expect(parseLeaseDuration(null)).toBe(15 * 60_000);
     expect(parseLeaseDuration("1")).toBe(60_000);
@@ -268,7 +349,7 @@ describe("bodyless node lease service kernel", () => {
   });
 });
 
-describe("direct node upload session kernel", () => {
+describe("frozen v1 direct-upload session kernel", () => {
   test("creates and reuses a matching upload session", async () => {
     const repository = new MemoryNodeLeaseRepository();
     const hash = "a".repeat(64);
@@ -358,7 +439,250 @@ describe("direct node upload session kernel", () => {
   });
 });
 
-describe("streaming node lease service kernel", () => {
+describe("lease-driven node upload kernel", () => {
+  const identifiers = (() => {
+    let generation = 0;
+    return () => {
+      generation += 1;
+      return {
+        generation: `generation-${generation}`,
+        temporaryObjectKey: `_uploads/v2/generation-${generation}`,
+      };
+    };
+  })();
+
+  function lease(repository: MemoryNodeLeaseRepository, hash: string, now = 100) {
+    return leaseDrivenNodeUpload({
+      repository,
+      scope: SCOPE,
+      hash,
+      leaseDurationMs: DURATION,
+      createIdentifiers: identifiers,
+      uploadSessionMs: 100,
+      uploadCleanupMs: 1_000,
+      now: () => now,
+    });
+  }
+
+  test("creates and reuses an internal upload generation", async () => {
+    const repository = new MemoryNodeLeaseRepository();
+    const hash = "a".repeat(64);
+
+    const first = await lease(repository, hash);
+    const second = await lease(repository, hash);
+
+    expect(first).toMatchObject({ kind: "awaiting_upload" });
+    expect(second).toEqual(first);
+    expect(repository.leaseDrivenUpload).toMatchObject({
+      hash,
+      rejection: null,
+      validation: null,
+    });
+  });
+
+  test("rejects new uploads when the Space active-generation limit is reached", async () => {
+    const repository = new MemoryNodeLeaseRepository();
+    repository.activeUploadCount = 2;
+
+    await expect(leaseDrivenNodeUpload({
+      repository,
+      scope: SCOPE,
+      hash: "f".repeat(64),
+      leaseDurationMs: DURATION,
+      maxActiveUploads: 2,
+      createIdentifiers: identifiers,
+    })).rejects.toMatchObject({ status: 429, code: "CAS_UPLOAD_LIMIT" });
+    expect(repository.leaseDrivenUpload).toBeNull();
+  });
+
+  test("rotates a rejected upload and preserves its rejection across retries", async () => {
+    const repository = new MemoryNodeLeaseRepository();
+    const hash = "b".repeat(64);
+    const first = await lease(repository, hash);
+    if (first.kind !== "awaiting_upload") throw new Error("expected upload");
+    repository.temporaryUploads.set(
+      first.upload.temporaryObjectKey,
+      new TextEncoder().encode("wrong canonical bytes"),
+    );
+
+    const rejected = await lease(repository, hash);
+    expect(rejected).toMatchObject({
+      kind: "awaiting_replacement_upload",
+      rejection: { code: "NODE_DIGEST_MISMATCH" },
+    });
+    expect(repository.temporaryUploads.has(first.upload.temporaryObjectKey)).toBe(false);
+    await expect(lease(repository, hash)).resolves.toEqual(rejected);
+
+    const expiredReplacement = await lease(repository, hash, 201);
+    expect(expiredReplacement).toMatchObject({
+      kind: "awaiting_replacement_upload",
+      rejection: { code: "NODE_DIGEST_MISMATCH" },
+    });
+    if (rejected.kind !== "awaiting_replacement_upload"
+      || expiredReplacement.kind !== "awaiting_replacement_upload") {
+      throw new Error("expected replacement uploads");
+    }
+    expect(expiredReplacement.upload.generation).not.toBe(rejected.upload.generation);
+  });
+
+  test("rotates an expired empty generation", async () => {
+    const repository = new MemoryNodeLeaseRepository();
+    const hash = "2".repeat(64);
+    const first = await lease(repository, hash, 100);
+    const rotated = await lease(repository, hash, 201);
+    if (first.kind !== "awaiting_upload" || rotated.kind !== "awaiting_upload") {
+      throw new Error("expected ordinary uploads");
+    }
+    expect(rotated.upload.generation).not.toBe(first.upload.generation);
+  });
+
+  test("rejects an oversized temporary object without reading its bytes", async () => {
+    const repository = new MemoryNodeLeaseRepository();
+    const hash = "3".repeat(64);
+    const first = await lease(repository, hash);
+    if (first.kind !== "awaiting_upload") throw new Error("expected upload");
+    repository.temporaryUploads.set(first.upload.temporaryObjectKey, new Uint8Array(11));
+
+    await expect(leaseDrivenNodeUpload({
+      repository,
+      scope: SCOPE,
+      hash,
+      leaseDurationMs: DURATION,
+      limits: { maxCanonicalNodeBytes: 10 },
+      createIdentifiers: identifiers,
+      now: () => 100,
+    })).resolves.toMatchObject({
+      kind: "awaiting_replacement_upload",
+      rejection: { code: "NODE_TOO_LARGE" },
+    });
+    expect(repository.temporaryReads).toBe(0);
+  });
+
+  test("returns every distinct unready child and reuses durable validation evidence", async () => {
+    const firstChild = "c".repeat(64);
+    const secondChild = "d".repeat(64);
+    const content = new TextEncoder().encode("parent");
+    const contentType = "text/plain";
+    const canonical = concatenate(
+      encodeHeader(content.length, contentType, 3),
+      new TextEncoder().encode(contentType),
+      hexBytes(firstChild),
+      hexBytes(firstChild),
+      hexBytes(secondChild),
+      content,
+    );
+    const hash = hashToHex(new Uint8Array(await crypto.subtle.digest("SHA-256", canonical)));
+    const repository = new MemoryNodeLeaseRepository();
+    const first = await lease(repository, hash);
+    if (first.kind !== "awaiting_upload") throw new Error("expected upload");
+    repository.temporaryUploads.set(first.upload.temporaryObjectKey, canonical);
+
+    await expect(lease(repository, hash)).resolves.toEqual({
+      kind: "validated_awaiting_children",
+      childHashes: [firstChild, secondChild],
+    });
+    expect(repository.leaseDrivenUpload?.validation).not.toBeNull();
+    await expect(lease(repository, hash)).resolves.toEqual({
+      kind: "validated_awaiting_children",
+      childHashes: [firstChild, secondChild],
+    });
+    expect(repository.validationWrites).toBe(1);
+
+    repository.ready.add(firstChild);
+    repository.ready.add(secondChild);
+    await expect(lease(repository, hash)).resolves.toMatchObject({
+      kind: "ready",
+      result: { state: "ready", hash },
+    });
+  });
+
+  test("validates an uploaded object after its authorization expires", async () => {
+    const content = new TextEncoder().encode("late upload");
+    const contentType = "text/plain";
+    const canonical = concatenate(
+      encodeHeader(content.length, contentType, 0),
+      new TextEncoder().encode(contentType),
+      content,
+    );
+    const hash = hashToHex(new Uint8Array(await crypto.subtle.digest("SHA-256", canonical)));
+    const repository = new MemoryNodeLeaseRepository();
+    const first = await lease(repository, hash, 100);
+    if (first.kind !== "awaiting_upload") throw new Error("expected upload");
+    repository.temporaryUploads.set(first.upload.temporaryObjectKey, canonical);
+
+    await expect(lease(repository, hash, 201)).resolves.toMatchObject({
+      kind: "ready",
+      result: { state: "ready", hash },
+    });
+  });
+
+  test("recovers after canonical publication succeeds before the ready commit", async () => {
+    const content = new TextEncoder().encode("recover publication");
+    const contentType = "text/plain";
+    const canonical = concatenate(
+      encodeHeader(content.length, contentType, 0),
+      new TextEncoder().encode(contentType),
+      content,
+    );
+    const hash = hashToHex(new Uint8Array(await crypto.subtle.digest("SHA-256", canonical)));
+    const repository = new MemoryNodeLeaseRepository();
+    const first = await lease(repository, hash);
+    if (first.kind !== "awaiting_upload") throw new Error("expected upload");
+    repository.temporaryUploads.set(first.upload.temporaryObjectKey, canonical);
+    repository.commitFailures = 1;
+
+    await expect(lease(repository, hash)).rejects.toThrow("injected commit failure");
+    expect(repository.object).toMatchObject({ storedBytes: canonical.length, sha256Hex: hash });
+    expect(repository.leaseDrivenUpload?.validation).not.toBeNull();
+    await expect(lease(repository, hash)).resolves.toMatchObject({
+      kind: "ready",
+      result: { state: "ready", hash },
+    });
+  });
+
+  test("reports a ready row without canonical content as a storage fault", async () => {
+    const repository = new MemoryNodeLeaseRepository();
+    repository.canonicalLease = {
+      contentSize: 1,
+      contentType: "text/plain",
+      leaseStartedAt: 1,
+      leaseExpiresAt: 2,
+    };
+
+    await expect(lease(repository, "e".repeat(64))).rejects.toMatchObject({
+      status: 503,
+      code: "STORAGE_ERROR",
+    });
+  });
+
+  test("reports missing validated upload content as a storage fault", async () => {
+    const repository = new MemoryNodeLeaseRepository();
+    const hash = "1".repeat(64);
+    repository.leaseDrivenUpload = {
+      hash,
+      generation: "generation-missing",
+      temporaryObjectKey: "_uploads/v2/missing",
+      createdAt: 1,
+      expiresAt: 200,
+      cleanupAt: 1_000,
+      rejection: null,
+      validation: {
+        storedBytes: 100,
+        contentSize: 10,
+        contentType: "text/plain",
+        refs: [],
+      },
+    };
+
+    await expect(lease(repository, hash)).rejects.toMatchObject({
+      status: 503,
+      code: "STORAGE_ERROR",
+    });
+    expect(repository.leaseDrivenUpload?.generation).toBe("generation-missing");
+  });
+});
+
+describe("frozen v1 inline-upload lease kernel", () => {
   test("ready hits renew without consuming the upload body", async () => {
     const repository = new MemoryNodeLeaseRepository();
     const hash = "a".repeat(64);

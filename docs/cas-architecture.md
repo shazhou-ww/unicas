@@ -152,7 +152,10 @@ A node must be ready before it can:
 - be referenced by a newly inserted node;
 - be used by a document operation.
 
-A D1 row without R2 content is a valid recoverable state. A later lease claim can request the content again.
+A ready D1 row without canonical R2 content is a storage-integrity fault and
+never falls back to upload instructions. The recoverable inverse is a verified
+canonical R2 object whose ready D1 transaction was interrupted; a later lease
+finishes publication.
 
 ## 5. Digest and identity
 
@@ -195,48 +198,36 @@ When no lease has ever existed, both are `0`.
 
 A claim requests a duration, but the service chooses the actual expiry. It may extend continuous leases more aggressively to reduce D1 write frequency.
 
-```ts
-export interface CasLeaseResult {
-  readonly hash: CasHash;
-  readonly ready: true;
-  readonly leaseStartedAt: number;
-  readonly leaseExpiresAt: number;
-}
-```
+Successful v2 responses form a strict union discriminated by `state`:
+`ready`, `awaiting_upload`, `awaiting_replacement_upload`, or
+`validated_awaiting_children`. Only `ready` carries lease timestamps.
 
 Rules:
 
 - A ready node renews or extends its lease without re-uploading content.
-- HTTP upload is a lease that carries content. The server never returns `uploadRequired` or an upload token.
+- The lease request carries only `leaseDurationMs`; canonical bytes go to the
+  returned write-once R2 target.
+- The client never carries an upload generation or upload ID.
 - Leases are not explicitly released.
 - Lease state is stored directly on the node row; there is no separate lease table.
 
 ## 7. Node creation
 
-A node is created or leased through its expected hash and immutable metadata.
+A node is created or leased through its expected hash. Creation follows these
+steps:
 
-```ts
-export interface CasNodeDescriptor {
-  readonly hash: CasHash;
-  readonly size: number;
-  readonly contentType: string;
-  readonly refs: readonly CasHash[];
-}
-```
-
-Creation uses two short Space mutation sections around an unlocked upload:
-
-1. Validate descriptor syntax and canonical constraints from URL and headers. Do not read the body yet.
-2. If the D1 row exists and R2 content is present, require immutable metadata to match, cancel the body, extend the lease, and return ready.
-3. Upsert an expiring upload reservation, then release the mutation gate.
-4. Stream the body to R2 and verify content length and the complete canonical SHA-256 digest without holding the gate.
-5. Re-enter the mutation gate and re-read node readiness and immutable metadata.
-6. If inserting a row, verify every child is ready.
-7. In one D1 transaction:
-   - insert immutable metadata and default mutable state, or update the lease on a not-ready row;
-   - insert ordered child edges on first insert;
-   - increment each child's `childRefCount` once per occurrence on first insert;
-   - persist `leaseStartedAt` and `leaseExpiresAt`.
+1. A lease call creates or reuses a short-lived internal generation and returns
+  a presigned write-once temporary-object target.
+2. The caller PUTs one complete canonical node block directly to R2.
+3. The caller repeats the same lease request. UniCAS checks the 32 MiB limit,
+  computes the complete SHA-256 digest, parses immutable metadata and ordered
+  refs, and persists generation-fenced validation evidence.
+4. If any child is not ready, the parent remains staged and the response lists
+  every distinct unready child hash. Later parent leases recheck only child
+  readiness.
+5. Once children are ready, UniCAS writes the immutable canonical object and
+  atomically inserts metadata and edges, increments child counts, establishes
+  the lease, and removes the reservation.
 
 R2 is published before the D1 row. A crash after R2 and before D1 leaves an orphan object; retry is idempotent and completes the row. A D1 row is never committed without canonical R2 content.
 
@@ -460,7 +451,9 @@ acceptance route plus logout. Acceptance consumes challenge evidence and the
 invitation in one D1 transaction, then rotates the session. General login uses
 Account admission, not email allowlisting.
 
-HTTP upload is a lease that carries content. The same /lease route without a body extends a ready node (bodyless lease).
+Node upload is driven by one hash-addressed lease operation. The lease body
+contains only the requested duration; canonical bytes go directly to a
+short-lived, write-once R2 target returned by the service.
 
 ### 11.1 Read content
 
@@ -483,32 +476,26 @@ Authorization: Bearer <CAS capability>
 
 Returns immutable metadata and mutable state. Unknown nodes return `404`.
 
-### 11.3 Lease with content
+### 11.3 Lease or obtain upload instructions
 
 ```http
 POST /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{sha256}/lease
 Authorization: Bearer <CAS capability>
-Content-Type: application/vnd.unidocs.cas-node.v1
-Content-Length: <canonical node length>
-X-CAS-Lease-Duration: 900000
+Content-Type: application/json
 
-<canonical node bytes>
+{"leaseDurationMs":900000}
 ```
 
-The request body is the canonical node: the 24-byte header (content size,
-content-type length, ref count), the UTF-8 content type, the ordered raw
-child hashes, then the node's own content. The `{sha256}` in the path is the
-content address: `SHA-256(header ‖ content-type ‖ child hashes ‖ content)`,
-and the server verifies it against the body checksum. Child refs are carried
-in the body only — there is no refs header. `X-CAS-Lease-Duration` may be
-omitted (default 15 minutes, clamped to 1 minute … 24 hours).
-
-If the node is already ready and immutable metadata matches, the service cancels the body, extends the lease, and returns success. Otherwise it streams the body to R2, parses the canonical prefix, verifies the digest, then commits the D1 row.
+The client sends the complete canonical node bytes only to the returned R2
+target, then repeats this exact lease request. The service validates the full
+SHA-256 digest, envelope, content type, ordered child hashes, and size before
+publication. The response `state` is one of `ready`, `awaiting_upload`,
+`awaiting_replacement_upload`, or `validated_awaiting_children`.
 
 ```json
 {
+  "state": "ready",
   "hash": "...",
-  "ready": true,
   "leaseStartedAt": 1787100000000,
   "leaseExpiresAt": 1787100900000
 }
@@ -519,12 +506,13 @@ If the node is already ready and immutable metadata matches, the service cancels
 ```http
 POST /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{sha256}/lease
 Authorization: Bearer <CAS capability>
-X-CAS-Lease-Duration: 900000
+Content-Type: application/json
+
+{"leaseDurationMs":900000}
 ```
 
-No body. Missing nodes return `404`. A not-ready node returns `409`; the caller must use lease-with-content.
-
-A successful response is the same lease result as 11.3.
+The same request extends a ready lease without reading or parsing canonical
+content. A missing node returns upload instructions rather than `404`.
 
 ### 11.5 Space usage and GC
 

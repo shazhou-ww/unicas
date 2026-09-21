@@ -72,7 +72,7 @@ export function generateSpaceOpenApiDocument() {
       description: [
         "App-scoped Space API for immutable content-addressed nodes, leases, usage accounting, garbage collection, and atomic Root Ref commits.",
         "",
-        "Every request uses a version 2 JWT capability. The registered issuer establishes App authority; the token's `spaceId` and `spaces:` permission must match the route exactly.",
+        "Every request uses a version 3 JWT capability on the version 2 HTTP API. The registered issuer establishes App authority; the token's signed `spaceId` must match the route and its exact operation permission must authorize the request.",
         "",
         "Principal identity and Profile metadata are independent of Space ownership and authorization.",
       ].join("\n"),
@@ -89,7 +89,7 @@ export function generateSpaceOpenApiDocument() {
           type: "http",
           scheme: "bearer",
           bearerFormat: "JWT",
-          description: "Version 2 Space capability. Issuer authority, spaceId, and the exact spaces permission must match the request path.",
+          description: "Version 3 Space capability. Issuer authority and signed spaceId must match the request path, and the permission set must contain the operation's exact CAS authority.",
         },
       },
     },

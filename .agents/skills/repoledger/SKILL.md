@@ -1,10 +1,10 @@
 ---
-name: repository-task-ledger
+name: repoledger
 description: "Authoritative lifecycle for user-invoked task-new and task-exec flows and existing repository tasks. Ordinary implementation requests remain task-free."
 user-invocable: false
 ---
 
-# Repository Task Ledger
+# Repoledger
 
 Manage explicitly opted-in implementation work as stable repository state on a
 shared primary branch. Repoledger validates and publishes lifecycle facts; it
@@ -35,10 +35,12 @@ independent implementation outcome.
 4. Read its stable `Task.md` and any existing `Progress.md` from primary.
 5. Preserve unrelated work and stop on semantic overlap or same-task conflicts.
 
-The configured remote primary branch is authoritative. Task records never
-encode a person, device, worktree, or source branch. Optional contributor
-branches and pull requests are repository policy outside the ledger; accepted
-work must return to primary.
+The configured primary repository and branch are authoritative. Their
+credential-free HTTPS URL and branch name are shared state, while local Git
+remote names, credentials, and URL rewrites are not. Every ongoing task
+advertises one source repository and branch so work can continue from another
+clone. The source ref is mutable collaboration state, not accepted history;
+accepted work must return to primary.
 
 ## Create And Start
 
@@ -49,9 +51,11 @@ After `task-new` admission:
    directory and publishes the backlog record and artifacts to primary.
 3. Do not start or implement unless the user also requested execution.
 
-When execution begins, run `repoledger task start <task-name>`. Repoledger
-publishes `backlog -> ongoing` to primary. It does not create a task branch or
-`Progress.md`.
+When execution begins, run `repoledger task start <task-name>`. The source
+defaults to `task/<task-name>` in the primary repository; use
+`--source-repository` for a fork or `--source-branch` for an intentional
+override. Repoledger publishes `backlog -> ongoing` and creates the shared
+source ref without changing the caller's checkout or creating `Progress.md`.
 
 ## Work And Progress
 
@@ -66,8 +70,10 @@ journal, not a transcript or a mirror of Git.
   hashes, reachability, status transitions, resumes, handoffs, review requests,
   approvals without implementation, or task-only document edits.
 - Git already records exact commit identity, chronology, and publication.
-- Publish validated implementation through the repository's normal non-force
-  primary integration path. Never force-push or discard concurrent work.
+- Publish validated implementation non-force to the exact source ref reported
+  by `repoledger status`, then integrate it through the repository's normal
+  primary path. Never force-push, silently switch repositories or branches, or
+  discard concurrent work.
 
 If work becomes blocked and there is no implementation delta to publish, report
 the blocker to the user without manufacturing a Progress update.
@@ -77,10 +83,16 @@ the blocker to the user without manufacturing a Progress update.
 Every new task plans scope and delivery review. Interface, business/data model,
 and architecture review apply when those surfaces change.
 
-- A review request names an immutable commit reachable from primary.
+- Scope and interface review requests link the canonical `Task.md` on primary
+  so the user can open the review artifact directly. Do not require the user to
+  provide or repeat a commit ID; associate the explicit decision with the
+  refreshed authoritative revision internally.
+- Other review requests identify their published artifact clearly. Delivery
+  approval remains bound to the exact primary commit passed to
+  `repoledger task complete --approved-commit`.
 - Task-only review artifacts may be published without editing `Progress.md`.
-- Approval is an explicit human decision naming the reviewed commit; Git
-  activity and silence are not approval.
+- Approval is an explicit human decision; Git activity and silence are not
+  approval.
 - Approval alone does not create a metadata commit. If the decision materially
   affects later implementation, summarize it in the next implementation-linked
   Progress update.
@@ -95,9 +107,10 @@ explicit. Routine non-force publication needs no separate permission.
 ## Resume And Handoff
 
 A receiving agent fetches primary, runs status and remote check, reads the
-stable artifacts, and continues from primary. Handoff changes no lifecycle
-field and does not update `Progress.md`. Concurrent publication is resolved by
-normal non-force Git integration, never by silent overwrite.
+stable artifacts, then fetches and continues from the advertised source ref.
+Handoff changes no lifecycle field or source locator and does not update
+`Progress.md`. Concurrent source or primary publication is resolved by normal
+non-force Git integration, never by silent overwrite.
 
 ## User Acceptance
 
@@ -116,13 +129,16 @@ To complete:
 3. Complete required manual acceptance.
 4. Ask the user to approve the exact current primary commit for delivery.
 5. Run `repoledger task complete <task-name> --approved-commit <commit>`.
-   Repoledger requires that commit to equal fetched primary, publishes the
-   completed record, and verifies it. Do not add a completion-only Progress
-   commit.
+  Repoledger requires that commit to equal fetched primary and contain the
+  fetched source tip, removes the source locator from status, publishes the
+  completed record, and verifies it. It does not delete the source branch. Do
+  not add a completion-only Progress commit.
 
 To abandon, obtain an explicit human or accountable-owner decision and run
-`repoledger task abandon <task-name>`. Existing findings remain in the latest
-implementation-linked Progress entry. Do not create abandonment-only progress.
+`repoledger task abandon <task-name>`. Repoledger removes the source locator
+from status but does not delete the source branch. Existing findings remain in
+the latest implementation-linked Progress entry. Do not create
+abandonment-only progress.
 
 Terminal task directories remain at the same stable path. There is no archive
 move, delete, rename, reopen, handoff, takeover, identity, or generic set-state

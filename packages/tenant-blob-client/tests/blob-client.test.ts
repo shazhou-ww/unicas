@@ -14,40 +14,58 @@ import {
 import type {
   CasGcOptions,
   CasGcResult,
-  CasLeaseOptions,
-  CasLeaseResult,
   CasNodeMetadata,
   CasNodeRange,
-  CasNodeSource,
   CasRootRefUpdate,
   CasRootRefsResult,
   CasUsage,
-  TenantCasClient,
+  HttpFetcher,
+  SpaceCasClient,
+  SpaceNodeLeaseOptions,
+  SpaceNodeLeaseResult,
 } from "@unicas/tenant-client";
 import { createCasBlobClient, storeNodeContent } from "../src/index.js";
 
-class MemoryCas implements TenantCasClient {
+class MemoryCas implements SpaceCasClient, HttpFetcher {
   readonly nodes = new Map<string, { content: Uint8Array; contentType: string; refs: string[] }>();
+  readonly uploads = new Map<string, Uint8Array>();
   readonly rootRefUpdates: CasRootRefUpdate[] = [];
   gcCalls: { maxNodes?: number }[] = [];
 
-  async leaseNode(
-    hash: string,
-    source?: CasNodeSource,
-    _options?: CasLeaseOptions,
-  ): Promise<CasLeaseResult> {
-    if (source === undefined) {
-      if (!this.nodes.has(hash)) throw new Error(`node not found: ${hash}`);
-      return { hash, ready: true, leaseStartedAt: 0, leaseExpiresAt: Date.now() + 60_000 };
+  leaseNode(hash: string): Promise<SpaceNodeLeaseResult>;
+  leaseNode(hash: string, options: SpaceNodeLeaseOptions): Promise<SpaceNodeLeaseResult>;
+  async leaseNode(hash: string, _options?: SpaceNodeLeaseOptions): Promise<SpaceNodeLeaseResult> {
+    if (this.nodes.has(hash)) {
+      return { hash, state: "ready", leaseStartedAt: 0, leaseExpiresAt: Date.now() + 60_000 };
     }
-    const canonical = new Uint8Array(await new Response(source.body).arrayBuffer());
-    const parsed = parseNodeBytes(canonical);
-    this.nodes.set(hash, {
-      content: parsed.content,
-      contentType: parsed.contentType,
-      refs: parsed.childHashes.map(hashToHex),
-    });
-    return { hash, ready: true, leaseStartedAt: 0, leaseExpiresAt: Date.now() + 60_000 };
+    const canonical = this.uploads.get(hash);
+    if (canonical !== undefined) {
+      const parsed = parseNodeBytes(canonical);
+      this.nodes.set(hash, {
+        content: parsed.content,
+        contentType: parsed.contentType,
+        refs: parsed.childHashes.map(hashToHex),
+      });
+      return { hash, state: "ready", leaseStartedAt: 0, leaseExpiresAt: Date.now() + 60_000 };
+    }
+    return {
+      hash,
+      state: "awaiting_upload",
+      upload: {
+        method: "PUT",
+        url: `https://uploads.test/${hash}`,
+        expiresAt: Date.now() + 60_000,
+        headers: { "If-None-Match": "*" },
+      },
+    };
+  }
+
+  async fetch(input: string | Request, init?: RequestInit): Promise<Response> {
+    const request = input instanceof Request ? input : new Request(input, init);
+    const hash = new URL(request.url).pathname.slice(1);
+    if (this.uploads.has(hash)) return new Response(null, { status: 412 });
+    this.uploads.set(hash, new Uint8Array(await request.arrayBuffer()));
+    return new Response(null, { status: 200 });
   }
 
   async readMetadata(hash: string): Promise<CasNodeMetadata> {
@@ -96,7 +114,7 @@ describe("functional blob client", () => {
     const cas = new MemoryCas();
     const leaseNode = vi.spyOn(cas, "leaseNode");
     const chunkBytes = 4;
-    const blobs = createCasBlobClient(cas, { chunkBytes, indexFanout: 2 });
+    const blobs = createCasBlobClient(cas, { chunkBytes, indexFanout: 2, uploadFetcher: cas });
     const bytes = Uint8Array.from([
       0x61, 0x61, 0x61, 0x61,
       0x62, 0x62, 0x62, 0x62,
@@ -110,13 +128,12 @@ describe("functional blob client", () => {
       leaseDurationMs: 30 * 60 * 1000,
       onProgress: progress,
     });
-    expect(leaseNode).toHaveBeenCalledTimes(cas.nodes.size);
+    expect(leaseNode).toHaveBeenCalledTimes(cas.nodes.size * 2);
     expect(leaseNode).toHaveBeenCalledWith(
       expect.any(String),
-      expect.objectContaining({ body: expect.any(ArrayBuffer) }),
-      { durationMs: 30 * 60 * 1000, signal: undefined },
+      { durationMs: 30 * 60 * 1000, signal: null },
     );
-    expect(leaseNode.mock.calls.every(call => call[2]?.durationMs === 30 * 60 * 1000)).toBe(true);
+    expect(leaseNode.mock.calls.every(call => call[1]?.durationMs === 30 * 60 * 1000)).toBe(true);
     const handle = await blobs.openBlob(ref.hash);
     expect(handle.ref).toEqual(ref);
     const opened = new Uint8Array(await new Response(handle.read()).arrayBuffer());
@@ -137,7 +154,7 @@ describe("functional blob client", () => {
 
   it("resolves single-node metadata when opening a blob", async () => {
     const cas = new MemoryCas();
-    const blobs = createCasBlobClient(cas, { chunkBytes: 1024, indexFanout: 2 });
+    const blobs = createCasBlobClient(cas, { chunkBytes: 1024, indexFanout: 2, uploadFetcher: cas });
     const bytes = new TextEncoder().encode("small");
     const ref = await blobs.storeBlob(streamOf(bytes, 3), {
       contentType: "text/plain",
@@ -150,11 +167,11 @@ describe("functional blob client", () => {
 
   it("separates batch retain and release while exposing the tenant client", async () => {
     const cas = new MemoryCas();
-    const blobs = createCasBlobClient(cas);
+    const blobs = createCasBlobClient(cas, { uploadFetcher: cas });
     const bytes = new TextEncoder().encode("abc");
-    const hash = await storeNodeContent(cas, bytes, "text/plain");
+    const hash = await storeNodeContent(cas, bytes, "text/plain", [], undefined, cas);
 
-    await expect(blobs.unicasClient.leaseNode(hash)).resolves.toMatchObject({ hash, ready: true });
+    await expect(blobs.unicasClient.leaseNode(hash)).resolves.toMatchObject({ hash, state: "ready" });
     await expect(blobs.retain({ requestId: "retain-1", references: { [hash]: 2 } }))
       .resolves.toMatchObject({ success: true, revision: 1 });
     await expect(blobs.release({ requestId: "release-1", references: { [hash]: 1 } }))
@@ -169,7 +186,7 @@ describe("functional blob client", () => {
 
   it("rejects non-positive retention counts before calling the tenant client", async () => {
     const cas = new MemoryCas();
-    const blobs = createCasBlobClient(cas);
+    const blobs = createCasBlobClient(cas, { uploadFetcher: cas });
 
     await expect(blobs.retain({ requestId: "invalid", references: { bad: 0 } }))
       .rejects.toThrow("positive safe integer");

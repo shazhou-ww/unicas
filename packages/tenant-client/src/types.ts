@@ -6,6 +6,7 @@ import type {
   CasRootRefUpdate,
   CasRootRefsPage,
   CasUsage,
+  SpaceNodeLeaseResult,
 } from "@unicas/tenant-protocol";
 
 export interface HttpFetcher {
@@ -27,6 +28,11 @@ export interface CasNodeSource {
 export interface CasLeaseOptions {
   readonly durationMs?: number;
   readonly signal?: AbortSignal;
+}
+
+export interface SpaceNodeLeaseOptions {
+  readonly durationMs: number;
+  readonly signal: AbortSignal | null;
 }
 
 export interface CasGcOptions {
@@ -76,33 +82,37 @@ export interface CasNodeCache {
   ): Promise<ReadableStream<Uint8Array>>;
 }
 
-export interface TenantCasClient {
+interface CasClientOperations {
   readMetadata(hash: CasHash, options?: { readonly signal?: AbortSignal }): Promise<CasNodeMetadata>;
   readContent(
     hash: CasHash,
     range?: CasNodeRange,
     options?: { readonly signal?: AbortSignal },
   ): Promise<ReadableStream<Uint8Array>>;
-  leaseNode(
-    hash: CasHash,
-    source?: CasNodeSource,
-    options?: CasLeaseOptions,
-  ): Promise<CasLeaseResult>;
   updateRootRefs(update: CasRootRefUpdate): Promise<CasRootRefsResult>;
   listRootRefs(options?: CasListRootRefsOptions): Promise<CasRootRefsPage>;
   usage(signal?: AbortSignal): Promise<CasUsage>;
   gc(options?: CasGcOptions): Promise<CasGcResult>;
 }
 
-export type SpaceCasClient = TenantCasClient;
+export interface TenantCasClient extends CasClientOperations {
+  leaseNode(
+    hash: CasHash,
+    source?: CasNodeSource,
+    options?: CasLeaseOptions,
+  ): Promise<CasLeaseResult>;
+}
+
+export interface SpaceCasClient extends CasClientOperations {
+  leaseNode(hash: CasHash): Promise<SpaceNodeLeaseResult>;
+  leaseNode(hash: CasHash, options: SpaceNodeLeaseOptions): Promise<SpaceNodeLeaseResult>;
+}
 
 interface CasClientConfigBase {
   readonly baseUrl: string;
   readonly getToken: () => Promise<string>;
   readonly fetcher?: HttpFetcher;
-  readonly uploadFetcher?: HttpFetcher;
   readonly cache?: CasNodeCache;
-  readonly uploadMode?: "legacy" | "direct";
 }
 
 export interface TenantCasClientConfig extends CasClientConfigBase {

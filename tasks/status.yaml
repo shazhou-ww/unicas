@@ -1,5 +1,10 @@
-version: 1
+version: 2
 tasks:
+  add-app-level-usage-reporting:
+    state: ongoing
+    sourceBranch: task/add-app-level-usage-reporting
+    createdAt: "2026-09-21T03:45:51Z"
+    updatedAt: "2026-09-21T04:05:08Z"
   add-platform-access-management:
     state: completed
     createdAt: "2026-09-15T14:26:52Z"
@@ -20,6 +25,24 @@ tasks:
     state: completed
     createdAt: "2026-09-14T13:31:14Z"
     updatedAt: "2026-09-19T05:12:49Z"
+  build-file-upload-smoke-app:
+    state: ongoing
+    sourceBranch: task/build-file-upload-smoke-app
+    createdAt: "2026-09-20T15:07:43Z"
+    updatedAt: "2026-09-20T15:15:57Z"
+  complete-app-space-concept-refactor:
+    state: ongoing
+    sourceBranch: task/complete-app-space-concept-refactor
+    createdAt: "2026-09-20T14:26:56Z"
+    updatedAt: "2026-09-21T03:59:06Z"
+  complete-direct-node-upload:
+    state: completed
+    createdAt: "2026-09-20T07:36:32Z"
+    updatedAt: "2026-09-20T15:01:44Z"
+  cut-over-app-space-api-to-v1:
+    state: backlog
+    createdAt: "2026-09-21T03:40:24Z"
+    updatedAt: "2026-09-21T03:40:24Z"
   deploy-documentation-site:
     state: completed
     createdAt: "2026-09-14T11:50:56Z"
@@ -41,9 +64,9 @@ tasks:
     createdAt: "2026-09-15T14:26:52Z"
     updatedAt: "2026-09-19T05:12:49Z"
   enforce-terminal-task-artifact-consistency:
-    state: backlog
+    state: abandoned
     createdAt: "2026-09-19T14:25:40Z"
-    updatedAt: "2026-09-19T14:25:40Z"
+    updatedAt: "2026-09-21T01:16:12Z"
   extract-standalone-repository:
     state: completed
     createdAt: "2026-09-14T09:35:30Z"
@@ -56,6 +79,18 @@ tasks:
     state: completed
     createdAt: "2026-09-14T09:30:47Z"
     updatedAt: "2026-09-19T05:12:49Z"
+  prepare-app-user-sdk-beta-packages:
+    state: backlog
+    createdAt: "2026-09-21T03:41:45Z"
+    updatedAt: "2026-09-21T03:41:45Z"
+  promote-app-user-api-to-beta:
+    state: backlog
+    createdAt: "2026-09-21T03:18:47Z"
+    updatedAt: "2026-09-21T03:18:47Z"
+  publish-app-user-sdk-beta:
+    state: backlog
+    createdAt: "2026-09-21T03:42:32Z"
+    updatedAt: "2026-09-21T03:42:32Z"
   replace-active-app-oauth-issuer:
     state: completed
     createdAt: "2026-09-15T14:26:52Z"
@@ -72,14 +107,26 @@ tasks:
     state: completed
     createdAt: "2026-09-20T02:30:21Z"
     updatedAt: "2026-09-20T03:21:40Z"
+  retire-stack-tenant-data-plane:
+    state: backlog
+    createdAt: "2026-09-21T03:41:05Z"
+    updatedAt: "2026-09-21T03:41:05Z"
   simplify-console-administration-navigation:
     state: completed
     createdAt: "2026-09-17T04:16:49Z"
     updatedAt: "2026-09-19T05:12:49Z"
+  split-app-space-operation-permissions:
+    state: completed
+    createdAt: "2026-09-20T14:23:39Z"
+    updatedAt: "2026-09-21T02:54:14Z"
   split-public-domain-topology:
     state: completed
     createdAt: "2026-09-14T09:30:47Z"
     updatedAt: "2026-09-19T05:12:49Z"
+  split-root-ref-update-api:
+    state: abandoned
+    createdAt: "2026-09-21T01:30:23Z"
+    updatedAt: "2026-09-21T03:57:46Z"
   support-multi-provider-admin-identity:
     state: completed
     createdAt: "2026-09-16T02:07:06Z"

@@ -2,10 +2,16 @@ import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import type { CryptoKey } from "jose";
 import { describe, expect, test } from "vitest";
 import {
+  MaximumCapabilityLifetimeSeconds,
+  SpaceCapabilityVersion,
   casReadPermission,
-  spaceCasManagePermission,
-  spaceCasReadPermission,
-  spaceCasWritePermission,
+  canonicalPermissionSegment,
+  spaceGcExecutePermission,
+  spaceNodeLeasePermission,
+  spaceNodeReadPermission,
+  spaceRootRefsReadPermission,
+  spaceRootRefsUpdatePermission,
+  spaceUsageReadPermission,
   type AppSpaceRoute,
 } from "@unicas/tenant-protocol";
 import {
@@ -38,7 +44,7 @@ const STACK_ROUTE = {
 };
 
 class StubAppAuthorityResolver implements AppAuthorityResolver {
-  constructor(readonly authority: ResolvedAppAuthority) {}
+  constructor(readonly authority: ResolvedAppAuthority) { }
 
   async resolveIssuer(issuer: string): Promise<ResolvedAppAuthority | null> {
     return issuer === ISSUER ? this.authority : null;
@@ -46,7 +52,7 @@ class StubAppAuthorityResolver implements AppAuthorityResolver {
 }
 
 class StubStackAuthorityResolver implements StackAuthorityResolver {
-  constructor(readonly authority: ResolvedStackAuthority) {}
+  constructor(readonly authority: ResolvedStackAuthority) { }
 
   async resolveIssuer(issuer: string): Promise<ResolvedStackAuthority | null> {
     return issuer === ISSUER ? this.authority : null;
@@ -90,8 +96,9 @@ async function issue(
   privateKey: CryptoKey,
   now: number,
   claims: Record<string, unknown>,
+  options: { readonly issuedAt?: number; readonly lifetimeSeconds?: number } = {},
 ): Promise<string> {
-  const nowSeconds = Math.floor(now / 1000);
+  const nowSeconds = Math.floor((options.issuedAt ?? now) / 1000);
   return new SignJWT(claims)
     .setProtectedHeader({ alg: "ES256", kid: "key-1" })
     .setIssuer(ISSUER)
@@ -100,8 +107,15 @@ async function issue(
     .setJti("request-1")
     .setIssuedAt(nowSeconds)
     .setNotBefore(nowSeconds)
-    .setExpirationTime(nowSeconds + 300)
+    .setExpirationTime(nowSeconds + (options.lifetimeSeconds ?? 300))
     .sign(privateKey);
+}
+
+function legacySpacePermission(
+  spaceId: string,
+  action: "read" | "write" | "manage",
+): string {
+  return `spaces:${canonicalPermissionSegment(spaceId)}:cas:${action}`;
 }
 
 function request(token: string): Request {
@@ -120,9 +134,16 @@ describe("AppSpaceCapabilityVerifier", () => {
       onEvent: (event) => events.push(event),
     });
     const token = await issue(privateKey, now, {
-      ver: 2,
+      ver: SpaceCapabilityVersion,
       spaceId: SPACE,
-      permissions: [spaceCasReadPermission(SPACE), spaceCasWritePermission(SPACE), spaceCasManagePermission(SPACE)],
+      permissions: [
+        spaceNodeReadPermission(),
+        spaceNodeLeasePermission(),
+        spaceRootRefsReadPermission(),
+        spaceRootRefsUpdatePermission(),
+        spaceUsageReadPermission(),
+        spaceGcExecutePermission(),
+      ],
       refDomain: "doc",
     });
     const routes: AppSpaceRoute[] = [
@@ -150,7 +171,11 @@ describe("AppSpaceCapabilityVerifier", () => {
       repository: { resolveIssuer: async () => authority },
       now: () => currentTime,
     });
-    const token = await issue(privateKey, now, { ver: 2, spaceId: SPACE, permissions: [spaceCasReadPermission(SPACE)] });
+    const token = await issue(privateKey, now, {
+      ver: SpaceCapabilityVersion,
+      spaceId: SPACE,
+      permissions: [spaceNodeReadPermission()],
+    });
     await expect(verifier.verify(request(token), APP_ROUTE)).resolves.toBeDefined();
     authority = { ...authority, appStatus: "suspended" };
     currentTime = now + 30_000;
@@ -165,11 +190,17 @@ describe("AppSpaceCapabilityVerifier", () => {
     let currentTime = now;
     let replaced = false;
     let unavailable = false;
-    const repository = { resolveIssuer: async () => {
-      if (unavailable) throw new Error("Registry unavailable");
-      return replaced ? null : appResolver.authority;
-    } };
-    const token = await issue(privateKey, now, { ver: 2, spaceId: SPACE, permissions: [spaceCasReadPermission(SPACE)] });
+    const repository = {
+      resolveIssuer: async () => {
+        if (unavailable) throw new Error("Registry unavailable");
+        return replaced ? null : appResolver.authority;
+      }
+    };
+    const token = await issue(privateKey, now, {
+      ver: SpaceCapabilityVersion,
+      spaceId: SPACE,
+      permissions: [spaceNodeReadPermission()],
+    });
     const refreshed = new AppSpaceCapabilityVerifier({ repository, now: () => currentTime });
     const stale = new AppSpaceCapabilityVerifier({ repository, now: () => currentTime });
     await refreshed.verify(request(token), APP_ROUTE);
@@ -190,13 +221,19 @@ describe("AppSpaceCapabilityVerifier", () => {
     let unavailable = false;
     let authority = appResolver.authority;
     const verifier = new AppSpaceCapabilityVerifier({
-      repository: { resolveIssuer: async () => {
-        if (unavailable) throw new Error("Registry unavailable");
-        return authority;
-      } },
+      repository: {
+        resolveIssuer: async () => {
+          if (unavailable) throw new Error("Registry unavailable");
+          return authority;
+        }
+      },
       now: () => currentTime,
     });
-    const token = await issue(privateKey, now, { ver: 2, spaceId: SPACE, permissions: [spaceCasReadPermission(SPACE)] });
+    const token = await issue(privateKey, now, {
+      ver: SpaceCapabilityVersion,
+      spaceId: SPACE,
+      permissions: [spaceNodeReadPermission()],
+    });
     await expect(verifier.verify(request(token), APP_ROUTE)).resolves.toBeDefined();
     authority = { ...authority, appStatus: "suspended" };
     unavailable = true;
@@ -215,9 +252,9 @@ describe("AppSpaceCapabilityVerifier", () => {
       now: () => now,
     });
     const token = await issue(privateKey, now, {
-      ver: 2,
+      ver: SpaceCapabilityVersion,
       spaceId: SPACE,
-      permissions: [spaceCasReadPermission(SPACE)],
+      permissions: [spaceNodeReadPermission()],
     });
 
     await expect(verifier.verify(request(token), APP_ROUTE)).resolves.toMatchObject({
@@ -246,18 +283,18 @@ describe("AppSpaceCapabilityVerifier", () => {
       permission: string;
       refDomain?: string;
     }> = [
-      { route: { operation: "readContent", appId: APP, spaceId: SPACE, hash }, permission: spaceCasReadPermission(SPACE) },
-      { route: { operation: "readMetadata", appId: APP, spaceId: SPACE, hash }, permission: spaceCasReadPermission(SPACE) },
-      { route: { operation: "lease", appId: APP, spaceId: SPACE, hash }, permission: spaceCasWritePermission(SPACE) },
-      { route: { operation: "listRootRefs", appId: APP, spaceId: SPACE }, permission: spaceCasReadPermission(SPACE), refDomain: "doc" },
-      { route: { operation: "updateRootRefs", appId: APP, spaceId: SPACE }, permission: spaceCasWritePermission(SPACE), refDomain: "doc" },
-      { route: { operation: "usage", appId: APP, spaceId: SPACE }, permission: spaceCasManagePermission(SPACE) },
-      { route: { operation: "gc", appId: APP, spaceId: SPACE }, permission: spaceCasManagePermission(SPACE) },
-    ];
+        { route: { operation: "readContent", appId: APP, spaceId: SPACE, hash }, permission: spaceNodeReadPermission() },
+        { route: { operation: "readMetadata", appId: APP, spaceId: SPACE, hash }, permission: spaceNodeReadPermission() },
+        { route: { operation: "lease", appId: APP, spaceId: SPACE, hash }, permission: spaceNodeLeasePermission() },
+        { route: { operation: "listRootRefs", appId: APP, spaceId: SPACE }, permission: spaceRootRefsReadPermission(), refDomain: "doc" },
+        { route: { operation: "updateRootRefs", appId: APP, spaceId: SPACE }, permission: spaceRootRefsUpdatePermission(), refDomain: "doc" },
+        { route: { operation: "usage", appId: APP, spaceId: SPACE }, permission: spaceUsageReadPermission() },
+        { route: { operation: "gc", appId: APP, spaceId: SPACE }, permission: spaceGcExecutePermission() },
+      ];
 
     for (const entry of cases) {
       const token = await issue(privateKey, now, {
-        ver: 2,
+        ver: SpaceCapabilityVersion,
         spaceId: SPACE,
         permissions: [entry.permission],
         ...(entry.refDomain === undefined ? {} : { refDomain: entry.refDomain }),
@@ -267,7 +304,189 @@ describe("AppSpaceCapabilityVerifier", () => {
     }
   });
 
-  test("rejects v1 and v2 tokens across route families even when both scopes are present", async () => {
+  test("does not infer permissions between independent Space operations", async () => {
+    const { now, privateKey, appResolver } = await fixture();
+    const verifier = new AppSpaceCapabilityVerifier({ repository: appResolver, now: () => now });
+    const hash = "c".repeat(64);
+    const cases: Array<{
+      permission: string;
+      allowed: AppSpaceRoute;
+      denied: AppSpaceRoute;
+      refDomain?: string;
+    }> = [
+        {
+          permission: spaceNodeLeasePermission(),
+          allowed: { operation: "lease", appId: APP, spaceId: SPACE, hash },
+          denied: { operation: "updateRootRefs", appId: APP, spaceId: SPACE },
+          refDomain: "doc",
+        },
+        {
+          permission: spaceRootRefsUpdatePermission(),
+          allowed: { operation: "updateRootRefs", appId: APP, spaceId: SPACE },
+          denied: { operation: "lease", appId: APP, spaceId: SPACE, hash },
+          refDomain: "doc",
+        },
+        {
+          permission: spaceRootRefsReadPermission(),
+          allowed: { operation: "listRootRefs", appId: APP, spaceId: SPACE },
+          denied: { operation: "readContent", appId: APP, spaceId: SPACE, hash },
+          refDomain: "doc",
+        },
+        {
+          permission: spaceNodeReadPermission(),
+          allowed: { operation: "readContent", appId: APP, spaceId: SPACE, hash },
+          denied: { operation: "listRootRefs", appId: APP, spaceId: SPACE },
+          refDomain: "doc",
+        },
+        {
+          permission: spaceUsageReadPermission(),
+          allowed: { operation: "usage", appId: APP, spaceId: SPACE },
+          denied: { operation: "gc", appId: APP, spaceId: SPACE },
+        },
+        {
+          permission: spaceGcExecutePermission(),
+          allowed: { operation: "gc", appId: APP, spaceId: SPACE },
+          denied: { operation: "usage", appId: APP, spaceId: SPACE },
+        },
+        {
+          permission: spaceGcExecutePermission(),
+          allowed: { operation: "gc", appId: APP, spaceId: SPACE },
+          denied: { operation: "readContent", appId: APP, spaceId: SPACE, hash },
+        },
+      ];
+
+    for (const entry of cases) {
+      const token = await issue(privateKey, now, {
+        ver: SpaceCapabilityVersion,
+        spaceId: SPACE,
+        permissions: [entry.permission],
+        ...(entry.refDomain === undefined ? {} : { refDomain: entry.refDomain }),
+      });
+      await expect(verifier.verify(request(token), entry.allowed)).resolves.toBeDefined();
+      await expect(verifier.verify(request(token), entry.denied))
+        .rejects.toMatchObject({ status: 403, code: "insufficient_permission" });
+    }
+  });
+
+  test("requires a valid non-reserved refDomain for both Root Ref permissions", async () => {
+    const { now, privateKey, appResolver } = await fixture();
+    const verifier = new AppSpaceCapabilityVerifier({ repository: appResolver, now: () => now });
+    const cases = [
+      {
+        permission: spaceRootRefsReadPermission(),
+        route: { operation: "listRootRefs", appId: APP, spaceId: SPACE } as const,
+      },
+      {
+        permission: spaceRootRefsUpdatePermission(),
+        route: { operation: "updateRootRefs", appId: APP, spaceId: SPACE } as const,
+      },
+    ];
+
+    for (const entry of cases) {
+      for (const refDomain of [undefined, "Bad Domain", "_reserved"]) {
+        const token = await issue(privateKey, now, {
+          ver: SpaceCapabilityVersion,
+          spaceId: SPACE,
+          permissions: [entry.permission],
+          ...(refDomain === undefined ? {} : { refDomain }),
+        });
+        await expect(verifier.verify(request(token), entry.route))
+          .rejects.toMatchObject({ status: 403, code: "resource_scope_mismatch" });
+      }
+    }
+  });
+
+  test("accepts legacy v2 permissions only before the configured issuance cutoff", async () => {
+    const { now, privateKey, appResolver } = await fixture();
+    const legacyV2IssuedBefore = now + 1_000;
+    const compatibleVerifier = new AppSpaceCapabilityVerifier({
+      repository: appResolver,
+      now: () => now,
+      legacyV2IssuedBefore,
+    });
+    const legacyToken = await issue(privateKey, now, {
+      ver: 2,
+      spaceId: SPACE,
+      permissions: [
+        legacySpacePermission(SPACE, "read"),
+        legacySpacePermission(SPACE, "write"),
+        legacySpacePermission(SPACE, "manage"),
+      ],
+      refDomain: "doc",
+    });
+    const routes: AppSpaceRoute[] = [
+      APP_ROUTE,
+      { ...APP_ROUTE, operation: "readMetadata" },
+      { ...APP_ROUTE, operation: "lease" },
+      { operation: "listRootRefs", appId: APP, spaceId: SPACE },
+      { operation: "updateRootRefs", appId: APP, spaceId: SPACE },
+      { operation: "usage", appId: APP, spaceId: SPACE },
+      { operation: "gc", appId: APP, spaceId: SPACE },
+    ];
+    for (const route of routes) {
+      await expect(compatibleVerifier.verify(request(legacyToken), route)).resolves.toBeDefined();
+    }
+
+    const defaultVerifier = new AppSpaceCapabilityVerifier({ repository: appResolver, now: () => now });
+    await expect(defaultVerifier.verify(request(legacyToken), APP_ROUTE))
+      .rejects.toMatchObject({ status: 401, code: "invalid_token" });
+
+    const cutoffToken = await issue(privateKey, now, {
+      ver: 2,
+      spaceId: SPACE,
+      permissions: [legacySpacePermission(SPACE, "read")],
+    }, { issuedAt: legacyV2IssuedBefore });
+    await expect(compatibleVerifier.verify(request(cutoffToken), APP_ROUTE))
+      .rejects.toMatchObject({ status: 401, code: "invalid_token" });
+  });
+
+  test("keeps v2 and v3 permission grammars version-specific during migration", async () => {
+    const { now, privateKey, appResolver } = await fixture();
+    const verifier = new AppSpaceCapabilityVerifier({
+      repository: appResolver,
+      now: () => now,
+      legacyV2IssuedBefore: now + 1_000,
+    });
+    const v3WithLegacyPermission = await issue(privateKey, now, {
+      ver: SpaceCapabilityVersion,
+      spaceId: SPACE,
+      permissions: [legacySpacePermission(SPACE, "read")],
+    });
+    const v2WithCurrentPermission = await issue(privateKey, now, {
+      ver: 2,
+      spaceId: SPACE,
+      permissions: [spaceNodeReadPermission()],
+    });
+
+    await expect(verifier.verify(request(v3WithLegacyPermission), APP_ROUTE))
+      .rejects.toMatchObject({ status: 403, code: "insufficient_permission" });
+    await expect(verifier.verify(request(v2WithCurrentPermission), APP_ROUTE))
+      .rejects.toMatchObject({ status: 403, code: "insufficient_permission" });
+  });
+
+  test("bounds the legacy cutoff and still enforces issuer lifetime limits", async () => {
+    const { now, privateKey, appResolver } = await fixture();
+    expect(() => new AppSpaceCapabilityVerifier({
+      repository: appResolver,
+      now: () => now,
+      legacyV2IssuedBefore: now + MaximumCapabilityLifetimeSeconds * 1000 + 1,
+    })).toThrow("must not be more than seven days in the future");
+
+    const verifier = new AppSpaceCapabilityVerifier({
+      repository: appResolver,
+      now: () => now,
+      legacyV2IssuedBefore: now + 1_000,
+    });
+    const overlongToken = await issue(privateKey, now, {
+      ver: 2,
+      spaceId: SPACE,
+      permissions: [legacySpacePermission(SPACE, "read")],
+    }, { lifetimeSeconds: appResolver.authority.capabilityMaxLifetimeSeconds + 1 });
+    await expect(verifier.verify(request(overlongToken), APP_ROUTE))
+      .rejects.toMatchObject({ status: 401, code: "invalid_token" });
+  });
+
+  test("rejects v1 and v3 tokens across route families even when both scopes are present", async () => {
     const { now, privateKey, appResolver, stackResolver } = await fixture();
     const appVerifier = new AppSpaceCapabilityVerifier({ repository: appResolver, now: () => now });
     const stackVerifier = new StackCapabilityVerifier({ repository: stackResolver, now: () => now });
@@ -275,26 +494,26 @@ describe("AppSpaceCapabilityVerifier", () => {
       ver: 1,
       tenantId: TENANT,
       spaceId: SPACE,
-      permissions: [casReadPermission(TENANT), spaceCasReadPermission(SPACE)],
+      permissions: [casReadPermission(TENANT), spaceNodeReadPermission()],
     });
-    const v2Token = await issue(privateKey, now, {
-      ver: 2,
+    const v3Token = await issue(privateKey, now, {
+      ver: SpaceCapabilityVersion,
       tenantId: TENANT,
       spaceId: SPACE,
-      permissions: [casReadPermission(TENANT), spaceCasReadPermission(SPACE)],
+      permissions: [casReadPermission(TENANT), spaceNodeReadPermission()],
     });
 
     await expect(appVerifier.verify(request(v1Token), APP_ROUTE))
       .rejects.toMatchObject({ status: 401, code: "invalid_token" });
-    await expect(stackVerifier.verify(request(v2Token), STACK_ROUTE))
+    await expect(stackVerifier.verify(request(v3Token), STACK_ROUTE))
       .rejects.toMatchObject({ status: 401, code: "invalid_token" });
   });
 
-  test("rejects the v1 permission grammar on a v2 route", async () => {
+  test("rejects the v1 permission grammar on a v3 Space capability", async () => {
     const { now, privateKey, appResolver } = await fixture();
     const verifier = new AppSpaceCapabilityVerifier({ repository: appResolver, now: () => now });
     const token = await issue(privateKey, now, {
-      ver: 2,
+      ver: SpaceCapabilityVersion,
       spaceId: SPACE,
       permissions: [casReadPermission(SPACE)],
     });

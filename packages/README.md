@@ -1,8 +1,9 @@
 # packages — UniCAS 包结构与边界
 
 UniCAS 是独立可部署的 CAS 中间件（content-addressed storage + App 控制面）。
-`packages/` 是 standalone 仓库的 workspace package 边界。2026-08-29 重组后，
-本目录内**零 `@unidocs/*` 依赖**，该承诺完全兑现。
+`packages/` 是 standalone 仓库的 workspace package 边界，包含 UniCAS
+中间件包及不发布的第一方集成 App。2026-08-29 重组后，本目录内**零
+`@unidocs/*` 依赖**，该承诺完全兑现。
 
 公共 v2 资源名是 **App** 和 **Space**。`tenant-*` 是既有数据访问面包族的
 稳定 package identifier，不表示 v2 资源仍叫 Tenant。该包族同时承载冻结的
@@ -48,7 +49,7 @@ tenant: [tenant-cli, tenant-webui] -> tenant-client -> tenant-protocol
 - 上图是固定的角色与依赖模型；某个 CLI/WebUI 产品尚未实现时不创建空包。
   WebUI 的服务端 BFF 属于服务端梳理范围，不改变浏览器侧的依赖方向。
 
-## 包清单（13 包）
+## 包清单（14 包）
 
 ```
 packages/                           @unicas org
@@ -73,19 +74,19 @@ packages/                           @unicas org
 │   │     cache，以及 Root Ref 校验/幂等/投影/revision/retry 业务内核；不依赖
 │   │     Cloudflare 类型或 control-plane 实现；node GC 的候选复核、删除顺序与
 │   │     回收统计、Space node usage、node content range/metadata read，以及
-│   │     streaming/bodyless node lease 语义，同样通过 semantic repository port 执行；
+│   │     lease-driven direct node upload 语义，同样通过 semantic repository port 执行；
 │   │     控制面业务内核（App/member/invitation/issuer/audit 语义）经
 │   │     ControlPlaneAdminService 与 semantic repository port 执行
 │   └── control-auth/      @unicas/control-auth       admin 组
 │         OIDC 认证库：discovery、PKCE、id_token 校验（admin BFF 与
 │         MCP/OAuth ingress 共用）
 │
-├── ■ Cloudflare 适配（唯一部署单元）
-│   └── service-cloudflare/@unicas/service-cloudflare  唯一 Worker 部署单元
+├── ■ Cloudflare 适配（UniCAS 中间件唯一部署单元）
+│   └── service-cloudflare/@unicas/service-cloudflare  UniCAS Worker 部署单元
 │         D1/R2/KV/DO bindings、统一公网路由、credential 隔离、admin BFF/OIDC、
 │         MCP/OAuth ingress、control schema 与 D1 repository 适配
 │
-└── ■ client 层
+├── ■ client 层
     ├── admin-webui/       @unicas/admin-webui         admin 组 · 浏览器 UI（纯前端）
     │     经 @unicas/admin-client 取 admin-protocol 类型；不含任何服务端代码
     ├── tenant-client/     @unicas/tenant-client       tenant 组 · 传输层
@@ -114,6 +115,11 @@ packages/                           @unicas org
     │     登录 = BFF /admin/auth/cli/authorize（服务端跑 Google OIDC）→
     │     /admin/auth/cli/exchange 换 session cookie + CSRF；
     │     `unicas mcp` 是 admin-client 之上的薄 MCP 呈现层（无 MCP 转 MCP）
+    │
+    └── ■ 私有第一方集成 App
+        └── spaces/            @unicas/spaces              文件工作流与 release smoke
+          独立部署且不发布；只消费公开 tenant client，部署配置与 App-owned
+          D1 migration 位于 stacks/unicas/spaces
 ```
 
 ## 依赖规则（分层单向，guard + boundary 测试强制）
@@ -121,9 +127,11 @@ packages/                           @unicas org
 ```
 编码层(codec) + 契约层(tenant-protocol, admin-protocol)
   ← service（cloud-neutral actor + platform ports）
-    ← service-cloudflare（唯一 Worker）
+    ← service-cloudflare（UniCAS 中间件唯一 Worker）
 契约层 + 编码层 ← tenant-client（纯函数传输层，仅组装）
                     ← tenant-blob-client（业务方唯一入口）
+                      ← tenant-file-client
+                        ← spaces（私有外部集成 App，不发布）
 契约层 ← admin-client（控制面 HTTP 传输，仅组装/CLI 用）
         ← admin-cli（走 admin-client + control-auth 登录）
 ```
@@ -143,7 +151,7 @@ packages/                           @unicas org
   平台 context 显式提供 control/tenant SQL、blob 与 keyed actor 端口。tenant
   capability 校验属于该 cloud-neutral actor：authority 只经只读 resolver port
   注入，D1 `AuthorityRepository` 仍由 Cloudflare adapter 构造。
-- `service-cloudflare` 是唯一部署包，持有 D1/R2/KV/DO 和公网 route；生产及
+- `service-cloudflare` 是 UniCAS 中间件唯一部署包，持有 D1/R2/KV/DO 和公网 route；生产及
   本地 Miniflare 均不再通过 tenant/admin/MCP service bindings 拆分 UniCAS。
 - tenant D1/R2 repositories、DO 生命周期与 audit RPC 已并入
   `service-cloudflare`，原 `server-cloudflare`、`control-plane`、`control-plane-mcp`
@@ -212,8 +220,7 @@ capability 是 JWT claim 词汇而非编码，故不进 `codec` 包。
 | **node GC 内核下沉 service** | 过期无引用候选、删除前复核、content-before-metadata 顺序与回收统计迁入 `@unicas/service`；D1/R2 adapter 保留候选 SQL、对象删除和 multiplicity-aware edge cascade |
 | **node usage 内核下沉 service** | logical/physical/reservation/readiness/lease 统计语义迁入 `@unicas/service`；D1/R2 adapter 只列 node、读取 canonical object 大小与 reservation 总量 |
 | **node read 内核下沉 service** | own-content HTTP range 解析、canonical payload offset 与 metadata/state shaping 迁入 `@unicas/service`；D1/R2 adapter 只读 node row、ordered edges 与 object range |
-| **bodyless lease 内核下沉 service** | lease duration policy、续租窗口、ready 检查与 verified canonical orphan adoption 迁入 `@unicas/service`；D1/R2 adapter 只负责 object head/prefix、lease update 与 adoption batch |
-| **streaming lease 内核下沉 service** | reservation/upload/inspect/immutability/child-readiness/commit/cleanup 编排迁入 `@unicas/service`，请求 body 仍直通平台 object store；Cloudflare adapter 只负责 R2 SHA-256 写入与 D1 batch |
+| **lease-driven upload 内核下沉 service** | v2 lease 的 generation fencing、临时对象检查、canonical validation、child readiness 与 publication 编排迁入 `@unicas/service`；Cloudflare adapter 负责 D1/R2 facts 与 presigned PUT |
 | **tenant Cloudflare 包收口** | D1/R2 repositories、tenant/domain DO、schema 与 audit RPC 迁入 `@unicas/service-cloudflare`，删除 `@unicas/server-cloudflare` |
 
 ## 待办（README 定方向）

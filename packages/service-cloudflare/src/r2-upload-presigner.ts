@@ -8,11 +8,13 @@ export interface R2UploadPresignerConfig {
   readonly accessKeyId: string;
   readonly secretAccessKey: string;
   readonly expiresInSeconds: number;
+  readonly now?: () => number;
 }
 
 export interface PresignedR2Upload {
   readonly method: "PUT";
   readonly url: string;
+  readonly expiresAt: number;
   readonly headers: Readonly<Record<string, string>>;
 }
 
@@ -20,6 +22,7 @@ export class R2UploadPresigner {
   readonly #accountId: string;
   readonly #bucketName: string;
   readonly #expiresInSeconds: number;
+  readonly #now: () => number;
   readonly #client: AwsClient;
 
   constructor(config: R2UploadPresignerConfig) {
@@ -31,6 +34,7 @@ export class R2UploadPresigner {
       throw new TypeError("R2 upload URL expiry must be an integer between 1 and 604800 seconds");
     }
     this.#expiresInSeconds = config.expiresInSeconds;
+    this.#now = config.now ?? (() => Date.now());
     this.#client = new AwsClient({
       accessKeyId: requireComponent(config.accessKeyId, "R2 access key ID"),
       secretAccessKey: requireComponent(config.secretAccessKey, "R2 secret access key"),
@@ -39,10 +43,7 @@ export class R2UploadPresigner {
     });
   }
 
-  async signPut(objectKey: string, contentLength: number): Promise<PresignedR2Upload> {
-    if (!Number.isSafeInteger(contentLength) || contentLength < 1) {
-      throw new TypeError("R2 upload content length must be a positive safe integer");
-    }
+  async signPut(objectKey: string): Promise<PresignedR2Upload> {
     const encodedKey = objectKey.split("/").map(segment => encodeURIComponent(
       requireComponent(segment, "R2 object key segment"),
     )).join("/");
@@ -52,7 +53,6 @@ export class R2UploadPresigner {
     );
     url.searchParams.set("X-Amz-Expires", String(this.#expiresInSeconds));
     const headers = {
-      "Content-Length": String(contentLength),
       "Content-Type": CanonicalUploadContentType,
       "If-None-Match": "*",
     } as const;
@@ -61,7 +61,12 @@ export class R2UploadPresigner {
       headers,
       aws: { signQuery: true, allHeaders: true },
     });
-    return { method: "PUT", url: signed.url, headers };
+    return {
+      method: "PUT",
+      url: signed.url,
+      expiresAt: this.#now() + this.#expiresInSeconds * 1000,
+      headers,
+    };
   }
 }
 

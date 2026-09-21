@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
+import { CapabilityAuthorizationError } from "@unicas/tenant-protocol";
 import {
   createUniCasService,
   matchUniCasServiceRoute,
@@ -159,7 +160,7 @@ describe("createUniCasService", () => {
       subject: "caller",
       jti: "request-v2",
       kid: "key-v2",
-      permissions: ["spaces:space%2Fb:cas:manage"],
+      permissions: ["cas:usage:read"],
     }));
     const actor = createUniCasService({
       platform,
@@ -181,6 +182,73 @@ describe("createUniCasService", () => {
     expect(forwarded.headers.get("X-CAS-Space-Id")).toBe("space/b");
     expect(forwarded.headers.get("X-CAS-Stack-Id")).toBeNull();
     expect(forwarded.headers.get("X-CAS-Tenant-Id")).toBeNull();
+  });
+
+  test("forwards v2 lease JSON and rejects legacy upload headers", async () => {
+    const actor = createUniCasService({
+      platform,
+      authorizeTenantRequest: vi.fn(),
+      authorizeSpaceRequest: async () => ({
+        appId: "app-1",
+        spaceId: "space-1",
+        subject: "caller",
+        jti: "request-v2-lease",
+        kid: "key-v2",
+        permissions: ["cas:nodes:lease"],
+      }),
+      handleAppAdminRequest: vi.fn(),
+    });
+    const url = `https://api.unicas.work/v2/apps/app-1/spaces/space-1/cas/nodes/${"a".repeat(64)}/lease`;
+    await actor.fetch(new Request(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ leaseDurationMs: 60_000 }),
+    }));
+    const [, forwarded] = tenantActorFetch.mock.calls.at(-1)!;
+    expect(forwarded.headers.get("X-CAS-Api-Version")).toBe("2");
+    expect(forwarded.headers.get("Content-Type")).toBe("application/json");
+    await expect(forwarded.json()).resolves.toEqual({ leaseDurationMs: 60_000 });
+
+    const callsBeforeRejection = tenantActorFetch.mock.calls.length;
+    const rejected = await actor.fetch(new Request(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CAS-Upload-Id": "legacy",
+      },
+      body: JSON.stringify({ leaseDurationMs: 60_000 }),
+    }));
+    expect(rejected.status).toBe(400);
+    expect(tenantActorFetch).toHaveBeenCalledTimes(callsBeforeRejection);
+  });
+
+  test("returns stable Space authorization codes without changing the v1 envelope", async () => {
+    const denial = new CapabilityAuthorizationError(
+      "insufficient_permission",
+      "CAS usage requires cas:usage:read",
+    );
+    const actor = createUniCasService({
+      platform,
+      authorizeTenantRequest: async () => { throw denial; },
+      authorizeSpaceRequest: async () => { throw denial; },
+    });
+
+    const spaceResponse = await actor.fetch(new Request(
+      "https://api.unicas.work/v2/apps/app-1/spaces/space-1/cas/usage",
+    ));
+    expect(spaceResponse.status).toBe(403);
+    await expect(spaceResponse.json()).resolves.toEqual({
+      error: "insufficient_permission",
+      message: "CAS usage requires cas:usage:read",
+    });
+
+    const tenantResponse = await actor.fetch(new Request(
+      "https://cas.example/stacks/stack-1/tenants/tenant-1/cas/usage",
+    ));
+    expect(tenantResponse.status).toBe(403);
+    await expect(tenantResponse.json()).resolves.toEqual({
+      error: "CAS usage requires cas:usage:read",
+    });
   });
 
   test("dispatches App administrator requests through the v2 handler", async () => {

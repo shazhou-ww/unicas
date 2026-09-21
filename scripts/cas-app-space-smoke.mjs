@@ -24,9 +24,12 @@ import {
   CapabilityVersion,
   SpaceCapabilityVersion,
   casManagePermission,
-  spaceCasManagePermission,
-  spaceCasReadPermission,
-  spaceCasWritePermission,
+  spaceGcExecutePermission,
+  spaceNodeLeasePermission,
+  spaceNodeReadPermission,
+  spaceRootRefsReadPermission,
+  spaceRootRefsUpdatePermission,
+  spaceUsageReadPermission,
 } from "../packages/tenant-protocol/dist/index.js";
 
 const BASE = normalizeSmokeBaseUrl(
@@ -90,9 +93,12 @@ async function main() {
     ver: SpaceCapabilityVersion,
     spaceId,
     permissions: [
-      spaceCasReadPermission(spaceId),
-      spaceCasWritePermission(spaceId),
-      spaceCasManagePermission(spaceId),
+      spaceNodeReadPermission(),
+      spaceNodeLeasePermission(),
+      spaceRootRefsReadPermission(),
+      spaceRootRefsUpdatePermission(),
+      spaceUsageReadPermission(),
+      spaceGcExecutePermission(),
     ],
     ...(refDomain === undefined ? {} : { refDomain }),
   });
@@ -102,7 +108,6 @@ async function main() {
     appId: APP_ID,
     spaceId: SPACE_ID,
     getToken: async () => token,
-    uploadMode: "legacy",
   });
 
   console.log(`smoke base: ${BASE}`);
@@ -115,18 +120,12 @@ async function main() {
   }
 
   const child = await nodeOf(`space-smoke-child:${RUN}`);
-  const childLease = await client.leaseNode(child.hash, {
-    contentLength: child.body.length,
-    body: child.body,
-  });
-  assert(childLease.ready === true, "lease child");
+  const childLease = await uploadNode(client, child);
+  assert(childLease.state === "ready", "lease child");
 
   const parent = await nodeOf(`space-smoke-parent:${RUN}`, [child.hash]);
-  const parentLease = await client.leaseNode(parent.hash, {
-    contentLength: parent.body.length,
-    body: parent.body,
-  });
-  assert(parentLease.ready === true, "lease parent");
+  const parentLease = await uploadNode(client, parent);
+  assert(parentLease.state === "ready", "lease parent");
 
   const content = new Uint8Array(await new Response(await client.readContent(parent.hash)).arrayBuffer());
   assert(content.join(",") === parent.contentBytes.join(","), "read content matches");
@@ -205,6 +204,27 @@ async function main() {
     }
   }
   console.log("\nAPP/SPACE SMOKE PASS");
+}
+
+async function uploadNode(client, node) {
+  let result = await client.leaseNode(node.hash);
+  if (result.state === "ready") return result;
+  if (result.state === "validated_awaiting_children") {
+    throw new Error(`Node upload is waiting for children: ${result.childHashes.join(", ")}`);
+  }
+  const uploaded = await fetch(result.upload.url, {
+    method: result.upload.method,
+    headers: result.upload.headers,
+    body: node.body,
+  });
+  if (!uploaded.ok && uploaded.status !== 412) {
+    throw new Error(`Direct node upload failed: ${uploaded.status} ${uploaded.statusText}`);
+  }
+  result = await client.leaseNode(node.hash);
+  if (result.state === "awaiting_replacement_upload") {
+    throw new Error(`${result.rejection.code}: ${result.rejection.message}`);
+  }
+  return result;
 }
 
 main().catch((error) => {

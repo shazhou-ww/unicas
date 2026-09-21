@@ -6,6 +6,7 @@ service core, Cloudflare deployment adapter, protocol packages, clients, CLI,
 and administrator console.
 
 - Product service: <https://unicas.work>
+- File App: <https://spaces.unicas.work>
 - Documentation: <https://docs.unicas.work>
 
 ## Requirements
@@ -55,7 +56,9 @@ Cloudflare secrets, and verify the active account before deploying.
 ```powershell
 pnpm deploy:plan
 pnpm deploy:production
+pnpm deploy:spaces:plan
 pnpm smoke
+pnpm spaces:smoke -- --base-url https://spaces.unicas.work
 ```
 
 `pnpm deploy` intentionally refuses to run without that explicit production

@@ -6,11 +6,13 @@ Runbooks, SLOs, and alerting for the independently deployed CAS middleware
 | Component | Worker / resource | Notes |
 |---|---|---|
 | UniCAS service (public) | `unicas` | Single `@unicas/service-cloudflare` Worker for `/v2/apps`, `/admin`, MCP/OAuth, and admin UI |
+| Spaces file App | `unicas-spaces` | Separate `@unicas/spaces` Worker, Google user login, App-owned issuer, file catalog, and release smoke |
 | OAuth KV | dedicated `OAUTH_KV` namespace | OAuth clients, grants, token hashes, and encrypted authorization transactions |
 | Control D1 | `unicas-control` (`3a64d58d-…`) | Apps, issuers, members, and audit; physical tables still use Stack names |
 | Data D1 | `unicas-tenant` (`c3924c96-…`) | App/Space nodes, edges, and Root Refs; resource name is a physical compatibility identifier |
 | R2 | `unicas-content`, `unicas-content-preview` | node content |
 | Email | `EMAIL` send binding | Microsoft invitation challenges from the configured UniCAS sender |
+| Spaces D1 | `unicas-spaces` | App Principals, identity bindings, sessions, file roots, and bounded smoke cleanup state |
 
 Secrets live only as Worker secrets (Google, Microsoft, and GitHub client secrets,
 `SESSION_ENCRYPTION_KEYS`, `OAUTH_STATE_ENCRYPTION_KEY`,
@@ -71,15 +73,36 @@ service request count + 5xx rate, Space 401/403 rate by error code
 
 ## Runbooks
 
+### Lease-driven upload cleanup
+
+App/Space v2 creates at most 1024 active node-upload generations per Space.
+Presigned PUT URLs default to five minutes. Uploaded or abandoned temporary
+objects remain eligible for recovery until their 24-hour cleanup deadline;
+the bounded Space GC path removes expired records, reservations, and temporary
+objects without requiring another lease for that hash.
+
+`reservedBytes` includes reservations whose byte length is known after
+validation (and retained v1 server-mediated uploads). It does not include an
+unvalidated direct R2 object because the v2 request declares no length. The
+active-generation limit, publication-time 32 MiB check, short URL lifetime,
+and cleanup deadline bound that pre-validation exposure instead.
+
+Alert on repeated `STORAGE_ERROR`, `CAS_UPLOAD_LIMIT`, or ready-record/object
+inconsistency. Never respond to a missing canonical object for a ready row by
+issuing a fresh upload target. R2 PutObject does not currently support a
+SHA-256 `FULL_OBJECT` checksum, so the 32 MiB limit and SHA-256 identity are
+enforced when the next lease validates the temporary object, not by R2 while
+receiving the PUT.
+
 ### Deploy
 
-The UniCAS service remains one application deployment unit, while a complete
-production release publishes three independently owned Workers: service,
-product site, then documentation site. A promotion pull request from `main`
+The UniCAS service remains one middleware deployment unit, while a complete
+production release publishes four independently owned Workers: service,
+Spaces App, product site, then documentation site. A promotion pull request from `main`
 into `release` is the normal release boundary. Its merged `release` revision
 runs the protected `deploy-production` job after CI validation. That job checks
-out and builds the exact validated commit, runs canonical smoke after the
-service publish, deploys the two static Workers, and verifies all four public
+out and builds the exact validated commit, runs canonical service smoke,
+deploys Spaces and runs its file smoke, deploys the two static Workers, and verifies all five public
 origins. A separate job then records a successful push deployment as an
 immutable `production-YYYYMMDD-<workflow-run-number>` annotated tag pointing
 to that exact revision; manual recovery runs do not create production tags.
@@ -95,9 +118,12 @@ Wrangler uploads `dist/` and stale output silently deploys old code:
 ```text
 pnpm deploy:plan
 pnpm deploy:production
+pnpm deploy:spaces:plan
+pnpm deploy:spaces
 pnpm deploy:site
 pnpm deploy:docs
 pnpm smoke                    # App/Space v2; run twice 70s apart
+pnpm spaces:smoke -- --base-url https://spaces.unicas.work
 pnpm smoke:v1                 # explicit frozen v1 compatibility check only
 ```
 
@@ -111,14 +137,24 @@ buffers the request body; set `UNICAS_SMOKE_ENABLE_CONCURRENCY=1` only when the
 target preserves streaming ingress. Running smoke twice with a 70s gap also
 proves the authority-cache refresh path.
 
+The Spaces smoke uses a dedicated Principal and Space. Each run creates a
+temporary file Root, records paths before mutation, uploads a multi-node file,
+requires immutable-node reuse on a second upload, and checks exact authority
+and Space denials. Cleanup uses a stable Root Ref request ID, removes the
+catalog row only after release, and is safe to repeat. The scheduled handler
+retries at most ten expired or failed runs per invocation. Detailed bootstrap,
+rotation, and recovery steps are in
+[Spaces file App operations](spaces-smoke-app.md).
+
 #### Failure diagnosis
 
 Use the named failed step and its non-secret Wrangler output to identify the
 deployment unit. Validation failures publish nothing. A failure in the service
 publish or canonical smoke leaves the product and documentation Workers
-untouched, although the service version may already be live. A product-site
-failure occurs after a successful service smoke. A documentation failure
-occurs after both earlier units succeed. A final HTTPS-check failure means the
+untouched, although the service version may already be live. A Spaces deploy or
+smoke failure occurs after the service smoke and blocks both static sites. A
+product-site failure occurs after both service smokes. A documentation failure
+occurs after all earlier units succeed. A final HTTPS-check failure means the
 publishes completed but one public route did not return a successful response.
 
 A `tag-production` failure happens only after all deployment and verification
@@ -275,7 +311,7 @@ suspended owning App so it cannot bypass this operational stop.
 
 Wrangler retains prior versions. Inspect each unit that may have changed and
 select the known-good version ID. If more than one unit changed, roll them back
-in reverse deployment order: documentation, product site, then service. Skip
+in reverse deployment order: documentation, product site, Spaces, then service. Skip
 units that the failed workflow never reached.
 
 A Worker version rollback changes the code receiving traffic; it does not
@@ -292,13 +328,16 @@ pnpm --filter @unicas/service-cloudflare exec wrangler rollback <docs-version-id
 pnpm --filter @unicas/service-cloudflare exec wrangler deployments list --config ../../stacks/unicas/site/wrangler.jsonc
 pnpm --filter @unicas/service-cloudflare exec wrangler rollback <site-version-id> --config ../../stacks/unicas/site/wrangler.jsonc --yes --message "rollback failed production release"
 
+pnpm --filter @unicas/service-cloudflare exec wrangler deployments list --config ../../.wrangler/spaces/wrangler.production.json
+pnpm --filter @unicas/service-cloudflare exec wrangler rollback <spaces-version-id> --config ../../.wrangler/spaces/wrangler.production.json --yes --message "rollback failed production release"
+
 pnpm --filter @unicas/service-cloudflare exec wrangler deployments list
 pnpm --filter @unicas/service-cloudflare exec wrangler rollback <service-version-id> --yes --message "rollback failed production release"
 ```
 
 After rollback, rerun the canonical smoke with provisioned operator
 credentials and check `https://api.unicas.work/health`,
-`https://console.unicas.work/`, `https://unicas.work/`, and
+`https://console.unicas.work/`, `https://spaces.unicas.work/`, `https://unicas.work/`, and
 `https://docs.unicas.work/`. Do not use a source rebuild as a substitute for an
 explicit version rollback: rebuilding a moving branch does not identify the
 artifact receiving traffic. The service rollback procedure was verified in
@@ -312,6 +351,7 @@ Backup (manual or scheduled; daily target):
 ```text
 wrangler d1 export unicas-control --remote --no-schema --output <cutover>/unicas-control.sql
 wrangler d1 export unicas-tenant --remote --no-schema --output <cutover>/unicas-tenant.sql
+pnpm --filter @unicas/service-cloudflare exec wrangler d1 export SPACES_DB --remote --config ../../.wrangler/spaces/wrangler.production.json --output ../../.wrangler/spaces/unicas-spaces.sql
 ```
 
 `--remote` is mandatory (without it wrangler exports an empty local DB).

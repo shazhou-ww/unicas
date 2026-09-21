@@ -1,7 +1,7 @@
 # Repository tasks
 
 This repository uses the installed
-[`repository-task-ledger`](/.agents/skills/repository-task-ledger/SKILL.md) with
+[`repoledger`](/.agents/skills/repoledger/SKILL.md) with
 [`repoledger.yaml`](/repoledger.yaml) and [`tasks/status.yaml`](/tasks/status.yaml).
 GitHub Issues remain the open intake surface; accepted implementation work is
 registered in this repository only after an explicit `task-new` invocation.
@@ -14,7 +14,7 @@ hashes. Restore them after cloning with `npx skills experimental_install`.
 Update them deliberately with:
 
 ```sh
-npx skills update repository-task-ledger task-new task-exec ui-change-review business-data-model-review publish --project --yes
+npx skills update repoledger task-new task-exec ui-change-review business-data-model-review publish --project --yes
 ```
 
 Review the resulting repository diff and run `pnpm check:tasks`. The `publish`
@@ -38,7 +38,8 @@ tasks/
 
 The allowed states are `backlog`, `ongoing`, `completed`, and `abandoned`.
 Task paths never move when state changes. Task records do not contain an owner,
-device, worktree, or source branch, and no identity lane or marker is used.
+device, or worktree, and no identity lane or marker is used. An ongoing record
+advertises the shared source branch where implementation can be resumed.
 
 ## Lifecycle
 
@@ -46,8 +47,9 @@ device, worktree, or source branch, and no identity lane or marker is used.
   semantic overlap before registering or resuming a task.
 - Prepare `tasks/<task-name>/Task.md`, then use `repoledger task register` to
   publish accepted backlog work.
-- Use `repoledger task start` before implementation. Planning and review alone
-  leave the task in `backlog`.
+- Use `repoledger task start` before implementation. It publishes the ongoing
+  state and creates the shared source branch; planning and review alone leave
+  the task in `backlog`.
 - Create or update `Progress.md` only with a publication that also changes a
   path outside `tasks/`; do not create bookkeeping-only progress commits.
 - Before completion, reconcile the task's acceptance criteria and Progress

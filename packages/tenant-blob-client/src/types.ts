@@ -9,7 +9,8 @@ import type {
   CasHash,
   CasNodeRange,
   CasRootRefsResult,
-  TenantCasClient,
+  HttpFetcher,
+  SpaceCasClient,
 } from "@unicas/tenant-client";
 
 /** Blob identity + resolved metadata. */
@@ -35,6 +36,8 @@ export interface CasBlobClientOptions {
   readonly chunkBytes?: number;
   /** Children per index node. Defaults to the protocol value. */
   readonly indexFanout?: number;
+  /** HTTP transport used only for presigned object-storage PUT requests. */
+  readonly uploadFetcher?: HttpFetcher;
 }
 
 /** Positive blob reference counts to retain or release as one business batch. */
@@ -58,7 +61,7 @@ export interface CasBlobHandle {
 /** Complete tenant data-plane CAS client surface for business users. */
 export interface CasBlobClient {
   /** Escape hatch for node-level transport operations and tenant administration. */
-  readonly unicasClient: TenantCasClient;
+  readonly unicasClient: SpaceCasClient;
   /**
    * Write a blob, chunking it into CAS nodes behind a blob-index tree.
    * Every written node is automatically leased. Call `retain` after the

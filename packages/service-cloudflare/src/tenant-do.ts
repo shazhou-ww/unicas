@@ -9,7 +9,7 @@
  * cycle.
  */
 
-import { CanonicalNodeContentType, hashToHex, parseCanonicalNodeStream } from "@unicas/codec";
+import { CanonicalNodeContentType, parseCanonicalNodeStream } from "@unicas/codec";
 import type { D1Database, R2Bucket, DurableObjectNamespace } from "@cloudflare/workers-types";
 import { CasUploadIdHeader, CasUploadLengthHeader } from "@unicas/tenant-protocol";
 import {
@@ -25,13 +25,12 @@ import {
 } from "@unicas/service";
 import { canonicalComposite } from "./do-names.js";
 import {
-  admitCanonicalNodeUploadFinalization,
   beginCanonicalNodeLease,
-  deleteCanonicalNodeUploadSession,
+  cleanupExpiredLeaseDrivenUploads,
   finalizeCanonicalNodeLease,
+  leaseDrivenNodeUpload,
   leaseReadyNode,
   parseLeaseDuration,
-  prepareCanonicalNodeUpload,
   uploadCanonicalNode,
 } from "./nodes.js";
 import { CloudflareNodeGcRepository } from "./node-gc.js";
@@ -41,7 +40,6 @@ import { canonicalizeRootRefsUpdate, listTenantRootRefs, parseRootRefsBody } fro
 import { RootRefsErrorCodes, RootRefsValidationError } from "./root-refs.js";
 import { ServerTiming } from "./timing.js";
 import { R2UploadPresigner } from "./r2-upload-presigner.js";
-import { appCanonicalNodeKey } from "./do-names.js";
 
 export interface SpaceCasDoEnv {
   CAS_DB: D1Database;
@@ -68,6 +66,7 @@ export class CasDurableObject {
   readonly #env: SpaceCasDoEnv;
   #mutationTail: Promise<void> = Promise.resolve();
   readonly #activeUploads = new Map<string, ActiveUpload>();
+  readonly #activeLeaseEvaluations = new Map<string, Promise<unknown>>();
   /** Positive node-ready cache (hash -> expiry) shared by every repository
    *  built in this DO, so child-ready checks and renewals skip the R2 HEAD. */
   readonly #readyCache = new Map<string, number>();
@@ -148,20 +147,15 @@ export class CasDurableObject {
 
   async #handleLease(request: Request, store: Parameters<typeof leaseReadyNode>[0]): Promise<unknown> {
     const hash = requireHeader(request, "X-CAS-Hash");
+    if (request.headers.get("X-CAS-Api-Version") === "2") {
+      return this.#handleSpaceLease(request, store, hash);
+    }
     const leaseDurationMs = parseLeaseDuration(request.headers.get("X-CAS-Lease-Duration"));
     const contentType = request.headers.get("Content-Type");
     const uploadLengthHeader = request.headers.get(CasUploadLengthHeader);
     const uploadId = request.headers.get(CasUploadIdHeader);
-    const modeCount = Number(contentType !== null) + Number(uploadLengthHeader !== null) + Number(uploadId !== null);
-    if (modeCount > 1) {
-      throw new NodeOpError(400, NodeOpErrorCodes.UPLOAD_INVALID, "Canonical lease upload modes are mutually exclusive");
-    }
-    if (uploadLengthHeader !== null) {
-      const storedBytes = Number(uploadLengthHeader);
-      return this.#prepareDirectUpload(store, hash, storedBytes, leaseDurationMs);
-    }
-    if (uploadId !== null) {
-      return this.#finalizeDirectUpload(store, hash, uploadId, leaseDurationMs);
+    if (uploadLengthHeader !== null || uploadId !== null) {
+      throw new NodeOpError(400, NodeOpErrorCodes.UPLOAD_INVALID, "Direct upload headers are no longer supported");
     }
     if (contentType !== null) {
       if (contentType !== CanonicalNodeContentType || request.body === null) {
@@ -238,125 +232,80 @@ export class CasDurableObject {
     }));
   }
 
-  async #prepareDirectUpload(
+  async #handleSpaceLease(
+    request: Request,
     store: Parameters<typeof leaseReadyNode>[0],
     hash: string,
-    storedBytes: number,
-    leaseDurationMs: number,
   ): Promise<unknown> {
-    const prepared = await this.#withMutation(() => prepareCanonicalNodeUpload(store, {
+    const body: unknown = await request.json().catch(() => null);
+    if (
+      typeof body !== "object"
+      || body === null
+      || Array.isArray(body)
+      || Object.keys(body).length !== 1
+    ) {
+      throw new NodeOpError(400, NodeOpErrorCodes.INVALID_REQUEST, "leaseDurationMs must be a positive integer");
+    }
+    const leaseDurationMs = (body as Record<string, unknown>)["leaseDurationMs"];
+    if (!Number.isSafeInteger(leaseDurationMs) || (leaseDurationMs as number) <= 0) {
+      throw new NodeOpError(400, NodeOpErrorCodes.INVALID_REQUEST, "leaseDurationMs must be a positive integer");
+    }
+    const now = Date.now();
+    const uploadExpirySeconds = this.#uploadExpirySeconds();
+    const uploadKey = `${store.stackId}\0${store.tenantId}\0${hash}`;
+    const active = this.#activeLeaseEvaluations.get(uploadKey);
+    if (active !== undefined) return active;
+    const evaluation = this.#evaluateSpaceLease(
+      store,
       hash,
-      storedBytes,
+      leaseDurationMs as number,
+      uploadExpirySeconds,
+      now,
+    );
+    this.#activeLeaseEvaluations.set(uploadKey, evaluation);
+    try {
+      return await evaluation;
+    } finally {
+      if (this.#activeLeaseEvaluations.get(uploadKey) === evaluation) {
+        this.#activeLeaseEvaluations.delete(uploadKey);
+      }
+    }
+  }
+
+  async #evaluateSpaceLease(
+    store: Parameters<typeof leaseReadyNode>[0],
+    hash: string,
+    leaseDurationMs: number,
+    uploadExpirySeconds: number,
+    now: number,
+  ): Promise<unknown> {
+    const result = await this.#withMutation(() => leaseDrivenNodeUpload(store, {
+      hash,
       leaseDurationMs,
+      uploadSessionMs: uploadExpirySeconds * 1000,
       createIdentifiers: () => {
         const id = crypto.randomUUID();
-        return { uploadId: id, temporaryObjectKey: `_uploads/v1/${id}` };
+        return { generation: id, temporaryObjectKey: `_uploads/v2/${id}` };
       },
+      now: () => now,
     }));
-    if (prepared.kind === "ready") return prepared.result;
-    if (prepared.replacedTemporaryObjectKey !== undefined) {
-      await store.bucket.delete(prepared.replacedTemporaryObjectKey);
+    if (result.kind === "ready") return result.result;
+    if (result.kind === "validated_awaiting_children") {
+      return { state: result.kind, hash, childHashes: result.childHashes };
     }
-    const upload = await this.#uploadPresigner().signPut(
-      prepared.session.temporaryObjectKey,
-      prepared.session.storedBytes,
-    );
+    const upload = await this.#uploadPresigner(uploadExpirySeconds, now)
+      .signPut(result.upload.temporaryObjectKey);
+    if (result.kind === "awaiting_replacement_upload") {
+      return { state: result.kind, hash, rejection: result.rejection, upload };
+    }
     return {
+      state: result.kind,
       hash,
-      ready: false,
-      status: "upload_required",
-      uploadId: prepared.session.uploadId,
-      expiresAt: prepared.session.expiresAt,
       upload,
     };
   }
 
-  async #finalizeDirectUpload(
-    store: Parameters<typeof leaseReadyNode>[0],
-    hash: string,
-    uploadId: string,
-    leaseDurationMs: number,
-  ): Promise<unknown> {
-    const uploadKey = `${store.stackId}\0${store.tenantId}\0${hash}`;
-    const admission = await this.#withMutation(async () => {
-      const active = this.#activeUploads.get(uploadKey);
-      if (active !== undefined) return { kind: "join" as const, active };
-      const admitted = await admitCanonicalNodeUploadFinalization(store, {
-        hash,
-        uploadId,
-        leaseDurationMs,
-      });
-      if (admitted.kind === "ready") return admitted;
-      const newActive = deferredUpload();
-      this.#activeUploads.set(uploadKey, newActive);
-      return { kind: "upload" as const, session: admitted.session, active: newActive };
-    });
-    if (admission.kind === "ready") return admission.result;
-    if (admission.kind === "join") {
-      const outcome = await admission.active.completion;
-      if (!outcome.ok) throw outcome.error;
-      return this.#withMutation(() => leaseReadyNode(store, { hash, leaseDurationMs }));
-    }
-
-    try {
-      const parsed = await this.#publishTemporaryUpload(store, admission.session);
-      const result = await this.#withMutation(() => finalizeCanonicalNodeLease(store, {
-        hash,
-        storedBytes: admission.session.storedBytes,
-        leaseDurationMs: admission.session.leaseDurationMs,
-      }, parsed));
-      await store.bucket.delete(admission.session.temporaryObjectKey);
-      admission.active.settle({ ok: true });
-      return result;
-    } catch (error) {
-      await Promise.allSettled([
-        store.bucket.delete(admission.session.temporaryObjectKey),
-        this.#withMutation(() => deleteCanonicalNodeUploadSession(store, hash, admission.session.uploadId)),
-      ]);
-      admission.active.settle({ ok: false, error });
-      throw error;
-    } finally {
-      if (this.#activeUploads.get(uploadKey) === admission.active) {
-        this.#activeUploads.delete(uploadKey);
-      }
-    }
-  }
-
-  async #publishTemporaryUpload(
-    store: Parameters<typeof leaseReadyNode>[0],
-    session: { readonly hash: string; readonly temporaryObjectKey: string; readonly storedBytes: number },
-  ): Promise<ParsedUploadedNodeMetadata> {
-    const temporary = await store.bucket.get(session.temporaryObjectKey);
-    if (temporary === null || temporary.body === undefined || temporary.size !== session.storedBytes) {
-      throw new NodeOpError(412, NodeOpErrorCodes.UPLOAD_INCOMPLETE, "Canonical upload is incomplete");
-    }
-    const [uploadStream, parseStream] = (temporary.body as unknown as ReadableStream<Uint8Array>).tee();
-    const parsing = parseUploadedBody(parseStream, session.storedBytes, store.limits);
-    const finalKey = appCanonicalNodeKey(store.stackId, store.tenantId, session.hash);
-    const uploading = store.bucket.put(
-      finalKey,
-      uploadStream as unknown as Parameters<R2Bucket["put"]>[1],
-      { sha256: session.hash, onlyIf: { etagDoesNotMatch: "*" } },
-    );
-    try {
-      const [parsed, stored] = await Promise.all([parsing, uploading]);
-      if (stored === null) {
-        const existing = await store.bucket.head(finalKey);
-        const checksum = existing?.checksums.sha256;
-        const actualHash = checksum === undefined ? undefined : hashToHex(new Uint8Array(checksum));
-        if (existing?.size !== session.storedBytes || actualHash !== session.hash) {
-          throw new NodeOpError(409, NodeOpErrorCodes.CONFLICT, "Canonical object conflicts with an existing object");
-        }
-      }
-      return parsed;
-    } catch (error) {
-      await Promise.allSettled([parsing, uploading]);
-      if (error instanceof NodeOpError) throw error;
-      throw new NodeOpError(422, NodeOpErrorCodes.DIGEST_MISMATCH, "Canonical node checksum does not match its hash");
-    }
-  }
-
-  #uploadPresigner(): R2UploadPresigner {
+  #uploadPresigner(expiresInSeconds: number, now: number): R2UploadPresigner {
     const accountId = this.#env.CAS_R2_ACCOUNT_ID;
     const bucketName = this.#env.CAS_R2_BUCKET_NAME;
     const accessKeyId = this.#env.CAS_R2_ACCESS_KEY_ID;
@@ -364,14 +313,22 @@ export class CasDurableObject {
     if (!accountId || !bucketName || !accessKeyId || !secretAccessKey) {
       throw new NodeOpError(503, NodeOpErrorCodes.STORAGE, "Direct canonical upload is not configured");
     }
-    const configuredExpiry = Number(this.#env.CAS_UPLOAD_URL_EXPIRY_SECONDS ?? "300");
     return new R2UploadPresigner({
       accountId,
       bucketName,
       accessKeyId,
       secretAccessKey,
-      expiresInSeconds: configuredExpiry,
+      expiresInSeconds,
+      now: () => now,
     });
+  }
+
+  #uploadExpirySeconds(): number {
+    const configured = Number(this.#env.CAS_UPLOAD_URL_EXPIRY_SECONDS ?? "300");
+    if (!Number.isSafeInteger(configured) || configured < 1 || configured > 604_800) {
+      throw new NodeOpError(503, NodeOpErrorCodes.STORAGE, "Direct upload expiry is invalid");
+    }
+    return configured;
   }
 
   /** Store the canonical body in R2 while tee-parsing its metadata from the
@@ -446,11 +403,14 @@ export class CasDurableObject {
     if (!Number.isSafeInteger(maxNodes) || maxNodes <= 0) {
       throw new NodeOpError(400, NodeOpErrorCodes.INVALID_REQUEST, "maxNodes must be a positive integer");
     }
-    return this.#withMutation(() => collectExpiredUnreferencedNodes({
-      repository: new CloudflareNodeGcRepository(store.db, store.bucket),
-      scope: { stackId: store.stackId, tenantId: store.tenantId },
-      maxNodes,
-    }));
+    return this.#withMutation(async () => {
+      await cleanupExpiredLeaseDrivenUploads(store, { now: Date.now(), limit: maxNodes });
+      return collectExpiredUnreferencedNodes({
+        repository: new CloudflareNodeGcRepository(store.db, store.bucket),
+        scope: { stackId: store.stackId, tenantId: store.tenantId },
+        maxNodes,
+      });
+    });
   }
 
   async #withMutation<T>(operation: () => Promise<T>): Promise<T> {

@@ -1,6 +1,6 @@
 # HTTP operation reference
 
-Status: Interface review draft
+Status: published operation reference
 
 ## Common request rules
 
@@ -18,6 +18,10 @@ Send a Space capability through the HTTP bearer authentication scheme:
 Authorization: Bearer CAPABILITY
 ```
 
+The HTTP API remains v2. Its capability claim version is `3`: the signed
+`spaceId` must match the route and `permissions` must contain the operation's
+exact authority.
+
 `appId` and `spaceId` are non-empty strings. A node `hash` is exactly 64
 lowercase hexadecimal characters. JSON requests use `application/json`.
 Canonical node bytes use `application/vnd.unidocs.cas-node.v1`.
@@ -29,13 +33,13 @@ than modeling `Authorization` as an ordinary operation header.
 
 | Client operation | Method and path | Authority | Success |
 | --- | --- | --- | --- |
-| `readContent` | `GET /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/content` | `cas:read` | Streamed canonical bytes |
-| `readMetadata` | `GET /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/metadata` | `cas:read` | Metadata and retention state |
-| `leaseNode` | `POST /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/lease` | `cas:write` | Ready lease or direct-upload instructions |
-| `usage` | `GET /v2/apps/{appId}/spaces/{spaceId}/cas/usage` | `cas:manage` | Space accounting |
-| `gc` | `POST /v2/apps/{appId}/spaces/{spaceId}/cas/gc` | `cas:manage` | Bounded collection result |
-| `listRootRefs` | `GET /v2/apps/{appId}/spaces/{spaceId}/root-refs` | `cas:read` + `refDomain` | Revision-stable page |
-| `updateRootRefs` | `POST /v2/apps/{appId}/spaces/{spaceId}/root-refs` | `cas:write` + `refDomain` | Atomic commit result |
+| `readContent` | `GET /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/content` | `cas:nodes:read` | Streamed canonical bytes |
+| `readMetadata` | `GET /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/metadata` | `cas:nodes:read` | Metadata and retention state |
+| `leaseNode` | `POST /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/lease` | `cas:nodes:lease` | Ready lease or direct-upload instructions |
+| `usage` | `GET /v2/apps/{appId}/spaces/{spaceId}/cas/usage` | `cas:usage:read` | Space accounting |
+| `gc` | `POST /v2/apps/{appId}/spaces/{spaceId}/cas/gc` | `cas:gc:execute` | Bounded collection result |
+| `listRootRefs` | `GET /v2/apps/{appId}/spaces/{spaceId}/root-refs` | `cas:root-refs:read` + `refDomain` | Revision-stable page |
+| `updateRootRefs` | `POST /v2/apps/{appId}/spaces/{spaceId}/root-refs` | `cas:root-refs:update` + `refDomain` | Atomic commit result |
 
 There are no other public v2 Space operations in the current generated
 OpenAPI.
@@ -112,63 +116,113 @@ and may use configured metadata caching.
 ```http
 POST /v2/apps/APP_ID/spaces/SPACE_ID/cas/nodes/HASH/lease
 Authorization: Bearer CAPABILITY
-content-type: application/vnd.unidocs.cas-node.v1
-content-length: 1024
-x-cas-lease-duration: 900000
+content-type: application/json
 
-<canonical node bytes>
+{"leaseDurationMs":900000}
 ```
 
-Optional request headers:
+The JSON property is required. Published clients use 15 minutes when the
+caller omits the complete options argument; the service clamps accepted values
+to 60 seconds through 24 hours.
 
-| Header | Constraint | Purpose |
-| --- | --- | --- |
-| `x-cas-lease-duration` | Positive integer | Requested lease duration in milliseconds; service clamps it to supported bounds. |
-| `x-cas-upload-length` | Non-negative integer | Prepare a direct upload of the stated length. |
-| `x-cas-upload-id` | Non-empty string | Finalize a prepared direct upload. |
-| `content-type` | Exact canonical node media type | Identifies an inline canonical-node body. |
-| `content-length` | Non-negative integer | Required by the runtime for inline body upload. |
-
-The body is optional and, when present, is streamed.
+The response reports the state after UniCAS evaluates the current upload and
+validation evidence. All four states below use HTTP `200`; only `ready` means
+the node is readable and can be referenced by another node.
 
 Ready result:
 
 ```json
 {
+  "state": "ready",
   "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-  "ready": true,
   "leaseStartedAt": 1760000000000,
   "leaseExpiresAt": 1760000900000
 }
 ```
 
-Direct-upload preparation result:
+`ready` means the node is validated, readable, referenceable, and protected
+from collection until `leaseExpiresAt`. Repeating the request for an active
+lease preserves `leaseStartedAt` and never shortens `leaseExpiresAt`; an
+expired lease starts a new lease interval.
+
+Initial upload result:
 
 ```json
 {
+  "state": "awaiting_upload",
   "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-  "ready": false,
-  "status": "upload_required",
-  "uploadId": "UPLOAD_ID",
-  "expiresAt": 1760000900000,
   "upload": {
     "method": "PUT",
     "url": "https://UPLOAD_TARGET",
+    "expiresAt": 1760000300000,
     "headers": {
-      "content-type": "application/vnd.unidocs.cas-node.v1"
+      "content-type": "application/vnd.unidocs.cas-node.v1",
+      "if-none-match": "*"
     }
   }
 }
 ```
 
-Use the returned method, URL, and headers exactly; then finalize with the same
-`uploadId`. Preparing the same active upload length reuses its session.
-Conflicting length is `409 CAS_UPLOAD_CONFLICT`; invalid upload identity is
-`400 CAS_UPLOAD_INVALID`; an expired session is `410 CAS_UPLOAD_EXPIRED`.
+`awaiting_upload` is a successful negotiation that requires caller action, not
+an asynchronously running server job. Use the returned method, URL, and
+headers exactly. The response exposes no upload ID, temporary object key,
+storage credential, or App capability. After the PUT, repeat the same lease
+request using only the node hash and requested duration.
+
+Rejected upload result:
+
+```json
+{
+  "state": "awaiting_replacement_upload",
+  "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "rejection": {
+    "code": "NODE_DIGEST_MISMATCH",
+    "message": "Uploaded canonical bytes did not match the requested node hash"
+  },
+  "upload": {
+    "method": "PUT",
+    "url": "https://REPLACEMENT_UPLOAD_TARGET",
+    "expiresAt": 1760000600000,
+    "headers": {
+      "content-type": "application/vnd.unidocs.cas-node.v1",
+      "if-none-match": "*"
+    }
+  }
+}
+```
+
+When a lease call detects malformed, oversized, or hash-mismatched bytes, it
+retires that write-once upload and returns a replacement target. Repeating the
+lease before a corrected PUT remains `awaiting_replacement_upload`, preserves
+the rejection, and returns the current replacement target. If that target
+expires without an object, UniCAS may rotate its URL and internal generation
+while retaining the rejection.
+
+Validated parent waiting for children:
+
+```json
+{
+  "state": "validated_awaiting_children",
+  "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "childHashes": [
+    "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+    "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+  ]
+}
+```
+
+`childHashes` contains every distinct child that is not ready, in canonical
+first-occurrence order. The canonical format limits the complete list to 256
+references. UniCAS retains the uploaded and structurally validated parent;
+after making the listed children ready, repeat the same lease request to
+publish it without another parent PUT, hash, or parse.
 
 The service validates canonical bytes against `HASH`. Ready-node calls renew
-the lease without re-uploading. Lease duration defaults to 15 minutes and is
-clamped to 60 seconds through 24 hours.
+the lease without re-uploading, parsing, or hashing.
+
+Creating a new upload generation can return `429 CAS_UPLOAD_LIMIT` when the
+Space has too many active uploads. No generation is created for that request;
+retry the same lease after active upload work has drained.
 
 ## Get Space usage
 
@@ -321,6 +375,7 @@ Only `error` is required by OpenAPI. The shared operation error map is:
 | `404` | `NOT_FOUND` |
 | `409` | `CONFLICT` |
 | `413` | `PAYLOAD_TOO_LARGE` |
+| `429` | `RESOURCE_EXHAUSTED` |
 | `500` | `INTERNAL_ERROR` |
 
 The service returns more specific stable authorization codes such as

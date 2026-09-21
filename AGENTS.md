@@ -3,7 +3,7 @@
 ## Task workflow
 
 Load and follow the
-[`repository-task-ledger` skill](.agents/skills/repository-task-ledger/SKILL.md)
+[`repoledger` skill](.agents/skills/repoledger/SKILL.md)
 only when the user invokes `task-new`, invokes `task-exec`, or asks to manage
 an existing repository task. Then apply the UniCAS-specific profile in
 [`docs/repository-tasks.md`](docs/repository-tasks.md). Ordinary implementation

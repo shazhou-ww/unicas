@@ -29,20 +29,27 @@ describe("repoledger forward-revert patch", () => {
     directory = await mkdtemp(join(tmpdir(), "repoledger-revert-"));
     const repository = join(directory, "repository");
     const remote = join(directory, "remote.git");
+    const primaryRepository = "https://example.com/owner/repository.git";
     await mkdir(repository);
     git(repository, "init", "-b", "main");
     git(repository, "config", "user.name", "Repoledger Test");
     git(repository, "config", "user.email", "repoledger@example.test");
     git(repository, "init", "--bare", remote);
     git(repository, "remote", "add", "origin", remote);
+    git(
+      repository,
+      "config",
+      `url.file:///${remote.replaceAll("\\", "/")}.insteadOf`,
+      primaryRepository,
+    );
     await write(repository, "repoledger.yaml", [
-      "version: 1",
+      "version: 2",
       "tasksDirectory: tasks",
-      "remote: origin",
+      `primaryRepository: ${primaryRepository}`,
       "primaryBranch: main",
       "",
     ].join("\n"));
-    await write(repository, "tasks/status.yaml", "version: 1\ntasks: {}\n");
+    await write(repository, "tasks/status.yaml", "version: 2\ntasks: {}\n");
     git(repository, "add", ".");
     git(repository, "commit", "-m", "initialize ledger");
     git(repository, "push", "-u", "origin", "main");

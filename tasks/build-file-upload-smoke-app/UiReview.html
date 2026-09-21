@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UniCAS Spaces UI review</title>
+  <style>
+    :root {
+      --background: #f8f8f9;
+      --surface: #ffffff;
+      --surface-subtle: #f4f4f5;
+      --surface-hover: #f1f1f2;
+      --border: #e1e1e4;
+      --border-strong: #c9c9ce;
+      --foreground: #18181b;
+      --muted: #71717a;
+      --muted-strong: #52525b;
+      --primary: #27272a;
+      --primary-hover: #09090b;
+      --primary-foreground: #fafafa;
+      --accent: #0f766e;
+      --accent-soft: #e8f5f2;
+      --danger: #b42318;
+      --danger-soft: #fff1f0;
+      --warning: #92400e;
+      --warning-soft: #fff8e7;
+      --sidebar: #fafafa;
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { min-width: 320px; min-height: 100%; background: var(--background); }
+
+    body {
+      min-width: 320px;
+      min-height: 100vh;
+      margin: 0;
+      color: var(--foreground);
+      background-color: var(--background);
+      background-image:
+        linear-gradient(rgba(24, 24, 27, 0.022) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(24, 24, 27, 0.022) 1px, transparent 1px);
+      background-size: 28px 28px;
+      font-family: "Aptos", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      letter-spacing: 0;
+    }
+
+    button { font: inherit; letter-spacing: 0; }
+    button:focus-visible { outline: 3px solid rgba(15, 118, 110, 0.28); outline-offset: 2px; }
+    [hidden] { display: none !important; }
+
+    .skip-link {
+      position: fixed;
+      top: 8px;
+      left: 8px;
+      z-index: 20;
+      padding: 8px 12px;
+      color: #fff;
+      background: var(--primary);
+      border-radius: 6px;
+      transform: translateY(-150%);
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    header, main, footer {
+      width: min(1500px, calc(100% - 40px));
+      margin-inline: auto;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 20px;
+      align-items: start;
+      padding: 28px 0 20px;
+      border-bottom: 1px solid var(--border-strong);
+    }
+
+    .brand { display: inline-flex; align-items: center; gap: 9px; font-weight: 700; }
+
+    .brand-mark {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      color: #fff;
+      background: #263746;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    h1 { margin: 0; font-size: 27px; line-height: 1.15; font-weight: 680; }
+    header p { max-width: 72ch; margin: 6px 0 0; color: var(--muted-strong); }
+
+    .status { display: inline-flex; align-items: center; gap: 8px; color: var(--muted-strong); white-space: nowrap; }
+    .status::before { width: 8px; height: 8px; background: var(--warning); border-radius: 50%; content: ""; }
+
+    main { padding: 20px 0 40px; }
+
+    .decision {
+      display: grid;
+      grid-template-columns: minmax(260px, 0.85fr) minmax(0, 1.15fr);
+      gap: 24px;
+      align-items: center;
+      padding: 16px 18px;
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    .eyebrow { margin: 0 0 4px; color: var(--muted); font-size: 11px; font-weight: 750; text-transform: uppercase; }
+    .decision h2 { margin: 0; font-size: 18px; line-height: 1.3; }
+    .decision p { margin: 0; color: var(--muted-strong); }
+
+    .controls { display: flex; justify-content: space-between; gap: 16px; margin: 18px 0 14px; }
+
+    .tabs, .viewport-toggle {
+      display: inline-flex;
+      gap: 3px;
+      padding: 3px;
+      background: #e9e9ec;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+    }
+
+    .tab, .viewport-button {
+      min-height: 36px;
+      padding: 7px 12px;
+      color: var(--muted-strong);
+      background: transparent;
+      border: 0;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: 650;
+    }
+
+    .tab[aria-selected="true"], .viewport-button[aria-pressed="true"] {
+      color: var(--foreground);
+      background: var(--surface);
+      box-shadow: 0 1px 3px rgba(24, 24, 27, 0.12);
+    }
+
+    .comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .comparison.mobile { grid-template-columns: repeat(2, minmax(300px, 390px)); justify-content: center; }
+
+    .frame { min-width: 0; overflow: hidden; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 14px 36px rgba(24, 24, 27, 0.07); }
+    .frame-label { display: flex; justify-content: space-between; gap: 12px; padding: 9px 12px; background: var(--surface-subtle); border-bottom: 1px solid var(--border); color: var(--muted-strong); font-size: 12px; font-weight: 650; }
+    .frame-label strong { color: var(--foreground); }
+    .screen { display: flex; min-height: 570px; background: var(--background); }
+
+    .sidebar { display: flex; width: 154px; flex: 0 0 154px; flex-direction: column; background: var(--sidebar); border-right: 1px solid var(--border); }
+    .sidebar-head { display: flex; align-items: center; gap: 7px; padding: 13px 11px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 650; }
+    .sidebar-head .brand-mark { width: 25px; height: 25px; font-size: 9px; }
+    .nav { flex: 1; padding: 12px 7px; }
+    .nav-title { padding: 0 7px 7px; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+    .nav-item { display: flex; align-items: center; gap: 8px; margin: 2px 0; padding: 8px; border-radius: 6px; color: var(--muted-strong); font-size: 12px; }
+    .nav-item.active { color: var(--foreground); background: var(--surface-hover); font-weight: 650; }
+    .nav-icon { width: 17px; text-align: center; font-size: 13px; }
+    .user { padding: 11px; border-top: 1px solid var(--border); color: var(--muted-strong); font-size: 11px; }
+
+    .workspace { min-width: 0; flex: 1; padding: 20px; }
+    .page-head { display: flex; justify-content: space-between; gap: 16px; align-items: start; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+    .page-head h3 { margin: 0; font-size: 20px; font-weight: 680; }
+    .page-head p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+
+    .page-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+    .breadcrumbs { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin: 14px 0 0; color: var(--muted); font-size: 12px; }
+    .breadcrumb { padding: 2px 4px; color: var(--muted-strong); background: transparent; border: 0; border-radius: 4px; }
+    .breadcrumb.current { color: var(--foreground); font-weight: 650; }
+
+    .button { display: inline-flex; min-height: 34px; align-items: center; justify-content: center; gap: 6px; padding: 7px 11px; color: var(--foreground); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; font-weight: 650; }
+    .button.primary { color: var(--primary-foreground); background: var(--primary); border-color: var(--primary); }
+    .button.danger { color: var(--danger); background: var(--danger-soft); border-color: #efc4c0; }
+
+    .metric-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin-top: 18px; overflow: hidden; background: var(--border); border: 1px solid var(--border); border-radius: 7px; }
+    .metric { padding: 12px; background: var(--surface); }
+    .metric span { display: block; color: var(--muted); font-size: 10px; text-transform: uppercase; }
+    .metric strong { display: block; margin-top: 3px; font-size: 17px; }
+
+    .table { margin-top: 18px; overflow: hidden; border: 1px solid var(--border); border-radius: 7px; }
+    .row { display: grid; grid-template-columns: minmax(0, 1.5fr) .7fr .8fr auto; gap: 10px; align-items: center; min-height: 47px; padding: 8px 10px; border-top: 1px solid var(--border); background: var(--surface); }
+    .row:first-child { border-top: 0; }
+    .row.header { min-height: 34px; color: var(--muted); background: var(--surface-subtle); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+    .filename { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
+    .filemeta { color: var(--muted); font-size: 11px; }
+    .row-actions { display: flex; gap: 4px; }
+    .icon-button { display: grid; width: 30px; height: 30px; place-items: center; background: transparent; border: 1px solid transparent; border-radius: 5px; color: var(--muted-strong); }
+    .empty-folder { display: grid; min-height: 164px; place-items: center; padding: 22px; color: var(--muted); text-align: center; background: var(--surface); }
+    .empty-folder strong { display: block; margin-bottom: 4px; color: var(--foreground); font-size: 14px; }
+
+    .login { display: grid; min-height: 570px; place-items: center; padding: 24px; background: var(--background); }
+    .login-panel { width: min(360px, 100%); padding: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 14px 36px rgba(24, 24, 27, 0.07); }
+    .login-panel .brand { margin-bottom: 24px; }
+    .login-panel h3 { margin: 0; font-size: 22px; }
+    .login-panel p { margin: 7px 0 20px; color: var(--muted-strong); }
+    .google { width: 100%; min-height: 42px; background: #fff; }
+    .provider-note { margin-top: 15px; padding-top: 13px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; }
+
+    .dropzone { display: grid; min-height: 160px; place-items: center; margin-top: 18px; padding: 22px; text-align: center; background: var(--surface); border: 1px dashed var(--border-strong); border-radius: 7px; }
+    .dropzone strong { display: block; font-size: 15px; }
+    .dropzone p { margin: 5px 0 13px; color: var(--muted); font-size: 12px; }
+    .progress { height: 7px; margin-top: 17px; overflow: hidden; background: var(--surface-subtle); border-radius: 4px; }
+    .progress span { display: block; width: 61%; height: 100%; background: var(--accent); }
+    .stage-row { display: flex; justify-content: space-between; gap: 8px; margin-top: 7px; color: var(--muted); font-size: 11px; }
+    .error { margin-top: 15px; padding: 11px 12px; color: #7f1d1d; background: var(--danger-soft); border: 1px solid #efc4c0; border-radius: 7px; }
+    .error strong { display: block; }
+    .error span { font-size: 11px; }
+
+    .rename-panel { width: min(380px, 100%); margin: 18px auto 0; padding: 18px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 10px 28px rgba(24, 24, 27, 0.08); }
+    .rename-panel h4 { margin: 0; font-size: 16px; }
+    .rename-panel p { margin: 5px 0 14px; color: var(--muted); font-size: 12px; }
+    .rename-panel label { display: block; margin-bottom: 5px; color: var(--muted-strong); font-size: 11px; font-weight: 650; }
+    .rename-panel input { width: 100%; min-height: 37px; padding: 7px 9px; color: var(--foreground); background: var(--surface); border: 1px solid var(--danger); border-radius: 6px; font: inherit; }
+    .field-error { margin: 5px 0 13px; color: var(--danger); font-size: 11px; }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 7px; }
+
+    .reference-note { margin: 18px 0 0; padding: 12px 14px; color: var(--muted-strong); background: var(--warning-soft); border-left: 3px solid #d7a84f; }
+    footer { padding: 0 0 30px; color: var(--muted); font-size: 12px; }
+
+    .comparison.mobile .screen { min-height: 610px; }
+    .comparison.mobile .sidebar { width: 54px; flex-basis: 54px; }
+    .comparison.mobile .sidebar-head span:last-child,
+    .comparison.mobile .nav-title,
+    .comparison.mobile .nav-item span:last-child,
+    .comparison.mobile .user { display: none; }
+    .comparison.mobile .sidebar-head { justify-content: center; padding-inline: 8px; }
+    .comparison.mobile .nav-item { justify-content: center; padding-inline: 5px; }
+    .comparison.mobile .workspace { padding: 14px; }
+    .comparison.mobile .metric-row { grid-template-columns: 1fr; }
+    .comparison.mobile .row { grid-template-columns: minmax(0, 1fr) auto; }
+    .comparison.mobile .row > :nth-child(2),
+    .comparison.mobile .row > :nth-child(3) { display: none; }
+
+    @media (max-width: 900px) {
+      header { grid-template-columns: auto minmax(0, 1fr); }
+      .status { grid-column: 2; }
+      .decision { grid-template-columns: 1fr; }
+      .controls { align-items: stretch; flex-direction: column; }
+      .tabs, .viewport-toggle { align-self: flex-start; flex-wrap: wrap; }
+      .comparison, .comparison.mobile { grid-template-columns: minmax(0, 1fr); }
+    }
+
+    @media (max-width: 560px) {
+      header, main, footer { width: min(100% - 24px, 1500px); }
+      header { gap: 12px; padding-top: 18px; }
+      header .brand { display: none; }
+      header, .status { grid-template-columns: 1fr; grid-column: 1; }
+      h1 { font-size: 23px; }
+      .tabs { display: grid; width: 100%; grid-template-columns: 1fr; }
+      .viewport-toggle { display: none; }
+      .frame-label { align-items: start; flex-direction: column; }
+      .screen { min-height: 610px; }
+      .sidebar { width: 52px; flex-basis: 52px; }
+      .sidebar-head span:last-child, .nav-title, .nav-item span:last-child, .user { display: none; }
+      .sidebar-head, .nav-item { justify-content: center; padding-inline: 6px; }
+      .workspace { padding: 13px; }
+      .page-head { align-items: stretch; flex-direction: column; }
+      .metric-row { grid-template-columns: 1fr; }
+      .row { grid-template-columns: minmax(0, 1fr) auto; }
+      .row > :nth-child(2), .row > :nth-child(3) { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#review">Skip to comparison</a>
+  <header>
+    <div class="brand"><span class="brand-mark">UC</span><span>UniCAS</span></div>
+    <div>
+      <h1>Spaces full-stack App review</h1>
+      <p>Illustrative review aid for the Google-first file workflow at spaces.unicas.work. The interface contract remains normative.</p>
+    </div>
+    <div class="status">Pending approval</div>
+  </header>
+
+  <main id="review">
+    <section class="decision" aria-labelledby="decision-title">
+      <div>
+        <p class="eyebrow">Decision requested</p>
+        <h2 id="decision-title">Adopt the Console visual language for a navigable Spaces file utility.</h2>
+      </div>
+      <p>Approve the Google-only login, folder navigation, targeted upload, rename behavior, and explicit recovery states. This is not a production prototype.</p>
+    </section>
+
+    <div class="controls">
+      <div class="tabs" role="tablist" aria-label="Review scenario">
+        <button class="tab" role="tab" aria-selected="true" data-scenario="files">Files</button>
+        <button class="tab" role="tab" aria-selected="false" data-scenario="login">Google login</button>
+        <button class="tab" role="tab" aria-selected="false" data-scenario="rename">Rename conflict</button>
+        <button class="tab" role="tab" aria-selected="false" data-scenario="upload">Upload failure</button>
+      </div>
+      <div class="viewport-toggle" aria-label="Preview width">
+        <button class="viewport-button" aria-pressed="true" data-viewport="desktop">Desktop</button>
+        <button class="viewport-button" aria-pressed="false" data-viewport="mobile">Narrow</button>
+      </div>
+    </div>
+
+    <section class="comparison" aria-live="polite">
+      <article class="frame">
+        <div class="frame-label"><strong>Visual reference</strong><span>Current Console language, not a previous Spaces UI</span></div>
+        <div class="screen reference-screen">
+          <aside class="sidebar">
+            <div class="sidebar-head"><span class="brand-mark">UC</span><span>Console</span></div>
+            <nav class="nav" aria-label="Reference navigation">
+              <div class="nav-title">Workspace</div>
+              <div class="nav-item active"><span class="nav-icon">&#9670;</span><span>Applications</span></div>
+              <div class="nav-item"><span class="nav-icon">&#9678;</span><span>Audit</span></div>
+            </nav>
+            <div class="user">admin@example.test</div>
+          </aside>
+          <div class="workspace">
+            <div class="page-head"><div><h3>Applications</h3><p>Administration overview</p></div><button class="button primary">Create App</button></div>
+            <div class="metric-row"><div class="metric"><span>Apps</span><strong>3</strong></div><div class="metric"><span>Active</span><strong>3</strong></div><div class="metric"><span>Issues</span><strong>0</strong></div></div>
+            <div class="table">
+              <div class="row header"><span>Name</span><span>Status</span><span>Updated</span><span></span></div>
+              <div class="row"><span class="filename">Production files</span><span class="filemeta">Active</span><span class="filemeta">Today</span><span>&rsaquo;</span></div>
+              <div class="row"><span class="filename">Release smoke</span><span class="filemeta">Active</span><span class="filemeta">Today</span><span>&rsaquo;</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="frame">
+        <div class="frame-label"><strong>Proposed Spaces</strong><span>Same shell grammar, end-user purpose</span></div>
+
+        <div class="scenario" data-panel="files">
+          <div class="screen">
+            <aside class="sidebar">
+              <div class="sidebar-head"><span class="brand-mark">UC</span><span>Spaces</span></div>
+              <nav class="nav" aria-label="Spaces navigation">
+                <div class="nav-title">Personal</div>
+                <div class="nav-item active"><span class="nav-icon">&#9638;</span><span>Files</span></div>
+              </nav>
+              <div class="user">Wei &middot; Google</div>
+            </aside>
+            <div class="workspace">
+              <div class="page-head"><div><h3 id="folder-title">Releases</h3><p id="folder-summary">2 folders &middot; 3 files &middot; 9.1 MB</p></div><div class="page-actions"><button class="button">New folder</button><button class="button primary"><span aria-hidden="true">&#43;</span> Upload file</button></div></div>
+              <nav class="breadcrumbs" aria-label="Current folder"><button class="breadcrumb" data-folder-path="files">Files</button><span>/</span><button class="breadcrumb" data-folder-path="projects">Projects</button><span>/</span><button class="breadcrumb current" data-folder-path="releases" aria-current="page">Releases</button><span data-child-crumb hidden>/</span><button class="breadcrumb current" data-folder-path="2026" data-child-crumb hidden>2026</button></nav>
+              <div class="table" id="release-list">
+                <div class="row header"><span>Name</span><span>Size</span><span>Uploaded</span><span>Actions</span></div>
+                <div class="row"><button class="breadcrumb filename" data-open-folder="2026" aria-label="Open 2026 folder">&#9633;&nbsp; 2026</button><span class="filemeta">Folder</span><span class="filemeta">Today</span><span class="row-actions"><button class="icon-button" aria-label="Open 2026 folder">&rsaquo;</button></span></div>
+                <div class="row"><button class="breadcrumb filename" aria-label="Open Archives folder">&#9633;&nbsp; Archives</button><span class="filemeta">Folder</span><span class="filemeta">Sep 18</span><span class="row-actions"><button class="icon-button" aria-label="Open Archives folder">&rsaquo;</button></span></div>
+                <div class="row"><span class="filename">release-evidence.json</span><span class="filemeta">18 KB</span><span class="filemeta">Today</span><span class="row-actions"><button class="icon-button" aria-label="Download release-evidence.json">&#8595;</button><button class="icon-button" aria-label="Rename release-evidence.json">&#9998;</button><button class="icon-button" aria-label="Delete release-evidence.json">&times;</button></span></div>
+                <div class="row"><span class="filename">sample-video.mp4</span><span class="filemeta">8.8 MB</span><span class="filemeta">Yesterday</span><span class="row-actions"><button class="icon-button" aria-label="Download sample-video.mp4">&#8595;</button><button class="icon-button" aria-label="Rename sample-video.mp4">&#9998;</button><button class="icon-button" aria-label="Delete sample-video.mp4">&times;</button></span></div>
+                <div class="row"><span class="filename">notes.txt</span><span class="filemeta">2 KB</span><span class="filemeta">Sep 18</span><span class="row-actions"><button class="icon-button" aria-label="Download notes.txt">&#8595;</button><button class="icon-button" aria-label="Rename notes.txt">&#9998;</button><button class="icon-button" aria-label="Delete notes.txt">&times;</button></span></div>
+              </div>
+              <div class="table" id="empty-folder" hidden><div class="empty-folder"><div><strong>This folder is empty</strong><span>Upload a file or create a folder in Releases / 2026.</span></div></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="scenario" data-panel="login" hidden>
+          <div class="login">
+            <div class="login-panel">
+              <div class="brand"><span class="brand-mark">UC</span><span>Spaces</span></div>
+              <h3>Sign in to your files</h3>
+              <p>Use the Google account admitted to this private App.</p>
+              <button class="button google"><strong>G</strong> Continue with Google</button>
+              <div class="provider-note">Microsoft and GitHub are planned providers and are not enabled in this MVP.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="scenario" data-panel="rename" hidden>
+          <div class="screen">
+            <aside class="sidebar">
+              <div class="sidebar-head"><span class="brand-mark">UC</span><span>Spaces</span></div>
+              <nav class="nav" aria-label="Spaces navigation"><div class="nav-title">Personal</div><div class="nav-item active"><span class="nav-icon">&#9638;</span><span>Files</span></div></nav>
+              <div class="user">Wei &middot; Google</div>
+            </aside>
+            <div class="workspace">
+              <div class="page-head"><div><h3>Releases</h3><p>Rename changes the path, not stored bytes.</p></div></div>
+              <nav class="breadcrumbs" aria-label="Current folder"><button class="breadcrumb">Files</button><span>/</span><button class="breadcrumb">Projects</button><span>/</span><span class="breadcrumb current" aria-current="page">Releases</span></nav>
+              <section class="rename-panel" role="dialog" aria-modal="true" aria-labelledby="rename-title">
+                <h4 id="rename-title">Rename file</h4>
+                <p>The existing content is reused when this change commits.</p>
+                <label for="rename-input">File name</label>
+                <input id="rename-input" value="release-evidence.json" aria-invalid="true" aria-describedby="rename-error">
+                <div class="field-error" id="rename-error">A file with this name already exists in Releases.</div>
+                <div class="dialog-actions"><button class="button">Cancel</button><button class="button primary" disabled>Rename</button></div>
+              </section>
+            </div>
+          </div>
+        </div>
+
+        <div class="scenario" data-panel="upload" hidden>
+          <div class="screen">
+            <aside class="sidebar">
+              <div class="sidebar-head"><span class="brand-mark">UC</span><span>Spaces</span></div>
+              <nav class="nav" aria-label="Spaces navigation"><div class="nav-title">Personal</div><div class="nav-item active"><span class="nav-icon">&#9638;</span><span>Files</span></div></nav>
+              <div class="user">Wei &middot; Google</div>
+            </aside>
+            <div class="workspace">
+              <div class="page-head"><div><h3>Upload to Releases</h3><p>Files are committed only after verification.</p></div><button class="button">Cancel</button></div>
+              <nav class="breadcrumbs" aria-label="Upload destination"><button class="breadcrumb">Files</button><span>/</span><button class="breadcrumb">Projects</button><span>/</span><span class="breadcrumb current" aria-current="page">Releases</span></nav>
+              <div class="dropzone"><div><strong>sample-video.mp4</strong><p>8.8 MB &middot; Preparing canonical nodes</p><button class="button">Choose another file</button></div></div>
+              <div class="progress" aria-label="Upload progress: 61 percent"><span></span></div>
+              <div class="stage-row"><span>Commit</span><span>61%</span></div>
+              <div class="error" role="alert"><strong>Commit could not be confirmed</strong><span>Nothing was added to your file list. Retry cleanup or contact support with correlation ID SP-7H2K.</span></div>
+              <p><button class="button danger">Retry cleanup</button></p>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <p class="reference-note">The left panel is a visual-language reference reconstructed from the current Console source. Spaces has no existing UI, so it is not presented as a Before state.</p>
+  </main>
+
+  <footer>Normative behavior: InterfaceReview.md &middot; Scope and trust boundaries: Task.md and Architecture.md</footer>
+
+  <script>
+    const comparison = document.querySelector(".comparison");
+    const tabs = [...document.querySelectorAll(".tab")];
+    const panels = [...document.querySelectorAll("[data-panel]")];
+    const viewportButtons = [...document.querySelectorAll(".viewport-button")];
+    const releaseList = document.querySelector("#release-list");
+    const emptyFolder = document.querySelector("#empty-folder");
+    const folderTitle = document.querySelector("#folder-title");
+    const folderSummary = document.querySelector("#folder-summary");
+    const childCrumbs = [...document.querySelectorAll("[data-child-crumb]")];
+
+    function showFolder(path) {
+      const isChild = path === "2026";
+      releaseList.hidden = isChild;
+      emptyFolder.hidden = !isChild;
+      folderTitle.textContent = isChild ? "2026" : "Releases";
+      folderSummary.textContent = isChild ? "Empty folder" : "2 folders, 3 files, 9.1 MB";
+      for (const crumb of childCrumbs) crumb.hidden = !isChild;
+    }
+
+    document.querySelector("[data-open-folder='2026']").addEventListener("click", () => showFolder("2026"));
+    document.querySelector("[data-folder-path='releases']").addEventListener("click", () => showFolder("releases"));
+
+    for (const tab of tabs) {
+      tab.addEventListener("click", () => {
+        for (const candidate of tabs) candidate.setAttribute("aria-selected", String(candidate === tab));
+        for (const panel of panels) panel.hidden = panel.dataset.panel !== tab.dataset.scenario;
+      });
+    }
+
+    for (const button of viewportButtons) {
+      button.addEventListener("click", () => {
+        for (const candidate of viewportButtons) candidate.setAttribute("aria-pressed", String(candidate === button));
+        comparison.classList.toggle("mobile", button.dataset.viewport === "mobile");
+      });
+    }
+  </script>
+</body>
+</html>

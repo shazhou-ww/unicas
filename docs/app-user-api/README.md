@@ -1,6 +1,6 @@
 # App-user API
 
-Status: Interface review draft
+Status: published integration guide
 
 This guide is for teams building end-user experiences on the UniCAS public v2
 Space API. It explains how an App authenticates its own users, maps business
@@ -13,7 +13,7 @@ CAS nodes plus atomic Root Refs without exposing administrator credentials.
 2. Follow [Scenarios and sequences](scenarios.md) for complete request flows.
 3. Use [HTTP operation reference](http-api.md) for all seven public operations.
 4. Use [Capability authorization](authorization.md) for claims, permissions,
-   denial behavior, and least-privilege examples.
+  denial behavior, least-privilege examples, and legacy capability migration.
 
 Machine-readable sources remain authoritative:
 
@@ -23,6 +23,32 @@ Machine-readable sources remain authoritative:
 - [`@unicas/tenant-client` transport](../../packages/tenant-client/src/client.ts)
 
 The guide explains those sources; it does not define a second schema.
+
+## Capability contract at a glance
+
+The route version and capability version are intentionally independent:
+
+- public Space routes remain under `/v2/apps/{appId}/spaces/{spaceId}`;
+- current Space capability claims use `ver: 3`;
+- the required signed `spaceId` is the capability's sole Space scope; and
+- every operation requires one exact permission from the following set.
+
+In this guide, v3 always means the capability claim contract. There is no
+public `/v3` Space route family.
+
+```text
+cas:nodes:read
+cas:nodes:lease
+cas:root-refs:read
+cas:root-refs:update
+cas:usage:read
+cas:gc:execute
+```
+
+Permissions do not imply one another. Both Root Ref permissions additionally
+require a valid signed `refDomain`. The old capability `ver: 2` broad
+permissions are disabled by default and exist only behind the bounded rollout
+described in [Version 2 migration](authorization.md#version-2-migration).
 
 ## Actors and trust boundaries
 

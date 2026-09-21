@@ -11,6 +11,7 @@ import {
   beginCanonicalNodeLease as beginCanonicalNodeLeaseKernel,
   finalizeCanonicalNodeLease as finalizeCanonicalNodeLeaseKernel,
   leaseCanonicalNode as leaseCanonicalNodeKernel,
+  leaseDrivenNodeUpload as leaseDrivenNodeUploadKernel,
   leaseReadyNode as leaseReadyNodeKernel,
   NodeOpError,
   NodeOpErrorCodes,
@@ -23,6 +24,7 @@ import type {
   CanonicalDirectUploadPrepareResult,
   CanonicalNodeLeaseBeginResult,
   CanonicalNodeUploadPlan,
+  LeaseDrivenNodeUploadResult,
 } from "@unicas/service";
 import { CloudflareNodeLeaseRepository } from "./node-lease.js";
 import type { NodeReadyCache } from "./node-lease.js";
@@ -167,4 +169,36 @@ export function leaseReadyNode(store: NodeStore, input: { hash: string; leaseDur
     ...input,
     limits: store.limits,
   });
+}
+
+export function leaseDrivenNodeUpload(
+  store: NodeStore,
+  input: {
+    readonly hash: string;
+    readonly leaseDurationMs: number;
+    readonly uploadSessionMs: number;
+    readonly createIdentifiers: () => {
+      readonly generation: string;
+      readonly temporaryObjectKey: string;
+    };
+    readonly now: () => number;
+  },
+): Promise<LeaseDrivenNodeUploadResult> {
+  return leaseDrivenNodeUploadKernel({
+    repository: repository(store),
+    scope: { stackId: store.stackId, tenantId: store.tenantId },
+    ...input,
+    limits: store.limits,
+  });
+}
+
+export function cleanupExpiredLeaseDrivenUploads(
+  store: NodeStore,
+  input: { readonly now: number; readonly limit: number },
+): Promise<number> {
+  return repository(store).cleanupExpiredLeaseDrivenUploads(
+    { stackId: store.stackId, tenantId: store.tenantId },
+    input.now,
+    input.limit,
+  );
 }
