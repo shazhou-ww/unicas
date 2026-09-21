@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import {
+  clearOAuthStateCookie,
   CsrfCookieName,
   OAuthStateCookieName,
   SessionCookieName,
@@ -32,8 +33,12 @@ describe("Spaces HTTP security", () => {
     expect(sessionCookie).toContain("Secure");
     expect(csrfCookie).toContain(`${CsrfCookieName}=csrf`);
     expect(csrfCookie).not.toContain("HttpOnly");
-    expect(oauthStateCookie("state", 300)).toContain(`${OAuthStateCookieName}=state`);
-    expect(oauthStateCookie("state", 300)).toContain("Path=/auth/google/callback");
+    const oauthCookie = oauthStateCookie("state", 300);
+    expect(oauthCookie).toContain(`${OAuthStateCookieName}=state`);
+    expect(oauthCookie).toContain("Path=/;");
+    expect(oauthCookie).toContain("HttpOnly");
+    expect(oauthCookie).toContain("Secure");
+    expect(clearOAuthStateCookie()).toContain("Path=/;");
   });
 
   test("parses cookie values containing equals characters", () => {

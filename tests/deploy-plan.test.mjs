@@ -164,7 +164,7 @@ describe("standalone deployment plan", () => {
       "pnpm --filter @unicas/service-cloudflare exec wrangler d1 migrations apply SPACES_DB --remote --config ../../.wrangler/spaces/wrangler.production.json",
       "node packages/spaces/scripts/preflight.mjs",
       "pnpm --filter @unicas/service-cloudflare exec wrangler deploy --config ../../.wrangler/spaces/wrangler.production.json --secrets-file ../../.wrangler/spaces/secrets.json",
-      "pnpm spaces:smoke -- --base-url https://spaces.unicas.work",
+      "pnpm spaces:smoke --base-url https://spaces.unicas.work",
     ]);
     expect(() => spacesDeploymentPlan({ bootstrap: true, dryRun: false, production: false }, {}))
       .toThrow("SPACES_BOOTSTRAP_DEPLOY_CONFIRM=spaces.unicas.work");
@@ -420,6 +420,8 @@ describe("standalone deployment plan", () => {
       "UNICAS_SMOKE_SPACE_ID: ${{ vars.UNICAS_SMOKE_SPACE_ID }}",
     ]) expect(job).toContain(binding);
     for (const secret of [
+      "CAS_R2_ACCESS_KEY_ID",
+      "CAS_R2_SECRET_ACCESS_KEY",
       "OAUTH_GOOGLE_CLIENT_SECRET",
       "OAUTH_MICROSOFT_CLIENT_SECRET",
       "OAUTH_GITHUB_CLIENT_SECRET",
