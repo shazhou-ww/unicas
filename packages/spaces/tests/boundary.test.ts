@@ -1,9 +1,10 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { extname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 
-const packageRoot = new URL("..", import.meta.url);
-const repositoryRoot = new URL("../../..", import.meta.url);
+const packageRoot = fileURLToPath(new URL("..", import.meta.url));
+const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const wrangler = JSON.parse(readFileSync(
   new URL("../../../stacks/unicas/spaces/wrangler.jsonc", import.meta.url),
@@ -36,14 +37,14 @@ describe("Spaces boundaries", () => {
     expect(wrangler.r2_buckets).toBeUndefined();
     expect(wrangler.kv_namespaces).toBeUndefined();
     expect(wrangler.durable_objects).toBeUndefined();
-    expect(relative(new URL("../../../stacks/unicas/spaces", import.meta.url).pathname, packageRoot.pathname))
+    expect(relative(fileURLToPath(new URL("../../../stacks/unicas/spaces", import.meta.url)), packageRoot))
       .not.toBe("");
-    expect(repositoryRoot.pathname).toBeTruthy();
+    expect(repositoryRoot).toBeTruthy();
   });
 });
 
 function sourceFiles(directory: URL): string[] {
-  const root = directory.pathname.slice(1);
+  const root = fileURLToPath(directory);
   const files: string[] = [];
   const visit = (path: string) => {
     for (const entry of readdirSync(path, { withFileTypes: true })) {

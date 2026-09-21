@@ -67,6 +67,10 @@ authorized production bootstrap, deployment, live smoke, and user acceptance.
   bottom-right trigger, Google-only login, and long-name rename dialog remained
   inside the viewport. Escape dismissal and focus restoration have component
   coverage.
+- Main CI exposed a Linux-only path bug in the Spaces boundary test. The test
+  now converts file URLs with Node's `fileURLToPath` rather than stripping a
+  Windows-style leading slash; the same focused test passes on Windows and is
+  ready for the required Linux CI rerun.
 - No production deployment, App/issuer activation, production D1 bootstrap,
   real Google callback, or live Spaces smoke was run without explicit release
   authorization and credentials.
