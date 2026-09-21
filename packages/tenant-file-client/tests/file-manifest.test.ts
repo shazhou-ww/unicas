@@ -7,16 +7,19 @@ describe("file manifest protocol", () => {
       { type: "file", path: "notes/todo.txt", ref: 99, size: 4, mediaType: "text/plain" },
       { type: "directory", path: "empty" },
       { type: "file", path: "avatar.png", ref: 99, size: 8, mediaType: "image/png" },
+      { type: "file", path: "B.txt", ref: 99, size: 2, mediaType: "text/plain" },
     ]);
     expect(manifest.entries).toEqual([
-      { type: "file", path: "avatar.png", ref: 0, size: 8, mediaType: "image/png" },
+      { type: "file", path: "B.txt", ref: 0, size: 2, mediaType: "text/plain" },
+      { type: "file", path: "avatar.png", ref: 1, size: 8, mediaType: "image/png" },
       { type: "directory", path: "empty" },
-      { type: "file", path: "notes/todo.txt", ref: 1, size: 4, mediaType: "text/plain" },
+      { type: "file", path: "notes/todo.txt", ref: 2, size: 4, mediaType: "text/plain" },
     ]);
     expect(decodeFileManifest(encodeFileManifest(manifest))).toEqual(manifest);
-    expect(fileManifestRefs(manifest, ["a", "b"])).toEqual(new Map([
-      ["avatar.png", "a"],
-      ["notes/todo.txt", "b"],
+    expect(fileManifestRefs(manifest, ["a", "b", "c"])).toEqual(new Map([
+      ["B.txt", "a"],
+      ["avatar.png", "b"],
+      ["notes/todo.txt", "c"],
     ]));
   });
 
