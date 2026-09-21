@@ -4,213 +4,145 @@ Created: 2026-09-21
 
 ## Goal
 
-Ship the first production-verified beta generation of the UniCAS App-user data
-plane as an App/Space `/v1` HTTP API with published npm SDKs and canonical
-documentation, then remove the old Stack/Tenant v1 and prototype App/Space v2
-surfaces so one public contract remains.
+Promote the completed App/Space v1 API and public SDK release work as one
+production-verified UniCAS App-user beta, with canonical documentation,
+registry evidence, protected deployment evidence, and explicit acceptance of
+the exact primary revision.
 
 ## Context
 
-The App-user surface has moved beyond its prototype. The newer contract uses
-App/Space `/v2` routes, lease-driven direct node upload, and Space capability
-claim `ver: 3` with exact operation permissions. A separate older
-Stack/Tenant v1 contract remains in the protocol, service, clients, OpenAPI,
-tests, and compatibility adapters.
+The original task combined contract renumbering, legacy removal, SDK package
+hardening, npm publication automation, documentation, deployment, and live
+acceptance. Those changes have different ownership boundaries, review gates,
+and failure recovery, so their implementation is delegated to four sibling
+tasks:
 
-Neither generation has been accepted as the formal public baseline. The beta
-release will restart the supported HTTP version sequence at App/Space `/v1`
-rather than preserving prototype numbering. The old Stack/Tenant v1 may be
-removed; it does not retain a compatibility claim against the released
-App/Space v1 API.
+- `cut-over-app-space-api-to-v1` owns the released HTTP and capability
+  contract and removal of the prototype App/Space v2 surface.
+- `retire-stack-tenant-data-plane` owns removal of the old Stack/Tenant
+  App-user contract and its compatibility implementation.
+- `prepare-app-user-sdk-beta-packages` owns public package contents, metadata,
+  dependency shape, and clean external-consumer validation.
+- `publish-app-user-sdk-beta` owns protected npm publication and registry
+  verification.
 
-The SDK packages remain at `0.1.0` and have package-level `publishConfig`, but
-the repository has no reviewed npm release contract or protected publication
-workflow. Package names and compatibility treatment also depend on the
-backlog App/Space concept refactor. The backlog Root Ref direction split may
-still change the final mutation surface, and the ongoing file upload smoke App
-is intended to validate the same boundary from an independent consumer.
+This task remains the release capstone. It consumes those outcomes together
+with the existing App/Space concept refactor, directional Root Ref API, and
+independent file upload smoke App, then proves that the assembled beta is one
+coherent deployed product rather than a set of individually passing changes.
 
 ## Scope
 
-- Produce and approve one beta contract inventory covering every supported
-  App-user HTTP operation, request and response schema, error, capability
-  claim, permission, limit, retry rule, compatibility promise, and generated
-  OpenAPI artifact.
-- Replace the prototype `/v2/apps/{appId}/spaces/{spaceId}` route family with
-  the released `/v1/apps/{appId}/spaces/{spaceId}` route family across protocol
-  contracts, route builders, clients, service routing, generated OpenAPI,
-  smoke tests, examples, documentation, and deployment verification.
-- Make an explicit interface decision on the released Space capability claim
-  version. Decide whether prototype `ver: 3` resets to `ver: 1` with the HTTP
-  baseline or remains independently versioned, then use exactly one released
-  claim grammar and permission vocabulary everywhere.
-- Resolve all known pre-beta public-contract decisions. Consume the accepted
-  outcome of `split-root-ref-update-api` rather than duplicating its Root Ref
-  design, and do not freeze beta while that task remains an unresolved planned
-  breaking change.
-- Remove the old Stack/Tenant route family, capability claims and permission
-  parser, protocol and OpenAPI contract, client construction and exports,
-  service authorization and routing, compatibility adapters, configuration,
-  examples, documentation, and tests after the App/Space v1 replacement is
-  validated.
-- Remove prototype App/Space v2 route builders, operation identifiers,
-  generated artifacts, documentation names, compatibility flags, legacy
-  broad-permission acceptance, and other superseded issuance or request paths.
-  Do not retain unbounded aliases between prototype and released contracts.
-- Finalize the canonical App-user documentation with installation guidance,
-  complete browser and backend request flows, least-privilege capability
-  issuance, migration from prototype contracts, and explicit HTTP,
-  capability, SDK, and product-maturity version axes.
-- Define the supported public SDK package set after consuming the accepted
-  package names and compatibility outcome of
-  `complete-app-space-concept-refactor`. Cover the protocol, transport, blob,
-  file, browser-cache, and codec layers that are intentionally public without
-  publishing service implementations or private applications.
-- Finalize package metadata, exports, declaration output, dependency ranges,
-  runtime and browser support, README and license inclusion, semantic version,
-  prerelease or dist-tag policy, and package dependency publication order.
-- Add a protected, repeatable npm publication path using repository-approved
-  identity and provenance. It must build and test the exact release revision,
-  reject version or generated-artifact drift, avoid long-lived registry tokens
-  where trusted publishing is available, and never overwrite an existing npm
-  version.
-- Pack every public SDK package and validate its actual tarball from a clean
-  external-consumer fixture. Verify dependency resolution and representative
-  Node and browser-facing imports without relying on workspace source paths.
-- Deploy the finalized App/Space v1 API and documentation through the existing
-  protected `release` workflow, then verify the public API origin, generated
-  contract, documentation, authorization denials, direct upload, Root Ref
-  lifecycle, reads, isolation, and cleanup against the deployed revision.
-- Consume the independently deployed file upload smoke App for end-to-end beta
-  evidence when its task is complete; do not add a privileged test-only UniCAS
-  route or private storage shortcut.
-- Inventory any remaining deprecated route, type, export, package alias,
-  configuration flag, adapter, fixture, generated artifact, and documentation
-  reference. Remove accepted obsolete entries and add guards that prevent the
-  retired Stack/Tenant v1 and prototype App/Space v2 surfaces from returning.
+- Maintain one release-level beta contract inventory that links the accepted
+  App/Space v1 operations, capability grammar, permission matrix, generated
+  OpenAPI, SDK package and export matrix, compatibility policy, and migration
+  guidance produced by the implementation tasks.
+- Confirm that the App/Space concept refactor and directional Root Ref API are
+  completed and integrated before freezing the beta contract.
+- Reconcile the canonical App-user guide, installation and browser/backend
+  flows, least-privilege issuance guidance, migration guidance, and the
+  distinct HTTP, capability, package-semver, and product-maturity version axes
+  against the final implementation and packed packages.
 - Document beta support expectations, rollout order, observability, npm and
   service failure recovery, package deprecation procedure, and the path from
   beta to a future stable release.
+- Run the protected npm publication path for the approved package revision and
+  retain non-secret evidence of expected package names, versions, dist-tags,
+  provenance, exports, dependency ranges, and clean installation from npm.
+- Promote the exact validated revision through the protected `release`
+  workflow and verify the public API origin, generated contract,
+  documentation, authorization denials, direct upload, directional Root Ref
+  lifecycle, reads, isolation, and bounded cleanup.
+- Consume the independently deployed file upload smoke App as external
+  end-to-end evidence without adding a privileged UniCAS route or private
+  storage shortcut.
+- Run the final retired-surface inventory and repository guards, record every
+  intentionally retained historical storage or compatibility name with its
+  owner and removal condition, and reject leaks into the released wire or SDK
+  surface.
+- Assemble exact-primary-revision delivery evidence and obtain explicit user
+  acceptance of the published packages, deployed API, documentation, and
+  cleanup result.
 
 ## Out of scope
 
+- Implementing the App/Space v1 route and capability cutover, which belongs to
+  `cut-over-app-space-api-to-v1`.
+- Removing the Stack/Tenant data-plane implementation, which belongs to
+  `retire-stack-tenant-data-plane`.
+- Choosing or preparing public SDK package contents, which belongs to
+  `prepare-app-user-sdk-beta-packages`.
+- Building the npm publication workflow, which belongs to
+  `publish-app-user-sdk-beta`.
+- Reimplementing the App/Space concept refactor, directional Root Ref API, or
+  independent file upload smoke App.
 - Adding new App-user product features, storage semantics, business entities,
   or administrator-plane operations solely for the beta label.
-- Reimplementing the directional Root Ref work, package-family naming refactor,
-  or file upload smoke App already owned by their existing repository tasks.
-- Deleting persisted customer or smoke data merely because its schema or key
-  uses a historical Stack/Tenant name. Any destructive data migration requires
-  a reviewed data-model decision and recovery plan.
-- Publishing `@unicas/service`, `@unicas/service-cloudflare`, administrator
-  packages, private WebUIs, or first-party application stacks as App-user SDKs.
+- Deleting persisted customer or smoke data because a schema or key uses a
+  historical name.
+- Publishing service implementations, administrator packages, private WebUIs,
+  or first-party application stacks as App-user SDKs.
 - Claiming stable `1.0` compatibility, general availability, or an indefinite
   beta support lifetime.
-- Performing an unreviewed production deployment, npm publication, package
-  unpublish, destructive migration, or secret provisioning during task
-  registration.
 
 ## Acceptance criteria
 
-- [ ] A reviewed beta contract inventory identifies the exact App/Space v1
-      operations, capability claim version and grammar, permission matrix,
-      schemas, errors, limits, retry semantics, SDK package names and exports,
-      and compatibility policy, with no unresolved planned breaking App-user
-      change at the freeze point.
-- [ ] The only released App-user base path is
-      `/v1/apps/{appId}/spaces/{spaceId}`; protocol constants, route builders,
-      service matching, generated OpenAPI, SDK calls, examples, smoke tests,
-      and documentation agree on it.
-- [ ] `split-root-ref-update-api` is either completed and integrated before the
-      freeze or explicitly excluded through an accountable lifecycle decision;
-      the beta docs, OpenAPI, service, clients, and migration guidance agree
-      with that outcome.
-- [ ] The accepted output of `complete-app-space-concept-refactor` determines
-      final public package names and internal App/Space boundaries before npm
-      publication; this task does not preserve temporary names by accident.
-- [ ] The released Space capability claim uses the one version approved during
-      interface review. No old Stack/Tenant v1 claim, prototype claim grammar,
-      broad permission, or migration cutoff can authorize an App/Space v1
-      request.
-- [ ] Old Stack/Tenant routes and prototype App/Space v2 routes return no
-      supported operation and are absent from protocol exports, route builders,
-      clients, service dispatch, generated OpenAPI, maintained examples, and
-      current documentation.
-- [ ] The old Stack/Tenant capability parser, client factory and types,
-      compatibility adapters, v1-only tests, and obsolete configuration are
-      removed; replacement App/Space v1 coverage proves equivalent intended
-      behavior and rejects cross-version or legacy authority.
-- [ ] The App-user HTTP implementation, generated OpenAPI, SDK methods,
-      examples, and documentation expose one consistent beta contract and
-      clearly distinguish HTTP versioning, capability versioning, package
-      semver, and product maturity.
-- [ ] Every supported SDK package produces a minimal tarball containing the
-      declared JavaScript, type declarations, required generated contracts,
-      README, and license, with no source-only entry point, workspace-only
-      dependency specifier, credential, local path, test fixture, or unrelated
-      build artifact.
-- [ ] A clean external-consumer test installs only the packed artifacts and
-      passes representative protocol, transport, direct-upload, blob, file,
-      and browser-cache import and usage checks for each advertised runtime.
-- [ ] A protected npm workflow publishes immutable versions in dependency order
-      with provenance and the reviewed beta version or dist-tag policy, fails
-      closed on an existing version or validation drift, and can be rerun
-      without republishing completed versions incorrectly.
-- [ ] Registry verification confirms the expected public package names,
+- [ ] `complete-app-space-concept-refactor`, `split-root-ref-update-api`,
+      `cut-over-app-space-api-to-v1`, `retire-stack-tenant-data-plane`,
+      `prepare-app-user-sdk-beta-packages`, and `publish-app-user-sdk-beta` are
+      completed and integrated before the production freeze.
+- [ ] The reviewed beta contract inventory contains no unresolved planned
+      breaking App-user change and agrees with the implementation, generated
+      OpenAPI, package tarballs, and canonical documentation.
+- [ ] The assembled release exposes only the accepted App/Space v1 wire and SDK
+      contract; focused guards and runtime probes reject retired Stack/Tenant
+      and prototype App/Space v2 surfaces.
+- [ ] The deployed documentation provides a complete setup-to-request path,
+      names the supported SDK entry points, distinguishes all version axes,
+      and contains no obsolete current guidance.
+- [ ] Registry verification confirms the approved public package names,
       versions, dist-tags, provenance, exports, dependency ranges, and clean
       installation from npm rather than the workspace.
-- [ ] The existing protected release path deploys the exact validated App/Space
-      v1 API and documentation revision. Production health, contract,
-      capability, direct upload, Root Ref, readback, cross-App and cross-Space
-      denial, and bounded cleanup checks pass without exposing credentials or
-      user data.
-- [ ] The deployed documentation gives an App team a complete setup-to-request
-      path, names the supported SDK entry points, and contains no old
-      Stack/Tenant or prototype App/Space v2 guidance.
-- [ ] A focused repository guard rejects reintroduction of retired public
-      routes, capability grammars, client exports, package aliases,
-      configuration, generated contracts, and current-documentation terms.
+- [ ] The protected release path deploys the exact validated App/Space v1 API
+      and documentation revision, and production health, contract,
+      authorization, direct-upload, directional Root Ref, readback, isolation,
+      and bounded-cleanup checks pass.
+- [ ] The independently deployed file upload smoke App passes against the same
+      release through public packages and routes only.
 - [ ] Any retained historical storage name or compatibility adapter is
       documented with its owner, reason, isolation boundary, and removal
-      condition; no retained internal name leaks into the App/Space v1 wire or
-      SDK surface.
-- [ ] Package tests, external-consumer tests, OpenAPI drift checks,
-      documentation checks, workspace boundary checks, build, typecheck,
-      exhaustive tests, deployment dry-runs, protected publication, and live
-      post-deployment smoke checks pass for the release candidate.
+      condition; none leaks into the released wire or SDK surface.
+- [ ] Package, external-consumer, OpenAPI, documentation, workspace-boundary,
+      build, typecheck, exhaustive, deployment dry-run, publication, registry,
+      and live post-deployment evidence is complete and contains no secrets or
+      customer data.
 - [ ] The user explicitly accepts the published npm packages, deployed API and
       documentation, legacy cleanup result, and validation evidence for the
       exact reviewed primary commit.
 
 ## Constraints
 
-- Treat the App/Space `/v2` and Stack/Tenant v1 surfaces as unpublished
-  prototype contracts, not as compatibility aliases that constrain the first
-  supported App/Space v1 release.
-- Treat `origin/main` as the source of accepted contract state and use the
-  existing protected `release` branch workflow for production promotion. Do
-  not deploy directly from an implementation branch or mutable local build.
-- Preserve the administrator and App-user credential boundary. npm, Cloudflare,
-  OAuth, capability-signing, and smoke credentials stay in approved secret
-  stores and never enter source, task artifacts, package tarballs, logs, or
-  generated documentation.
-- Keep generated OpenAPI and package outputs reproducible from source. Do not
-  hand-edit generated artifacts or publish from a dirty workspace.
-- Keep public SDK dependency direction aligned with the reviewed package
-  architecture; public clients may depend on protocol and codec layers, but
-  must not acquire runtime dependencies on service implementations,
-  administrator packages, private stacks, or `@unidocs/*`.
-- Make cleanup inventory-driven. Search source, exports, generated files,
-  tests, docs, configuration, and known consumers before deletion, and land
-  migrations and compatibility notes with each accepted removal.
-- Do not delete persisted data or physical storage namespaces without the
-  business/data-model checkpoint becoming required and receiving explicit
-  approval.
-- npm versions are immutable. A failed partial publication is recovered with a
-  new reviewed version and correct deprecation or dist-tag changes, never by
-  overwriting or silently unpublishing an accepted artifact.
-- Coordinate release ordering with `build-file-upload-smoke-app`; a consumer
-  incompatibility blocks beta promotion rather than being bypassed with a
-  private API or storage binding.
+- Treat `origin/main` as the accepted contract and release source. Publish npm
+  packages and deploy production only from the exact protected revision; do
+  not release from an implementation branch, mutable local build, or dirty
+  workspace.
+- Do not begin the production freeze while a named dependency is incomplete
+  or while a planned breaking App-user change remains unresolved.
+- Preserve the administrator and App-user credential boundary. npm,
+  Cloudflare, OAuth, capability-signing, and smoke credentials stay in
+  approved secret stores and never enter source, task artifacts, package
+  tarballs, logs, or generated documentation.
+- Keep generated OpenAPI, documentation inputs, and package outputs
+  reproducible from source; never repair release drift by editing generated
+  artifacts manually.
+- npm versions are immutable. Recover a partial publication through the
+  reviewed version and dist-tag procedure, never by overwriting or silently
+  unpublishing an accepted artifact.
+- A package, API, documentation, authorization, isolation, or smoke mismatch
+  blocks promotion. Do not bypass it with aliases, private routes, direct
+  storage access, or weaker credentials.
+- Do not delete persisted data or physical storage namespaces without a new
+  required business/data-model review and explicit approval.
 
 ## Human review checkpoints
 
@@ -219,10 +151,10 @@ reviewed explicitly before the work named in the final column begins.
 
 | Checkpoint | Applicability | Reviewer | Planned review artifact | Approval required before |
 | --- | --- | --- | --- | --- |
-| Scope | Required | Requesting user | This task's App/Space v1 beta outcome, dependencies, included release and cleanup work, exclusions, constraints, and acceptance criteria. | Substantive implementation. |
-| Interface | Required | Requesting user or delegated API/package owner | Task-local beta contract review containing the exact App/Space v1 HTTP/OpenAPI surface, released capability claim version, SDK package and export matrix, semantic-version and dist-tag policy, compatibility break, migration path, and removal inventory. | Renumbering routes or claims, changing public surfaces, deleting compatibility APIs, or publishing packages. |
-| Business and data model | Assess during execution: required if retiring v1 requires persisted-data, schema, key, or lifecycle migration rather than code and interface removal only. | Requesting user or delegated data owner | Task-local legacy-data assessment and, when applicable, migration and recovery review. | Modifying or deleting persisted data, schemas, keys, or lifecycle state. |
-| Architecture | Required | Requesting user or delegated release owner | Task-local architecture covering version cutover, package dependency order, trusted npm publication, artifact provenance, protected API/docs deployment, smoke sequencing, observability, partial-failure recovery, and rollback. | Removing compatibility implementations, adding publication automation, changing release workflows, or performing beta deployment. |
+| Scope | Required | Requesting user | This capstone's dependency boundary, release evidence, documentation reconciliation, protected promotion, exclusions, constraints, and acceptance criteria. | Substantive capstone implementation. |
+| Interface | Required | Requesting user or delegated API/package owner | Release-level beta contract inventory linking the accepted HTTP/OpenAPI, capability, SDK, compatibility, migration, and version-policy artifacts. | Freezing the beta contract, publishing packages, or promoting production. |
+| Business and data model | Not applicable: the capstone consumes reviewed implementation outcomes and prohibits persisted-data or lifecycle migration. | Not applicable | Not applicable | Not applicable |
+| Architecture | Required | Requesting user or delegated release owner | Release plan covering dependency convergence, exact-revision provenance, npm and service sequencing, smoke ordering, observability, partial-failure recovery, and rollback. | Running protected npm publication or production promotion. |
 | Delivery acceptance | Required | Requesting user | Exact primary revision, published npm registry evidence, deployed App/Space v1 API and documentation checks, cleanup inventory result, automated validation, and live smoke evidence. | Running `task complete` for the exact approved primary commit. |
 
 ## References
