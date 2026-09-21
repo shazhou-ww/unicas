@@ -1,11 +1,19 @@
 import { describe, expect, test, vi } from "vitest";
 import {
+  parseSmokeArgs,
   SpacesSmokeError,
   normalizeSpacesSmokeBaseUrl,
   runSpacesSmoke,
 } from "../scripts/smoke.mjs";
 
 describe("Spaces smoke command", () => {
+  test("accepts the deploy script's base URL arguments without a pnpm separator", () => {
+    expect(parseSmokeArgs(["--base-url", "https://spaces.unicas.work"]))
+      .toEqual({ baseUrl: "https://spaces.unicas.work" });
+    expect(() => parseSmokeArgs(["--", "--base-url", "https://spaces.unicas.work"]))
+      .toThrow("invalid_arguments");
+  });
+
   test("runs upload, reuse, readback, isolation, and repeated cleanup without exposing data", async () => {
     const runId = "smoke-100-test-run";
     let uploadCount = 0;
