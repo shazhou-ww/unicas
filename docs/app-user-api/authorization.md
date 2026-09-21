@@ -1,6 +1,6 @@
 # Capability authorization
 
-Status: Interface review draft
+Status: published authorization contract
 
 ## Verification model
 

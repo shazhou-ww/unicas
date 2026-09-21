@@ -1,6 +1,6 @@
 # HTTP operation reference
 
-Status: Interface review draft
+Status: published operation reference
 
 ## Common request rules
 
@@ -125,6 +125,10 @@ The JSON property is required. Published clients use 15 minutes when the
 caller omits the complete options argument; the service clamps accepted values
 to 60 seconds through 24 hours.
 
+The response reports the state after UniCAS evaluates the current upload and
+validation evidence. All four states below use HTTP `200`; only `ready` means
+the node is readable and can be referenced by another node.
+
 Ready result:
 
 ```json
@@ -136,7 +140,12 @@ Ready result:
 }
 ```
 
-Upload result:
+`ready` means the node is validated, readable, referenceable, and protected
+from collection until `leaseExpiresAt`. Repeating the request for an active
+lease preserves `leaseStartedAt` and never shortens `leaseExpiresAt`; an
+expired lease starts a new lease interval.
+
+Initial upload result:
 
 ```json
 {
@@ -154,13 +163,66 @@ Upload result:
 }
 ```
 
-Use the returned method, URL, and headers exactly, then repeat the same lease
-request. `awaiting_replacement_upload` additionally returns a required
-`rejection`; `validated_awaiting_children` returns every distinct unready child
-hash in canonical order and requires no second parent upload.
+`awaiting_upload` is a successful negotiation that requires caller action, not
+an asynchronously running server job. Use the returned method, URL, and
+headers exactly. The response exposes no upload ID, temporary object key,
+storage credential, or App capability. After the PUT, repeat the same lease
+request using only the node hash and requested duration.
+
+Rejected upload result:
+
+```json
+{
+  "state": "awaiting_replacement_upload",
+  "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "rejection": {
+    "code": "NODE_DIGEST_MISMATCH",
+    "message": "Uploaded canonical bytes did not match the requested node hash"
+  },
+  "upload": {
+    "method": "PUT",
+    "url": "https://REPLACEMENT_UPLOAD_TARGET",
+    "expiresAt": 1760000600000,
+    "headers": {
+      "content-type": "application/vnd.unidocs.cas-node.v1",
+      "if-none-match": "*"
+    }
+  }
+}
+```
+
+When a lease call detects malformed, oversized, or hash-mismatched bytes, it
+retires that write-once upload and returns a replacement target. Repeating the
+lease before a corrected PUT remains `awaiting_replacement_upload`, preserves
+the rejection, and returns the current replacement target. If that target
+expires without an object, UniCAS may rotate its URL and internal generation
+while retaining the rejection.
+
+Validated parent waiting for children:
+
+```json
+{
+  "state": "validated_awaiting_children",
+  "hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "childHashes": [
+    "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+    "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+  ]
+}
+```
+
+`childHashes` contains every distinct child that is not ready, in canonical
+first-occurrence order. The canonical format limits the complete list to 256
+references. UniCAS retains the uploaded and structurally validated parent;
+after making the listed children ready, repeat the same lease request to
+publish it without another parent PUT, hash, or parse.
 
 The service validates canonical bytes against `HASH`. Ready-node calls renew
 the lease without re-uploading, parsing, or hashing.
+
+Creating a new upload generation can return `429 CAS_UPLOAD_LIMIT` when the
+Space has too many active uploads. No generation is created for that request;
+retry the same lease after active upload work has drained.
 
 ## Get Space usage
 
@@ -313,6 +375,7 @@ Only `error` is required by OpenAPI. The shared operation error map is:
 | `404` | `NOT_FOUND` |
 | `409` | `CONFLICT` |
 | `413` | `PAYLOAD_TOO_LARGE` |
+| `429` | `RESOURCE_EXHAUSTED` |
 | `500` | `INTERNAL_ERROR` |
 
 The service returns more specific stable authorization codes such as
