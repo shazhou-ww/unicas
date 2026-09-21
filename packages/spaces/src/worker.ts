@@ -73,7 +73,10 @@ class HttpError extends Error {
 const MaximumMultipartOverheadBytes = 64 * 1024;
 
 export function createSpacesWorker(dependencies: SpacesWorkerDependencies = {}): SpacesWorker {
-  const fetchImpl = dependencies.fetchImpl ?? globalThis.fetch;
+  const dependencyFetch = dependencies.fetchImpl;
+  const fetchImpl: typeof fetch = dependencyFetch
+    ? ((input, init) => dependencyFetch(input, init))
+    : globalThis.fetch.bind(globalThis);
   const fileServiceFactory = dependencies.createFileService ?? createSpacesFileService;
   const googleClientFactory = dependencies.createGoogleClient
     ?? ((config, providerFetch) => new GoogleOidcClient(config, providerFetch));
