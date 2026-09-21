@@ -5,6 +5,7 @@ import {
   bootstrapSpacesPrincipal,
   bootstrapStateQuery,
   classifyBootstrapState,
+  parseD1Rows,
   readBootstrapConfig,
 } from "../scripts/bootstrap.mjs";
 import { signIssuerChallenge } from "../scripts/sign-issuer-challenge.mjs";
@@ -65,6 +66,17 @@ describe("Spaces bootstrap", () => {
     expect(classifyBootstrapState(config, existing)).toBe("existing");
     expect(classifyBootstrapState(config, Object.fromEntries(Object.keys(existing).map((key) => [key, null]))))
       .toBe("create");
+    expect(classifyBootstrapState(config, {
+      principal_status: null,
+      display_name: null,
+      app_id: null,
+      space_id: null,
+      ref_domain: null,
+      root_id: null,
+      identity_count: 0,
+      identity_owner: null,
+      space_owner: null,
+    })).toBe("create");
     expect(() => classifyBootstrapState(config, { ...existing, space_id: "other" }))
       .toThrow("conflicting or partial state");
     await expect(bootstrapSpacesPrincipal(config, async () => [existing]))
@@ -168,5 +180,16 @@ describe("Spaces bootstrap", () => {
       blocking_run_count: 0,
       recoverable_run_count: 1,
     })).toMatchObject({ principalId: "smoke-principal" });
+  });
+
+  test("parses Wrangler file-execution JSON after progress output", () => {
+    expect(parseD1Rows(`├ Checking if file needs uploading
+│
+├ Uploading complete.
+│
+[
+  {"results":[{"ok":1}],"success":true}
+]`)).toEqual([{ ok: 1 }]);
+    expect(() => parseD1Rows("no JSON response")).toThrow("Unexpected D1 response");
   });
 });
