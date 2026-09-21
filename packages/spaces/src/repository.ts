@@ -52,7 +52,10 @@ interface PrincipalRow {
 interface SessionRow extends PrincipalRow {
   readonly csrf_token_hash: string;
   readonly expires_at: number;
+  readonly last_seen_at: number;
 }
+
+const SessionTouchIntervalMs = 5 * 60 * 1000;
 
 export class SpacesRepository {
   readonly #db: D1Database;
@@ -139,7 +142,7 @@ export class SpacesRepository {
     const row = await this.#db.prepare(`
       SELECT p.principal_id, p.status, p.display_name, i.provider,
              m.app_id, m.space_id, m.ref_domain,
-             s.csrf_token_hash, s.expires_at
+              s.csrf_token_hash, s.expires_at, s.last_seen_at
       FROM spaces_sessions s
       JOIN spaces_principals p ON p.principal_id = s.principal_id
       LEFT JOIN spaces_external_identities i ON i.principal_id = p.principal_id
@@ -154,8 +157,11 @@ export class SpacesRepository {
         .bind(sessionIdHash).run();
       return null;
     }
-    await this.#db.prepare("UPDATE spaces_sessions SET last_seen_at = ? WHERE session_id_hash = ?")
-      .bind(this.#now(), sessionIdHash).run();
+    const now = this.#now();
+    if (now - row.last_seen_at >= SessionTouchIntervalMs) {
+      await this.#db.prepare("UPDATE spaces_sessions SET last_seen_at = ? WHERE session_id_hash = ?")
+        .bind(now, sessionIdHash).run();
+    }
     return {
       context: toPrincipalContext(row),
       csrfTokenHash: row.csrf_token_hash,

@@ -70,6 +70,11 @@ The deployment script writes secrets to `.wrangler/spaces/secrets.json` with
 owner-only permissions, passes that file to Wrangler, and deletes it in a
 `finally` path. The generated Wrangler config contains only non-secret values.
 
+Dynamic `/api`, `/auth`, `/.well-known`, and `/oauth` routes run near the ENAM
+D1 primary through the configured placement hint. Static SPA assets remain
+asset-first and edge-served. If the D1 primary region changes, review the
+placement hint and authenticated request-duration metrics together.
+
 Register this callback in the dedicated Google OAuth client:
 
 ```text

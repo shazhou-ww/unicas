@@ -5,6 +5,9 @@
   "compatibility_date": "2026-08-18",
   "workers_dev": false,
   "preview_urls": false,
+  "placement": {
+    "region": "aws:us-east-1"
+  },
   "routes": [
     {
       "pattern": "spaces.unicas.work",
@@ -16,7 +19,16 @@
     "directory": "../../../packages/spaces/dist/ui",
     "html_handling": "none",
     "not_found_handling": "single-page-application",
-    "run_worker_first": true
+    "run_worker_first": [
+      "/api",
+      "/api/*",
+      "/auth",
+      "/auth/*",
+      "/.well-known",
+      "/.well-known/*",
+      "/oauth",
+      "/oauth/*"
+    ]
   },
   "d1_databases": [
     {

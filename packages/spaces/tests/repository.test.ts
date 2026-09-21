@@ -76,6 +76,20 @@ describe("SpacesRepository", () => {
     expect(await db.prepare("SELECT COUNT(*) AS count FROM spaces_sessions").first()).toEqual({ count: 0 });
   });
 
+  test("throttles session last-seen writes", async () => {
+    const { db, repository } = await fixture();
+    const issued = await repository.createSession("principal-a", 1_000_000);
+
+    await repository.readSession(issued.sessionId);
+    expect(await db.prepare("SELECT last_seen_at FROM spaces_sessions").first()).toEqual({ last_seen_at: 1_000 });
+
+    await new SpacesRepository(db, () => 300_999).readSession(issued.sessionId);
+    expect(await db.prepare("SELECT last_seen_at FROM spaces_sessions").first()).toEqual({ last_seen_at: 1_000 });
+
+    await new SpacesRepository(db, () => 301_001).readSession(issued.sessionId);
+    expect(await db.prepare("SELECT last_seen_at FROM spaces_sessions").first()).toEqual({ last_seen_at: 301_001 });
+  });
+
   test("consumes OAuth state exactly once", async () => {
     const { repository } = await fixture();
     await repository.createOAuthAttempt({

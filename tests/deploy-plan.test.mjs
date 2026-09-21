@@ -99,11 +99,15 @@ function git(cwd, args) {
 describe("standalone deployment plan", () => {
   test("keeps the Spaces App on its own public bindings", () => {
     expect(SPACES_WRANGLER_CONFIG.main).toBe("../../../packages/spaces/src/worker.ts");
+    expect(SPACES_WRANGLER_CONFIG.placement).toEqual({ region: "aws:us-east-1" });
     expect(SPACES_WRANGLER_CONFIG.routes).toEqual([
       { pattern: "spaces.unicas.work", custom_domain: true },
     ]);
     expect(SPACES_WRANGLER_CONFIG.d1_databases).toEqual([
       expect.objectContaining({ binding: "SPACES_DB", database_name: "unicas-spaces" }),
+    ]);
+    expect(SPACES_WRANGLER_CONFIG.assets.run_worker_first).toEqual([
+      "/api", "/api/*", "/auth", "/auth/*", "/.well-known", "/.well-known/*", "/oauth", "/oauth/*",
     ]);
     expect(JSON.stringify(SPACES_WRANGLER_CONFIG)).not.toMatch(/CAS_CONTROL_DB|CAS_DB|CAS_R2|durable_objects|kv_namespaces/);
   });
