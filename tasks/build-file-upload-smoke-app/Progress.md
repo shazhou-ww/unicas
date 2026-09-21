@@ -10,9 +10,11 @@ The approved Spaces file App is implemented as the private
 D1 catalog and recovery state, public file-client workflows, responsive UI,
 non-interactive smoke, bootstrap/preflight tooling, protected release ordering,
 and stable operations documentation pass local validation. The production App,
-catalog, issuer, and capability-v3 service are provisioned; Principal bootstrap,
-the dedicated Google client, the normal Spaces release, and user acceptance
-remain.
+catalog, issuer, Principals, dedicated Google client, capability-v3 service, and
+R2 signing credentials are provisioned. The normal release deployed the service
+and Spaces Worker but exposed a smoke CLI argument-forwarding defect before a
+smoke session was created; the tested fix awaits release rerun and user
+acceptance.
 
 ## Decisions
 
@@ -97,14 +99,31 @@ remain.
 - The Production workflow now synchronizes both R2 signing credentials before
   deploying the service, so a clean deployment or credential rotation cannot
   silently publish a Worker that returns `503` for direct uploads.
+- Production catalog verification reports two active Principals, one external
+  identity, two Principal-to-Space mappings, one persistent user Root, and zero
+  smoke Roots, open smoke runs, or pending Root releases. Least-privileged
+  production preflight also passes against the activated issuer.
+- The dedicated `spaces-production` Google Web client is restricted to the
+  Spaces callback. The replacement Cloudflare deployment token is restricted
+  to Worker scripts, D1, account reads, and Worker routes on `unicas.work`; live
+  Workers and D1 calls verified it before storage in the protected environment.
+- Protected release run `35568230939` passed full validation, secret sync,
+  service deployment, canonical service smoke, D1 migration/preflight, and
+  Spaces deployment. Its Spaces smoke stopped before authentication with
+  `invalid_arguments` because pnpm forwarded a redundant bare `--`; no run ID
+  or temporary smoke state was created. The deploy plan now passes
+  `--base-url` directly, with 40 focused deployment and smoke tests passing.
+- A real Google callback then returned `auth_invalid` before consuming its D1
+  OAuth attempt. The `__Host-spaces-oauth-state` cookie incorrectly used a
+  callback-only path, which browsers reject for the `__Host-` prefix. Issuance
+  and clearing now use the required root path; 17 focused HTTP, OIDC, and Worker
+  tests pass.
 
 ## Blockers
 
-- Remaining protected production values must be provisioned through
-  [Spaces file App operations](/docs/spaces-smoke-app.md), including the
-  Principal mappings, dedicated Google client, and corrected Cloudflare
-  deployment token.
-- The live deployment, real-provider checks, canonical Spaces smoke, and
+- The corrected smoke invocation and OAuth state cookie must be integrated and
+  rerun through the protected Production workflow.
+- Real-provider checks, the canonical Spaces smoke, and
   [UserAcceptance](./UserAcceptance.md) remain external gates. Delivery
   acceptance cannot be requested until that evidence is attached to the exact
   integrated primary revision.
