@@ -302,8 +302,15 @@ describe("Spaces Worker", () => {
       SPACES_SMOKE_PRINCIPAL_ID: "smoke-principal",
     };
     const ensureSmokeRoot = vi.fn();
+    const fetchImpl = vi.fn(function(this: unknown) {
+      expect(this).toBeUndefined();
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
     const worker = createSpacesWorker({
-      createFileService: async () => ({
+      fetchImpl,
+      createFileService: async ({ fetcher }) => {
+        await fetcher?.fetch("https://upload.example.test");
+        return {
         list: vi.fn(),
         createFolder: vi.fn(),
         uploadFile: vi.fn(),
@@ -314,7 +321,8 @@ describe("Spaces Worker", () => {
         ensureSmokeRoot,
         releaseSmokeRoot: vi.fn(),
         reconcilePendingReleases: vi.fn(),
-      }),
+        };
+      },
     });
     const response = await worker.fetch(new Request("https://spaces.example.test/api/smoke/session", {
       method: "POST",
@@ -322,6 +330,7 @@ describe("Spaces Worker", () => {
     }), smokeEnv);
 
     expect(response.status).toBe(201);
+    expect(fetchImpl).toHaveBeenCalledOnce();
     expect(ensureSmokeRoot).toHaveBeenCalledOnce();
     expect(await response.json()).toMatchObject({ runId: expect.stringMatching(/^smoke-/) });
     expect(response.headers.get("Set-Cookie")).toContain(SessionCookieName);

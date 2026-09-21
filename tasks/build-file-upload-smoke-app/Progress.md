@@ -118,11 +118,22 @@ acceptance.
   callback-only path, which browsers reject for the `__Host-` prefix. Issuance
   and clearing now use the required root path; 17 focused HTTP, OIDC, and Worker
   tests pass.
+- Release run `35569587926` proved the smoke CLI fix and deployed the OAuth
+  cookie fix, then reached the real smoke session. Cloudflare rejected an
+  unbound runtime `fetch` with `Illegal invocation`; the Worker now normalizes
+  both platform and injected fetch functions at its boundary. Twenty-two
+  focused Worker and file-service tests cover the corrected binding.
+- The corrected Worker was deployed directly for bounded verification. The
+  live OAuth start returns a browser-valid `__Host-` cookie with root path,
+  Secure, HttpOnly, and SameSite=Lax; the dedicated client, callback, and PKCE
+  S256 remain exact. A full production Spaces smoke passed authenticate, hash,
+  lease, upload, commit, verify, and cleanup, followed by zero smoke Roots,
+  open runs, or pending releases.
 
 ## Blockers
 
-- The corrected smoke invocation and OAuth state cookie must be integrated and
-  rerun through the protected Production workflow.
+- The corrected fetch binding must be integrated and rerun through the
+  protected Production workflow so release tagging records the verified code.
 - Real-provider checks, the canonical Spaces smoke, and
   [UserAcceptance](./UserAcceptance.md) remain external gates. Delivery
   acceptance cannot be requested until that evidence is attached to the exact
