@@ -90,10 +90,9 @@ tasks:
     createdAt: "2026-09-17T04:16:49Z"
     updatedAt: "2026-09-19T05:12:49Z"
   split-app-space-operation-permissions:
-    state: ongoing
-    sourceBranch: task/split-app-space-operation-permissions
+    state: completed
     createdAt: "2026-09-20T14:23:39Z"
-    updatedAt: "2026-09-20T16:35:52Z"
+    updatedAt: "2026-09-21T02:54:14Z"
   split-public-domain-topology:
     state: completed
     createdAt: "2026-09-14T09:30:47Z"
