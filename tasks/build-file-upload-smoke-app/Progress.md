@@ -113,11 +113,16 @@ acceptance.
   `invalid_arguments` because pnpm forwarded a redundant bare `--`; no run ID
   or temporary smoke state was created. The deploy plan now passes
   `--base-url` directly, with 40 focused deployment and smoke tests passing.
+- A real Google callback then returned `auth_invalid` before consuming its D1
+  OAuth attempt. The `__Host-spaces-oauth-state` cookie incorrectly used a
+  callback-only path, which browsers reject for the `__Host-` prefix. Issuance
+  and clearing now use the required root path; 17 focused HTTP, OIDC, and Worker
+  tests pass.
 
 ## Blockers
 
-- The corrected release must be integrated and rerun through the protected
-  Production workflow.
+- The corrected smoke invocation and OAuth state cookie must be integrated and
+  rerun through the protected Production workflow.
 - Real-provider checks, the canonical Spaces smoke, and
   [UserAcceptance](./UserAcceptance.md) remain external gates. Delivery
   acceptance cannot be requested until that evidence is attached to the exact
