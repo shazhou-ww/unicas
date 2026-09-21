@@ -76,11 +76,19 @@ primary integration, and delivery acceptance remain.
 - `pnpm exec vitest run tests/app-space-v1-issuer-cutover.test.mjs
   tests/deploy-plan.test.mjs`: 38 issuer proof, activation, workflow gate,
   deployment ordering, secret handling, and deployment-plan tests passed.
+- Production run `35609491714` validated and predeployed the v1 API at release
+  revision `c88b19e2cb0a58ef91087dae0cb0f5f483bfbc91`, then stopped before any
+  issuer activation because the cutover script expected a top-level audience
+  that the formal inspection response does not expose. Both active audiences
+  remained unchanged. The follow-up reuses the service's structured challenge
+  parser to validate the embedded App, issuer, and v1 audience before signing;
+  its focused 38-test validation passes.
 
 ## Blockers
 
-- Deployed smoke requires an authorized target and credentials; follow
-  [UserAcceptance.md](./UserAcceptance.md) after integration.
+- The protected production retry must complete both issuer activations and all
+  deployed smoke steps; follow [UserAcceptance.md](./UserAcceptance.md) for the
+  remaining manual probes after that run.
 - Delivery acceptance remains the final human checkpoint after primary
   integration.
 

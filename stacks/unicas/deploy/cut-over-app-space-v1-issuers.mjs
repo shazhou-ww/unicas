@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import { signIssuerChallenge } from "../../../packages/spaces/scripts/sign-issuer-challenge.mjs";
+import { parseOAuthIssuerInspectionChallenge } from "../../../packages/service/src/oauth-discovery.ts";
 
 export function appSpaceV1Audience(publicOrigin, appId) {
   return `${new URL(publicOrigin).origin}/v1/apps/${encodeURIComponent(appId)}`;
@@ -60,10 +61,15 @@ export async function cutOverAppSpaceV1Issuers({
       body: JSON.stringify({ issuer: issuer.issuer }),
     });
     const inspection = await inspectionResponse.json();
+    const parsedChallenge = typeof inspection.challenge === "string"
+      ? parseOAuthIssuerInspectionChallenge(inspection.challenge)
+      : null;
     if (
       typeof inspection.inspectionId !== "string"
-      || typeof inspection.challenge !== "string"
-      || inspection.audience !== targetAudience
+      || parsedChallenge?.inspectionId !== inspection.inspectionId
+      || parsedChallenge.appId !== issuer.appId
+      || parsedChallenge.issuer !== issuer.issuer
+      || parsedChallenge.audience !== targetAudience
     ) {
       throw new Error(`issuer inspection returned an unexpected contract for ${issuer.appId}`);
     }
