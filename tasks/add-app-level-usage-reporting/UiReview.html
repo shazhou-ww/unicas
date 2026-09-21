@@ -1,0 +1,783 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UniCAS App usage review</title>
+  <style>
+    :root {
+      --canvas: #f8f8f9;
+      --surface: #ffffff;
+      --surface-subtle: #f4f4f5;
+      --surface-hover: #f1f1f2;
+      --ink: #18181b;
+      --muted: #71717a;
+      --border: #e1e1e4;
+      --border-strong: #c9c9ce;
+      --accent: #0f766e;
+      --accent-soft: #e8f5f2;
+      --danger: #b42318;
+      --danger-soft: #fff1f0;
+      --warning: #92400e;
+      --warning-soft: #fff8e7;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      min-width: 320px;
+      background: var(--canvas);
+    }
+
+    body {
+      min-width: 320px;
+      min-height: 100vh;
+      margin: 0;
+      color: var(--ink);
+      background-color: var(--canvas);
+      background-image:
+        linear-gradient(rgba(24, 24, 27, 0.022) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(24, 24, 27, 0.022) 1px, transparent 1px);
+      background-size: 28px 28px;
+      font-family: "Aptos", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      letter-spacing: 0;
+    }
+
+    button,
+    a {
+      font: inherit;
+      letter-spacing: 0;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    button:focus-visible,
+    a:focus-visible {
+      outline: 3px solid rgba(15, 118, 110, 0.28);
+      outline-offset: 2px;
+    }
+
+    .skip-link {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+      padding: 8px 12px;
+      color: white;
+      background: var(--ink);
+      border-radius: 6px;
+      transform: translateY(-160%);
+    }
+
+    .skip-link:focus {
+      transform: translateY(0);
+    }
+
+    header,
+    main,
+    footer {
+      width: min(1320px, calc(100% - 40px));
+      margin-inline: auto;
+    }
+
+    header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 28px 0 20px;
+      border-bottom: 1px solid var(--border-strong);
+    }
+
+    .brand {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 32px;
+      height: 32px;
+      flex: 0 0 auto;
+      place-items: center;
+      color: #fff;
+      background: #27272a;
+      border-radius: 6px;
+      font-weight: 760;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.2;
+      font-weight: 680;
+    }
+
+    header p {
+      max-width: 72ch;
+      margin: 5px 0 0;
+      color: var(--muted);
+    }
+
+    .pending {
+      padding-top: 6px;
+      color: var(--warning);
+      white-space: nowrap;
+      font-weight: 650;
+    }
+
+    main {
+      padding: 20px 0 42px;
+    }
+
+    .decision {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 24px;
+      align-items: center;
+      padding: 16px 18px;
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .decision h2 {
+      margin: 0;
+      font-size: 17px;
+      line-height: 1.35;
+    }
+
+    .decision p {
+      margin: 5px 0 0;
+      color: var(--muted);
+    }
+
+    .decision a {
+      color: var(--accent);
+      font-weight: 650;
+    }
+
+    .deltas {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .deltas li {
+      padding: 5px 8px;
+      color: #115e59;
+      background: var(--accent-soft);
+      border: 1px solid #b9ddd7;
+      border-radius: 5px;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-top: 18px;
+    }
+
+    .controls p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .tabs {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 3px;
+      padding: 3px;
+      background: #e9e9ec;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+    }
+
+    .tab {
+      min-height: 36px;
+      padding: 7px 12px;
+      color: #505058;
+      background: transparent;
+      border: 0;
+      border-radius: 5px;
+      font-weight: 650;
+    }
+
+    .tab[aria-selected="true"] {
+      color: var(--ink);
+      background: var(--surface);
+      box-shadow: 0 1px 3px rgba(24, 24, 27, 0.12);
+    }
+
+    .comparison {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 18px;
+    }
+
+    .frame {
+      min-width: 0;
+      overflow: hidden;
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      box-shadow: 0 14px 36px rgba(24, 24, 27, 0.07);
+    }
+
+    .frame.after {
+      border-color: #8ec7bf;
+    }
+
+    .frame-label {
+      display: flex;
+      min-height: 44px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      background: var(--surface-subtle);
+      border-bottom: 1px solid var(--border);
+      font-weight: 680;
+    }
+
+    .frame-label span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .console {
+      min-height: 390px;
+      padding: 18px;
+      background: var(--canvas);
+    }
+
+    .context {
+      margin-bottom: 12px;
+    }
+
+    .context strong {
+      display: block;
+      font-size: 17px;
+      font-weight: 680;
+    }
+
+    .context span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .card {
+      overflow: hidden;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .card-header {
+      display: flex;
+      min-height: 58px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-title {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 680;
+    }
+
+    .card-body {
+      padding: 16px;
+    }
+
+    .placeholder-title {
+      margin: 0 0 4px;
+      font-weight: 650;
+    }
+
+    .placeholder-copy {
+      max-width: 58ch;
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .icon-button {
+      display: grid;
+      width: 34px;
+      height: 34px;
+      place-items: center;
+      color: var(--ink);
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      font-size: 19px;
+      line-height: 1;
+    }
+
+    .icon-button:hover {
+      background: var(--surface-hover);
+    }
+
+    .icon-button:disabled {
+      cursor: wait;
+      opacity: 0.55;
+    }
+
+    .refreshing {
+      animation: spin 900ms linear infinite;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      border: 1px solid var(--border);
+      border-radius: 7px;
+    }
+
+    .metric {
+      min-width: 0;
+      min-height: 88px;
+      padding: 14px;
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .metric:nth-child(3n) {
+      border-right: 0;
+    }
+
+    .metric:nth-child(n+4) {
+      border-bottom: 0;
+    }
+
+    .metric dt {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .metric dd {
+      margin: 7px 0 0;
+      overflow-wrap: anywhere;
+      font-size: 20px;
+      line-height: 1.2;
+      font-weight: 680;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .metric.warning dd {
+      color: var(--danger);
+    }
+
+    .meta {
+      display: flex;
+      min-height: 28px;
+      align-items: end;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .meta p {
+      margin: 0;
+    }
+
+    .skeleton {
+      display: block;
+      width: 68%;
+      height: 23px;
+      margin-top: 9px;
+      background: #e6e6e9;
+      border-radius: 4px;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+
+    .alert {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 12px;
+      color: var(--danger);
+      background: var(--danger-soft);
+      border: 1px solid #f4c7c3;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+
+    .alert strong {
+      display: block;
+      color: #8f1d14;
+    }
+
+    .alert p {
+      margin: 2px 0 0;
+    }
+
+    .retry {
+      min-height: 32px;
+      padding: 6px 10px;
+      color: var(--ink);
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      font-weight: 650;
+    }
+
+    .empty-note {
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .state[hidden] {
+      display: none;
+    }
+
+    footer {
+      padding: 0 0 28px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    footer strong {
+      color: var(--ink);
+    }
+
+    @keyframes pulse {
+      50% {
+        opacity: 0.45;
+      }
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+      }
+    }
+
+    @media (max-width: 820px) {
+      header {
+        display: grid;
+        gap: 12px;
+      }
+
+      .pending {
+        padding: 0;
+      }
+
+      .decision {
+        grid-template-columns: 1fr;
+      }
+
+      .deltas {
+        justify-content: flex-start;
+      }
+
+      .controls {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .comparison {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 520px) {
+
+      header,
+      main,
+      footer {
+        width: min(100% - 24px, 1320px);
+      }
+
+      header {
+        padding-top: 18px;
+      }
+
+      h1 {
+        font-size: 21px;
+      }
+
+      .console {
+        min-height: 0;
+        padding: 12px;
+      }
+
+      .metric-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .metric:nth-child(n) {
+        border-right: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .metric:nth-child(2n) {
+        border-right: 0;
+      }
+
+      .metric:nth-child(n+5) {
+        border-bottom: 0;
+      }
+
+      .metric dd {
+        font-size: 18px;
+      }
+
+      .tabs {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .alert {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <a class="skip-link" href="#comparison">Skip to comparison</a>
+  <header>
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">UC</div>
+      <div>
+        <h1>App usage interface review</h1>
+        <p>Decision: replace the App Overview placeholder with current aggregate CAS metrics and honest operational
+          states.</p>
+      </div>
+    </div>
+    <div class="pending">Pending approval</div>
+  </header>
+
+  <main>
+    <section class="decision" aria-labelledby="decision-title">
+      <div>
+        <h2 id="decision-title">One compact aggregate, no Space enumeration</h2>
+        <p>Illustrative review aid only. Normative behavior lives in <a
+            href="./InterfaceDesign.md">InterfaceDesign.md</a> and <a href="./Task.md">Task.md</a>.</p>
+      </div>
+      <ul class="deltas" aria-label="Material changes">
+        <li>Six stable metrics</li>
+        <li>Manual refresh</li>
+        <li>Fail-closed errors</li>
+      </ul>
+    </section>
+
+    <div class="controls">
+      <p id="scenario-help">Compare the same App before and after for each material state.</p>
+      <div class="tabs" role="tablist" aria-label="Usage state">
+        <button class="tab" type="button" role="tab" aria-selected="true" aria-controls="state-current" id="tab-current"
+          data-state="current">Current</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="state-refreshing"
+          id="tab-refreshing" data-state="refreshing">Refreshing</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="state-empty" id="tab-empty"
+          data-state="empty">Empty</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="state-error" id="tab-error"
+          data-state="error">Error</button>
+      </div>
+    </div>
+
+    <section class="comparison" id="comparison" aria-describedby="scenario-help">
+      <article class="frame">
+        <div class="frame-label">Before <span>Current production behavior</span></div>
+        <div class="console">
+          <div class="context"><strong>Atlas Archive</strong><span>App overview</span></div>
+          <section class="card" aria-labelledby="before-title">
+            <div class="card-header">
+              <h3 class="card-title" id="before-title">Usage</h3>
+            </div>
+            <div class="card-body">
+              <p class="placeholder-title">Usage is a Space data-plane read</p>
+              <p class="placeholder-copy">Space usage requires a cas:usage:read capability for a specific Space. The
+                admin session deliberately carries no Space credential, so an explicit delegated path is required before
+                this view can query usage.</p>
+            </div>
+          </section>
+        </div>
+      </article>
+
+      <article class="frame after">
+        <div class="frame-label">After <span>Proposed App aggregate</span></div>
+        <div class="console">
+          <div class="context"><strong>Atlas Archive</strong><span>App overview</span></div>
+          <section class="card" aria-labelledby="after-title">
+            <div class="card-header">
+              <h3 class="card-title" id="after-title">Usage</h3>
+              <button class="icon-button" type="button" aria-label="Refresh usage" title="Refresh usage"><span
+                  aria-hidden="true">↻</span></button>
+            </div>
+            <div class="card-body">
+              <div class="state" id="state-current" role="tabpanel" aria-labelledby="tab-current">
+                <dl class="metric-grid">
+                  <div class="metric">
+                    <dt>Logical content</dt>
+                    <dd title="1,932,735,283 bytes">1.8 GiB</dd>
+                  </div>
+                  <div class="metric">
+                    <dt>Stored content</dt>
+                    <dd title="1,395,864,371 bytes">1.3 GiB</dd>
+                  </div>
+                  <div class="metric">
+                    <dt>Upload reservations</dt>
+                    <dd title="67,108,864 bytes">64 MiB</dd>
+                  </div>
+                  <div class="metric">
+                    <dt>Nodes</dt>
+                    <dd>18,420</dd>
+                  </div>
+                  <div class="metric warning">
+                    <dt>Missing content</dt>
+                    <dd>3</dd>
+                  </div>
+                  <div class="metric">
+                    <dt>Leased nodes</dt>
+                    <dd>1,206</dd>
+                  </div>
+                </dl>
+                <div class="meta">
+                  <p>Updated just now</p>
+                </div>
+              </div>
+
+              <div class="state" id="state-refreshing" role="tabpanel" aria-labelledby="tab-refreshing" hidden>
+                <dl class="metric-grid">
+                  <div class="metric">
+                    <dt>Logical content</dt>
+                    <dd>1.8 GiB</dd>
+                  </div>
+                  <div class="metric">
+                    <dt>Stored content</dt>
+                    <dd>1.3 GiB</dd>
+                  </div>
+                  <div class="metric">
+                    <dt>Upload reservations</dt>
+                    <dd>64 MiB</dd>
+                  </div>
+                  <div class="metric">
+                    <dt>Nodes</dt>
+                    <dd>18,420</dd>
+                  </div>
+                  <div class="metric warning">
+                    <dt>Missing content</dt>
+                    <dd>3</dd>
+                  </div>
+                  <div class="metric">
+                    <dt>Leased nodes</dt>
+                    <dd>1,206</dd>
+                  </div>
+                </dl>
+                <div class="meta" role="status">
+                  <p>Refreshing usage</p><span>Current values remain visible</span>
+                </div>
+              </div>
+
+              <div class="state" id="state-empty" role="tabpanel" aria-labelledby="tab-empty" hidden>
+                <dl class="metric-grid">
+                  <div class="metric">
+                    <dt>Logical content</dt>
+                    <dd>0 B</dd>
+                  </div>
+                  <div class="metric">
+                    <dt>Stored content</dt>
+                    <dd>0 B</dd>
+                  </div>
+                  <div class="metric">
+                    <dt>Upload reservations</dt>
+                    <dd>0 B</dd>
+                  </div>
+                  <div class="metric">
+                    <dt>Nodes</dt>
+                    <dd>0</dd>
+                  </div>
+                  <div class="metric">
+                    <dt>Missing content</dt>
+                    <dd>0</dd>
+                  </div>
+                  <div class="metric">
+                    <dt>Leased nodes</dt>
+                    <dd>0</dd>
+                  </div>
+                </dl>
+                <p class="empty-note">No storage activity yet.</p>
+              </div>
+
+              <div class="state" id="state-error" role="tabpanel" aria-labelledby="tab-error" hidden>
+                <div class="alert" role="alert">
+                  <div><strong>Usage is temporarily unavailable</strong>
+                    <p>Accounting is still being reconciled. Retry in a moment.</p>
+                  </div>
+                  <button class="retry" type="button">Retry</button>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <footer><strong>Review boundary:</strong> aggregate current usage only. Per-Space browsing, history, quota, billing,
+    and charts remain out of scope.</footer>
+
+  <script>
+    const tabs = Array.from(document.querySelectorAll("[role='tab']"));
+    const states = Array.from(document.querySelectorAll(".state"));
+    const refreshButton = document.querySelector(".icon-button");
+
+    function selectState(name) {
+      tabs.forEach((tab) => tab.setAttribute("aria-selected", String(tab.dataset.state === name)));
+      states.forEach((state) => { state.hidden = state.id !== `state-${name}`; });
+      refreshButton.disabled = name === "refreshing";
+      refreshButton.firstElementChild.classList.toggle("refreshing", name === "refreshing");
+    }
+
+    tabs.forEach((tab, index) => {
+      tab.addEventListener("click", () => selectState(tab.dataset.state));
+      tab.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+        event.preventDefault();
+        const offset = event.key === "ArrowRight" ? 1 : -1;
+        const next = tabs[(index + offset + tabs.length) % tabs.length];
+        next.focus();
+        selectState(next.dataset.state);
+      });
+    });
+  </script>
+</body>
+
+</html>
