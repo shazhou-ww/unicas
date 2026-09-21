@@ -36,6 +36,9 @@
       "path": "packages/service-cloudflare"
     },
     {
+      "path": "packages/spaces"
+    },
+    {
       "path": "packages/tenant-blob-client"
     },
     {

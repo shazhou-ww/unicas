@@ -23,7 +23,7 @@ interface WorkingFile {
 type WorkingEntry = WorkingDirectory | WorkingFile;
 
 export function createTenantFileSystem(options: TenantFileSystemOptions): TenantFileSystem {
-  const blobs = createCasBlobClient(options.cas);
+  const blobs = createCasBlobClient(options.cas, options.blobOptions);
   const createId = options.createId ?? (() => crypto.randomUUID());
   const createRequestId = options.createRequestId ?? (() => crypto.randomUUID());
 

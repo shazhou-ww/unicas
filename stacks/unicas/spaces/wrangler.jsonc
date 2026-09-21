@@ -1,0 +1,51 @@
+{
+  "$schema": "../../../node_modules/wrangler/config-schema.json",
+  "name": "unicas-spaces",
+  "main": "../../../packages/spaces/src/worker.ts",
+  "compatibility_date": "2026-08-18",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    {
+      "pattern": "spaces.unicas.work",
+      "custom_domain": true
+    }
+  ],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "../../../packages/spaces/dist/ui",
+    "html_handling": "none",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  },
+  "d1_databases": [
+    {
+      "binding": "SPACES_DB",
+      "database_name": "unicas-spaces",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "./migrations"
+    }
+  ],
+  "triggers": {
+    "crons": [
+      "17,47 * * * *"
+    ]
+  },
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "PUBLIC_ORIGIN": "https://spaces.unicas.work",
+    "UNICAS_BASE_URL": "https://api.unicas.work",
+    "UNICAS_AUDIENCE": "replace-at-production-deploy",
+    "SPACES_ISSUER": "https://spaces.unicas.work",
+    "SPACES_SIGNING_KID": "replace-at-production-deploy",
+    "SPACES_SIGNING_PUBLIC_JWKS": "{\"keys\":[{\"kty\":\"EC\",\"crv\":\"P-256\",\"x\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"y\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"kid\":\"replace-at-production-deploy\"}]}",
+    "GOOGLE_CLIENT_ID": "replace-at-production-deploy",
+    "SPACES_SESSION_TTL_SECONDS": "28800",
+    "SPACES_MAX_UPLOAD_BYTES": "41943040",
+    "SPACES_COOKIE_SECURE": "true",
+    "SPACES_SMOKE_ENABLED": "false",
+    "SPACES_SMOKE_PRINCIPAL_ID": "replace-at-production-deploy"
+  }
+}

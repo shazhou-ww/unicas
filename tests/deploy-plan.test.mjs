@@ -30,6 +30,15 @@ import {
   fetchWorkflowCreatedAt,
   tagProductionDeployment,
 } from "../scripts/tag-production-deployment.mjs";
+import {
+  buildProductionSpacesConfig,
+  writeProductionSpacesSecrets,
+} from "../stacks/unicas/spaces/deployment-config.mjs";
+import {
+  parseSpacesDeployArgs,
+  runSpacesCommand,
+  spacesDeploymentPlan,
+} from "../stacks/unicas/spaces/deploy.mjs";
 
 const ROOT = join(import.meta.dirname, "..");
 const CI_WORKFLOW = readFileSync(join(ROOT, ".github/workflows/ci.yml"), "utf8");
@@ -38,6 +47,10 @@ const DEPLOYMENT_GUIDE = readFileSync(
   "utf8",
 );
 const OPERATIONS_GUIDE = readFileSync(join(ROOT, "docs/cas-operations.md"), "utf8");
+const SPACES_WRANGLER_CONFIG = JSON.parse(readFileSync(
+  join(ROOT, "stacks/unicas/spaces/wrangler.jsonc"),
+  "utf8",
+));
 
 function workflowTriggers() {
   const end = CI_WORKFLOW.indexOf("jobs:");
@@ -75,6 +88,93 @@ function git(cwd, args) {
 }
 
 describe("standalone deployment plan", () => {
+  test("keeps the Spaces App on its own public bindings", () => {
+    expect(SPACES_WRANGLER_CONFIG.main).toBe("../../../packages/spaces/src/worker.ts");
+    expect(SPACES_WRANGLER_CONFIG.routes).toEqual([
+      { pattern: "spaces.unicas.work", custom_domain: true },
+    ]);
+    expect(SPACES_WRANGLER_CONFIG.d1_databases).toEqual([
+      expect.objectContaining({ binding: "SPACES_DB", database_name: "unicas-spaces" }),
+    ]);
+    expect(JSON.stringify(SPACES_WRANGLER_CONFIG)).not.toMatch(/CAS_CONTROL_DB|CAS_DB|CAS_R2|durable_objects|kv_namespaces/);
+  });
+
+  test("generates a secret-free Spaces production config and a separate ephemeral secrets file", () => {
+    const environment = {
+      SPACES_D1_DATABASE_ID: "11111111-1111-4111-8111-111111111111",
+      SPACES_GOOGLE_CLIENT_ID: "google-client",
+      SPACES_SIGNING_KID: "spaces-key",
+      SPACES_SIGNING_PUBLIC_JWKS: JSON.stringify({
+        keys: [{ kty: "EC", crv: "P-256", x: "x", y: "y", kid: "spaces-key" }],
+      }),
+      SPACES_SMOKE_PRINCIPAL_ID: "smoke-principal",
+      SPACES_UNICAS_AUDIENCE: "https://api.unicas.work",
+      SPACES_GOOGLE_CLIENT_SECRET: "google-secret",
+      SPACES_SIGNING_PRIVATE_KEY_PKCS8: "private-key",
+      SPACES_SMOKE_CREDENTIAL: "smoke-secret",
+    };
+    const config = buildProductionSpacesConfig(SPACES_WRANGLER_CONFIG, environment);
+    expect(config.d1_databases[0].database_id).toBe(environment.SPACES_D1_DATABASE_ID);
+    expect(config.vars).toMatchObject({
+      GOOGLE_CLIENT_ID: "google-client",
+      SPACES_SIGNING_KID: "spaces-key",
+      SPACES_SMOKE_ENABLED: "true",
+      SPACES_SMOKE_PRINCIPAL_ID: "smoke-principal",
+      UNICAS_AUDIENCE: "https://api.unicas.work",
+    });
+    expect(JSON.stringify(config)).not.toContain("google-secret");
+    expect(JSON.stringify(config)).not.toContain("private-key");
+    expect(JSON.stringify(config)).not.toContain("smoke-secret");
+
+    const directory = mkdtempSync(join(tmpdir(), "unicas-spaces-secrets-"));
+    const output = join(directory, "secrets.json");
+    try {
+      writeProductionSpacesSecrets(environment, output);
+      expect(JSON.parse(readFileSync(output, "utf8"))).toEqual({
+        GOOGLE_CLIENT_SECRET: "google-secret",
+        SPACES_SIGNING_PRIVATE_KEY: "private-key",
+        SPACES_SMOKE_CREDENTIAL: "smoke-secret",
+      });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("orders Spaces build, migration, deploy, and smoke and refuses implicit deployment", () => {
+    expect(() => parseSpacesDeployArgs([])).toThrow("implicit production deployment is refused");
+    expect(spacesDeploymentPlan({ dryRun: true, production: false })).toEqual([
+      ["pnpm", "--filter", "@unicas/spaces", "build"],
+      [
+        "pnpm", "--filter", "@unicas/service-cloudflare", "exec", "wrangler", "deploy",
+        "--dry-run", "--config", "../../stacks/unicas/spaces/wrangler.jsonc",
+      ],
+    ]);
+    const production = spacesDeploymentPlan({ dryRun: false, production: true });
+    expect(production.map((command) => command.join(" "))).toEqual([
+      "pnpm --filter @unicas/spaces build",
+      "pnpm --filter @unicas/service-cloudflare exec wrangler d1 migrations apply SPACES_DB --remote --config ../../.wrangler/spaces/wrangler.production.json",
+      "node packages/spaces/scripts/preflight.mjs",
+      "pnpm --filter @unicas/service-cloudflare exec wrangler deploy --config ../../.wrangler/spaces/wrangler.production.json --secrets-file ../../.wrangler/spaces/secrets.json",
+      "pnpm spaces:smoke -- --base-url https://spaces.unicas.work",
+    ]);
+    expect(() => spacesDeploymentPlan({ bootstrap: true, dryRun: false, production: false }, {}))
+      .toThrow("SPACES_BOOTSTRAP_DEPLOY_CONFIRM=spaces.unicas.work");
+    const bootstrap = spacesDeploymentPlan(
+      { bootstrap: true, dryRun: false, production: false },
+      { SPACES_BOOTSTRAP_DEPLOY_CONFIRM: "spaces.unicas.work" },
+    );
+    expect(bootstrap.map((command) => command.join(" "))).toEqual([
+      "pnpm --filter @unicas/spaces build",
+      "pnpm --filter @unicas/service-cloudflare exec wrangler d1 migrations apply SPACES_DB --remote --config ../../.wrangler/spaces/wrangler.production.json",
+      "pnpm --filter @unicas/service-cloudflare exec wrangler deploy --config ../../.wrangler/spaces/wrangler.production.json --secrets-file ../../.wrangler/spaces/secrets.json",
+    ]);
+  });
+
+  test("throws a Spaces command failure so outer secret cleanup can run", () => {
+    expect(() => runSpacesCommand(["failing-command"], () => ({ status: 7 })))
+      .toThrow("Spaces deployment command failed");
+  });
+
   test("keeps production credentials and deployment commands out of validation", () => {
     const job = validationJob();
     expect(job).not.toContain("secrets.");
@@ -87,6 +187,7 @@ describe("standalone deployment plan", () => {
   test("builds every Worker upload bundle during unprivileged validation", () => {
     const job = validationJob();
     expect(job).toContain("wrangler deploy --dry-run");
+    expect(job).toContain("run: pnpm deploy:spaces:plan");
     expect(job).toContain("run: pnpm deploy:site:plan");
     expect(job).toContain("run: pnpm deploy:docs:plan");
   });
@@ -254,10 +355,12 @@ describe("standalone deployment plan", () => {
   test("deploys each production Worker in order with environment-scoped credentials", () => {
     const job = productionJob();
     const service = job.indexOf("run: pnpm deploy:production");
+    const spaces = job.indexOf("run: pnpm deploy:spaces");
     const site = job.indexOf("run: pnpm deploy:site");
     const docs = job.indexOf("run: pnpm deploy:docs");
     expect(service).toBeGreaterThan(-1);
-    expect(site).toBeGreaterThan(service);
+    expect(spaces).toBeGreaterThan(service);
+    expect(site).toBeGreaterThan(spaces);
     expect(docs).toBeGreaterThan(site);
 
     for (const binding of [
@@ -279,6 +382,17 @@ describe("standalone deployment plan", () => {
     ]) {
       expect(job).toContain(`${secret}: $` + `{{ secrets.${secret} }}`);
     }
+    for (const binding of [
+      "SPACES_D1_DATABASE_ID: ${{ vars.SPACES_D1_DATABASE_ID }}",
+      "SPACES_GOOGLE_CLIENT_ID: ${{ vars.SPACES_GOOGLE_CLIENT_ID }}",
+      "SPACES_SIGNING_KID: ${{ vars.SPACES_SIGNING_KID }}",
+      "SPACES_SIGNING_PUBLIC_JWKS: ${{ vars.SPACES_SIGNING_PUBLIC_JWKS }}",
+      "SPACES_SMOKE_PRINCIPAL_ID: ${{ vars.SPACES_SMOKE_PRINCIPAL_ID }}",
+      "SPACES_UNICAS_AUDIENCE: ${{ vars.SPACES_UNICAS_AUDIENCE }}",
+      "SPACES_GOOGLE_CLIENT_SECRET: ${{ secrets.SPACES_GOOGLE_CLIENT_SECRET }}",
+      "SPACES_SIGNING_PRIVATE_KEY_PKCS8: ${{ secrets.SPACES_SIGNING_PRIVATE_KEY_PKCS8 }}",
+      "SPACES_SMOKE_CREDENTIAL: ${{ secrets.SPACES_SMOKE_CREDENTIAL }}",
+    ]) expect(job).toContain(binding);
     expect(job).not.toContain("secrets.SESSION_ENCRYPTION_KEYS");
     expect(job).not.toContain("secrets.OAUTH_STATE_ENCRYPTION_KEY");
     expect(job).toContain('wrangler secret put "$name"');
@@ -358,15 +472,17 @@ describe("standalone deployment plan", () => {
     for (const target of [
       "https://api.unicas.work/health",
       "https://console.unicas.work/",
+      "https://spaces.unicas.work/",
       "https://unicas.work/",
       "https://docs.unicas.work/",
     ]) expect(job.indexOf(target)).toBeGreaterThan(docs);
     expect(job).not.toContain("--location");
-    expect(job.match(/--proto '=https'/g)).toHaveLength(4);
+    expect(job.match(/--proto '=https'/g)).toHaveLength(5);
     expect(job).toContain("302 https://console.unicas.work/admin/");
     expect(job).toContain('"service":"unicas"');
     expect(job).toContain("UniCAS | Content-addressed storage infrastructure");
     expect(job).toContain("Overview | UniCAS Docs");
+    expect(job).toContain("UniCAS Spaces");
   });
 
   test("requires an environment name after --env", () => {

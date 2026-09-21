@@ -216,10 +216,12 @@ removing the existing apex callbacks:
 ```text
 https://console.unicas.work/admin/auth/callback
 https://api.unicas.work/oauth/google/callback
+https://spaces.unicas.work/auth/google/callback
 ```
 
-The first serves administrator WebUI and CLI login; the second serves remote
-MCP OAuth. `docs.unicas.work` is served by the independent assets-only
+The first serves administrator WebUI and CLI login, the second serves remote
+MCP OAuth, and the third belongs to the separately registered Spaces Google
+client. `docs.unicas.work` is served by the independent assets-only
 `unicas-docs` Worker under `stacks/unicas/docs-site`; it has no API service
 bindings or credentials. Validate and deploy it separately:
 
@@ -228,6 +230,12 @@ pnpm docs:check
 pnpm deploy:docs:plan
 pnpm deploy:docs
 ```
+
+`spaces.unicas.work` is a separately deployed full-stack App, not a route on
+the UniCAS service Worker. Its browser never receives a capability or presigned
+upload URL, so this server-mediated design does not add the Spaces origin to R2
+CORS. See [Spaces file App operations](spaces-smoke-app.md) for its dedicated
+D1, variables, secrets, one-time bootstrap, release smoke, and key rotation.
 
 The accepted origin ownership model is documented in
 [UniCAS domain topology](domain-topology.md).
@@ -244,6 +252,7 @@ Build Wrangler's actual upload bundle without contacting the deployment API:
 
 ```powershell
 pnpm --filter @unicas/service-cloudflare exec wrangler deploy --dry-run
+pnpm deploy:spaces:plan
 ```
 
 Do not run `pnpm deploy --dry-run`: pnpm can consume that argument instead of
@@ -271,6 +280,11 @@ node stacks/unicas/deploy/smoke.mjs https://staging.example.com
 
 No named environments are currently declared in `wrangler.toml`, so the example
 above is valid only after adding isolated bindings and routes.
+
+The protected release runs `pnpm deploy:spaces` after the UniCAS service smoke
+and before product or documentation promotion. It applies App-owned D1
+migrations, deploys Spaces, runs upload/commit/readback/isolation/cleanup smoke,
+and refuses an implicit or smoke-skipping production invocation.
 
 The smoke signer reads provisioned private keys from the gitignored
 `.wrangler/cas-deploy/` directory. To target one control-plane-managed App,
