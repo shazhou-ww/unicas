@@ -8,7 +8,7 @@ import {
   CapabilityAlgorithm,
   CapabilityTokenType,
   SpaceCapabilityVersion,
-  spaceCasReadPermission,
+  spaceRootRefsReadPermission,
 } from "@unicas/tenant-protocol";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
@@ -64,7 +64,7 @@ export async function runSpacesPreflight(environment = process.env, execute = ex
   const token = await new SignJWT({
     ver: SpaceCapabilityVersion,
     spaceId: mapping.spaceId,
-    permissions: [spaceCasReadPermission(mapping.spaceId)],
+    permissions: [spaceRootRefsReadPermission()],
     refDomain: mapping.refDomain,
   })
     .setProtectedHeader({

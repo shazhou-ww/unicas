@@ -45,7 +45,12 @@ describe("issueSpaceCapability", () => {
       sub: "principal-a",
       spaceId: "space-a",
       refDomain: "spaces",
-      permissions: ["spaces:space-a:cas:read", "spaces:space-a:cas:write"],
+      permissions: [
+        "cas:nodes:read",
+        "cas:nodes:lease",
+        "cas:root-refs:read",
+        "cas:root-refs:update",
+      ],
       iat: 1000,
       exp: 1300,
     });

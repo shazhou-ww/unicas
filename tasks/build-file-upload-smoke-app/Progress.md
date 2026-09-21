@@ -26,9 +26,9 @@ authorized production bootstrap, deployment, live smoke, and user acceptance.
   active run.
 - Keep capabilities, presigned upload URLs, signing keys, and uploaded bytes in
   Worker memory. Browser requests use opaque App sessions plus same-origin CSRF.
-- Use the current public v2 `cas:read`/`cas:write` vocabulary because the
-  operation-permission task is not integrated. GET routes receive read only;
-  mutations receive read plus write. No future permission string was invented.
+- Consume the integrated capability v3 operation vocabulary. GET routes receive
+  only `cas:nodes:read`; file mutations receive node read/lease and Root Ref
+  read/update. Spaces never receives usage or GC authority.
 - Configure the public file client with 1 MiB chunks so a bounded 2 MiB smoke
   payload proves multi-node direct upload without a large Worker buffer.
 - Persist old-manifest release intent in the same D1 batch as catalog revision,

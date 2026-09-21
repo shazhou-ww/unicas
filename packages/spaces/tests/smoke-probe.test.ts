@@ -11,7 +11,7 @@ describe("verifySmokeIsolation", () => {
       const claims = decodeJwt(authorization.slice("Bearer ".length));
       if (url.pathname.endsWith("/lease")) {
         expect(claims.spaceId).toBe("space-a");
-        expect(claims.permissions).toEqual(["spaces:space-a:cas:read"]);
+        expect(claims.permissions).toEqual(["cas:nodes:read"]);
         return Response.json({ error: "insufficient_permission" }, { status: 403 });
       }
       expect(url.pathname).toContain("/spaces/space-a/");

@@ -9,8 +9,10 @@ import {
   CapabilityAlgorithm,
   CapabilityTokenType,
   SpaceCapabilityVersion,
-  spaceCasReadPermission,
-  spaceCasWritePermission,
+  spaceNodeLeasePermission,
+  spaceNodeReadPermission,
+  spaceRootRefsReadPermission,
+  spaceRootRefsUpdatePermission,
   validateRefDomainClaim,
 } from "@unicas/tenant-protocol";
 
@@ -130,7 +132,12 @@ export async function bootstrapSpacesPrincipal(config, execute = executeD1) {
   const token = await new SignJWT({
     ver: SpaceCapabilityVersion,
     spaceId: config.spaceId,
-    permissions: [spaceCasReadPermission(config.spaceId), spaceCasWritePermission(config.spaceId)],
+    permissions: [
+      spaceNodeReadPermission(),
+      spaceNodeLeasePermission(),
+      spaceRootRefsReadPermission(),
+      spaceRootRefsUpdatePermission(),
+    ],
     refDomain: config.refDomain,
   })
     .setProtectedHeader({ alg: CapabilityAlgorithm, kid: config.keyId, typ: CapabilityTokenType })

@@ -4,9 +4,12 @@ import {
   CapabilityAlgorithm,
   CapabilityTokenType,
   SpaceCapabilityVersion,
-  spaceCasManagePermission,
-  spaceCasReadPermission,
-  spaceCasWritePermission,
+  spaceGcExecutePermission,
+  spaceNodeLeasePermission,
+  spaceNodeReadPermission,
+  spaceRootRefsReadPermission,
+  spaceRootRefsUpdatePermission,
+  spaceUsageReadPermission,
   type SpaceCapabilityPermission,
 } from "@unicas/tenant-protocol";
 import type { PrincipalContext } from "./repository.js";
@@ -31,9 +34,15 @@ export async function issueSpaceCapability(
 ): Promise<string> {
   const issuedAt = Math.floor(now() / 1000);
   const permissions: SpaceCapabilityPermission[] = [];
-  if (access.includes("read")) permissions.push(spaceCasReadPermission(principal.spaceId));
-  if (access.includes("write")) permissions.push(spaceCasWritePermission(principal.spaceId));
-  if (access.includes("manage")) permissions.push(spaceCasManagePermission(principal.spaceId));
+  if (access.includes("read")) permissions.push(spaceNodeReadPermission());
+  if (access.includes("write")) {
+    permissions.push(
+      spaceNodeLeasePermission(),
+      spaceRootRefsReadPermission(),
+      spaceRootRefsUpdatePermission(),
+    );
+  }
+  if (access.includes("manage")) permissions.push(spaceUsageReadPermission(), spaceGcExecutePermission());
   if (permissions.length === 0) throw new TypeError("At least one Space access permission is required");
 
   let importedKey = keyCache.get(config.privateKeyPem);
