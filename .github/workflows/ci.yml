@@ -283,6 +283,35 @@ jobs:
           printf '%s\n' "$UNICAS_SMOKE_PRIVATE_KEY_PKCS8" > .wrangler/cas-deploy/github-actions-smoke-key.pem
           chmod 600 .wrangler/cas-deploy/github-actions-smoke-key.pem
 
+      - name: Deploy API and Console for App/Space v1 issuer cutover
+        if: vars.APP_SPACE_V1_CUTOVER_ENABLED == 'true'
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          OAUTH_GOOGLE_CLIENT_ID: ${{ vars.OAUTH_GOOGLE_CLIENT_ID }}
+          OAUTH_MICROSOFT_CLIENT_ID: ${{ vars.OAUTH_MICROSOFT_CLIENT_ID }}
+          OAUTH_GITHUB_CLIENT_ID: ${{ vars.OAUTH_GITHUB_CLIENT_ID }}
+        run: |
+          node stacks/unicas/deploy/ensure-encryption-secrets.mjs
+          pnpm --filter @unicas/service-cloudflare build
+          pnpm --filter @unicas/service-cloudflare exec wrangler deploy \
+            --var "OAUTH_GOOGLE_CLIENT_ID:$OAUTH_GOOGLE_CLIENT_ID" \
+            --var "OAUTH_MICROSOFT_CLIENT_ID:$OAUTH_MICROSOFT_CLIENT_ID" \
+            --var "OAUTH_GITHUB_CLIENT_ID:$OAUTH_GITHUB_CLIENT_ID"
+
+      - name: Cut over App/Space v1 issuer audiences
+        if: vars.APP_SPACE_V1_CUTOVER_ENABLED == 'true'
+        env:
+          UNICAS_RELEASE_ADMIN_SESSION: ${{ secrets.UNICAS_RELEASE_ADMIN_SESSION }}
+          UNICAS_SMOKE_APP_ID: ${{ vars.UNICAS_SMOKE_APP_ID }}
+          UNICAS_SMOKE_ISSUER: ${{ vars.UNICAS_SMOKE_ISSUER }}
+          UNICAS_SMOKE_KID: ${{ vars.UNICAS_SMOKE_KID }}
+          UNICAS_SMOKE_PRIVATE_KEY_PKCS8: ${{ secrets.UNICAS_SMOKE_PRIVATE_KEY_PKCS8 }}
+          SPACES_BOOTSTRAP_APP_ID: ${{ vars.SPACES_BOOTSTRAP_APP_ID }}
+          SPACES_SIGNING_KID: ${{ vars.SPACES_SIGNING_KID }}
+          SPACES_SIGNING_PRIVATE_KEY_PKCS8: ${{ secrets.SPACES_SIGNING_PRIVATE_KEY_PKCS8 }}
+        run: node stacks/unicas/deploy/cut-over-app-space-v1-issuers.mjs
+
       - name: Deploy API and console service, then run canonical smoke
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}

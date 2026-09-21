@@ -32,6 +32,11 @@ primary integration, and delivery acceptance remain.
   Durable Object identities, and browser-cache persistence names.
 - Keep one atomic mixed-sign Root Ref update with the existing runtime
   idempotency and retry semantics; expose its accepted limits in OpenAPI.
+- For the one-time production cutover, gate a two-stage protected release with
+  `APP_SPACE_V1_CUTOVER_ENABLED`: deploy the v1 API first, replace both active
+  production App issuer audiences through normal inspect/proof/activate calls,
+  then run the ordinary full deployment and smoke. The cutover step is
+  idempotent and remains disabled for later releases.
 
 ## Human approvals
 
@@ -68,6 +73,9 @@ primary integration, and delivery acceptance remain.
   App/Space route, contract, operation, cutoff, or dispatch-header identifier.
 - `pnpm deploy:plan`: produced the expected non-deploying Worker, protocol,
   client, and smoke command plan.
+- `pnpm exec vitest run tests/app-space-v1-issuer-cutover.test.mjs
+  tests/deploy-plan.test.mjs`: 38 issuer proof, activation, workflow gate,
+  deployment ordering, secret handling, and deployment-plan tests passed.
 
 ## Blockers
 

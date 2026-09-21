@@ -1,5 +1,5 @@
 /**
- * Smoke-test the deployed App/Space v2 contract through a machine API origin.
+ * Smoke-test the deployed App/Space v1 contract through a machine API origin.
  *
  * Usage: node scripts/cas-app-space-smoke.mjs [baseUrl]
  * Required: UNICAS_SMOKE_APP_ID/ISSUER/AUDIENCE/KID/KEY_FILE.
@@ -181,11 +181,11 @@ async function main() {
     response = await fetch(`${BASE}${prefix}/cas/usage`, {
       headers: { Authorization: `Bearer ${v1Token}` },
     });
-    assert(response.status === 401, `v1 token on v2 route -> ${response.status} (401)`);
+    assert(response.status === 401, `frozen token on App/Space v1 route -> ${response.status} (401)`);
     response = await fetch(`${BASE}/stacks/${encodeURIComponent(APP_ID)}/tenants/${encodeURIComponent(SPACE_ID)}/cas/usage`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    assert(response.status === 401, `v2 token on v1 route -> ${response.status} (401)`);
+    assert(response.status === 401, `Space v1 token on frozen route -> ${response.status} (401)`);
   } catch (error) {
     smokeFailure = error;
     throw error;
