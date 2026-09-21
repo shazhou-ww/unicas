@@ -420,6 +420,8 @@ describe("standalone deployment plan", () => {
       "UNICAS_SMOKE_SPACE_ID: ${{ vars.UNICAS_SMOKE_SPACE_ID }}",
     ]) expect(job).toContain(binding);
     for (const secret of [
+      "CAS_R2_ACCESS_KEY_ID",
+      "CAS_R2_SECRET_ACCESS_KEY",
       "OAUTH_GOOGLE_CLIENT_SECRET",
       "OAUTH_MICROSOFT_CLIENT_SECRET",
       "OAUTH_GITHUB_CLIENT_SECRET",

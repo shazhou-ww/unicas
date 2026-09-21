@@ -9,9 +9,10 @@ The approved Spaces file App is implemented as the private
 `stacks/unicas/spaces`. Worker authentication, App-owned capability issuance,
 D1 catalog and recovery state, public file-client workflows, responsive UI,
 non-interactive smoke, bootstrap/preflight tooling, protected release ordering,
-and stable operations documentation pass local validation. The next action is
-to publish and integrate this source revision, then complete the separately
-authorized production bootstrap, deployment, live smoke, and user acceptance.
+and stable operations documentation pass local validation. The production App,
+catalog, issuer, and capability-v3 service are provisioned; Principal bootstrap,
+the dedicated Google client, the normal Spaces release, and user acceptance
+remain.
 
 ## Decisions
 
@@ -88,16 +89,21 @@ authorized production bootstrap, deployment, live smoke, and user acceptance.
 - The first real empty-catalog row reports `COUNT(*) = 0` alongside null entity
   fields. Bootstrap now recognizes that exact D1 shape as fresh state rather
   than a partial-state conflict.
-- No production deployment, App/issuer activation, production D1 bootstrap,
-  real Google callback, or live Spaces smoke was run without explicit release
-  authorization and credentials.
+- The authorized capability-v3 service deployment initially failed canonical
+  smoke because production lacked R2 S3 signing credentials. The service was
+  rolled back, an account-owned Object Read & Write token scoped only to
+  `unicas-content` was installed as Worker and protected GitHub secrets, and the
+  configured v3 version then passed the complete canonical production smoke.
+- The Production workflow now synchronizes both R2 signing credentials before
+  deploying the service, so a clean deployment or credential rotation cannot
+  silently publish a Worker that returns `503` for direct uploads.
 
 ## Blockers
 
-- Production resources and protected values must be provisioned through
-  [Spaces file App operations](/docs/spaces-smoke-app.md), including the App,
-  issuer activation, dedicated D1, Principal mappings, Google client, signing
-  keys, smoke credential, and Cloudflare deployment credentials.
+- Remaining protected production values must be provisioned through
+  [Spaces file App operations](/docs/spaces-smoke-app.md), including the
+  Principal mappings, dedicated Google client, and corrected Cloudflare
+  deployment token.
 - The live deployment, real-provider checks, canonical Spaces smoke, and
   [UserAcceptance](./UserAcceptance.md) remain external gates. Delivery
   acceptance cannot be requested until that evidence is attached to the exact
