@@ -157,7 +157,7 @@ reviewed explicitly before the work named in the final column begins.
 - [Repository glossary](/GLOSSARY.md)
 - [Package boundaries](/packages/README.md)
 - [UniCAS architecture](/docs/cas-architecture.md)
-- [Data-plane protocol boundary](/packages/tenant-protocol/README.md)
+- [Data-plane protocol boundary](/packages/space-protocol/README.md)
 - [Cloud-neutral service routing](/packages/service/src/actor.ts)
 - [Direct node upload task](/tasks/complete-direct-node-upload/Task.md)
 - [Space operation permission task](/tasks/split-app-space-operation-permissions/Task.md)

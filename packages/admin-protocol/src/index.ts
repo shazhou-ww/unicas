@@ -35,7 +35,7 @@ export type {
   SpaceRootRefEvent,
   VerifiedEmailSource,
 } from "./types.js";
-export type { AppId } from "@unicas/tenant-protocol";
+export type { AppId } from "@unicas/space-protocol";
 
 export {
   AccountAvatarSchema,

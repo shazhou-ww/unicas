@@ -11,7 +11,7 @@
 
 import { CanonicalNodeContentType, parseCanonicalNodeStream } from "@unicas/codec";
 import type { D1Database, R2Bucket, DurableObjectNamespace } from "@cloudflare/workers-types";
-import { CasUploadIdHeader, CasUploadLengthHeader } from "@unicas/tenant-protocol";
+import { CasUploadIdHeader, CasUploadLengthHeader } from "@unicas/space-protocol";
 import {
   type CanonicalNodeUploadPlan,
   collectExpiredUnreferencedNodes,

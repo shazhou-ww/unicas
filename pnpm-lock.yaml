@@ -97,9 +97,9 @@ importers:
       '@orpc/zod':
         specifier: 1.15.0
         version: 1.15.0(@opentelemetry/api@1.9.1)(@orpc/contract@1.15.0(@opentelemetry/api@1.9.1))(@orpc/server@1.15.0(@opentelemetry/api@1.9.1)(ws@8.21.0))(ws@8.21.0)(zod@4.4.3)
-      '@unicas/tenant-protocol':
+      '@unicas/space-protocol':
         specifier: workspace:*
-        version: link:../tenant-protocol
+        version: link:../space-protocol
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -257,9 +257,9 @@ importers:
       '@unicas/codec':
         specifier: workspace:*
         version: link:../codec
-      '@unicas/tenant-protocol':
+      '@unicas/space-protocol':
         specifier: workspace:*
-        version: link:../tenant-protocol
+        version: link:../space-protocol
       jose:
         specifier: ^6.0.0
         version: 6.2.10
@@ -291,9 +291,9 @@ importers:
       '@unicas/service':
         specifier: workspace:*
         version: link:../service
-      '@unicas/tenant-protocol':
+      '@unicas/space-protocol':
         specifier: workspace:*
-        version: link:../tenant-protocol
+        version: link:../space-protocol
       agents:
         specifier: 0.21.0
         version: 0.21.0(@babel/core@8.0.1)(@babel/runtime@7.29.7)(@cloudflare/workers-types@4.20260702.1)(@modelcontextprotocol/client@2.0.0)(@modelcontextprotocol/sdk@1.30.0(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.4.3))(@modelcontextprotocol/server@2.0.0)(ai@6.0.33(zod@4.4.3))(react@19.2.8)(rolldown@1.2.5)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.13)(yaml@2.9.0))(zod@4.4.3)
@@ -323,17 +323,121 @@ importers:
         specifier: ^4.20.0
         version: 4.123.0(@cloudflare/workers-types@4.20260702.1)
 
+  packages/space-blob-client:
+    dependencies:
+      '@unicas/codec':
+        specifier: workspace:*
+        version: link:../codec
+      '@unicas/space-client':
+        specifier: workspace:*
+        version: link:../space-client
+      cborg:
+        specifier: ^6.1.1
+        version: 6.1.1
+    devDependencies:
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(jsdom@25.0.0(supports-color@10.2.2))(lightningcss@1.32.0)(supports-color@10.2.2)(tsx@4.23.13)(yaml@2.9.1)
+
+  packages/space-browser-cache:
+    dependencies:
+      '@unicas/space-client':
+        specifier: workspace:*
+        version: link:../space-client
+      idb:
+        specifier: ^8.0.3
+        version: 8.0.3
+    devDependencies:
+      fake-indexeddb:
+        specifier: ^6.2.4
+        version: 6.2.5
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(jsdom@25.0.0(supports-color@10.2.2))(lightningcss@1.32.0)(supports-color@10.2.2)(tsx@4.23.13)(yaml@2.9.1)
+
+  packages/space-client:
+    dependencies:
+      '@unicas/codec':
+        specifier: workspace:*
+        version: link:../codec
+      '@unicas/space-protocol':
+        specifier: workspace:*
+        version: link:../space-protocol
+    devDependencies:
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(jsdom@25.0.0(supports-color@10.2.2))(lightningcss@1.32.0)(supports-color@10.2.2)(tsx@4.23.13)(yaml@2.9.1)
+
+  packages/space-file-client:
+    dependencies:
+      '@unicas/space-blob-client':
+        specifier: workspace:*
+        version: link:../space-blob-client
+      '@unicas/space-client':
+        specifier: workspace:*
+        version: link:../space-client
+      cborg:
+        specifier: ^6.1.1
+        version: 6.1.1
+    devDependencies:
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(jsdom@25.0.0(supports-color@10.2.2))(lightningcss@1.32.0)(supports-color@10.2.2)(tsx@4.23.13)(yaml@2.9.1)
+
+  packages/space-protocol:
+    dependencies:
+      '@orpc/contract':
+        specifier: 1.15.0
+        version: 1.15.0(@opentelemetry/api@1.9.1)
+      '@orpc/openapi':
+        specifier: 1.15.0
+        version: 1.15.0(@opentelemetry/api@1.9.1)(ws@8.21.0)
+      '@orpc/zod':
+        specifier: 1.15.0
+        version: 1.15.0(@opentelemetry/api@1.9.1)(@orpc/contract@1.15.0(@opentelemetry/api@1.9.1))(@orpc/server@1.15.0(@opentelemetry/api@1.9.1)(ws@8.21.0))(ws@8.21.0)(zod@4.4.3)
+      jose:
+        specifier: ^6.2.10
+        version: 6.2.10
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: ^24.13.3
+        version: 24.13.3
+      tsx:
+        specifier: ^4.23.13
+        version: 4.23.13
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(jsdom@25.0.0(supports-color@10.2.2))(lightningcss@1.32.0)(supports-color@10.2.2)(tsx@4.23.13)(yaml@2.9.1)
+
   packages/spaces:
     dependencies:
-      '@unicas/tenant-client':
+      '@unicas/space-client':
         specifier: workspace:*
-        version: link:../tenant-client
-      '@unicas/tenant-file-client':
+        version: link:../space-client
+      '@unicas/space-file-client':
         specifier: workspace:*
-        version: link:../tenant-file-client
-      '@unicas/tenant-protocol':
+        version: link:../space-file-client
+      '@unicas/space-protocol':
         specifier: workspace:*
-        version: link:../tenant-protocol
+        version: link:../space-protocol
       jose:
         specifier: ^6.2.10
         version: 6.2.10
@@ -383,110 +487,6 @@ importers:
       vite:
         specifier: ^7.3.0
         version: 7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.13)(yaml@2.9.1)
-      vitest:
-        specifier: ^3.2.0
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(jsdom@25.0.0(supports-color@10.2.2))(lightningcss@1.32.0)(supports-color@10.2.2)(tsx@4.23.13)(yaml@2.9.1)
-
-  packages/tenant-blob-client:
-    dependencies:
-      '@unicas/codec':
-        specifier: workspace:*
-        version: link:../codec
-      '@unicas/tenant-client':
-        specifier: workspace:*
-        version: link:../tenant-client
-      cborg:
-        specifier: ^6.1.1
-        version: 6.1.1
-    devDependencies:
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.0
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(jsdom@25.0.0(supports-color@10.2.2))(lightningcss@1.32.0)(supports-color@10.2.2)(tsx@4.23.13)(yaml@2.9.1)
-
-  packages/tenant-browser-cache:
-    dependencies:
-      '@unicas/tenant-client':
-        specifier: workspace:*
-        version: link:../tenant-client
-      idb:
-        specifier: ^8.0.3
-        version: 8.0.3
-    devDependencies:
-      fake-indexeddb:
-        specifier: ^6.2.4
-        version: 6.2.5
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.0
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(jsdom@25.0.0(supports-color@10.2.2))(lightningcss@1.32.0)(supports-color@10.2.2)(tsx@4.23.13)(yaml@2.9.1)
-
-  packages/tenant-client:
-    dependencies:
-      '@unicas/codec':
-        specifier: workspace:*
-        version: link:../codec
-      '@unicas/tenant-protocol':
-        specifier: workspace:*
-        version: link:../tenant-protocol
-    devDependencies:
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.0
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(jsdom@25.0.0(supports-color@10.2.2))(lightningcss@1.32.0)(supports-color@10.2.2)(tsx@4.23.13)(yaml@2.9.1)
-
-  packages/tenant-file-client:
-    dependencies:
-      '@unicas/tenant-blob-client':
-        specifier: workspace:*
-        version: link:../tenant-blob-client
-      '@unicas/tenant-client':
-        specifier: workspace:*
-        version: link:../tenant-client
-      cborg:
-        specifier: ^6.1.1
-        version: 6.1.1
-    devDependencies:
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.0
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(jsdom@25.0.0(supports-color@10.2.2))(lightningcss@1.32.0)(supports-color@10.2.2)(tsx@4.23.13)(yaml@2.9.1)
-
-  packages/tenant-protocol:
-    dependencies:
-      '@orpc/contract':
-        specifier: 1.15.0
-        version: 1.15.0(@opentelemetry/api@1.9.1)
-      '@orpc/openapi':
-        specifier: 1.15.0
-        version: 1.15.0(@opentelemetry/api@1.9.1)(ws@8.21.0)
-      '@orpc/zod':
-        specifier: 1.15.0
-        version: 1.15.0(@opentelemetry/api@1.9.1)(@orpc/contract@1.15.0(@opentelemetry/api@1.9.1))(@orpc/server@1.15.0(@opentelemetry/api@1.9.1)(ws@8.21.0))(ws@8.21.0)(zod@4.4.3)
-      jose:
-        specifier: ^6.2.10
-        version: 6.2.10
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
-    devDependencies:
-      '@types/node':
-        specifier: ^24.13.3
-        version: 24.13.3
-      tsx:
-        specifier: ^4.23.13
-        version: 4.23.13
-      typescript:
-        specifier: ^5.9.0
-        version: 5.9.3
       vitest:
         specifier: ^3.2.0
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(jsdom@25.0.0(supports-color@10.2.2))(lightningcss@1.32.0)(supports-color@10.2.2)(tsx@4.23.13)(yaml@2.9.1)

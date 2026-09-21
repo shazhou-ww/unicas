@@ -154,8 +154,8 @@ permission vocabulary that is ultimately integrated by that task.
 
 ## References
 
-- [Space v2 protocol contract](/packages/tenant-protocol/src/space-v2-contract.ts)
-- [Public tenant client](/packages/tenant-client/src/client.ts)
+- [Space v2 protocol contract](/packages/space-protocol/src/space-v2-contract.ts)
+- [Public tenant client](/packages/space-client/src/client.ts)
 - [Cloud-neutral Root Ref service](/packages/service/src/root-refs.ts)
 - [Cloudflare Root Ref adapter](/packages/service-cloudflare/src/root-refs.ts)
 - [CAS architecture](/docs/cas-architecture.md)

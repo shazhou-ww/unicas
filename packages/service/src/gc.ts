@@ -1,4 +1,4 @@
-import type { CasGcResult } from "@unicas/tenant-protocol";
+import type { CasGcResult } from "@unicas/space-protocol";
 
 export const DEFAULT_GC_MAX_NODES = 100;
 

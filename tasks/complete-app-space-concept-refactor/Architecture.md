@@ -64,7 +64,7 @@ exact occurrence inventory and make it reproducible.
 
 Representative frozen v1 ownership:
 
-- `/packages/tenant-protocol/src/contract.ts`, `http.ts`, and the v1 portion
+- `/packages/space-protocol/src/v1/contract.ts`, `v1/http.ts`, and the v1 portion
   of `routes.ts` and `capability.ts`.
 - `StackCapabilityVerifier` and related claims in
   `/packages/service/src/tenant-auth.ts`.

@@ -1,4 +1,4 @@
-import type { AppId } from "@unicas/tenant-protocol";
+import type { AppId } from "@unicas/space-protocol";
 import type { PlatformAuthority } from "./platform-access.js";
 
 /**

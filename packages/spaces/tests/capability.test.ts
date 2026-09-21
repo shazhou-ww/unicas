@@ -10,7 +10,7 @@ import {
   CapabilityAlgorithm,
   CapabilityTokenType,
   SpaceCapabilityVersion,
-} from "@unicas/tenant-protocol";
+} from "@unicas/space-protocol";
 import { issueSpaceCapability } from "../src/capability.js";
 
 describe("issueSpaceCapability", () => {

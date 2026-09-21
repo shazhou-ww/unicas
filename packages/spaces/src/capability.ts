@@ -1,5 +1,5 @@
 import { importPKCS8, SignJWT } from "jose";
-import { createSpaceCasClient, type SpaceCasClient } from "@unicas/tenant-client";
+import { createSpaceCasClient, type SpaceCasClient } from "@unicas/space-client";
 import {
   CapabilityAlgorithm,
   CapabilityTokenType,
@@ -11,7 +11,7 @@ import {
   spaceRootRefsUpdatePermission,
   spaceUsageReadPermission,
   type SpaceCapabilityPermission,
-} from "@unicas/tenant-protocol";
+} from "@unicas/space-protocol";
 import type { PrincipalContext } from "./repository.js";
 
 export type SpaceAccess = "read" | "write" | "manage";

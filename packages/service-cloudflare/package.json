@@ -31,7 +31,7 @@
     "@unicas/codec": "workspace:*",
     "@unicas/control-auth": "workspace:*",
     "@unicas/service": "workspace:*",
-    "@unicas/tenant-protocol": "workspace:*",
+    "@unicas/space-protocol": "workspace:*",
     "agents": "0.21.0",
     "aws4fetch": "^1.0.20",
     "jose": "^6.2.10",

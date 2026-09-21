@@ -15,7 +15,7 @@ import {
   casWritePermission,
   validateRefDomainClaim,
   type CasRoute,
-} from "@unicas/tenant-protocol";
+} from "@unicas/space-protocol/v1";
 
 /** Cloud-neutral authority data required to verify a tenant capability. */
 export interface ResolvedStackAuthority {

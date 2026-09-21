@@ -7,7 +7,7 @@ import {
   casWritePermission,
   type CapabilityPermission,
   type CasRoute,
-} from "@unicas/tenant-protocol";
+} from "@unicas/space-protocol/v1";
 import {
   StackCapabilityVerifier,
   permissionFor,

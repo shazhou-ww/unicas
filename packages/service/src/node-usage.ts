@@ -1,4 +1,4 @@
-import type { CasUsage } from "@unicas/tenant-protocol";
+import type { CasUsage } from "@unicas/space-protocol";
 
 export interface NodeUsageScope {
   readonly stackId: string;

@@ -29,7 +29,7 @@ describe("documentation static site", () => {
     for (const [route, title] of [
       ["reference/packages", "Package Boundaries"],
       ["reference/admin-protocol", "Admin Protocol"],
-      ["reference/tenant-protocol", "Tenant Protocol"],
+      ["reference/space-protocol", "Tenant Protocol"],
       ["reference/admin-cli", "Administrator CLI"],
     ]) {
       await expect(page(route)).resolves.toContain(title);

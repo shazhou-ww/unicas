@@ -1,11 +1,11 @@
 import { describe, expect, test, vi } from "vitest";
-import type { SpaceCasClient } from "@unicas/tenant-client";
+import type { SpaceCasClient } from "@unicas/space-client";
 import type {
-  TenantFileRoot,
-  TenantFileRootInfo,
-  TenantFileStat,
-  TenantFileSystem,
-} from "@unicas/tenant-file-client";
+  SpaceFileRoot,
+  SpaceFileRootInfo,
+  SpaceFileStat,
+  SpaceFileSystem,
+} from "@unicas/space-file-client";
 import {
   FileServiceError,
   SpacesFileService,
@@ -16,11 +16,11 @@ import {
 
 function fixture(options: {
   readonly revision?: number;
-  readonly entries?: readonly TenantFileStat[];
+  readonly entries?: readonly SpaceFileStat[];
   readonly rootCount?: number;
   readonly retained?: boolean;
 } = {}) {
-  let info: TenantFileRootInfo = {
+  let info: SpaceFileRootInfo = {
     rootId: "root-a",
     name: "Files",
     manifestHash: "manifest-a",
@@ -29,7 +29,7 @@ function fixture(options: {
     updatedAt: 1,
   };
   const entries = new Map((options.entries ?? []).map((entry) => [entry.path, entry]));
-  const root: TenantFileRoot = {
+  const root: SpaceFileRoot = {
     get info() { return info; },
     dirty: false,
     stat: vi.fn(async (path: string) => {
@@ -74,7 +74,7 @@ function fixture(options: {
     ...info,
     rootId: index === 0 ? info.rootId : `root-${index}`,
   }));
-  const fileSystem: TenantFileSystem = {
+  const fileSystem: SpaceFileSystem = {
     listRoots: vi.fn(async () => roots),
     openRoot: vi.fn(async () => root),
     createRoot: vi.fn(),
@@ -210,7 +210,7 @@ describe("SpacesFileService", () => {
 
   test("creates an ephemeral smoke Root and releases its final manifest idempotently", async () => {
     const { cas } = fixture();
-    const rootInfo: TenantFileRootInfo = {
+    const rootInfo: SpaceFileRootInfo = {
       rootId: "smoke-root",
       name: "Release smoke",
       manifestHash: "smoke-manifest",
@@ -225,7 +225,7 @@ describe("SpacesFileService", () => {
       createRoot: vi.fn(async () => ({ info: rootInfo })),
       openRoot: vi.fn(),
       deleteRoot: vi.fn(),
-    } as unknown as TenantFileSystem;
+    } as unknown as SpaceFileSystem;
     const catalog = {
       list: vi.fn(async () => []),
       create: vi.fn(),
@@ -280,7 +280,7 @@ describe("SpacesFileService", () => {
       createRoot: vi.fn(),
       openRoot: vi.fn(),
       deleteRoot: vi.fn(),
-    } as unknown as TenantFileSystem;
+    } as unknown as SpaceFileSystem;
     const service = new SpacesFileService(cas, fileSystem, 10, undefined, catalog);
 
     await expect(service.reconcilePendingReleases()).resolves.toBe(1);
@@ -319,7 +319,7 @@ describe("SpacesFileService", () => {
       createRoot: vi.fn(),
       openRoot: vi.fn(),
       deleteRoot: vi.fn(),
-    } as unknown as TenantFileSystem;
+    } as unknown as SpaceFileSystem;
     const service = new SpacesFileService(cas, fileSystem, 10, undefined, catalog);
 
     await expect(service.reconcilePendingReleases()).rejects.toMatchObject({

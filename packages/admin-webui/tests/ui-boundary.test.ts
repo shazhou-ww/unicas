@@ -58,7 +58,7 @@ describe("cas-admin-webui browser boundary", () => {
     for (const file of listFiles(UI_DIR)) {
       const source = readFileSync(file, "utf8");
       expect(source, `${file} must not import the tenant plane`).not.toContain("@unicas/tenant-");
-      expect(source).not.toContain("@unicas/tenant-protocol");
+      expect(source).not.toContain("@unicas/space-protocol");
       expect(source).not.toContain("@unicas/codec");
     }
   });

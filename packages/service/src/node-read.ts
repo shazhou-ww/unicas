@@ -1,5 +1,5 @@
 import { HASH_SIZE, HEADER_SIZE } from "@unicas/codec";
-import type { CasNodeMetadata, CasNodeState } from "@unicas/tenant-protocol";
+import type { CasNodeMetadata, CasNodeState } from "@unicas/space-protocol";
 import { NodeOpError, NodeOpErrorCodes } from "./node-errors.js";
 
 export interface NodeReadScope {

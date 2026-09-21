@@ -1,13 +1,13 @@
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { importPKCS8, SignJWT } from "jose";
-import { createSpaceCasClient } from "@unicas/tenant-client";
+import { createSpaceCasClient } from "@unicas/space-client";
 import {
   CapabilityAlgorithm,
   CapabilityTokenType,
   SpaceCapabilityVersion,
   spaceRootRefsReadPermission,
-} from "@unicas/tenant-protocol";
+} from "@unicas/space-protocol";
 import { executeD1 } from "./bootstrap.mjs";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));

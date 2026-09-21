@@ -5,15 +5,14 @@ import {
 import {
   CapabilityError,
   matchAppSpaceRoute,
-  matchCasRoute,
   type AppSpaceRoute,
-  type CasRoute,
-} from "@unicas/tenant-protocol";
+} from "@unicas/space-protocol";
+import { matchCasRoute, type CasRoute } from "@unicas/space-protocol/v1";
 import {
   CasLeaseDurationHeader,
   CasUploadIdHeader,
   CasUploadLengthHeader,
-} from "@unicas/tenant-protocol";
+} from "@unicas/space-protocol";
 import type { ServicePlatform } from "./ports.js";
 
 export interface HttpActor {

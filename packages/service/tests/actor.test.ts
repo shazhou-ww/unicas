@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { CapabilityAuthorizationError } from "@unicas/tenant-protocol";
+import { CapabilityAuthorizationError } from "@unicas/space-protocol";
 import {
   createUniCasService,
   matchUniCasServiceRoute,

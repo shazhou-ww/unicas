@@ -4,8 +4,8 @@ import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { importPKCS8, SignJWT } from "jose";
-import { createSpaceCasClient } from "@unicas/tenant-client";
-import { createTenantFileSystem } from "@unicas/tenant-file-client";
+import { createSpaceCasClient } from "@unicas/space-client";
+import { createTenantFileSystem } from "@unicas/space-file-client";
 import {
   CapabilityAlgorithm,
   CapabilityTokenType,
@@ -15,7 +15,7 @@ import {
   spaceRootRefsReadPermission,
   spaceRootRefsUpdatePermission,
   validateRefDomainClaim,
-} from "@unicas/tenant-protocol";
+} from "@unicas/space-protocol";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const requireFromServicePackage = createRequire(new URL("../../service-cloudflare/package.json", import.meta.url));

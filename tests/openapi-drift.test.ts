@@ -7,7 +7,7 @@ import {
 import {
   generateSpaceOpenApiDocument,
   generateTenantOpenApiDocument,
-} from "../packages/tenant-protocol/scripts/openapi.js";
+} from "../packages/space-protocol/scripts/openapi.js";
 
 const ROOT = join(import.meta.dirname, "..");
 
@@ -28,13 +28,13 @@ describe("generated OpenAPI documents", () => {
 
   test("tenant document is current", async () => {
     expect(jsonValue(await generateTenantOpenApiDocument())).toEqual(
-      await readJson("packages/tenant-protocol/openapi/tenant-v1.openapi.json"),
+      await readJson("packages/space-protocol/openapi/tenant-v1.openapi.json"),
     );
   });
 
   test("Space v2 document is current", async () => {
     expect(jsonValue(await generateSpaceOpenApiDocument())).toEqual(
-      await readJson("packages/tenant-protocol/openapi/space-v2.openapi.json"),
+      await readJson("packages/space-protocol/openapi/space-v2.openapi.json"),
     );
   });
 });

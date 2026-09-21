@@ -38,11 +38,11 @@ Please verify that the draft:
 
 The draft was checked against:
 
-- [Space v2 TypeScript contract](../../packages/tenant-protocol/src/space-v2-contract.ts)
-- [Generated Space v2 OpenAPI](../../packages/tenant-protocol/openapi/space-v2.openapi.json)
-- [Capability vocabulary](../../packages/tenant-protocol/src/capability.ts)
-- [Public transport client](../../packages/tenant-client/src/client.ts)
-- [Public transport client types](../../packages/tenant-client/src/types.ts)
+- [Space v2 TypeScript contract](../../packages/space-protocol/src/space-v2-contract.ts)
+- [Generated Space v2 OpenAPI](../../packages/space-protocol/openapi/space-v2.openapi.json)
+- [Capability vocabulary](../../packages/space-protocol/src/capability.ts)
+- [Public transport client](../../packages/space-client/src/client.ts)
+- [Public transport client types](../../packages/space-client/src/types.ts)
 - [Service authorization](../../packages/service/src/app-space-auth.ts)
 - [Service authorization tests](../../packages/service/tests/app-space-auth.test.ts)
 - [Service actor tests](../../packages/service/tests/actor.test.ts)

@@ -2,7 +2,7 @@
 import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
 import type { CanonicalNodeLimits } from "@unicas/codec";
 import { validateHash } from "@unicas/codec";
-import type { CasLeaseResult } from "@unicas/tenant-protocol";
+import type { CasLeaseResult } from "@unicas/space-protocol";
 export { NodeOpError, NodeOpErrorCodes } from "@unicas/service";
 export type { NodeOpErrorCode } from "@unicas/service";
 export { clampLeaseDuration, DEFAULT_LEASE_MS, MAX_LEASE_MS, MIN_LEASE_MS, parseLeaseDuration } from "@unicas/service";

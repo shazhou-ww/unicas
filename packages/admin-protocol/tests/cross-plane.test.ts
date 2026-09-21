@@ -20,9 +20,9 @@ function readPkg(name: string): {
 }
 
 const TENANT_CLIENT_PACKAGES = [
-  "@unicas/tenant-client",
-  "@unicas/tenant-blob-client",
-  "@unicas/tenant-file-client",
+  "@unicas/space-client",
+  "@unicas/space-blob-client",
+  "@unicas/space-file-client",
 ] as const;
 
 const TENANT_ONLY_PACKAGES = [
@@ -93,14 +93,14 @@ describe("package dependency boundaries", () => {
     expect(cloudflareService.private).toBe(true);
 
     expect(webui.dependencies?.["@unicas/admin-client"]).toBe("workspace:*");
-    expect(webui.dependencies?.["@unicas/tenant-client"]).toBeUndefined();
-    expect(webui.dependencies?.["@unicas/tenant-file-client"]).toBeUndefined();
-    expect(webui.dependencies?.["@unicas/tenant-browser-cache"]).toBeUndefined();
+    expect(webui.dependencies?.["@unicas/space-client"]).toBeUndefined();
+    expect(webui.dependencies?.["@unicas/space-file-client"]).toBeUndefined();
+    expect(webui.dependencies?.["@unicas/space-browser-cache"]).toBeUndefined();
     expect(webui.dependencies?.["@unicas/admin-protocol"]).toBeUndefined();
     expect(webui.dependencies?.["@unicas/service"]).toBeUndefined();
     expect(webui.dependencies?.["@unicas/control-plane"]).toBeUndefined();
     expect(service.dependencies?.["@unicas/admin-protocol"]).toBe("workspace:*");
-    expect(service.dependencies?.["@unicas/tenant-protocol"]).toBe("workspace:*");
+    expect(service.dependencies?.["@unicas/space-protocol"]).toBe("workspace:*");
     expect(service.dependencies?.["@unicas/codec"]).toBe("workspace:*");
     expect(cloudflareService.dependencies?.["@unicas/service"]).toBe("workspace:*");
     expect(cloudflareService.dependencies?.["@unicas/control-plane"]).toBeUndefined();
@@ -134,21 +134,21 @@ describe("package dependency boundaries", () => {
         ...pkg.dependencies,
         ...pkg.devDependencies,
       };
-      expect(deps["@unicas/tenant-protocol"]).toBeUndefined();
+      expect(deps["@unicas/space-protocol"]).toBeUndefined();
     }
 
     expect(protocol.dependencies?.["@unicas/control-plane"]).toBeUndefined();
     expect(protocol.dependencies?.["@unicas/admin-webui"]).toBeUndefined();
   });
 
-  test("tenant-client stays on the tenant protocol only", () => {
-    const client = readPkg("tenant-client");
-    expect(client.dependencies?.["@unicas/tenant-protocol-legacy"]).toBeUndefined();
+  test("space-client stays on the tenant protocol only", () => {
+    const client = readPkg("space-client");
+    expect(client.dependencies?.["@unicas/space-protocol-legacy"]).toBeUndefined();
     expect(client.dependencies?.["@unicas/admin-protocol"]).toBeUndefined();
   });
 
   test("tenant protocol never depends on the admin protocol", () => {
-    const protocol = readPkg("tenant-protocol");
+    const protocol = readPkg("space-protocol");
     expect(protocol.dependencies?.["@unicas/admin-protocol"]).toBeUndefined();
     expect(protocol.devDependencies?.["@unicas/admin-protocol"]).toBeUndefined();
   });

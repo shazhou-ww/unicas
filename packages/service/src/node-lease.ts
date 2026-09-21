@@ -14,7 +14,7 @@ import type {
   CasLeaseResult,
   SpaceNodeLeaseReadyResult,
   SpaceNodeUploadRejection,
-} from "@unicas/tenant-protocol";
+} from "@unicas/space-protocol";
 import { NodeOpError, NodeOpErrorCodes } from "./node-errors.js";
 
 export const DEFAULT_LEASE_MS = 15 * 60 * 1000;

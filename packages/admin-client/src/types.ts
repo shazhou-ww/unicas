@@ -1,7 +1,7 @@
 /**
  * Admin-client types. The admin client is a typed HTTP transport for the
  * `/admin` control-plane API (the BFF surface), mirroring how
- * `@unicas/tenant-client` wraps the tenant data-plane HTTP API: one plain
+ * `@unicas/space-client` wraps the tenant data-plane HTTP API: one plain
  * function per operation, a factory binding common parameters, no encoding,
  * no business abstraction.
  *

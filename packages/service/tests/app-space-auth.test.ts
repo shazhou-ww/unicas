@@ -4,7 +4,6 @@ import { describe, expect, test } from "vitest";
 import {
   MaximumCapabilityLifetimeSeconds,
   SpaceCapabilityVersion,
-  casReadPermission,
   canonicalPermissionSegment,
   spaceGcExecutePermission,
   spaceNodeLeasePermission,
@@ -13,7 +12,8 @@ import {
   spaceRootRefsUpdatePermission,
   spaceUsageReadPermission,
   type AppSpaceRoute,
-} from "@unicas/tenant-protocol";
+} from "@unicas/space-protocol";
+import { casReadPermission } from "@unicas/space-protocol/v1";
 import {
   AppSpaceCapabilityVerifier,
   StackCapabilityVerifier,
