@@ -16,11 +16,13 @@ already occupied the first HTTP version. Neither surface has been released as
 a supported public baseline, so the beta contract may restart App/Space at
 `/v1` without retaining a prototype `/v2` alias.
 
-The final operation set depends on the directional Root Ref API, while package
-and internal symbol names depend on the App/Space concept refactor. The
-separate `retire-stack-tenant-data-plane` task removes the older Stack/Tenant
-contract after this replacement is validated; this task keeps that legacy
-surface isolated but does not remove it.
+The final operation set retains one atomic mixed-sign Root Ref update API so a
+caller can increase replacement roots and decrease superseded roots in one
+transaction. The separate directional Root Ref task was abandoned after that
+decision. Package and internal symbol names still depend on the App/Space
+concept refactor. The separate `retire-stack-tenant-data-plane` task removes
+the older Stack/Tenant contract after this replacement is validated; this
+task keeps that legacy surface isolated but does not remove it.
 
 ## Scope
 
@@ -36,9 +38,9 @@ surface isolated but does not remove it.
 - Update public protocol types, client methods, higher-level client workflows,
   service dispatch, authorization, Cloudflare integration, mocks, fixtures,
   examples, and smoke commands to use the released App/Space v1 contract.
-- Consume the accepted increase/decrease Root Ref operations and final exact
-  Space permission vocabulary rather than freezing an obsolete mutation or
-  broad-permission surface.
+- Preserve one atomic mixed-sign Root Ref update operation and the final exact
+  Space permission vocabulary. Infer any post-commit garbage-collection hint
+  from committed negative deltas rather than from separate directional calls.
 - Remove prototype App/Space v2 route builders, operation identifiers, claim
   issuance and acceptance paths, generated OpenAPI entries, examples,
   compatibility flags, and current-documentation references.
@@ -46,8 +48,8 @@ surface isolated but does not remove it.
   that reject reintroduction or accidental dispatch of the prototype
   App/Space v2 surface.
 - Document migration from prototype App/Space v2 requests and capabilities to
-  the released v1 contract, including changed Root Ref calls, version axes,
-  and authorization failure behavior.
+  the released v1 contract, including the retained atomic Root Ref update,
+  version axes, and authorization failure behavior.
 
 ## Out of scope
 
@@ -55,8 +57,8 @@ surface isolated but does not remove it.
   configuration surface; that belongs to `retire-stack-tenant-data-plane`.
 - Renaming the data-plane package family or internal Stack/Tenant symbols;
   those outcomes belong to `complete-app-space-concept-refactor`.
-- Redesigning directional Root Ref semantics owned by
-  `split-root-ref-update-api`.
+- Splitting Root Ref updates into directional increase and decrease operations
+  or otherwise redesigning the retained atomic mixed-sign update semantics.
 - Finalizing package tarballs, package versions, npm publication automation,
   registry promotion, or production deployment.
 - Adding new App-user operations, storage semantics, business entities, or
@@ -77,9 +79,10 @@ surface isolated but does not remove it.
       grammar, resource binding, and exact-operation permission vocabulary;
       prototype claims, broad permissions, and migration cutoffs cannot
       authorize App/Space v1 requests.
-- [ ] The accepted directional Root Ref increase and decrease operations are
-      represented consistently in protocol, OpenAPI, clients, service routing,
-      authorization, examples, and migration guidance.
+- [ ] One atomic mixed-sign Root Ref update operation is represented
+  consistently in protocol, OpenAPI, clients, service routing,
+  authorization, examples, and migration guidance; any GC hint is derived
+  from committed negative deltas rather than operation identity.
 - [ ] Prototype `/v2/apps/{appId}/spaces/{spaceId}` routes return no supported
       operation and are absent from maintained exports, route builders,
       generated OpenAPI, clients, examples, and current documentation.
@@ -96,8 +99,10 @@ surface isolated but does not remove it.
 
 ## Constraints
 
-- Complete and integrate `complete-app-space-concept-refactor` and
-  `split-root-ref-update-api` before freezing or implementing this contract.
+- Complete and integrate `complete-app-space-concept-refactor` before freezing
+  or implementing this contract.
+- Preserve the reviewed decision to keep one atomic mixed-sign Root Ref update
+  API; do not reintroduce separate increase and decrease operations.
 - Treat App/Space v2 and Stack/Tenant v1 as unpublished prototypes, not as
   compatibility contracts that constrain the first supported App/Space v1
   release.
@@ -131,7 +136,7 @@ reviewed explicitly before the work named in the final column begins.
 
 - [Beta promotion capstone](/tasks/promote-app-user-api-to-beta/Task.md)
 - [App/Space concept refactor](/tasks/complete-app-space-concept-refactor/Task.md)
-- [Directional Root Ref API](/tasks/split-root-ref-update-api/Task.md)
+- [Abandoned directional Root Ref split](/tasks/split-root-ref-update-api/Task.md)
 - [Completed Space operation permissions](/tasks/split-app-space-operation-permissions/Task.md)
 - [File upload smoke App](/tasks/build-file-upload-smoke-app/Task.md)
 - [App-user API guide](/docs/app-user-api/README.md)

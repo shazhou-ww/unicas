@@ -77,6 +77,9 @@ export function generateSpaceOpenApiDocument() {
         "Principal identity and Profile metadata are independent of Space ownership and authorization.",
       ].join("\n"),
     },
+    servers: [
+      { url: "https://api.unicas.work", description: "Production" },
+    ],
     tags: [
       { name: "Nodes", description: "Read immutable nodes and establish temporary protection leases within a Space." },
       { name: "Root Refs", description: "Read and atomically update business-root balances in the verified capability's refDomain." },

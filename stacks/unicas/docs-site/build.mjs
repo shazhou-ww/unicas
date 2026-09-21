@@ -2,11 +2,14 @@ import { existsSync } from "node:fs";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { build as buildBundle } from "esbuild";
 import { Marked } from "marked";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const SITE_ROOT = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_OUTPUT = join(SITE_ROOT, "dist");
+const API_REFERENCE = ["app-user-api/reference", "API Reference", "Integrate"];
+const SPACE_OPENAPI_SOURCE = "packages/tenant-protocol/openapi/space-v2.openapi.json";
 
 export const DOCUMENTS = [
   ["app-user-api", "App-user API", "Integrate", "docs/app-user-api/README.md"],
@@ -71,7 +74,7 @@ function plainText(tokens) {
 }
 
 function resolveMarkdownHref(sourcePath, href) {
-  if (/^(?:https?:|mailto:)/.test(href) || href.startsWith("#")) return href;
+  if (/^(?:https?:|mailto:)/.test(href) || href.startsWith("#") || href.startsWith("/")) return href;
   const [pathPart, fragment = ""] = href.split("#", 2);
   const normalized = relative(ROOT, resolve(dirname(join(ROOT, sourcePath)), pathPart)).replaceAll("\\", "/");
   const target = knownSources.get(normalized);
@@ -106,7 +109,7 @@ function renderMarkdown(markdown, sourcePath) {
 
 function navigation() {
   const groups = new Map();
-  for (const [slug, title, group] of DOCUMENTS) {
+  for (const [slug, title, group] of [...DOCUMENTS, API_REFERENCE]) {
     if (!groups.has(group)) groups.set(group, []);
     groups.get(group).push([slug, title]);
   }
@@ -165,7 +168,7 @@ function shell({ title, description, content, currentPath = "" }) {
 }
 
 function overviewPage() {
-  const cards = DOCUMENTS.map(([slug, title, group]) => `
+  const cards = [...DOCUMENTS, API_REFERENCE].map(([slug, title, group]) => `
     <a class="doc-card" href="/${slug}/">
       <span>${group}</span><strong>${title}</strong><small>Read document -&gt;</small>
     </a>`).join("\n");
@@ -181,6 +184,36 @@ function overviewPage() {
     </section>
     <section class="doc-grid" aria-label="Documentation index">${cards}</section>`,
   });
+}
+
+function apiReferencePage() {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Interactive OpenAPI reference for the UniCAS App-user Space API.">
+    <title>Space API Reference | UniCAS Docs</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/docs.css">
+    <link rel="stylesheet" href="/assets/api-reference.css">
+    <script type="module" src="/assets/api-reference.js"></script>
+  </head>
+  <body class="api-reference-page">
+    <header class="topbar">
+      <a class="wordmark" href="/"><span>U</span>UniCAS <b>DOCS</b></a>
+      <nav class="top-actions" aria-label="API reference links">
+        <a href="/app-user-api/">Integration guide</a>
+        <a href="/openapi/space-v2.openapi.json">OpenAPI JSON</a>
+        <a href="https://github.com/shazhou-ww/unicas">GitHub</a>
+      </nav>
+    </header>
+    <main id="api-reference" aria-label="UniCAS Space API reference"></main>
+  </body>
+</html>`;
 }
 
 function articlePage(title, description, html, sourcePath, currentPath) {
@@ -237,7 +270,7 @@ async function validateGeneratedLinks(outputDir, pages) {
       const targetRoute = targetPath || route;
       const target = pages.get(targetRoute);
       if (!target) {
-        const asset = targetPath.startsWith("/assets/") || targetPath === "/favicon.svg";
+        const asset = targetPath.startsWith("/assets/") || targetPath.startsWith("/openapi/") || targetPath === "/favicon.svg";
         if (!asset) failures.push(`${route} -> ${href}`);
         continue;
       }
@@ -253,6 +286,7 @@ export async function buildDocsSite(outputDir = DEFAULT_OUTPUT) {
   await mkdir(join(outputDir, "assets"), { recursive: true });
   const pages = new Map();
   pages.set("/", overviewPage());
+  pages.set("/app-user-api/reference/", apiReferencePage());
 
   for (const [slug, title, , configuredSourcePath] of DOCUMENTS) {
     const sourcePath = configuredSourcePath ?? `docs/${slug}.md`;
@@ -280,6 +314,17 @@ export async function buildDocsSite(outputDir = DEFAULT_OUTPUT) {
   for (const file of ["docs.css", "docs.js"]) {
     await copyFile(join(SITE_ROOT, "static", file), join(outputDir, "assets", file));
   }
+  await mkdir(join(outputDir, "openapi"), { recursive: true });
+  await copyFile(join(ROOT, SPACE_OPENAPI_SOURCE), join(outputDir, "openapi", "space-v2.openapi.json"));
+  await buildBundle({
+    entryPoints: [join(SITE_ROOT, "static", "api-reference.js")],
+    bundle: true,
+    format: "esm",
+    legalComments: "none",
+    minify: true,
+    outfile: join(outputDir, "assets", "api-reference.js"),
+    platform: "browser",
+  });
   await copyFile(join(SITE_ROOT, "static", "favicon.svg"), join(outputDir, "favicon.svg"));
   await writeFile(join(outputDir, "404.html"), shell({
     title: "Not found",
