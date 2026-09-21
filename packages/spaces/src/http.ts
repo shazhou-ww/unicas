@@ -37,7 +37,7 @@ export function oauthStateCookie(state: string, maxAgeSeconds: number, secure = 
   return cookie(OAuthStateCookieName, state, {
     httpOnly: true,
     maxAgeSeconds,
-    path: "/auth/google/callback",
+    path: "/",
     sameSite: "Lax",
     secure,
   });
@@ -47,7 +47,7 @@ export function clearOAuthStateCookie(secure = true): string {
   return cookie(OAuthStateCookieName, "", {
     httpOnly: true,
     maxAgeSeconds: 0,
-    path: "/auth/google/callback",
+    path: "/",
     sameSite: "Lax",
     secure,
   });
