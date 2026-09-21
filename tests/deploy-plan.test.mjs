@@ -99,7 +99,7 @@ function git(cwd, args) {
 describe("standalone deployment plan", () => {
   test("keeps the Spaces App on its own public bindings", () => {
     expect(SPACES_WRANGLER_CONFIG.main).toBe("../../../packages/spaces/src/worker.ts");
-    expect(SPACES_WRANGLER_CONFIG.placement).toEqual({ mode: "smart" });
+    expect(SPACES_WRANGLER_CONFIG.placement).toEqual({ region: "aws:us-east-1" });
     expect(SPACES_WRANGLER_CONFIG.routes).toEqual([
       { pattern: "spaces.unicas.work", custom_domain: true },
     ]);
