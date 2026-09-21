@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
+import { CapabilityAuthorizationError } from "@unicas/tenant-protocol";
 import {
   createUniCasService,
   matchUniCasServiceRoute,
@@ -159,7 +160,7 @@ describe("createUniCasService", () => {
       subject: "caller",
       jti: "request-v2",
       kid: "key-v2",
-      permissions: ["spaces:space%2Fb:cas:manage"],
+      permissions: ["cas:usage:read"],
     }));
     const actor = createUniCasService({
       platform,
@@ -193,7 +194,7 @@ describe("createUniCasService", () => {
         subject: "caller",
         jti: "request-v2-lease",
         kid: "key-v2",
-        permissions: ["spaces:space-1:cas:write"],
+        permissions: ["cas:nodes:lease"],
       }),
       handleAppAdminRequest: vi.fn(),
     });
@@ -219,6 +220,35 @@ describe("createUniCasService", () => {
     }));
     expect(rejected.status).toBe(400);
     expect(tenantActorFetch).toHaveBeenCalledTimes(callsBeforeRejection);
+  });
+
+  test("returns stable Space authorization codes without changing the v1 envelope", async () => {
+    const denial = new CapabilityAuthorizationError(
+      "insufficient_permission",
+      "CAS usage requires cas:usage:read",
+    );
+    const actor = createUniCasService({
+      platform,
+      authorizeTenantRequest: async () => { throw denial; },
+      authorizeSpaceRequest: async () => { throw denial; },
+    });
+
+    const spaceResponse = await actor.fetch(new Request(
+      "https://api.unicas.work/v2/apps/app-1/spaces/space-1/cas/usage",
+    ));
+    expect(spaceResponse.status).toBe(403);
+    await expect(spaceResponse.json()).resolves.toEqual({
+      error: "insufficient_permission",
+      message: "CAS usage requires cas:usage:read",
+    });
+
+    const tenantResponse = await actor.fetch(new Request(
+      "https://cas.example/stacks/stack-1/tenants/tenant-1/cas/usage",
+    ));
+    expect(tenantResponse.status).toBe(403);
+    await expect(tenantResponse.json()).resolves.toEqual({
+      error: "CAS usage requires cas:usage:read",
+    });
   });
 
   test("dispatches App administrator requests through the v2 handler", async () => {

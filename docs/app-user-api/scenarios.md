@@ -44,7 +44,7 @@ sequenceDiagram
     participant UI as App frontend
     participant CAS as UniCAS Space data plane
 
-    UI->>CAS: GET .../nodes/ROOT_HASH/metadata<br/>cas:read capability
+    UI->>CAS: GET .../nodes/ROOT_HASH/metadata<br/>cas:nodes:read capability
     alt Node is ready in the same Space
         CAS-->>UI: 200 metadata + retention state
         UI->>CAS: GET .../nodes/ROOT_HASH/content<br/>optional Range
@@ -77,7 +77,7 @@ sequenceDiagram
     participant CAS as UniCAS Space data plane
     participant Upload as Authorized upload target
 
-    App->>CAS: POST .../nodes/HASH/lease<br/>leaseDurationMs + cas:write
+    App->>CAS: POST .../nodes/HASH/lease<br/>leaseDurationMs + cas:nodes:lease
     alt Node already ready
         CAS-->>App: 200 ready lease
     else Direct upload required
@@ -115,7 +115,7 @@ sequenceDiagram
     participant App as App backend
     participant CAS as UniCAS Space data plane
 
-    App->>CAS: POST .../root-refs<br/>requestId + changes + cas:write + refDomain
+    App->>CAS: POST .../root-refs<br/>requestId + changes + cas:root-refs:update + refDomain
     CAS->>CAS: Validate all hashes, readiness, balances, and domain revision
     alt First successful commit
         CAS-->>App: 200 success, idempotent=false, revision
@@ -135,22 +135,23 @@ If the client loses the response, retry the exact same canonical request with
 the same `requestId`. Never reuse a `requestId` for different changes.
 
 To inspect committed state, page through `GET .../root-refs` with a
-`cas:read` capability carrying the same `refDomain`. Pages are revision-stable;
-the response returns the domain and revision alongside the next cursor.
+`cas:root-refs:read` capability carrying the same `refDomain`. Pages are
+revision-stable; the response returns the domain and revision alongside the
+next cursor.
 
 ## Inspect usage and run bounded garbage collection
 
-Usage and collection require `cas:manage`; read or write capability alone is
-insufficient.
+Usage and collection have independent authorities. Grant either or both only
+when the operational workflow requires them.
 
 ```mermaid
 sequenceDiagram
     participant Operator as App-owned maintenance workflow
     participant CAS as UniCAS Space data plane
 
-    Operator->>CAS: GET .../cas/usage<br/>cas:manage
+    Operator->>CAS: GET .../cas/usage<br/>cas:usage:read
     CAS-->>Operator: Counts and byte accounting
-    Operator->>CAS: POST .../cas/gc<br/>{ maxNodes } + cas:manage
+    Operator->>CAS: POST .../cas/gc<br/>{ maxNodes } + cas:gc:execute
     loop Up to maxNodes candidates
         CAS->>CAS: Recheck refs and lease immediately before delete
         alt Still unreferenced and lease expired

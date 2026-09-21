@@ -30,7 +30,7 @@ wire contracts.
 | **Platform** | 持久化文档、版本、thread、current pointer 与 submission 的平台服务。 | The persistence authority in the Platform v0 model; a View or Operator is not a second persistence authority. |
 | **Gateway** | 面向最终用户的服务入口，负责认证、租户成员关系、文档目录与路由。 | Owns public `docId` to private `sessionId` routing. It does not own document-format behavior. |
 | **Doc service** | 承载某一种文档类型会话和格式逻辑的服务。 | One independently deployable service per document type. It receives an opaque `sessionId`, not end-user identity. |
-| **Admin** | 管理文档类型、bundle、Operator 和 UniCAS App 的控制面角色或界面。 | Capitalize when naming the product role or surface. “Admin” does not mean the Space data-plane `cas:manage` permission. |
+| **Admin** | 管理文档类型、bundle、Operator 和 UniCAS App 的控制面角色或界面。 | Capitalize when naming the product role or surface. “Admin” does not mean any Space data-plane operation permission. |
 | **Agent** | 代表用户读取、推理并提出文档变更的 AI 参与者。 | Uses the Platform Agent API in the target model. An Agent may call an Operator but is not synonymous with one. |
 | **Host** | 装载 View、提供用户界面外壳并代理 Host RPC 的运行环境。 | A View receives capabilities through the Host; it does not directly become the Platform authority. |
 | **Operator** | 面向 Agent 的文档能力服务，执行领域查询并生成原子 submission。 | Capitalized platform role. An Operator endpoint declares supported document types and Snapshot Contract revisions. |
@@ -99,8 +99,8 @@ semantics.
 | **Platform Admin** | 持有 `platform.admin` 权限、可管理平台准入与平台邀请的 Principal。 | Does not imply `apps.create`. |
 | **App Creator** | 持有 `apps.create` 权限、可创建 App 的 Principal。 | App membership does not imply this authority. |
 | **control plane** | 管理 App、成员、邀请、issuer 与审计的管理面。 | Served through UniCAS Admin APIs and clients. Do not call Space content operations “admin APIs”. |
-| **data plane** | Space 内容寻址存储的读写与生命周期操作面。 | V2 routes are scoped by both App and Space. The `cas:manage` permission is a data-plane permission. |
-| **capability** | 对 Principal、Space、权限和可选 Root Ref domain 进行约束的已签名授权声明。 | V2 uses `ver: 2`, `spaceId`, and `spaces:{spaceId}:cas:*`. A capability authorizes an operation; it is not a public document identifier. |
+| **data plane** | Space 内容寻址存储的读写与生命周期操作面。 | HTTP v2 routes are scoped by both App and Space. Node, Root Ref, usage, and GC permissions are independent data-plane authorities. |
+| **capability** | 对 Principal、Space、权限和可选 Root Ref domain 进行约束的已签名授权声明。 | The HTTP v2 API uses capability `ver: 3`, one signed `spaceId`, and exact `cas:{resource}:{action}` permissions. A capability authorizes an operation; it is not a public document identifier. |
 | **issuer** | 签发并可被验证信任令牌的身份提供方。 | A registered issuer establishes App authority; verified Space claims and permissions must agree with the request path. |
 | **`refDomain`** | Root Ref 的正交审计和授权维度。 | It does not replace `appId` or `spaceId` and is not a storage partition by itself. |
 | **v1 Stack/Tenant identifiers** | 冻结兼容合同中的 `stackId`、`tenantId` 与 `tenants:` 权限。 | Retained for `unicas.shazhou.work`, v1 artifacts, tests, and physical adapters. Never reinterpret them as App/Space claims. |

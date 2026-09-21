@@ -69,6 +69,10 @@ tasks:
     state: completed
     createdAt: "2026-09-14T09:30:47Z"
     updatedAt: "2026-09-19T05:12:49Z"
+  promote-app-user-api-to-beta:
+    state: backlog
+    createdAt: "2026-09-21T03:18:47Z"
+    updatedAt: "2026-09-21T03:18:47Z"
   replace-active-app-oauth-issuer:
     state: completed
     createdAt: "2026-09-15T14:26:52Z"
@@ -90,14 +94,17 @@ tasks:
     createdAt: "2026-09-17T04:16:49Z"
     updatedAt: "2026-09-19T05:12:49Z"
   split-app-space-operation-permissions:
-    state: ongoing
-    sourceBranch: task/split-app-space-operation-permissions
+    state: completed
     createdAt: "2026-09-20T14:23:39Z"
-    updatedAt: "2026-09-20T16:35:52Z"
+    updatedAt: "2026-09-21T02:54:14Z"
   split-public-domain-topology:
     state: completed
     createdAt: "2026-09-14T09:30:47Z"
     updatedAt: "2026-09-19T05:12:49Z"
+  split-root-ref-update-api:
+    state: backlog
+    createdAt: "2026-09-21T01:30:23Z"
+    updatedAt: "2026-09-21T01:30:23Z"
   support-multi-provider-admin-identity:
     state: completed
     createdAt: "2026-09-16T02:07:06Z"

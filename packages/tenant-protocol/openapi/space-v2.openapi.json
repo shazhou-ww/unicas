@@ -2,7 +2,7 @@
   "info": {
     "title": "UniCAS Space API",
     "version": "2.0.0",
-    "description": "App-scoped Space API for immutable content-addressed nodes, leases, usage accounting, garbage collection, and atomic Root Ref commits.\n\nEvery request uses a version 2 JWT capability. The registered issuer establishes App authority; the token's `spaceId` and `spaces:` permission must match the route exactly.\n\nPrincipal identity and Profile metadata are independent of Space ownership and authorization."
+    "description": "App-scoped Space API for immutable content-addressed nodes, leases, usage accounting, garbage collection, and atomic Root Ref commits.\n\nEvery request uses a version 3 JWT capability on the version 2 HTTP API. The registered issuer establishes App authority; the token's signed `spaceId` must match the route and its exact operation permission must authorize the request.\n\nPrincipal identity and Profile metadata are independent of Space ownership and authorization."
   },
   "tags": [
     {
@@ -29,7 +29,7 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT",
-        "description": "Version 2 Space capability. Issuer authority, spaceId, and the exact spaces permission must match the request path."
+        "description": "Version 3 Space capability. Issuer authority and signed spaceId must match the request path, and the permission set must contain the operation's exact CAS authority."
       }
     }
   },
@@ -39,7 +39,7 @@
       "get": {
         "operationId": "readSpaceContent",
         "summary": "Read immutable node content",
-        "description": "Streams canonical bytes for a ready node in the requested Space.",
+        "description": "Streams canonical bytes for a ready node in the requested Space. Requires cas:nodes:read.",
         "tags": [
           "Nodes"
         ],
@@ -279,7 +279,7 @@
       "get": {
         "operationId": "readSpaceMetadata",
         "summary": "Read node metadata",
-        "description": "Returns immutable metadata and mutable retention state for one Space node.",
+        "description": "Returns immutable metadata and mutable retention state for one Space node. Requires cas:nodes:read.",
         "tags": [
           "Nodes"
         ],
@@ -606,7 +606,7 @@
       "post": {
         "operationId": "leaseSpaceNode",
         "summary": "Lease a node",
-        "description": "Advances the lease-driven node state machine and returns the resulting ready, upload, replacement-upload, or dependency state.",
+        "description": "Advances the lease-driven node state machine and returns the resulting ready, upload, replacement-upload, or dependency state. Requires cas:nodes:lease.",
         "tags": [
           "Nodes"
         ],
@@ -1070,7 +1070,7 @@
       "get": {
         "operationId": "getSpaceUsage",
         "summary": "Read Space CAS usage",
-        "description": "Returns current operational accounting for one Space.",
+        "description": "Returns current operational accounting for one Space. Requires cas:usage:read.",
         "tags": [
           "Operations"
         ],
@@ -1353,7 +1353,7 @@
       "post": {
         "operationId": "runSpaceGc",
         "summary": "Run Space garbage collection",
-        "description": "Runs one bounded and race-safe garbage-collection pass within the Space.",
+        "description": "Runs one bounded and race-safe garbage-collection pass within the Space. Requires cas:gc:execute.",
         "tags": [
           "Operations"
         ],
@@ -1631,7 +1631,7 @@
       "get": {
         "operationId": "listSpaceRootRefs",
         "summary": "List Space Root Ref balances",
-        "description": "Returns a revision-stable page for the refDomain in the verified capability.",
+        "description": "Returns a revision-stable page for the refDomain in the verified capability. Requires cas:root-refs:read and a valid signed refDomain.",
         "tags": [
           "Root Refs"
         ],
@@ -1941,7 +1941,7 @@
       "post": {
         "operationId": "updateSpaceRootRefs",
         "summary": "Apply Space Root Ref changes",
-        "description": "Atomically applies signed Root Ref deltas in the capability's refDomain.",
+        "description": "Atomically applies signed Root Ref deltas in the capability's refDomain. Requires cas:root-refs:update and a valid signed refDomain.",
         "tags": [
           "Root Refs"
         ],

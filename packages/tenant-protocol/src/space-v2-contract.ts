@@ -137,7 +137,7 @@ export const readSpaceContentContract = spaceProcedure
     path: `${SpaceApiBasePath}/cas/nodes/{hash}/content`,
     operationId: "readSpaceContent",
     summary: "Read immutable node content",
-    description: "Streams canonical bytes for a ready node in the requested Space.",
+    description: "Streams canonical bytes for a ready node in the requested Space. Requires cas:nodes:read.",
     inputStructure: "detailed",
     tags: ["Nodes"],
   })
@@ -150,7 +150,7 @@ export const readSpaceMetadataContract = spaceProcedure
     path: `${SpaceApiBasePath}/cas/nodes/{hash}/metadata`,
     operationId: "readSpaceMetadata",
     summary: "Read node metadata",
-    description: "Returns immutable metadata and mutable retention state for one Space node.",
+    description: "Returns immutable metadata and mutable retention state for one Space node. Requires cas:nodes:read.",
     inputStructure: "detailed",
     tags: ["Nodes"],
   })
@@ -164,7 +164,7 @@ export const leaseSpaceNodeContract = spaceProcedure
     path: `${SpaceApiBasePath}/cas/nodes/{hash}/lease`,
     operationId: "leaseSpaceNode",
     summary: "Lease a node",
-    description: "Advances the lease-driven node state machine and returns the resulting ready, upload, replacement-upload, or dependency state.",
+    description: "Advances the lease-driven node state machine and returns the resulting ready, upload, replacement-upload, or dependency state. Requires cas:nodes:lease.",
     inputStructure: "detailed",
     tags: ["Nodes"],
   })
@@ -180,7 +180,7 @@ export const getSpaceUsageContract = spaceProcedure
     path: `${SpaceApiBasePath}/cas/usage`,
     operationId: "getSpaceUsage",
     summary: "Read Space CAS usage",
-    description: "Returns current operational accounting for one Space.",
+    description: "Returns current operational accounting for one Space. Requires cas:usage:read.",
     inputStructure: "detailed",
     tags: ["Operations"],
   })
@@ -193,7 +193,7 @@ export const runSpaceGcContract = spaceProcedure
     path: `${SpaceApiBasePath}/cas/gc`,
     operationId: "runSpaceGc",
     summary: "Run Space garbage collection",
-    description: "Runs one bounded and race-safe garbage-collection pass within the Space.",
+    description: "Runs one bounded and race-safe garbage-collection pass within the Space. Requires cas:gc:execute.",
     inputStructure: "detailed",
     tags: ["Operations"],
   })
@@ -209,7 +209,7 @@ export const listSpaceRootRefsContract = spaceProcedure
     path: `${SpaceApiBasePath}/root-refs`,
     operationId: "listSpaceRootRefs",
     summary: "List Space Root Ref balances",
-    description: "Returns a revision-stable page for the refDomain in the verified capability.",
+    description: "Returns a revision-stable page for the refDomain in the verified capability. Requires cas:root-refs:read and a valid signed refDomain.",
     inputStructure: "detailed",
     tags: ["Root Refs"],
   })
@@ -228,7 +228,7 @@ export const updateSpaceRootRefsContract = spaceProcedure
     path: `${SpaceApiBasePath}/root-refs`,
     operationId: "updateSpaceRootRefs",
     summary: "Apply Space Root Ref changes",
-    description: "Atomically applies signed Root Ref deltas in the capability's refDomain.",
+    description: "Atomically applies signed Root Ref deltas in the capability's refDomain. Requires cas:root-refs:update and a valid signed refDomain.",
     inputStructure: "detailed",
     tags: ["Root Refs"],
   })
