@@ -1,5 +1,11 @@
 import { createCasBlobClient, storeNodeContent } from "@unicas/tenant-blob-client";
-import { createFileManifest, decodeFileManifest, encodeFileManifest, fileManifestRefs } from "./file-manifest.js";
+import {
+  compareFileManifestPaths,
+  createFileManifest,
+  decodeFileManifest,
+  encodeFileManifest,
+  fileManifestRefs,
+} from "./file-manifest.js";
 import { FileManifestContentType, type TenantFileManifestEntry } from "./file-protocol.js";
 import type {
   TenantFileRoot,
@@ -28,7 +34,7 @@ export function createTenantFileSystem(options: TenantFileSystemOptions): Tenant
   const createRequestId = options.createRequestId ?? (() => crypto.randomUUID());
 
   async function storeManifest(entries: ReadonlyMap<string, WorkingEntry>): Promise<string> {
-    const sorted = [...entries.entries()].sort(([left], [right]) => left.localeCompare(right));
+    const sorted = [...entries.entries()].sort(([left], [right]) => compareFileManifestPaths(left, right));
     const refs: string[] = [];
     const manifestEntries: TenantFileManifestEntry[] = sorted.map(([path, entry]) => {
       if (entry.type === "directory") return { type: "directory", path };
