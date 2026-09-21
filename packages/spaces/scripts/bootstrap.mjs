@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { importPKCS8, SignJWT } from "jose";
@@ -17,6 +18,8 @@ import {
 } from "@unicas/tenant-protocol";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
+const requireFromServicePackage = createRequire(new URL("../../service-cloudflare/package.json", import.meta.url));
+const WRANGLER_CLI = requireFromServicePackage.resolve("wrangler");
 const DEFAULT_WRANGLER_CONFIG = resolve(ROOT, ".wrangler/spaces/wrangler.production.json");
 const TEMP_SQL = resolve(ROOT, ".wrangler/spaces/bootstrap.sql");
 
@@ -92,13 +95,31 @@ export function bootstrapInsertSql(config, root, now) {
 }
 
 export function parseD1Rows(output) {
-  const parsed = JSON.parse(output);
-  if (!Array.isArray(parsed)) throw new Error("Unexpected D1 response");
-  return parsed.flatMap((entry) => Array.isArray(entry?.results) ? entry.results : []);
+  const lines = output.trim().split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!lines[index].trimStart().startsWith("[")) continue;
+    try {
+      const parsed = JSON.parse(lines.slice(index).join("\n"));
+      if (Array.isArray(parsed)) {
+        return parsed.flatMap((entry) => Array.isArray(entry?.results) ? entry.results : []);
+      }
+    } catch {
+      continue;
+    }
+  }
+  throw new Error("Unexpected D1 response");
 }
 
 export function classifyBootstrapState(config, row) {
-  const empty = Object.values(row).every((value) => value === null || value === undefined);
+  const empty = row.principal_status == null
+    && row.display_name == null
+    && row.app_id == null
+    && row.space_id == null
+    && row.ref_domain == null
+    && row.root_id == null
+    && row.identity_owner == null
+    && row.space_owner == null
+    && (row.identity_count == null || row.identity_count === 0);
   if (empty) return "create";
   const identityMatches = config.googleSubject === null
     ? row.identity_owner === null && row.identity_count === 0
@@ -192,19 +213,23 @@ function memoryCatalog() {
   };
 }
 
-async function executeD1(config, statement) {
-  mkdirSync(dirname(TEMP_SQL), { recursive: true });
-  writeFileSync(TEMP_SQL, `${statement}\n`, { mode: 0o600 });
+export async function executeD1(config, statement) {
+  const isQuery = /^\s*SELECT\b/i.test(statement);
+  if (!isQuery) {
+    mkdirSync(dirname(TEMP_SQL), { recursive: true });
+    writeFileSync(TEMP_SQL, `${statement}\n`, { mode: 0o600 });
+  }
   try {
-    const executable = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-    const result = spawnSync(executable, [
-      "--filter", "@unicas/service-cloudflare", "exec", "wrangler", "d1", "execute", "SPACES_DB",
-      "--remote", "--config", config.wranglerConfig, "--file", TEMP_SQL, "--json",
+    const result = spawnSync(process.execPath, [
+      WRANGLER_CLI,
+      "d1", "execute", "SPACES_DB", "--remote", "--config", config.wranglerConfig,
+      ...(isQuery ? ["--command", statement] : ["--file", TEMP_SQL]),
+      "--json",
     ], { cwd: ROOT, encoding: "utf8", shell: false });
     if (result.error || result.status !== 0) throw new Error("Spaces D1 bootstrap command failed");
-    return parseD1Rows(result.stdout);
+    return isQuery ? parseD1Rows(result.stdout) : [];
   } finally {
-    rmSync(TEMP_SQL, { force: true });
+    if (!isQuery) rmSync(TEMP_SQL, { force: true });
   }
 }
 
