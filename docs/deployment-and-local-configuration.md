@@ -163,6 +163,34 @@ Deploy the lease-upload migration in this order:
 4. Run the App/Space smoke test, which exercises lease, direct PUT, repeated
    lease publication, readback, Root Refs, usage, GC, and Space isolation.
 
+### Space capability v3 rollout
+
+The Space HTTP API remains v2, while its capability claim advances to `ver: 3`
+with exact operation permissions. Legacy `ver: 2` broad permissions are
+disabled by default. A transition deployment may set the non-secret Worker
+text binding below to an exclusive absolute RFC 3339 issuance cutoff:
+
+```text
+CAS_SPACE_CAPABILITY_V2_ISSUED_BEFORE=2026-09-28T00:00:00Z
+```
+
+Use `Z` or a known numeric offset; RFC 3339's unknown-offset form `-00:00` is
+rejected. Fractional seconds are accepted and conservatively truncated to
+milliseconds, the runtime's comparison precision.
+
+Do not commit a temporary production cutoff to `wrangler.toml`. Configure it
+for the target Worker environment, deploy the compatible verifier, and update
+every participating App issuer to emit v3 before that instant. The cutoff can
+be no more than seven days in the future; malformed or farther-future values
+fail closed.
+
+After the cutoff, wait for the greatest `capabilityMaxLifetimeSeconds` among
+active App issuers plus 30 seconds of clock tolerance. Then remove the binding
+and redeploy. A v2 token must have `iat` before the cutoff and still pass its
+normal expiry, route scope, and issuer lifetime checks, so this process leaves
+no steady-state broad-permission path. Never move an elapsed cutoff forward
+without separate deployment review.
+
 Optional OIDC/session variables include `OIDC_ISSUER`, `OIDC_DISCOVERY_URL`,
 `SESSION_TTL_MS`, `SESSION_COOKIE_NAME`, `SESSION_COOKIE_SECURE`, and
 `SESSION_COOKIE_SAME_SITE`.

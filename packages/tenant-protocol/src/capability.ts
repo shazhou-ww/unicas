@@ -37,6 +37,14 @@ export type CapabilityPermissionKind =
   | "sessions:read"
   | "sessions:write";
 
+export type SpaceCapabilityPermissionKind =
+  | "cas:nodes:read"
+  | "cas:nodes:lease"
+  | "cas:root-refs:read"
+  | "cas:root-refs:update"
+  | "cas:usage:read"
+  | "cas:gc:execute";
+
 export type ParsedCapabilityPermission = {
   readonly kind: CapabilityPermissionKind;
   readonly tenantId: string;
@@ -44,8 +52,7 @@ export type ParsedCapabilityPermission = {
 };
 
 export type ParsedSpaceCapabilityPermission = {
-  readonly kind: "cas:read" | "cas:write" | "cas:manage";
-  readonly spaceId: string;
+  readonly kind: SpaceCapabilityPermissionKind;
 };
 
 export function canonicalPermissionSegment(value: string): string {
@@ -68,16 +75,28 @@ export function casManagePermission(tenantId: string): CapabilityPermission {
   return tenantPermission(tenantId, "cas:manage");
 }
 
-export function spaceCasReadPermission(spaceId: string): SpaceCapabilityPermission {
-  return spaceCasPermission(spaceId, "read");
+export function spaceNodeReadPermission(): SpaceCapabilityPermission {
+  return spaceOperationPermission("cas:nodes:read");
 }
 
-export function spaceCasWritePermission(spaceId: string): SpaceCapabilityPermission {
-  return spaceCasPermission(spaceId, "write");
+export function spaceNodeLeasePermission(): SpaceCapabilityPermission {
+  return spaceOperationPermission("cas:nodes:lease");
 }
 
-export function spaceCasManagePermission(spaceId: string): SpaceCapabilityPermission {
-  return spaceCasPermission(spaceId, "manage");
+export function spaceRootRefsReadPermission(): SpaceCapabilityPermission {
+  return spaceOperationPermission("cas:root-refs:read");
+}
+
+export function spaceRootRefsUpdatePermission(): SpaceCapabilityPermission {
+  return spaceOperationPermission("cas:root-refs:update");
+}
+
+export function spaceUsageReadPermission(): SpaceCapabilityPermission {
+  return spaceOperationPermission("cas:usage:read");
+}
+
+export function spaceGcExecutePermission(): SpaceCapabilityPermission {
+  return spaceOperationPermission("cas:gc:execute");
 }
 
 export function sessionCreatePermission(tenantId: string): CapabilityPermission {
@@ -135,16 +154,17 @@ export function parseCapabilityPermission(
 export function parseSpaceCapabilityPermission(
   permission: string,
 ): ParsedSpaceCapabilityPermission | null {
-  const parts = permission.split(":");
-  if (parts.length !== 4 || parts[0] !== "spaces" || parts[2] !== "cas") {
-    return null;
+  switch (permission) {
+    case "cas:nodes:read":
+    case "cas:nodes:lease":
+    case "cas:root-refs:read":
+    case "cas:root-refs:update":
+    case "cas:usage:read":
+    case "cas:gc:execute":
+      return { kind: permission };
+    default:
+      return null;
   }
-  const spaceId = decodeCanonicalSegment(parts[1]);
-  const action = parts[3];
-  if (spaceId === null || (action !== "read" && action !== "write" && action !== "manage")) {
-    return null;
-  }
-  return { kind: `cas:${action}`, spaceId };
 }
 
 export function hasCapabilityPermission(
@@ -165,11 +185,10 @@ function tenantPermission(
   return `tenants:${canonicalPermissionSegment(tenantId)}:${suffix}` as CapabilityPermission;
 }
 
-function spaceCasPermission(
-  spaceId: string,
-  action: "read" | "write" | "manage",
+function spaceOperationPermission(
+  kind: SpaceCapabilityPermissionKind,
 ): SpaceCapabilityPermission {
-  return `spaces:${canonicalPermissionSegment(spaceId)}:cas:${action}` as SpaceCapabilityPermission;
+  return kind as SpaceCapabilityPermission;
 }
 
 function sessionPermission(
@@ -197,7 +216,7 @@ function decodeCanonicalSegment(value: string | undefined): string | null {
 // ---------------------------------------------------------------------------
 
 export const CapabilityVersion = 1 as const;
-export const SpaceCapabilityVersion = 2 as const;
+export const SpaceCapabilityVersion = 3 as const;
 export const CapabilityAlgorithm = "ES256" as const;
 export const CapabilityTokenType = "unidocs-cap+jwt" as const;
 export const DefaultCapabilityLifetimeSeconds = 120;

@@ -113,7 +113,7 @@ export function createUniCasService(context: ServiceContext): HttpActor {
         return context.authorizeSpaceRequest(spaceContext)
           .then(
             (call) => dispatchSpaceRequest(spaceContext, call),
-            tenantAuthorizationErrorResponse,
+            spaceAuthorizationErrorResponse,
           );
       }
       if (!context.handleAppAdminRequest) return Promise.resolve(notImplementedResponse());
@@ -133,6 +133,16 @@ function notImplementedResponse(): Response {
 function tenantAuthorizationErrorResponse(error: unknown): Response {
   if (error instanceof CapabilityError) {
     return Response.json({ error: error.message }, { status: error.status });
+  }
+  return Response.json({ error: "CAS capability validation failed" }, { status: 401 });
+}
+
+function spaceAuthorizationErrorResponse(error: unknown): Response {
+  if (error instanceof CapabilityError) {
+    return Response.json(
+      { error: error.code, message: error.message },
+      { status: error.status },
+    );
   }
   return Response.json({ error: "CAS capability validation failed" }, { status: 401 });
 }

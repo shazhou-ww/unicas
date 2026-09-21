@@ -1,6 +1,6 @@
 # Space operation authorization design
 
-Status: proposed for scope, interface, and architecture review
+Status: approved and implemented; pending delivery acceptance
 
 Updated: 2026-09-21
 

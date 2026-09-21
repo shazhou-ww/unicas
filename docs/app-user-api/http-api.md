@@ -18,6 +18,10 @@ Send a Space capability through the HTTP bearer authentication scheme:
 Authorization: Bearer CAPABILITY
 ```
 
+The HTTP API remains v2. Its capability claim version is `3`: the signed
+`spaceId` must match the route and `permissions` must contain the operation's
+exact authority.
+
 `appId` and `spaceId` are non-empty strings. A node `hash` is exactly 64
 lowercase hexadecimal characters. JSON requests use `application/json`.
 Canonical node bytes use `application/vnd.unidocs.cas-node.v1`.
@@ -29,13 +33,13 @@ than modeling `Authorization` as an ordinary operation header.
 
 | Client operation | Method and path | Authority | Success |
 | --- | --- | --- | --- |
-| `readContent` | `GET /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/content` | `cas:read` | Streamed canonical bytes |
-| `readMetadata` | `GET /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/metadata` | `cas:read` | Metadata and retention state |
-| `leaseNode` | `POST /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/lease` | `cas:write` | Ready lease or direct-upload instructions |
-| `usage` | `GET /v2/apps/{appId}/spaces/{spaceId}/cas/usage` | `cas:manage` | Space accounting |
-| `gc` | `POST /v2/apps/{appId}/spaces/{spaceId}/cas/gc` | `cas:manage` | Bounded collection result |
-| `listRootRefs` | `GET /v2/apps/{appId}/spaces/{spaceId}/root-refs` | `cas:read` + `refDomain` | Revision-stable page |
-| `updateRootRefs` | `POST /v2/apps/{appId}/spaces/{spaceId}/root-refs` | `cas:write` + `refDomain` | Atomic commit result |
+| `readContent` | `GET /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/content` | `cas:nodes:read` | Streamed canonical bytes |
+| `readMetadata` | `GET /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/metadata` | `cas:nodes:read` | Metadata and retention state |
+| `leaseNode` | `POST /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/lease` | `cas:nodes:lease` | Ready lease or direct-upload instructions |
+| `usage` | `GET /v2/apps/{appId}/spaces/{spaceId}/cas/usage` | `cas:usage:read` | Space accounting |
+| `gc` | `POST /v2/apps/{appId}/spaces/{spaceId}/cas/gc` | `cas:gc:execute` | Bounded collection result |
+| `listRootRefs` | `GET /v2/apps/{appId}/spaces/{spaceId}/root-refs` | `cas:root-refs:read` + `refDomain` | Revision-stable page |
+| `updateRootRefs` | `POST /v2/apps/{appId}/spaces/{spaceId}/root-refs` | `cas:root-refs:update` + `refDomain` | Atomic commit result |
 
 There are no other public v2 Space operations in the current generated
 OpenAPI.

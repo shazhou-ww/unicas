@@ -24,9 +24,12 @@ import {
   CapabilityVersion,
   SpaceCapabilityVersion,
   casManagePermission,
-  spaceCasManagePermission,
-  spaceCasReadPermission,
-  spaceCasWritePermission,
+  spaceGcExecutePermission,
+  spaceNodeLeasePermission,
+  spaceNodeReadPermission,
+  spaceRootRefsReadPermission,
+  spaceRootRefsUpdatePermission,
+  spaceUsageReadPermission,
 } from "../packages/tenant-protocol/dist/index.js";
 
 const BASE = normalizeSmokeBaseUrl(
@@ -90,9 +93,12 @@ async function main() {
     ver: SpaceCapabilityVersion,
     spaceId,
     permissions: [
-      spaceCasReadPermission(spaceId),
-      spaceCasWritePermission(spaceId),
-      spaceCasManagePermission(spaceId),
+      spaceNodeReadPermission(),
+      spaceNodeLeasePermission(),
+      spaceRootRefsReadPermission(),
+      spaceRootRefsUpdatePermission(),
+      spaceUsageReadPermission(),
+      spaceGcExecutePermission(),
     ],
     ...(refDomain === undefined ? {} : { refDomain }),
   });
