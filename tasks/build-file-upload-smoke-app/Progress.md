@@ -76,6 +76,18 @@ authorized production bootstrap, deployment, live smoke, and user acceptance.
   D1, deploys issuer metadata with smoke disabled, and separately bootstraps
   user/smoke Principals after issuer activation. Normal production remains
   disabled until `SPACES_RELEASE_ENABLED=true` and never skips live smoke.
+- Authorized production bootstrap created the dedicated D1 database and
+  deployed the issuer/UI Worker with smoke disabled. The first Principal
+  bootstrap exposed that Node cannot spawn the Windows `pnpm.cmd` shim with
+  `shell:false` (`EINVAL`); bootstrap and preflight now use the portable pnpm
+  invocation while Linux behavior remains unchanged.
+- Wrangler `--file --json` returns execution summaries rather than SELECT rows.
+  Bootstrap and preflight now start the installed Wrangler JS CLI directly,
+  use `--command` for state reads, and retain protected temporary files only
+  for mutation batches.
+- The first real empty-catalog row reports `COUNT(*) = 0` alongside null entity
+  fields. Bootstrap now recognizes that exact D1 shape as fresh state rather
+  than a partial-state conflict.
 - No production deployment, App/issuer activation, production D1 bootstrap,
   real Google callback, or live Spaces smoke was run without explicit release
   authorization and credentials.
