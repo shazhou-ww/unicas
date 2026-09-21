@@ -76,6 +76,9 @@ describe("CAS tenant OpenAPI", () => {
     expect(Object.keys(document.paths ?? {})).toHaveLength(6);
     expect(operationIds).toHaveLength(7);
     expect(document.security).toEqual([{ spaceCapability: [] }]);
+    expect(document.servers).toEqual([
+      { url: "https://api.unicas.work", description: "Production" },
+    ]);
     expect(document.paths?.["/v2/apps/{appId}/spaces/{spaceId}/cas/usage"]?.get)
       .toHaveProperty("operationId", "getSpaceUsage");
     const lease = document.paths?.["/v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/lease"]?.post;

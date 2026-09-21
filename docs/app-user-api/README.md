@@ -11,8 +11,11 @@ CAS nodes plus atomic Root Refs without exposing administrator credentials.
 
 1. Read this page for the actors, trust boundaries, and ownership split.
 2. Follow [Scenarios and sequences](scenarios.md) for complete request flows.
-3. Use [HTTP operation reference](http-api.md) for all seven public operations.
-4. Use [Capability authorization](authorization.md) for claims, permissions,
+3. Explore the [interactive API reference](/app-user-api/reference/) for
+  OpenAPI schemas, examples, and client snippets.
+4. Use [HTTP operation reference](http-api.md) for runtime behavior and known
+  contract gaps across all seven public operations.
+5. Use [Capability authorization](authorization.md) for claims, permissions,
   denial behavior, least-privilege examples, and legacy capability migration.
 
 Machine-readable sources remain authoritative:

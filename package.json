@@ -34,6 +34,7 @@
     "keys:local": "node scripts/generate-local-capability-keys.mjs"
   },
   "devDependencies": {
+    "@scalar/api-reference": "1.69.2",
     "@types/node": "^24.0.0",
     "esbuild": "^0.28.2",
     "jose": "^6.2.10",
