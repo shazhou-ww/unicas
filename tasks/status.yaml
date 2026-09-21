@@ -29,10 +29,9 @@ tasks:
     createdAt: "2026-09-20T15:07:43Z"
     updatedAt: "2026-09-21T09:24:25Z"
   complete-app-space-concept-refactor:
-    state: ongoing
-    sourceBranch: task/complete-app-space-concept-refactor
+    state: completed
     createdAt: "2026-09-20T14:26:56Z"
-    updatedAt: "2026-09-21T03:59:06Z"
+    updatedAt: "2026-09-21T11:01:42Z"
   complete-direct-node-upload:
     state: completed
     createdAt: "2026-09-20T07:36:32Z"
