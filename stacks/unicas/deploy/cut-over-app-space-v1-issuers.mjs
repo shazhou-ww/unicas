@@ -1,9 +1,33 @@
 import { pathToFileURL } from "node:url";
 import { signIssuerChallenge } from "../../../packages/spaces/scripts/sign-issuer-challenge.mjs";
-import { parseOAuthIssuerInspectionChallenge } from "../../../packages/service/src/oauth-discovery.ts";
+
+const OAUTH_ISSUER_INSPECTION_CHALLENGE_VERSION = "cas-oauth-issuer-inspection-v1";
 
 export function appSpaceV1Audience(publicOrigin, appId) {
   return `${new URL(publicOrigin).origin}/v1/apps/${encodeURIComponent(appId)}`;
+}
+
+export function parseIssuerInspectionChallenge(challenge) {
+  if (typeof challenge !== "string") return null;
+  const parts = challenge.split("\n");
+  if (parts.length !== 10 || parts[0] !== OAUTH_ISSUER_INSPECTION_CHALLENGE_VERSION) return null;
+  const [, nonce, inspectionId, appId, issuer, audience, metadataDigest, jwksDigest, lifetimeText, expiresText] = parts;
+  const capabilityMaxLifetimeSeconds = Number(lifetimeText);
+  const expiresAt = Number(expiresText);
+  if (!nonce || !inspectionId || !appId || !issuer || !audience || !metadataDigest || !jwksDigest
+    || !Number.isSafeInteger(capabilityMaxLifetimeSeconds) || capabilityMaxLifetimeSeconds <= 0
+    || !Number.isSafeInteger(expiresAt) || expiresAt <= 0) return null;
+  return {
+    nonce,
+    inspectionId,
+    appId,
+    issuer,
+    audience,
+    metadataDigest,
+    jwksDigest,
+    capabilityMaxLifetimeSeconds,
+    expiresAt,
+  };
 }
 
 export async function cutOverAppSpaceV1Issuers({
@@ -61,9 +85,7 @@ export async function cutOverAppSpaceV1Issuers({
       body: JSON.stringify({ issuer: issuer.issuer }),
     });
     const inspection = await inspectionResponse.json();
-    const parsedChallenge = typeof inspection.challenge === "string"
-      ? parseOAuthIssuerInspectionChallenge(inspection.challenge)
-      : null;
+    const parsedChallenge = parseIssuerInspectionChallenge(inspection.challenge);
     if (
       typeof inspection.inspectionId !== "string"
       || parsedChallenge?.inspectionId !== inspection.inspectionId
