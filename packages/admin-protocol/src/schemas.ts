@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AppIdSchema } from "@unicas/tenant-protocol";
+import { AppIdSchema } from "@unicas/space-protocol";
 import type { CasAdminErrorResponse } from "./errors.js";
 import { PlatformAuditActionSchema, PlatformAuthoritySchema } from "./platform-access.js";
 import { CasAdminErrorCodes } from "./errors.js";

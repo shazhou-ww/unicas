@@ -19,8 +19,8 @@ import { migrateAppSpaceSchema } from "../src/schema.js";
 import { appCanonicalNodeKey, canonicalComposite } from "../src/do-names.js";
 import { RootRefDomainDurableObject } from "../src/domain-do.js";
 import type { RootRefDomainDoEnv } from "../src/domain-do.js";
-import { CasDurableObject } from "../src/tenant-do.js";
-import type { SpaceCasDoEnv } from "../src/tenant-do.js";
+import { CasDurableObject } from "../src/space-do.js";
+import type { SpaceCasDoEnv } from "../src/space-do.js";
 import { RootRefsErrorCodes } from "../src/root-refs.js";
 import { NodeOpErrorCodes, leaseCanonicalNode } from "../src/nodes.js";
 import type { NodeStore } from "../src/nodes.js";
@@ -149,7 +149,7 @@ describe("RootRefDomainDurableObject", () => {
   });
 });
 
-describe("CasDurableObject (tenant DO)", () => {
+describe("CasDurableObject (Space DO)", () => {
   test("accepts one complete App/Space header family and rejects mixed scopes", async () => {
     await createStore();
     const doInstance = new CasDurableObject(
@@ -393,7 +393,7 @@ function arrayBufferOf(bytes: Uint8Array): ArrayBuffer {
 }
 
 function store(): NodeStore {
-  return { db: db!, bucket: bucket!, stackId: STACK, tenantId: TENANT };
+  return { db: db!, bucket: bucket!, appId: STACK, spaceId: TENANT };
 }
 
 function tenantRequest(
@@ -423,7 +423,7 @@ function spaceLeaseRequest(hash: string, leaseDurationMs = 60_000): Request {
   });
 }
 
-describe("CasDurableObject (tenant DO) — node storage operations", () => {
+describe("CasDurableObject (Space DO) — node storage operations", () => {
   test("R2 write-once upload rejects replay without replacing content", async () => {
     await createStore();
     const key = "_uploads/v1/write-once";

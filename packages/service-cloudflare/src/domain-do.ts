@@ -54,8 +54,8 @@ export class RootRefDomainDurableObject {
         () => executeDomainUpdate({
           db: this.#env.CAS_DB,
           bucket: this.#env.CAS_R2,
-          stackId: appId,
-          tenantId: spaceId,
+          appId: appId,
+          spaceId: spaceId,
           refDomain,
           canonical,
         }),

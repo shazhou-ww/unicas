@@ -7,12 +7,12 @@ import {
   casWritePermission,
   type CapabilityPermission,
   type CasRoute,
-} from "@unicas/tenant-protocol";
+} from "@unicas/space-protocol/v1";
 import {
-  StackCapabilityVerifier,
-  permissionFor,
-  type ResolvedStackAuthority,
-  type StackAuthorityResolver,
+  V1StackTenantCapabilityVerifier,
+  v1PermissionFor,
+  type ResolvedV1StackAuthority,
+  type V1StackAuthorityResolver,
 } from "../src/index.js";
 
 const ISSUER = "https://issuer.example";
@@ -26,16 +26,16 @@ const ROUTE = {
   hash: "a".repeat(64),
 };
 
-class StubAuthorityResolver implements StackAuthorityResolver {
-  authority: ResolvedStackAuthority | null;
+class StubAuthorityResolver implements V1StackAuthorityResolver {
+  authority: ResolvedV1StackAuthority | null;
   unavailable = false;
   lookups = 0;
 
-  constructor(authority: ResolvedStackAuthority) {
+  constructor(authority: ResolvedV1StackAuthority) {
     this.authority = authority;
   }
 
-  async resolveIssuer(issuer: string): Promise<ResolvedStackAuthority | null> {
+  async resolveIssuer(issuer: string): Promise<ResolvedV1StackAuthority | null> {
     this.lookups += 1;
     if (this.unavailable) throw new Error("registry unavailable");
     return issuer === ISSUER ? this.authority : null;
@@ -51,7 +51,7 @@ async function fixture(): Promise<{
   const clock = { now: 1_700_000_000_000 };
   const { publicKey, privateKey } = await generateKeyPair("ES256", { extractable: true });
   const publicJwk = await exportJWK(publicKey);
-  const authority: ResolvedStackAuthority = {
+  const authority: ResolvedV1StackAuthority = {
     stackId: STACK,
     issuer: ISSUER,
     audience: AUDIENCE,
@@ -109,10 +109,10 @@ function request(token: string): Request {
   });
 }
 
-describe("StackCapabilityVerifier", () => {
+describe("V1StackTenantCapabilityVerifier", () => {
   test("verifies issuer, resource scope, and exact operation permission", async () => {
     const { clock, resolver, token } = await fixture();
-    const actual = new StackCapabilityVerifier({
+    const actual = new V1StackTenantCapabilityVerifier({
       repository: resolver,
       now: () => clock.now,
     });
@@ -139,7 +139,7 @@ describe("StackCapabilityVerifier", () => {
 
   test("enforces the exact permission for every tenant operation", async () => {
     const { clock, privateKey, resolver } = await fixture();
-    const verifier = new StackCapabilityVerifier({ repository: resolver, now: () => clock.now });
+    const verifier = new V1StackTenantCapabilityVerifier({ repository: resolver, now: () => clock.now });
     const hash = "b".repeat(64);
     const cases: Array<{
       route: CasRoute;
@@ -176,7 +176,7 @@ describe("StackCapabilityVerifier", () => {
   test("enforces the stack lifetime cap and registered issuer, audience, and key", async () => {
     const { clock, privateKey, resolver } = await fixture();
     resolver.authority = { ...resolver.authority!, capabilityMaxLifetimeSeconds: 60 };
-    const verifier = new StackCapabilityVerifier({ repository: resolver, now: () => clock.now });
+    const verifier = new V1StackTenantCapabilityVerifier({ repository: resolver, now: () => clock.now });
 
     const overCap = await issue(privateKey, clock.now, { lifetimeSeconds: 61 });
     await expect(verifier.verify(request(overCap), ROUTE)).rejects.toMatchObject({ status: 401 });
@@ -195,7 +195,7 @@ describe("StackCapabilityVerifier", () => {
 
   test("rejects unsupported or missing capability versions", async () => {
     const { clock, privateKey, resolver } = await fixture();
-    const verifier = new StackCapabilityVerifier({ repository: resolver, now: () => clock.now });
+    const verifier = new V1StackTenantCapabilityVerifier({ repository: resolver, now: () => clock.now });
     await expect(verifier.verify(request(await issue(privateKey, clock.now, { ver: 2 })), ROUTE))
       .rejects.toMatchObject({ status: 401 });
     await expect(verifier.verify(request(await issue(privateKey, clock.now, { omitVer: true })), ROUTE))
@@ -206,7 +206,7 @@ describe("StackCapabilityVerifier", () => {
 
   test("takes Root Ref domain and opaque subject only from verified claims", async () => {
     const { clock, privateKey, resolver } = await fixture();
-    const verifier = new StackCapabilityVerifier({ repository: resolver, now: () => clock.now });
+    const verifier = new V1StackTenantCapabilityVerifier({ repository: resolver, now: () => clock.now });
     const route = { operation: "updateRootRefs" as const, stackId: STACK, tenantId: TENANT };
 
     const token = await issue(privateKey, clock.now, {
@@ -239,7 +239,7 @@ describe("StackCapabilityVerifier", () => {
 
   test("does not treat an admin session cookie as tenant authentication", async () => {
     const { clock, resolver } = await fixture();
-    const verifier = new StackCapabilityVerifier({ repository: resolver, now: () => clock.now });
+    const verifier = new V1StackTenantCapabilityVerifier({ repository: resolver, now: () => clock.now });
     const cookieOnly = new Request("https://cas.example/tenant", {
       headers: { Cookie: "cas_admin_session=secret" },
     });
@@ -248,7 +248,7 @@ describe("StackCapabilityVerifier", () => {
 
   test("uses a fresh cache entry without another registry lookup", async () => {
     const { clock, resolver, token } = await fixture();
-    const verifier = new StackCapabilityVerifier({
+    const verifier = new V1StackTenantCapabilityVerifier({
       repository: resolver,
       now: () => clock.now,
     });
@@ -260,7 +260,7 @@ describe("StackCapabilityVerifier", () => {
   test("serves stale authority only inside the hard stale bound", async () => {
     const { clock, resolver, token } = await fixture();
     const events: string[] = [];
-    const verifier = new StackCapabilityVerifier({
+    const verifier = new V1StackTenantCapabilityVerifier({
       repository: resolver,
       now: () => clock.now,
       onEvent: (event) => events.push(event.kind),
@@ -279,7 +279,7 @@ describe("StackCapabilityVerifier", () => {
 
   test("refreshes past the hard bound when the registry is reachable", async () => {
     const { clock, resolver, token } = await fixture();
-    const verifier = new StackCapabilityVerifier({
+    const verifier = new V1StackTenantCapabilityVerifier({
       repository: resolver,
       now: () => clock.now,
     });
@@ -292,14 +292,14 @@ describe("StackCapabilityVerifier", () => {
   test("fails closed on a cold registry outage", async () => {
     const { clock, resolver, token } = await fixture();
     resolver.unavailable = true;
-    const verifier = new StackCapabilityVerifier({ repository: resolver, now: () => clock.now });
+    const verifier = new V1StackTenantCapabilityVerifier({ repository: resolver, now: () => clock.now });
     await expect(verifier.verify(request(token), ROUTE)).rejects.toMatchObject({ status: 401 });
     expect(resolver.lookups).toBe(1);
   });
 
   test("observes key removal on the first refresh after the cache TTL", async () => {
     const { clock, resolver, token } = await fixture();
-    const verifier = new StackCapabilityVerifier({ repository: resolver, now: () => clock.now });
+    const verifier = new V1StackTenantCapabilityVerifier({ repository: resolver, now: () => clock.now });
     await verifier.verify(request(token), ROUTE);
 
     const { publicKey } = await generateKeyPair("ES256", { extractable: true });
@@ -317,8 +317,8 @@ describe("StackCapabilityVerifier", () => {
   });
 
   test("exposes the protocol permission matrix", () => {
-    expect(permissionFor(ROUTE)).toBe(casReadPermission(TENANT));
-    expect(permissionFor({ operation: "readMetadata", stackId: STACK, tenantId: TENANT, hash: "a" }))
+    expect(v1PermissionFor(ROUTE)).toBe(casReadPermission(TENANT));
+    expect(v1PermissionFor({ operation: "readMetadata", stackId: STACK, tenantId: TENANT, hash: "a" }))
       .toBe(casReadPermission(TENANT));
   });
 });

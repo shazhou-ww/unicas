@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import {
   CapabilityAuthenticationError,
   CapabilityAuthorizationError,
-} from "@unicas/tenant-protocol";
+} from "@unicas/space-protocol";
 
 const handlers = vi.hoisted(() => ({
   tenant: vi.fn(async () => new Response("tenant")),
@@ -68,7 +68,7 @@ vi.mock("@unicas/service", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@unicas/service")>();
   return {
     ...actual,
-    StackCapabilityVerifier: class {
+    V1StackTenantCapabilityVerifier: class {
       verify = handlers.verify;
     },
     AppSpaceCapabilityVerifier: class {

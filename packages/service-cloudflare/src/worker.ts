@@ -14,7 +14,7 @@ import {
   AppSpaceCapabilityVerifier,
   createUniCasService,
   matchUniCasServiceRoute,
-  StackCapabilityVerifier,
+  V1StackTenantCapabilityVerifier,
   type BlobStore,
   type KeyedActorPort,
   type ServicePlatform,
@@ -46,7 +46,7 @@ import {
   reconcileAppUsageObservations,
   repairOldestSpaceUsageProjection,
 } from "./usage-reconciliation.js";
-import { CasDurableObject, type SpaceCasDoEnv } from "./tenant-do.js";
+import { CasDurableObject, type SpaceCasDoEnv } from "./space-do.js";
 import { ServerTiming, type TimingSink } from "./timing.js";
 
 export { CasDurableObject, RootRefDomainDurableObject };
@@ -63,7 +63,7 @@ export type Env = TenantEnv & AdminBffEnv & McpEnv & {
   CAS_SPACE_CAPABILITY_V2_ISSUED_BEFORE?: string;
 };
 
-const TENANT_STRIPPED_HEADERS = [
+const DATA_PLANE_STRIPPED_HEADERS = [
   "cookie",
   "x-internal-token",
   "x-cas-audit-reader-key",
@@ -121,11 +121,11 @@ export default {
     if (isPrefixed(pathname, "/admin/stacks")) {
       return new Response("Not Found", { status: 404 });
     }
-    const protectedResourceStackId = matchStackProtectedResourcePath(pathname);
-    if (protectedResourceStackId !== null) {
+    const v1StackId = matchV1StackProtectedResourcePath(pathname);
+    if (v1StackId !== null) {
       if (request.method !== "GET") return new Response("Method Not Allowed", { status: 405, headers: { Allow: "GET" } });
       await ensureControlSchema(env);
-      return stackProtectedResourceMetadata(env, protectedResourceStackId);
+      return v1StackProtectedResourceMetadata(env, v1StackId);
     }
     const timing = new ServerTiming();
     const platform = platformFromEnv(env, timing);
@@ -134,14 +134,14 @@ export default {
     const spaceVerifier = spaceVerifierFor(env);
     const actor = createUniCasService({
       platform,
-      authorizeTenantRequest: async ({ request: tenantRequest, route }) => {
+      authorizeV1StackTenantRequest: async ({ request: v1Request, route }) => {
         try {
           return await timing.time("cas_auth", () => verifier.verify(
-            tenantAuthorizationRequest(tenantRequest), route,
+            dataPlaneAuthorizationRequest(v1Request), route,
           ));
         } catch (error) {
           if (!(error instanceof Error) || error.name === "Error") {
-            console.error("Unexpected tenant authorization failure", error);
+            console.error("Unexpected v1 Stack/Tenant authorization failure", error);
           }
           throw error;
         }
@@ -155,7 +155,7 @@ export default {
       authorizeSpaceRequest: async ({ request: spaceRequest, route }) => {
         try {
           return await timing.time("cas_auth", () => spaceVerifier.verify(
-            tenantAuthorizationRequest(spaceRequest), route,
+            dataPlaneAuthorizationRequest(spaceRequest), route,
           ));
         } catch (error) {
           if (!(error instanceof Error) || error.name === "Error") {
@@ -168,8 +168,8 @@ export default {
 
     const serviceRoute = matchUniCasServiceRoute(request);
     if (serviceRoute) {
-      if (serviceRoute.plane === "tenant" || serviceRoute.plane === "space") {
-        await timing.time("cas_schema", () => ensureTenantSchema(env));
+      if (serviceRoute.plane === "v1-stack-tenant" || serviceRoute.plane === "space") {
+        await timing.time("cas_schema", () => ensureSpaceSchema(env));
       }
       try {
         const response = await actor.fetch(request);
@@ -207,7 +207,7 @@ export default {
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil((async () => {
       await ensureControlSchema(env);
-      await ensureTenantSchema(env);
+      await ensureSpaceSchema(env);
       await new D1EmailChallengeRepository(env.CAS_CONTROL_DB).pruneExpired(Date.now());
       await new ControlSessionStore(env.CAS_CONTROL_DB).pruneExpired();
       const usage = await reconcileAppUsageObservations({
@@ -253,7 +253,7 @@ function isOwnedPublicOrigin(requestUrl: URL, configuredOrigin: string | undefin
   }
 }
 
-function matchStackProtectedResourcePath(pathname: string): string | null {
+function matchV1StackProtectedResourcePath(pathname: string): string | null {
   const match = /^\/\.well-known\/oauth-protected-resource\/stacks\/([^/]+)$/.exec(pathname);
   if (!match) return null;
   try {
@@ -264,7 +264,7 @@ function matchStackProtectedResourcePath(pathname: string): string | null {
   }
 }
 
-async function stackProtectedResourceMetadata(env: Env, stackId: string): Promise<Response> {
+async function v1StackProtectedResourceMetadata(env: Env, stackId: string): Promise<Response> {
   const result = await env.CAS_CONTROL_DB.prepare(
     `SELECT issuer_record.issuer FROM cas_app_oauth_issuers AS issuer_record
      JOIN cas_apps AS app ON app.app_id = issuer_record.app_id
@@ -298,13 +298,13 @@ async function stackProtectedResourceMetadata(env: Env, stackId: string): Promis
   });
 }
 
-const verifiers = new WeakMap<object, StackCapabilityVerifier>();
+const verifiers = new WeakMap<object, V1StackTenantCapabilityVerifier>();
 const spaceVerifiers = new WeakMap<object, AppSpaceCapabilityVerifier>();
 const controlSchemaInitializations = new WeakMap<object, Promise<void>>();
 const tenantSchemaInitializations = new WeakMap<object, Promise<void>>();
 const adminHandlers = new WeakMap<object, Promise<(request: Request) => Promise<Response>>>();
 
-function ensureTenantSchema(env: Pick<Env, "CAS_DB">): Promise<void> {
+function ensureSpaceSchema(env: Pick<Env, "CAS_DB">): Promise<void> {
   const key = env.CAS_DB as object;
   let initialization = tenantSchemaInitializations.get(key);
   if (!initialization) {
@@ -349,7 +349,7 @@ function adminHandlerFor(env: Env): Promise<(request: Request) => Promise<Respon
         accountRepository,
         appUsageRepository: {
           async readAppUsage(appId) {
-            await ensureTenantSchema(env);
+            await ensureSpaceSchema(env);
             return new CloudflareAppUsageRepository(env.CAS_DB).readAppUsage(appId);
           },
         },
@@ -372,14 +372,14 @@ function parseOriginAllowlist(value: string | undefined): readonly string[] | un
   return [...new Set(value.split(",").map((origin) => origin.trim()).filter(Boolean))];
 }
 
-function verifierFor(env: Env): StackCapabilityVerifier {
+function verifierFor(env: Env): V1StackTenantCapabilityVerifier {
   const key = env as object;
   let verifier = verifiers.get(key);
   if (!verifier) {
     const jwksPort = new CloudflareOAuthDiscoveryPort({
       allowedOrigins: parseOriginAllowlist(env.CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS),
     });
-    verifier = new StackCapabilityVerifier({
+    verifier = new V1StackTenantCapabilityVerifier({
       repository: new AuthorityRepository(env.CAS_CONTROL_DB),
       jwksFetcher: async (url, options) => {
         return new URL(url).protocol === "data:"
@@ -466,7 +466,7 @@ function platformFromEnv(env: Env, timing?: TimingSink): ServicePlatform {
     controlDatabase: env.CAS_CONTROL_DB as unknown as SqlDatabase,
     tenantDatabase: env.CAS_DB as unknown as SqlDatabase,
     blobs: env.CAS_R2 as unknown as BlobStore,
-    tenantActors: keyedActorPort(env.CAS_DO, timing),
+    spaceActors: keyedActorPort(env.CAS_DO, timing),
     refDomainActors: keyedActorPort(env.CAS_DOMAIN_DO as unknown as DurableObjectNamespace, timing),
   };
 }
@@ -486,7 +486,7 @@ function localAuditReader(env: Env): Fetcher {
       const normalized = request instanceof Request
         ? new Request(request, init)
         : new Request(request.toString(), init);
-      await ensureTenantSchema(env);
+      await ensureSpaceSchema(env);
       return handleAuditRpc(normalized, env, new URL(normalized.url));
     },
     connect() {
@@ -580,9 +580,9 @@ function stripHeaders(request: Request, names: readonly string[]): Request {
   return new Request(request, { headers });
 }
 
-function tenantAuthorizationRequest(request: Request): Request {
+function dataPlaneAuthorizationRequest(request: Request): Request {
   const headers = new Headers(request.headers);
-  for (const name of TENANT_STRIPPED_HEADERS) headers.delete(name);
+  for (const name of DATA_PLANE_STRIPPED_HEADERS) headers.delete(name);
   return new Request(request.url, { method: request.method, headers });
 }
 
@@ -617,8 +617,8 @@ function stripMcpBrowserHeaders(request: Request): Request {
   return new Request(request, { headers });
 }
 
-export { StackCapabilityVerifier, permissionFor } from "@unicas/service";
-export type { StackAuthEvent, VerifiedStackCall } from "@unicas/service";
+export { V1StackTenantCapabilityVerifier, v1PermissionFor } from "@unicas/service";
+export type { V1StackTenantAuthEvent, VerifiedV1StackTenantCall } from "@unicas/service";
 
 export { migrateAppSpaceSchema } from "./schema.js";
 

@@ -5,7 +5,7 @@ import { migrateAppSpaceSchema } from "../src/schema.js";
 import {
   canonicalizeRootRefsUpdate,
   executeDomainUpdate,
-  listTenantRootRefs,
+  listSpaceRootRefs,
   parseRootRefsBody,
   withDomainRetry,
   RootRefsErrorCodes,
@@ -61,7 +61,7 @@ async function seedNode(hash: string, rootRefCount = 0, ready = true): Promise<v
 async function runUpdate(input: {
   requestId: string;
   changes: Record<string, number>;
-  tenantId?: string;
+  spaceId?: string;
   refDomain?: string;
 }): Promise<{ status: number; body: Record<string, unknown> }> {
   try {
@@ -73,8 +73,8 @@ async function runUpdate(input: {
     const result = await executeDomainUpdate({
       db: db!,
       bucket: bucket!,
-      stackId: STACK,
-      tenantId: input.tenantId ?? TENANT,
+      appId: STACK,
+      spaceId: input.spaceId ?? TENANT,
       refDomain: input.refDomain ?? DOMAIN,
       canonical,
     });
@@ -111,8 +111,8 @@ describe("atomic Root Refs update", () => {
       "INSERT INTO cas_root_domain_refs (app_id, ref_domain, space_id, hash, ref_count) VALUES (?, ?, ?, ?, ?)",
     ).bind(STACK, "other", TENANT, H3, 9).run();
 
-    const first = await listTenantRootRefs({
-      db: db!, stackId: STACK, tenantId: TENANT, refDomain: DOMAIN, limit: 1, cursor: "",
+    const first = await listSpaceRootRefs({
+      db: db!, appId: STACK, spaceId: TENANT, refDomain: DOMAIN, limit: 1, cursor: "",
     });
     expect(first).toEqual({
       refDomain: DOMAIN,
@@ -120,8 +120,8 @@ describe("atomic Root Refs update", () => {
       items: [{ hash: H1, refCount: 1 }],
       nextCursor: H1,
     });
-    await expect(listTenantRootRefs({
-      db: db!, stackId: STACK, tenantId: TENANT, refDomain: DOMAIN, limit: 1, cursor: H1,
+    await expect(listSpaceRootRefs({
+      db: db!, appId: STACK, spaceId: TENANT, refDomain: DOMAIN, limit: 1, cursor: H1,
     })).resolves.toEqual({
       refDomain: DOMAIN,
       revision: 1,
@@ -248,7 +248,7 @@ describe("atomic Root Refs update", () => {
 
     // tenant-1 then tenant-2 in the same domain: revisions 1, 2.
     const a = await runUpdate({ requestId: "a", changes: { [H1]: 1 } });
-    const b = await runUpdate({ requestId: "b", changes: { [H1]: 1 }, tenantId: "tenant-2" });
+    const b = await runUpdate({ requestId: "b", changes: { [H1]: 1 }, spaceId: "tenant-2" });
     expect(a.body.revision).toBe(1);
     expect(b.body.revision).toBe(2);
 
@@ -276,8 +276,8 @@ describe("atomic Root Refs update", () => {
     await executeDomainUpdate({
       db: loggingDb,
       bucket: bucket!,
-      stackId: STACK,
-      tenantId: TENANT,
+      appId: STACK,
+      spaceId: TENANT,
       refDomain: DOMAIN,
       canonical,
     });
@@ -314,8 +314,8 @@ describe("retry policy", () => {
       () => executeDomainUpdate({
         db: wrappingDb,
         bucket: bucket!,
-        stackId: STACK,
-        tenantId: TENANT,
+        appId: STACK,
+        spaceId: TENANT,
         refDomain: DOMAIN,
         canonical,
       }),
@@ -348,8 +348,8 @@ describe("retry policy", () => {
       () => executeDomainUpdate({
         db: flakyDb,
         bucket: bucket!,
-        stackId: STACK,
-        tenantId: TENANT,
+        appId: STACK,
+        spaceId: TENANT,
         refDomain: DOMAIN,
         canonical,
       }),
@@ -379,8 +379,8 @@ describe("retry policy", () => {
         return executeDomainUpdate({
           db: brokenDb,
           bucket: bucket!,
-          stackId: STACK,
-          tenantId: TENANT,
+          appId: STACK,
+          spaceId: TENANT,
           refDomain: DOMAIN,
           canonical,
         });

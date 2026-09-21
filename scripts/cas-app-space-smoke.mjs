@@ -17,7 +17,7 @@ import {
   hashToHex,
   hexToHash,
 } from "../packages/codec/dist/index.js";
-import { createSpaceCasClient } from "../packages/tenant-client/dist/index.js";
+import { createSpaceCasClient } from "../packages/space-client/dist/index.js";
 import {
   CapabilityAlgorithm,
   CapabilityTokenType,
@@ -30,7 +30,7 @@ import {
   spaceRootRefsReadPermission,
   spaceRootRefsUpdatePermission,
   spaceUsageReadPermission,
-} from "../packages/tenant-protocol/dist/index.js";
+} from "../packages/space-protocol/dist/index.js";
 
 const BASE = normalizeSmokeBaseUrl(
   process.argv[2] ?? "https://api.unicas.work",

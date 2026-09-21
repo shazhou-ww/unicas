@@ -5,28 +5,27 @@ import {
 import {
   CapabilityError,
   matchAppSpaceRoute,
-  matchCasRoute,
   type AppSpaceRoute,
-  type CasRoute,
-} from "@unicas/tenant-protocol";
+} from "@unicas/space-protocol";
+import { matchCasRoute, type CasRoute } from "@unicas/space-protocol/v1";
 import {
   CasLeaseDurationHeader,
   CasUploadIdHeader,
   CasUploadLengthHeader,
-} from "@unicas/tenant-protocol";
+} from "@unicas/space-protocol";
 import type { ServicePlatform } from "./ports.js";
 
 export interface HttpActor {
   fetch(request: Request): Promise<Response>;
 }
 
-export interface TenantRequestContext {
+export interface V1StackTenantRequestContext {
   readonly request: Request;
   readonly route: CasRoute;
   readonly platform: ServicePlatform;
 }
 
-export interface AuthorizedTenantCall {
+export interface AuthorizedV1StackTenantCall {
   readonly stackId: string;
   readonly tenantId: string;
   readonly subject: string;
@@ -60,20 +59,22 @@ export interface AppAdminRequestContext {
 
 export interface ServiceContext {
   readonly platform: ServicePlatform;
-  authorizeTenantRequest(context: TenantRequestContext): Promise<AuthorizedTenantCall>;
+  authorizeV1StackTenantRequest(
+    context: V1StackTenantRequestContext,
+  ): Promise<AuthorizedV1StackTenantCall>;
   authorizeSpaceRequest?(context: SpaceRequestContext): Promise<AuthorizedSpaceCall>;
   handleAppAdminRequest?(context: AppAdminRequestContext): Promise<Response>;
 }
 
 export type UniCasServiceRoute =
-  | { readonly plane: "tenant"; readonly route: CasRoute }
+  | { readonly plane: "v1-stack-tenant"; readonly route: CasRoute }
   | { readonly plane: "space"; readonly route: AppSpaceRoute }
   | { readonly plane: "app-admin"; readonly route: AppAdminRoute };
 
 export function matchUniCasServiceRoute(request: Request): UniCasServiceRoute | null {
   const pathname = new URL(request.url).pathname;
-  const tenantRoute = matchCasRoute(request.method, pathname);
-  if (tenantRoute) return { plane: "tenant", route: tenantRoute };
+  const v1Route = matchCasRoute(request.method, pathname);
+  if (v1Route) return { plane: "v1-stack-tenant", route: v1Route };
   const spaceRoute = matchAppSpaceRoute(request.method, pathname);
   if (spaceRoute) return { plane: "space", route: spaceRoute };
   const appAdminRoute = matchAppAdminRoute(request.method, pathname);
@@ -91,15 +92,15 @@ export function createUniCasService(context: ServiceContext): HttpActor {
           { status: 404 },
         ));
       }
-      if (matched.plane === "tenant") {
-        const tenantContext = {
+      if (matched.plane === "v1-stack-tenant") {
+        const v1Context = {
           request,
           route: matched.route,
           platform: context.platform,
         };
-        return context.authorizeTenantRequest(tenantContext)
+        return context.authorizeV1StackTenantRequest(v1Context)
           .then(
-            (call) => dispatchTenantRequest(tenantContext, call),
+            (call) => dispatchV1StackTenantRequest(v1Context, call),
             tenantAuthorizationErrorResponse,
           );
       }
@@ -147,9 +148,9 @@ function spaceAuthorizationErrorResponse(error: unknown): Response {
   return Response.json({ error: "CAS capability validation failed" }, { status: 401 });
 }
 
-async function dispatchTenantRequest(
-  context: TenantRequestContext,
-  call: AuthorizedTenantCall,
+async function dispatchV1StackTenantRequest(
+  context: V1StackTenantRequestContext,
+  call: AuthorizedV1StackTenantCall,
 ): Promise<Response> {
   return dispatchDataRequest(
     context.request,
@@ -198,13 +199,13 @@ async function dispatchDataRequest(
     headers["X-CAS-Ref-Domain"] = refDomain;
     if (route.operation === "listRootRefs") {
       const query = new URL(request.url).search;
-      return platform.tenantActors.fetch(actorKey, new Request(
-        `https://tenant.internal/rootRefs${query}`,
+      return platform.spaceActors.fetch(actorKey, new Request(
+        `https://space.internal/rootRefs${query}`,
         { headers },
       ));
     }
-    return platform.tenantActors.fetch(actorKey, new Request(
-      "https://tenant.internal/updateRootRefs",
+    return platform.spaceActors.fetch(actorKey, new Request(
+      "https://space.internal/updateRootRefs",
       { method: "POST", headers, body: await request.text() },
     ));
   }
@@ -271,8 +272,8 @@ async function dispatchDataRequest(
       body = request.body;
       break;
   }
-  return platform.tenantActors.fetch(actorKey, new Request(
-    `https://tenant.internal${path}`,
+  return platform.spaceActors.fetch(actorKey, new Request(
+    `https://space.internal${path}`,
     {
       method,
       headers,
@@ -281,9 +282,9 @@ async function dispatchDataRequest(
   ));
 }
 
-function canonicalActorKey(stackId: string, component: string): string {
-  if (stackId.length === 0 || component.length === 0) {
+function canonicalActorKey(appId: string, component: string): string {
+  if (appId.length === 0 || component.length === 0) {
     throw new TypeError("actor key parts must not be empty");
   }
-  return `${encodeURIComponent(stackId)}|${encodeURIComponent(component)}`;
+  return `${encodeURIComponent(appId)}|${encodeURIComponent(component)}`;
 }

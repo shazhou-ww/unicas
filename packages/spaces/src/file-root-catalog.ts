@@ -1,7 +1,7 @@
 import type {
-  TenantFileRootCatalog,
-  TenantFileRootInfo,
-} from "@unicas/tenant-file-client";
+  SpaceFileRootCatalog,
+  SpaceFileRootInfo,
+} from "@unicas/space-file-client";
 import type { D1Database } from "@cloudflare/workers-types";
 
 export interface PendingRootRelease {
@@ -34,7 +34,7 @@ const selectRoots = `
   ORDER BY created_at, root_id
 `;
 
-export class D1FileRootCatalog implements TenantFileRootCatalog {
+export class D1FileRootCatalog implements SpaceFileRootCatalog {
   readonly #db: D1Database;
   readonly #principalId: string;
   readonly #now: () => number;
@@ -45,7 +45,7 @@ export class D1FileRootCatalog implements TenantFileRootCatalog {
     this.#now = now;
   }
 
-  async list(): Promise<readonly TenantFileRootInfo[]> {
+  async list(): Promise<readonly SpaceFileRootInfo[]> {
     const result = await this.#db.prepare(selectRoots).bind(this.#principalId).all<FileRootRow>();
     return result.results.map(toRootInfo);
   }
@@ -54,7 +54,7 @@ export class D1FileRootCatalog implements TenantFileRootCatalog {
     readonly rootId: string;
     readonly name: string;
     readonly manifestHash: string;
-  }): Promise<TenantFileRootInfo> {
+  }): Promise<SpaceFileRootInfo> {
     const now = this.#now();
     try {
       await this.#db.prepare(`
@@ -76,7 +76,7 @@ export class D1FileRootCatalog implements TenantFileRootCatalog {
     readonly revision: number;
     readonly name: string;
     readonly manifestHash: string;
-  }): Promise<TenantFileRootInfo> {
+  }): Promise<SpaceFileRootInfo> {
     const current = await this.#requireRoot(input.rootId);
     if (current.revision !== input.revision) throw new FileRootConflictError();
     const now = this.#now();
@@ -143,7 +143,7 @@ export class D1FileRootCatalog implements TenantFileRootCatalog {
     `).bind(requestId, this.#principalId).run();
   }
 
-  async #requireRoot(rootId: string): Promise<TenantFileRootInfo> {
+  async #requireRoot(rootId: string): Promise<SpaceFileRootInfo> {
     const row = await this.#db.prepare(`
       SELECT root_id, name, manifest_hash, revision, created_at, updated_at
       FROM spaces_file_system_roots
@@ -154,7 +154,7 @@ export class D1FileRootCatalog implements TenantFileRootCatalog {
   }
 }
 
-function toRootInfo(row: FileRootRow): TenantFileRootInfo {
+function toRootInfo(row: FileRootRow): SpaceFileRootInfo {
   return {
     rootId: row.root_id,
     name: row.name,

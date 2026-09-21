@@ -20,8 +20,8 @@ import {
   spaceUsageReadPermission,
   validateRefDomainClaim,
   type AppSpaceRoute,
-} from "@unicas/tenant-protocol";
-import type { JwksFetcher } from "./tenant-auth.js";
+} from "@unicas/space-protocol";
+import type { JwksFetcher } from "./v1/tenant-auth.js";
 
 export interface ResolvedAppAuthority {
   readonly appId: string;

@@ -212,8 +212,8 @@ describe("listRootDomainEvents", () => {
       await executeDomainUpdate({
         db: db!,
         bucket: bucket!,
-        stackId: STACK,
-        tenantId: "tenant-a",
+        appId: STACK,
+        spaceId: "tenant-a",
         refDomain: DOMAIN,
         canonical,
       });

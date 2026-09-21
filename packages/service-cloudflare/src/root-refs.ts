@@ -45,7 +45,7 @@ export class CloudflareRootRefRepository implements RootRefRepository {
       .prepare(
         "SELECT payload_hash, revision FROM cas_root_ref_requests WHERE app_id = ? AND space_id = ? AND ref_domain = ? AND request_id = ?",
       )
-      .bind(scope.stackId, scope.tenantId, scope.refDomain, requestId)
+      .bind(scope.appId, scope.spaceId, scope.refDomain, requestId)
       .first<{ payload_hash: string; revision: number }>();
     return row === null
       ? null
@@ -53,7 +53,7 @@ export class CloudflareRootRefRepository implements RootRefRepository {
   }
 
   async readNodes(
-    scope: Pick<RootRefScope, "stackId" | "tenantId">,
+    scope: Pick<RootRefScope, "appId" | "spaceId">,
     hashes: readonly string[],
   ): Promise<readonly RootRefNodeState[]> {
     const nodes: RootRefNodeState[] = [];
@@ -62,7 +62,7 @@ export class CloudflareRootRefRepository implements RootRefRepository {
         .prepare(
           "SELECT root_ref_count FROM cas_nodes WHERE app_id = ? AND space_id = ? AND hash = ?",
         )
-        .bind(scope.stackId, scope.tenantId, hash)
+        .bind(scope.appId, scope.spaceId, hash)
         .first<{ root_ref_count: number }>();
       if (row) nodes.push({ hash, rootRefCount: row.root_ref_count });
     }
@@ -70,11 +70,11 @@ export class CloudflareRootRefRepository implements RootRefRepository {
   }
 
   async findUnreadyNode(
-    scope: Pick<RootRefScope, "stackId" | "tenantId">,
+    scope: Pick<RootRefScope, "appId" | "spaceId">,
     hashes: readonly string[],
   ): Promise<string | null> {
     for (const hash of hashes) {
-      const key = appCanonicalNodeKey(scope.stackId, scope.tenantId, hash);
+      const key = appCanonicalNodeKey(scope.appId, scope.spaceId, hash);
       if (!(await this.#bucket.head(key))) return hash;
     }
     return null;
@@ -85,13 +85,13 @@ export class CloudflareRootRefRepository implements RootRefRepository {
       .prepare(
         "SELECT revision FROM cas_root_domain_revisions WHERE app_id = ? AND ref_domain = ?",
       )
-      .bind(scope.stackId, scope.refDomain)
+      .bind(scope.appId, scope.refDomain)
       .first<{ revision: number }>();
     const projectionRows = await this.#db
       .prepare(
         "SELECT hash, ref_count FROM cas_root_domain_refs WHERE app_id = ? AND ref_domain = ? AND space_id = ?",
       )
-      .bind(scope.stackId, scope.refDomain, scope.tenantId)
+      .bind(scope.appId, scope.refDomain, scope.spaceId)
       .all<{ hash: string; ref_count: number }>();
     return {
       revision: revisionRow?.revision ?? 0,
@@ -106,29 +106,29 @@ export class CloudflareRootRefRepository implements RootRefRepository {
     const batch: D1PreparedStatement[] = [
       this.#db.prepare(
         "INSERT INTO cas_root_domain_revisions (app_id, ref_domain, revision) VALUES (?, ?, ?) ON CONFLICT(app_id, ref_domain) DO UPDATE SET revision = excluded.revision WHERE cas_root_domain_revisions.revision = ?",
-      ).bind(scope.stackId, scope.refDomain, plan.revision, plan.expectedRevision),
+      ).bind(scope.appId, scope.refDomain, plan.revision, plan.expectedRevision),
     ];
     for (const [hash, delta] of plan.entries) {
       batch.push(
         this.#db.prepare(
           "UPDATE cas_nodes SET root_ref_count = root_ref_count + ? WHERE app_id = ? AND space_id = ? AND hash = ?",
-        ).bind(delta, scope.stackId, scope.tenantId, hash),
+        ).bind(delta, scope.appId, scope.spaceId, hash),
       );
       const projection = plan.projections.find((candidate) => candidate.hash === hash)!;
       if (projection.refCount === null) {
         batch.push(
           this.#db.prepare(
             "DELETE FROM cas_root_domain_refs WHERE app_id = ? AND ref_domain = ? AND space_id = ? AND hash = ?",
-          ).bind(scope.stackId, scope.refDomain, scope.tenantId, hash),
+          ).bind(scope.appId, scope.refDomain, scope.spaceId, hash),
         );
       } else {
         batch.push(
           this.#db.prepare(
             "INSERT INTO cas_root_domain_refs (app_id, ref_domain, space_id, hash, ref_count) VALUES (?, ?, ?, ?, ?) ON CONFLICT(app_id, ref_domain, space_id, hash) DO UPDATE SET ref_count = excluded.ref_count",
           ).bind(
-            scope.stackId,
+            scope.appId,
             scope.refDomain,
-            scope.tenantId,
+            scope.spaceId,
             hash,
             projection.refCount,
           ),
@@ -139,10 +139,10 @@ export class CloudflareRootRefRepository implements RootRefRepository {
       this.#db.prepare(
         "INSERT INTO cas_root_domain_events (app_id, ref_domain, revision, space_id, request_id, payload_hash, changes_json, applied_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       ).bind(
-        scope.stackId,
+        scope.appId,
         scope.refDomain,
         plan.revision,
-        scope.tenantId,
+        scope.spaceId,
         plan.requestId,
         plan.payloadHash,
         plan.changesJson,
@@ -153,8 +153,8 @@ export class CloudflareRootRefRepository implements RootRefRepository {
       this.#db.prepare(
         "INSERT INTO cas_root_ref_requests (app_id, space_id, ref_domain, request_id, payload_hash, revision, applied_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
       ).bind(
-        scope.stackId,
-        scope.tenantId,
+        scope.appId,
+        scope.spaceId,
         scope.refDomain,
         plan.requestId,
         plan.payloadHash,
@@ -170,25 +170,25 @@ export class CloudflareRootRefRepository implements RootRefRepository {
   }
 }
 
-export async function listTenantRootRefs(input: {
+export async function listSpaceRootRefs(input: {
   readonly db: D1Database;
-  readonly stackId: string;
-  readonly tenantId: string;
+  readonly appId: string;
+  readonly spaceId: string;
   readonly refDomain: string;
   readonly limit: number;
   readonly cursor: string;
 }) {
   const revisionRow = await input.db.prepare(
     "SELECT revision FROM cas_root_domain_revisions WHERE app_id = ? AND ref_domain = ?",
-  ).bind(input.stackId, input.refDomain).first<{ revision: number }>();
+  ).bind(input.appId, input.refDomain).first<{ revision: number }>();
   const rows = await input.db.prepare(
     `SELECT hash, ref_count FROM cas_root_domain_refs
      WHERE app_id = ? AND ref_domain = ? AND space_id = ? AND hash > ?
      ORDER BY hash LIMIT ?`,
   ).bind(
-    input.stackId,
+    input.appId,
     input.refDomain,
-    input.tenantId,
+    input.spaceId,
     input.cursor,
     input.limit + 1,
   ).all<{ hash: string; ref_count: number }>();
@@ -209,16 +209,16 @@ export async function listTenantRootRefs(input: {
 export function executeDomainUpdate(input: {
   readonly db: D1Database;
   readonly bucket: R2Bucket;
-  readonly stackId: string;
-  readonly tenantId: string;
+  readonly appId: string;
+  readonly spaceId: string;
   readonly refDomain: string;
   readonly canonical: CanonicalRootRefsUpdate;
   readonly now?: () => number;
 }): Promise<DomainUpdateResult> {
   return applyRootRefsUpdate({
     repository: new CloudflareRootRefRepository(input.db, input.bucket),
-    stackId: input.stackId,
-    tenantId: input.tenantId,
+    appId: input.appId,
+    spaceId: input.spaceId,
     refDomain: input.refDomain,
     canonical: input.canonical,
     now: input.now,

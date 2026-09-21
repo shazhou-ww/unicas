@@ -1,16 +1,16 @@
 import {
-  createTenantFileSystem,
+  createSpaceFileSystem,
   FileManifestMaxPathBytes,
-  type TenantFileRoot,
-  type TenantFileRootCatalog,
-  type TenantFileStat,
-  type TenantFileSystem,
-} from "@unicas/tenant-file-client";
+  type SpaceFileRoot,
+  type SpaceFileRootCatalog,
+  type SpaceFileStat,
+  type SpaceFileSystem,
+} from "@unicas/space-file-client";
 import type {
   SpaceCasClient,
   SpaceNodeLeaseOptions,
   SpaceNodeLeaseResult,
-} from "@unicas/tenant-client";
+} from "@unicas/space-client";
 import type { D1Database } from "@cloudflare/workers-types";
 import {
   createPrincipalCasClient,
@@ -55,14 +55,14 @@ export class FileServiceError extends Error {
 export interface DirectoryResult {
   readonly path: string;
   readonly revision: number;
-  readonly entries: readonly TenantFileStat[];
+  readonly entries: readonly SpaceFileStat[];
 }
 
 export interface MutationResult {
   readonly rootId: string;
   readonly revision: number;
   readonly rootRetained: true;
-  readonly entry?: TenantFileStat;
+  readonly entry?: SpaceFileStat;
   readonly uploadEvidence?: UploadEvidence;
 }
 
@@ -71,21 +71,21 @@ interface LeaseEvidenceTracker {
   summarize(mark: number): UploadEvidence;
 }
 
-interface ReconciliationCatalog extends TenantFileRootCatalog {
+interface ReconciliationCatalog extends SpaceFileRootCatalog {
   listPendingReleases(limit?: number): Promise<readonly PendingRootRelease[]>;
   completePendingRelease(requestId: string): Promise<void>;
 }
 
 export class SpacesFileService {
   readonly #cas: SpaceCasClient;
-  readonly #fileSystem: TenantFileSystem;
+  readonly #fileSystem: SpaceFileSystem;
   readonly #maximumUploadBytes: number;
   readonly #leaseEvidence: LeaseEvidenceTracker | undefined;
   readonly #catalog: ReconciliationCatalog | undefined;
 
   constructor(
     cas: SpaceCasClient,
-    fileSystem: TenantFileSystem,
+    fileSystem: SpaceFileSystem,
     maximumUploadBytes = DefaultMaximumUploadBytes,
     leaseEvidence?: LeaseEvidenceTracker,
     catalog?: ReconciliationCatalog,
@@ -263,7 +263,7 @@ export class SpacesFileService {
 
   async download(path: string, signal?: AbortSignal): Promise<{
     readonly body: ReadableStream<Uint8Array>;
-    readonly stat: TenantFileStat;
+    readonly stat: SpaceFileStat;
   }> {
     const normalizedPath = normalizeAbsolutePath(path, false);
     const root = await this.#openRoot();
@@ -274,7 +274,7 @@ export class SpacesFileService {
 
   async #mutate(
     expectedRevision: number,
-    change: (root: TenantFileRoot) => Promise<string | void>,
+    change: (root: SpaceFileRoot) => Promise<string | void>,
   ): Promise<MutationResult> {
     if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
       throw new FileServiceError("invalid_revision", 400, "A positive Root revision is required");
@@ -291,7 +291,7 @@ export class SpacesFileService {
     return { rootId: committed.rootId, revision: committed.revision, rootRetained: true, ...(entry ? { entry } : {}) };
   }
 
-  async #openRoot(): Promise<TenantFileRoot> {
+  async #openRoot(): Promise<SpaceFileRoot> {
     const roots = await this.#fileSystem.listRoots();
     if (roots.length !== 1) {
       throw new FileServiceError(
@@ -341,7 +341,7 @@ export async function createSpacesFileService(input: {
   );
   const { cas, evidence } = createLeaseEvidenceClient(baseCas);
   const catalog = new D1FileRootCatalog(input.db, input.principal.principalId);
-  return new SpacesFileService(cas, createTenantFileSystem({
+  return new SpacesFileService(cas, createSpaceFileSystem({
     cas,
     catalog,
     blobOptions: {
@@ -436,6 +436,6 @@ function parentPath(path: string): string {
   return separator === 0 ? "/" : path.slice(0, separator);
 }
 
-function compareEntries(left: TenantFileStat, right: TenantFileStat): number {
+function compareEntries(left: SpaceFileStat, right: SpaceFileStat): number {
   return left.type === right.type ? left.name.localeCompare(right.name) : left.type === "directory" ? -1 : 1;
 }

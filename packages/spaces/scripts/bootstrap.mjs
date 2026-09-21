@@ -4,8 +4,8 @@ import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { importPKCS8, SignJWT } from "jose";
-import { createSpaceCasClient } from "@unicas/tenant-client";
-import { createTenantFileSystem } from "@unicas/tenant-file-client";
+import { createSpaceCasClient } from "@unicas/space-client";
+import { createSpaceFileSystem } from "@unicas/space-file-client";
 import {
   CapabilityAlgorithm,
   CapabilityTokenType,
@@ -15,7 +15,7 @@ import {
   spaceRootRefsReadPermission,
   spaceRootRefsUpdatePermission,
   validateRefDomainClaim,
-} from "@unicas/tenant-protocol";
+} from "@unicas/space-protocol";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const requireFromServicePackage = createRequire(new URL("../../service-cloudflare/package.json", import.meta.url));
@@ -177,7 +177,7 @@ export async function bootstrapSpacesPrincipal(config, execute = executeD1) {
     getToken: async () => token,
   });
   const catalog = memoryCatalog();
-  const files = createTenantFileSystem({ cas, catalog, blobOptions: { chunkBytes: 1024 * 1024 } });
+  const files = createSpaceFileSystem({ cas, catalog, blobOptions: { chunkBytes: 1024 * 1024 } });
   const root = await files.createRoot("Files");
   try {
     await execute(config, bootstrapInsertSql(config, root.info, Date.now()));

@@ -1,4 +1,4 @@
-import { appSpaceRoutes, type CasErrorResponse } from "@unicas/tenant-protocol";
+import { appSpaceRoutes, type CasErrorResponse } from "@unicas/space-protocol";
 import { issueSpaceCapability, type CapabilityConfig } from "./capability.js";
 import type { PrincipalContext } from "./repository.js";
 

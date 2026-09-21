@@ -9,7 +9,7 @@ const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const SITE_ROOT = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_OUTPUT = join(SITE_ROOT, "dist");
 const API_REFERENCE = ["app-user-api/reference", "API Reference", "Integrate"];
-const SPACE_OPENAPI_SOURCE = "packages/tenant-protocol/openapi/space-v2.openapi.json";
+const SPACE_OPENAPI_SOURCE = "packages/space-protocol/openapi/space-v2.openapi.json";
 
 export const DOCUMENTS = [
   ["app-user-api", "App-user API", "Integrate", "docs/app-user-api/README.md"],
@@ -33,7 +33,7 @@ export const DOCUMENTS = [
 const PACKAGE_REFERENCES = [
   ["packages", "Package Boundaries", "packages/README.md"],
   ["admin-protocol", "Admin Protocol", "packages/admin-protocol/README.md"],
-  ["tenant-protocol", "Tenant Protocol", "packages/tenant-protocol/README.md"],
+  ["space-protocol", "Tenant Protocol", "packages/space-protocol/README.md"],
   ["admin-cli", "Administrator CLI", "packages/admin-cli/README.md"],
 ];
 

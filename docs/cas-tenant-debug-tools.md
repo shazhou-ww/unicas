@@ -114,13 +114,13 @@ so the later WebUI reuses the same store:
   remote change is GC deleting the origin (the local copy is kept, which is
   what a debug tool wants). No eviction in v1; `cache status` / `cache clear`.
 - **Cache policy — node granularity** (the disk cache implements
-  `CasNodeCache` from `@unicas/tenant-client`): full node reads
+  `CasNodeCache` from `@unicas/space-client`): full node reads
   (`range === undefined`) populate the cache on miss; partial reads (`--range`)
   serve from a cached full copy or pass through without populating; metadata
   (incl. `refs`) is cached so subgraphs can be walked offline. `leaseNode`
   write-through is deferred.
 - **Range contract**: the `CasNodeCache.read(key, range, load)` interface
-  comment in tenant-client is updated to state that `range === undefined`
+  comment in space-client is updated to state that `range === undefined`
   means a full read (populate) and a present range means a partial read (serve
   or bypass); the policy lives in the cache implementation.
 - **Blob layer**: `createCasBlobClient(cas, options)` is cache-agnostic and

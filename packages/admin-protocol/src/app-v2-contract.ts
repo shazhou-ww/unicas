@@ -1,6 +1,6 @@
 import { oc } from "@orpc/contract";
 import { z } from "zod";
-import { AppIdSchema } from "@unicas/tenant-protocol";
+import { AppIdSchema } from "@unicas/space-protocol";
 import { AppPeopleQuerySchema, PlatformPeopleQuerySchema } from "./people.js";
 import {
   AccountSelfSchema,

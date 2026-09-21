@@ -8,8 +8,8 @@ export const casAdminThreatModel = {
     emailIsDisplayOnly: true,
     banEmailAsOwnershipKey: true,
   },
-  stackTakeover: {
-    requireMembershipForStackRoutes: true,
+  appTakeover: {
+    requireMembershipForAppRoutes: true,
     invitationBindsImmutableOidcIdentity: true,
     lastMemberCannotBeDeleted: true,
     managementTransferRequiresAddThenRemove: true,
@@ -20,10 +20,10 @@ export const casAdminThreatModel = {
     neverAcceptAdministratorSuppliedJwksUrl: true,
     discoveryIssuerMustExactlyMatchRegisteredIssuer: true,
     issuerControlProofUsesDiscoveredJwks: true,
-    oauthAudienceDerivedFromStackResource: true,
+    oauthAudienceDerivedFromAppResource: true,
     oauthMaximumLifetimeIsServerPolicy: true,
     issuerGloballyUnique: true,
-    oneActiveIssuerPerStack: true,
+    oneActiveIssuerPerApp: true,
   },
   jwksRotation: {
     jwksUriAlwaysFromVerifiedMetadata: true,
@@ -33,10 +33,12 @@ export const casAdminThreatModel = {
     neverFallBackToLegacyManualKeys: true,
   },
   confusedDeputy: {
-    tenantJwtNeverAcceptedOnAdminRoutes: true,
-    adminSessionNeverAcceptedOnTenantRoutes: true,
-    stripTenantAuthorizationOnAdminDispatch: true,
-    stripAdminSessionOnTenantDispatch: true,
+    spaceCapabilityNeverAcceptedOnAdminRoutes: true,
+    adminSessionNeverAcceptedOnSpaceRoutes: true,
+    stripSpaceAuthorizationOnAdminDispatch: true,
+    stripAdminSessionOnSpaceDispatch: true,
+    v1StackTenantCapabilityNeverAcceptedOnAdminRoutes: true,
+    adminSessionNeverAcceptedOnV1StackTenantRoutes: true,
   },
   webuiCsrfSessionTheft: {
     sessionCookie: "HttpOnly+Secure+SameSite",
@@ -47,6 +49,6 @@ export const casAdminThreatModel = {
   controlAuditTampering: {
     appendOnlyEvents: true,
     mutationAndAuditSameTransaction: true,
-    stackMembersCannotRewriteHistory: true,
+    appMembersCannotRewriteHistory: true,
   },
 } as const;

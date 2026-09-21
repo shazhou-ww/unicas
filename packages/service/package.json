@@ -25,7 +25,7 @@
   "dependencies": {
     "@unicas/admin-protocol": "workspace:*",
     "@unicas/codec": "workspace:*",
-    "@unicas/tenant-protocol": "workspace:*",
+    "@unicas/space-protocol": "workspace:*",
     "jose": "^6.0.0"
   },
   "devDependencies": {

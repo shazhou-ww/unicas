@@ -61,8 +61,8 @@ export function deploymentPlan({ dryRun = false, env, production = false, skipSm
   );
   if (!skipSmoke) {
     commands.push(["pnpm", "--filter", "@unicas/codec", "build"]);
-    commands.push(["pnpm", "--filter", "@unicas/tenant-protocol", "build"]);
-    commands.push(["pnpm", "--filter", "@unicas/tenant-client", "build"]);
+    commands.push(["pnpm", "--filter", "@unicas/space-protocol", "build"]);
+    commands.push(["pnpm", "--filter", "@unicas/space-client", "build"]);
     commands.push(["node", "stacks/unicas/deploy/smoke.mjs"]);
   }
   return commands;

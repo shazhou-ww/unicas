@@ -45,7 +45,7 @@ export interface OAuthDiscoveryPort {
 export interface OAuthIssuerInspectionChallengeInput {
   readonly nonce: string;
   readonly inspectionId: string;
-  readonly stackId: string;
+  readonly appId: string;
   readonly issuer: string;
   readonly audience: string;
   readonly metadataDigest: string;
@@ -61,7 +61,7 @@ export function buildOAuthIssuerInspectionChallenge(
     OAUTH_ISSUER_INSPECTION_CHALLENGE_VERSION,
     input.nonce,
     input.inspectionId,
-    input.stackId,
+    input.appId,
     input.issuer,
     input.audience,
     input.metadataDigest,
@@ -76,15 +76,15 @@ export function parseOAuthIssuerInspectionChallenge(
 ): OAuthIssuerInspectionChallengeInput | null {
   const parts = challenge.split("\n");
   if (parts.length !== 10 || parts[0] !== OAUTH_ISSUER_INSPECTION_CHALLENGE_VERSION) return null;
-  const [, nonce, inspectionId, stackId, issuer, audience, metadataDigest, jwksDigest, lifetimeText, expiresText] = parts;
+  const [, nonce, inspectionId, appId, issuer, audience, metadataDigest, jwksDigest, lifetimeText, expiresText] = parts;
   const capabilityMaxLifetimeSeconds = Number(lifetimeText);
   const expiresAt = Number(expiresText);
-  if (!nonce || !inspectionId || !stackId || !issuer || !audience || !metadataDigest || !jwksDigest
+  if (!nonce || !inspectionId || !appId || !issuer || !audience || !metadataDigest || !jwksDigest
     || !Number.isSafeInteger(capabilityMaxLifetimeSeconds) || !Number.isSafeInteger(expiresAt)) return null;
   return {
     nonce,
     inspectionId,
-    stackId,
+    appId,
     issuer,
     audience,
     metadataDigest,

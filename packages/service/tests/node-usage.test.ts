@@ -6,7 +6,7 @@ import {
   type NodeUsageScope,
 } from "../src/index.js";
 
-const SCOPE = { stackId: "cas_stack_a", tenantId: "tenant-1" };
+const SCOPE = { appId: "cas_stack_a", spaceId: "tenant-1" };
 
 class MemoryNodeUsageRepository implements NodeUsageRepository {
   nodes: NodeUsageEntry[] = [];
