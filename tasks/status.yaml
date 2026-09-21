@@ -69,6 +69,10 @@ tasks:
     state: completed
     createdAt: "2026-09-14T09:30:47Z"
     updatedAt: "2026-09-19T05:12:49Z"
+  promote-app-user-api-to-beta:
+    state: backlog
+    createdAt: "2026-09-21T03:18:47Z"
+    updatedAt: "2026-09-21T03:18:47Z"
   replace-active-app-oauth-issuer:
     state: completed
     createdAt: "2026-09-15T14:26:52Z"
