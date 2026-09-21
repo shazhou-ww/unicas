@@ -453,7 +453,7 @@ describe("standalone deployment plan", () => {
     expect(job).toContain('wrangler secret put "$name"');
     expect(job).toContain("if: vars.APP_SPACE_V1_CUTOVER_ENABLED == 'true'");
     expect(job).toContain("UNICAS_RELEASE_ADMIN_SESSION: ${{ secrets.UNICAS_RELEASE_ADMIN_SESSION }}");
-    expect(job).toContain("run: pnpm exec tsx stacks/unicas/deploy/cut-over-app-space-v1-issuers.mjs");
+    expect(job).toContain("run: node stacks/unicas/deploy/cut-over-app-space-v1-issuers.mjs");
   });
 
   test("creates missing encryption secrets before a production deployment", () => {

@@ -3,10 +3,31 @@ import { describe, expect, test } from "vitest";
 import {
   appSpaceV1Audience,
   cutOverAppSpaceV1Issuers,
+  parseIssuerInspectionChallenge,
 } from "../stacks/unicas/deploy/cut-over-app-space-v1-issuers.mjs";
-import { buildOAuthIssuerInspectionChallenge } from "../packages/service/src/oauth-discovery.ts";
+import {
+  buildOAuthIssuerInspectionChallenge,
+  parseOAuthIssuerInspectionChallenge,
+} from "../packages/service/src/oauth-discovery.ts";
 
 describe("App/Space v1 production issuer cutover", () => {
+  test("parses the exact service challenge grammar without a TypeScript runtime", () => {
+    const challenge = buildOAuthIssuerInspectionChallenge({
+      nonce: "nonce-1",
+      inspectionId: "inspection-1",
+      appId: "app-1",
+      issuer: "https://issuer.example",
+      audience: "https://api.unicas.work/v1/apps/app-1",
+      metadataDigest: "metadata-digest",
+      jwksDigest: "jwks-digest",
+      capabilityMaxLifetimeSeconds: 1_800,
+      expiresAt: 1_800_000_000_000,
+    });
+    expect(parseIssuerInspectionChallenge(challenge))
+      .toEqual(parseOAuthIssuerInspectionChallenge(challenge));
+    expect(parseIssuerInspectionChallenge(`${challenge}\nextra`)).toBeNull();
+  });
+
   test("inspects, proves, activates, and verifies an old audience", async () => {
     const { privateKey, publicKey } = await generateKeyPair("ES256", { extractable: true });
     const calls = [];

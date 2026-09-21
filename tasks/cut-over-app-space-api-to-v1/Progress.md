@@ -83,6 +83,12 @@ primary integration, and delivery acceptance remain.
   remained unchanged. The follow-up reuses the service's structured challenge
   parser to validate the embedded App, issuer, and v1 audience before signing;
   its focused 38-test validation passes.
+- Production retry `35612354560` also stopped before any issuer activation
+  because the root workspace does not expose a `tsx` executable. Both active
+  audiences again remained unchanged. The script now has no TypeScript runtime
+  dependency: plain Node imports it successfully, its strict local parser is
+  tested equal to the service parser for the formal 10-line challenge grammar,
+  and the focused suite passes 39 tests.
 
 ## Blockers
 
