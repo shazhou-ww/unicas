@@ -41,7 +41,6 @@ const handlers = vi.hoisted(() => ({
     kid: "key-v2",
     permissions: [],
   })),
-  spaceVerifierOptions: [] as unknown[],
 }));
 
 vi.mock("../src/schema.js", () => ({
@@ -72,9 +71,6 @@ vi.mock("@unicas/service", async (importOriginal) => {
       verify = handlers.verify;
     },
     AppSpaceCapabilityVerifier: class {
-      constructor(options: unknown) {
-        handlers.spaceVerifierOptions.push(options);
-      }
       verify = handlers.verifySpace;
     },
   };
@@ -122,7 +118,6 @@ const ctx = {} as ExecutionContext;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  handlers.spaceVerifierOptions.length = 0;
   handlers.spaceGet.mockImplementation(() => ({ fetch: handlers.spaceActor }));
 });
 
@@ -289,11 +284,16 @@ describe("service-cloudflare public routing", () => {
     expect(handlers.migrate).toHaveBeenCalledTimes(1);
   });
 
-  test("authorizes Space routes through the v2 verifier and trusted scope", async () => {
+  test("authorizes Space routes through the released verifier and trusted scope", async () => {
     const spaceEnv = { ...env, CAS_DB: {} } as Env;
     const space = await worker.fetch(new Request(
-      "https://cas.example/v2/apps/app-1/spaces/space-1/cas/usage",
-      { headers: { Authorization: "Bearer v2-capability" } },
+      "https://cas.example/v1/apps/app-1/spaces/space-1/cas/usage",
+      {
+        headers: {
+          Authorization: "Bearer v1-capability",
+          "X-CAS-Route-Family": "attacker",
+        },
+      },
     ), spaceEnv, ctx);
     const app = await worker.fetch(new Request(
       "https://cas.example/admin/apps/app-1",
@@ -311,71 +311,11 @@ describe("service-cloudflare public routing", () => {
     const spaceRequest = handlers.spaceActor.mock.calls[0]![0] as Request;
     expect(spaceRequest.headers.get("X-CAS-App-Id")).toBe("app-1");
     expect(spaceRequest.headers.get("X-CAS-Space-Id")).toBe("space-1");
+    expect(spaceRequest.headers.get("X-CAS-Route-Family")).toBe("app-space");
     const adminRequest = handlers.admin.mock.calls[0]![0] as Request;
     expect(adminRequest.url).toBe("https://cas.example/admin/apps/app-1");
     expect(handlers.migrate).toHaveBeenCalledTimes(1);
     expect(handlers.migrateControl).toHaveBeenCalledTimes(1);
-  });
-
-  test("passes an absolute legacy v2 issuance cutoff to the Space verifier", async () => {
-    const cutoff = "2026-09-28T00:00:00Z";
-    const spaceEnv = {
-      ...env,
-      CAS_DB: {},
-      CAS_SPACE_CAPABILITY_V2_ISSUED_BEFORE: cutoff,
-    } as Env;
-    const response = await worker.fetch(new Request(
-      "https://cas.example/v2/apps/app-1/spaces/space-1/cas/usage",
-      { headers: { Authorization: "Bearer capability" } },
-    ), spaceEnv, ctx);
-
-    expect(response.status).toBe(200);
-    expect(handlers.spaceVerifierOptions).toContainEqual(expect.objectContaining({
-      legacyV2IssuedBefore: Date.parse(cutoff),
-    }));
-  });
-
-  test.each([
-    ["2026-09-28T00:00:00.123456789Z", Date.parse("2026-09-28T00:00:00.123Z")],
-    ["2026-09-28T08:00:00+08:00", Date.parse("2026-09-28T00:00:00Z")],
-  ])("accepts absolute RFC 3339 cutoff %s", async (cutoff, expected) => {
-    const spaceEnv = {
-      ...env,
-      CAS_DB: {},
-      CAS_SPACE_CAPABILITY_V2_ISSUED_BEFORE: cutoff,
-    } as Env;
-    const response = await worker.fetch(new Request(
-      "https://cas.example/v2/apps/app-1/spaces/space-1/cas/usage",
-      { headers: { Authorization: "Bearer capability" } },
-    ), spaceEnv, ctx);
-
-    expect(response.status).toBe(200);
-    expect(handlers.spaceVerifierOptions).toContainEqual(expect.objectContaining({
-      legacyV2IssuedBefore: expected,
-    }));
-  });
-
-  test.each([
-    "2026-09-28",
-    "2026-09-31T00:00:00Z",
-    "2026-02-29T00:00:00Z",
-    "2026-09-28T24:00:00Z",
-    "2026-09-28T00:60:00Z",
-    "2026-09-28T00:00:00+24:00",
-    "2026-09-28T00:00:00-00:00",
-  ])("fails closed for invalid legacy v2 issuance cutoff %s", async (cutoff) => {
-    const spaceEnv = {
-      ...env,
-      CAS_DB: {},
-      CAS_SPACE_CAPABILITY_V2_ISSUED_BEFORE: cutoff,
-    } as Env;
-
-    await expect(worker.fetch(new Request(
-      "https://cas.example/v2/apps/app-1/spaces/space-1/cas/usage",
-    ), spaceEnv, ctx)).rejects.toThrow(
-      "CAS_SPACE_CAPABILITY_V2_ISSUED_BEFORE must be an RFC 3339 timestamp",
-    );
-    expect(handlers.verifySpace).not.toHaveBeenCalled();
   });
 
   test("dispatches tenant operations to the canonical Durable Object with trusted headers", async () => {

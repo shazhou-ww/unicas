@@ -5,7 +5,7 @@ import { migrateAppSpaceSchema } from "../src/schema.js";
 import {
   canonicalizeRootRefsUpdate,
   executeDomainUpdate,
-  listSpaceRootRefs,
+  listRootRefs,
   parseRootRefsBody,
   withDomainRetry,
   RootRefsErrorCodes,
@@ -111,7 +111,7 @@ describe("atomic Root Refs update", () => {
       "INSERT INTO cas_root_domain_refs (app_id, ref_domain, space_id, hash, ref_count) VALUES (?, ?, ?, ?, ?)",
     ).bind(STACK, "other", TENANT, H3, 9).run();
 
-    const first = await listSpaceRootRefs({
+    const first = await listRootRefs({
       db: db!, appId: STACK, spaceId: TENANT, refDomain: DOMAIN, limit: 1, cursor: "",
     });
     expect(first).toEqual({
@@ -120,7 +120,7 @@ describe("atomic Root Refs update", () => {
       items: [{ hash: H1, refCount: 1 }],
       nextCursor: H1,
     });
-    await expect(listSpaceRootRefs({
+    await expect(listRootRefs({
       db: db!, appId: STACK, spaceId: TENANT, refDomain: DOMAIN, limit: 1, cursor: H1,
     })).resolves.toEqual({
       refDomain: DOMAIN,

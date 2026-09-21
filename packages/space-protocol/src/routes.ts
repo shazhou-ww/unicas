@@ -21,17 +21,17 @@ function decodeSegment(value: string): string | null {
 
 export const appSpaceRoutes = {
   readContent: ({ appId, spaceId, hash }: { appId: string; spaceId: string; hash: string }) =>
-    `/v2/apps/${segment(appId)}/spaces/${segment(spaceId)}/cas/nodes/${segment(hash)}/content`,
+    `/v1/apps/${segment(appId)}/spaces/${segment(spaceId)}/cas/nodes/${segment(hash)}/content`,
   readMetadata: ({ appId, spaceId, hash }: { appId: string; spaceId: string; hash: string }) =>
-    `/v2/apps/${segment(appId)}/spaces/${segment(spaceId)}/cas/nodes/${segment(hash)}/metadata`,
+    `/v1/apps/${segment(appId)}/spaces/${segment(spaceId)}/cas/nodes/${segment(hash)}/metadata`,
   lease: ({ appId, spaceId, hash }: { appId: string; spaceId: string; hash: string }) =>
-    `/v2/apps/${segment(appId)}/spaces/${segment(spaceId)}/cas/nodes/${segment(hash)}/lease`,
+    `/v1/apps/${segment(appId)}/spaces/${segment(spaceId)}/cas/nodes/${segment(hash)}/lease`,
   usage: ({ appId, spaceId }: { appId: string; spaceId: string }) =>
-    `/v2/apps/${segment(appId)}/spaces/${segment(spaceId)}/cas/usage`,
+    `/v1/apps/${segment(appId)}/spaces/${segment(spaceId)}/cas/usage`,
   gc: ({ appId, spaceId }: { appId: string; spaceId: string }) =>
-    `/v2/apps/${segment(appId)}/spaces/${segment(spaceId)}/cas/gc`,
+    `/v1/apps/${segment(appId)}/spaces/${segment(spaceId)}/cas/gc`,
   updateRootRefs: ({ appId, spaceId }: { appId: string; spaceId: string }) =>
-    `/v2/apps/${segment(appId)}/spaces/${segment(spaceId)}/root-refs`,
+    `/v1/apps/${segment(appId)}/spaces/${segment(spaceId)}/root-refs`,
   listRootRefs: (
     { appId, spaceId }: { appId: string; spaceId: string },
     query: { readonly limit?: number; readonly cursor?: string } = {},
@@ -40,14 +40,14 @@ export const appSpaceRoutes = {
     if (query.limit !== undefined) params.set("limit", String(query.limit));
     if (query.cursor !== undefined) params.set("cursor", query.cursor);
     const suffix = params.size === 0 ? "" : `?${params}`;
-    return `/v2/apps/${segment(appId)}/spaces/${segment(spaceId)}/root-refs${suffix}`;
+    return `/v1/apps/${segment(appId)}/spaces/${segment(spaceId)}/root-refs${suffix}`;
   },
 } as const;
 
 export function matchAppSpaceRoute(method: string, pathname: string): AppSpaceRoute | null {
   const parts = pathname.split("/").filter(Boolean);
   if (
-    parts[0] !== "v2"
+    parts[0] !== "v1"
     || parts[1] !== "apps"
     || !parts[2]
     || parts[3] !== "spaces"

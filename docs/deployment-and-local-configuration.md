@@ -24,7 +24,7 @@ It starts:
 | Surface | Default URL |
 | --- | --- |
 | Administrator console | `http://localhost:4070/admin/` |
-| Browser-facing UniCAS edge | `http://localhost:4070/v2/apps/.../spaces/...` |
+| Browser-facing UniCAS edge | `http://localhost:4070/v1/apps/.../spaces/...` |
 | Direct Miniflare edge | `http://127.0.0.1:8794` |
 | Mock OIDC discovery | `http://127.0.0.1:8793/.well-known/openid-configuration` |
 
@@ -156,40 +156,21 @@ Deploy the lease-upload migration in this order:
 1. Configure the R2 signing credentials and browser CORS policy.
 2. Deploy the service so its idempotent startup migration creates
    `cas_node_uploads`, `cas_node_upload_cleanup`, and the `cas_nodes.ready`
-   column before accepting v2 traffic.
-3. Publish protocol and client consumers together. This is an intentional v2
-   break: old clients using inline bodies or `X-CAS-Upload-*` headers are not
-   compatible with the new endpoint.
+   column before accepting App/Space traffic.
+3. Publish protocol and client consumers together. Clients using inline bodies
+   or `X-CAS-Upload-*` headers are not compatible with the released endpoint.
 4. Run the App/Space smoke test, which exercises lease, direct PUT, repeated
    lease publication, readback, Root Refs, usage, GC, and Space isolation.
 
-### Space capability v3 rollout
+### App/Space v1 rollout
 
-The Space HTTP API remains v2, while its capability claim advances to `ver: 3`
-with exact operation permissions. Legacy `ver: 2` broad permissions are
-disabled by default. A transition deployment may set the non-secret Worker
-text binding below to an exclusive absolute RFC 3339 issuance cutoff:
-
-```text
-CAS_SPACE_CAPABILITY_V2_ISSUED_BEFORE=2026-09-28T00:00:00Z
-```
-
-Use `Z` or a known numeric offset; RFC 3339's unknown-offset form `-00:00` is
-rejected. Fractional seconds are accepted and conservatively truncated to
-milliseconds, the runtime's comparison precision.
-
-Do not commit a temporary production cutoff to `wrangler.toml`. Configure it
-for the target Worker environment, deploy the compatible verifier, and update
-every participating App issuer to emit v3 before that instant. The cutoff can
-be no more than seven days in the future; malformed or farther-future values
-fail closed.
-
-After the cutoff, wait for the greatest `capabilityMaxLifetimeSeconds` among
-active App issuers plus 30 seconds of clock tolerance. Then remove the binding
-and redeploy. A v2 token must have `iat` before the cutoff and still pass its
-normal expiry, route scope, and issuer lifetime checks, so this process leaves
-no steady-state broad-permission path. Never move an elapsed cutoff forward
-without separate deployment review.
+The released Space HTTP API and its family-local capability claim both use
+version 1 with exact operation permissions. Deploy the service and maintained
+App consumers from the same accepted repository revision. Prototype routes,
+claim versions, and broad permissions are rejected immediately; there is no
+cutoff binding or compatibility mode. Follow the
+[prototype migration guide](app-user-api/migration-v2-to-v1.md) for consumer
+changes and rollback boundaries.
 
 Optional OIDC/session variables include `OIDC_ISSUER`, `OIDC_DISCOVERY_URL`,
 `SESSION_TTL_MS`, `SESSION_COOKIE_NAME`, `SESSION_COOKIE_SECURE`, and

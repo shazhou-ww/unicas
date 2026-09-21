@@ -17,7 +17,8 @@ const SESSION_KEY = createHash("sha256").update("unicas local development sessio
 
 const WORKSPACE_ALIASES = Object.fromEntries(Object.entries({
   "@unicas/codec": "packages/codec/src/index.ts",
-  "@unicas/space-protocol/openapi-v1.json": "packages/space-protocol/openapi/tenant-v1.openapi.json",
+  "@unicas/space-protocol/openapi.json": "packages/space-protocol/openapi/app-space-v1.openapi.json",
+  "@unicas/space-protocol/v1/openapi.json": "packages/space-protocol/openapi/tenant-v1.openapi.json",
   "@unicas/space-protocol": "packages/space-protocol/src/index.ts",
   "@unicas/admin-protocol/openapi-v2.json": "packages/admin-protocol/openapi/admin-v2.openapi.json",
   "@unicas/admin-protocol": "packages/admin-protocol/src/index.ts",

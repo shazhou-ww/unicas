@@ -32,9 +32,9 @@ describe("generated OpenAPI documents", () => {
     );
   });
 
-  test("Space v2 document is current", async () => {
+  test("App/Space v1 document is current", async () => {
     expect(jsonValue(await generateSpaceOpenApiDocument())).toEqual(
-      await readJson("packages/space-protocol/openapi/space-v2.openapi.json"),
+      await readJson("packages/space-protocol/openapi/app-space-v1.openapi.json"),
     );
   });
 });

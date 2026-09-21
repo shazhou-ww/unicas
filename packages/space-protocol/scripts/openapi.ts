@@ -1,7 +1,7 @@
 import { OpenAPIGenerator } from "@orpc/openapi";
 import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4";
 import { casTenantApiContract } from "../src/v1/contract.js";
-import { spaceApiContract } from "../src/space-v2-contract.js";
+import { spaceApiContract } from "../src/space-contract.js";
 
 export function generateV1OpenApiDocument() {
   const generator = new OpenAPIGenerator({
@@ -68,11 +68,11 @@ export function generateSpaceOpenApiDocument() {
   return generator.generate(spaceApiContract, {
     info: {
       title: "UniCAS Space API",
-      version: "2.0.0",
+      version: "1.0.0",
       description: [
         "App-scoped Space API for immutable content-addressed nodes, leases, usage accounting, garbage collection, and atomic Root Ref commits.",
         "",
-        "Every request uses a version 3 JWT capability on the version 2 HTTP API. The registered issuer establishes App authority; the token's signed `spaceId` must match the route and its exact operation permission must authorize the request.",
+        "Every request uses a version 1 JWT capability on the version 1 HTTP API. The registered issuer establishes App authority; the token's signed `spaceId` must match the route and its exact operation permission must authorize the request.",
         "",
         "Principal identity and Profile metadata are independent of Space ownership and authorization.",
       ].join("\n"),
@@ -92,7 +92,7 @@ export function generateSpaceOpenApiDocument() {
           type: "http",
           scheme: "bearer",
           bearerFormat: "JWT",
-          description: "Version 3 Space capability. Issuer authority and signed spaceId must match the request path, and the permission set must contain the operation's exact CAS authority.",
+          description: "Version 1 Space capability. Issuer authority and signed spaceId must match the request path, and the permission set must contain the operation's exact CAS authority.",
         },
       },
     },

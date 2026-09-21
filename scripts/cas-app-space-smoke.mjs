@@ -159,7 +159,7 @@ async function main() {
       `GC keeps current leased nodes (deleted ${gc.deleted} stale nodes)`,
     );
 
-    const prefix = `/v2/apps/${encodeURIComponent(APP_ID)}/spaces/${encodeURIComponent(SPACE_ID)}`;
+    const prefix = `/v1/apps/${encodeURIComponent(APP_ID)}/spaces/${encodeURIComponent(SPACE_ID)}`;
     const isolationToken = await issueSpace(ISOLATION_SPACE_ID);
     let response = await fetch(`${BASE}${prefix}/cas/nodes/${parent.hash}/content`, {
       headers: { Authorization: `Bearer ${isolationToken}` },

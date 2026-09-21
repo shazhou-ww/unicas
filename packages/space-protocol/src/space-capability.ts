@@ -85,7 +85,7 @@ function spaceOperationPermission(
   return kind as SpaceCapabilityPermission;
 }
 
-export const SpaceCapabilityVersion = 3 as const;
+export const SpaceCapabilityVersion = 1 as const;
 
 export interface SpaceCapabilityClaims extends JWTPayload {
   readonly ver: typeof SpaceCapabilityVersion;

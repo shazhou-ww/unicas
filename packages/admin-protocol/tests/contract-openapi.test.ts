@@ -140,7 +140,7 @@ describe("CAS admin schemas", () => {
     const issuer: AppOAuthIssuer = {
       appId: "app-1",
       issuer: "https://issuer.example",
-      audience: "https://api.unicas.work/v2/apps/app-1",
+      audience: "https://api.unicas.work/v1/apps/app-1",
       metadataUrl: "https://issuer.example/.well-known/oauth-authorization-server",
       metadataType: "oauth",
       authorizationEndpoint: "https://issuer.example/authorize",

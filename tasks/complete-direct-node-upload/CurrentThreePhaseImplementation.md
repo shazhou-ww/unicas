@@ -11,7 +11,7 @@ the current contract remains ambiguous or incomplete.
 
 The implementation sources are:
 
-- [Space v2 contract](/packages/space-protocol/src/space-v2-contract.ts)
+- [Current Space contract](/packages/space-protocol/src/space-contract.ts)
 - [Tenant client](/packages/space-client/src/client.ts)
 - [Cloud-neutral node lease kernel](/packages/service/src/node-lease.ts)
 - [Cloudflare Space Durable Object](/packages/service-cloudflare/src/space-do.ts)

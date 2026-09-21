@@ -11,9 +11,9 @@ import {
 } from "../src/index.js";
 import { casReadPermission, parseCapabilityPermission } from "../src/v1.js";
 
-describe("Space capability v3 vocabulary", () => {
+describe("Space capability v1 vocabulary", () => {
   test("uses an explicit version and operation permission grammar", () => {
-    expect(SpaceCapabilityVersion).toBe(3);
+    expect(SpaceCapabilityVersion).toBe(1);
     expect(spaceNodeReadPermission()).toBe("cas:nodes:read");
     expect(spaceNodeLeasePermission()).toBe("cas:nodes:lease");
     expect(spaceRootRefsReadPermission()).toBe("cas:root-refs:read");
@@ -40,10 +40,10 @@ describe("Space capability v3 vocabulary", () => {
     expect(parseSpaceCapabilityPermission("cas:root-refs:lease")).toBeNull();
   });
 
-  test("keeps v1 and v3 permission parsers disjoint", () => {
-    const v1Permission = casReadPermission("scope-a");
+  test("keeps Space and frozen Stack/Tenant permission parsers disjoint", () => {
+    const tenantPermission = casReadPermission("scope-a");
     const spacePermission = spaceNodeReadPermission();
-    expect(parseSpaceCapabilityPermission(v1Permission)).toBeNull();
+    expect(parseSpaceCapabilityPermission(tenantPermission)).toBeNull();
     expect(parseCapabilityPermission(spacePermission)).toBeNull();
   });
 });

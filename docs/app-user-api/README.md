@@ -2,7 +2,7 @@
 
 Status: published integration guide
 
-This guide is for teams building end-user experiences on the UniCAS public v2
+This guide is for teams building end-user experiences on the UniCAS public v1
 Space API. It explains how an App authenticates its own users, maps business
 Principals to Spaces, issues least-privileged capabilities, and uses immutable
 CAS nodes plus atomic Root Refs without exposing administrator credentials.
@@ -16,12 +16,14 @@ CAS nodes plus atomic Root Refs without exposing administrator credentials.
 4. Use [HTTP operation reference](http-api.md) for runtime behavior and known
   contract gaps across all seven public operations.
 5. Use [Capability authorization](authorization.md) for claims, permissions,
-  denial behavior, least-privilege examples, and legacy capability migration.
+  denial behavior, and least-privilege examples.
+6. Use [Prototype v2 migration](migration-v2-to-v1.md) when updating an
+  existing pre-release integration.
 
 Machine-readable sources remain authoritative:
 
-- [Space v2 contract](../../packages/space-protocol/src/space-v2-contract.ts)
-- [Generated Space v2 OpenAPI](../../packages/space-protocol/openapi/space-v2.openapi.json)
+- [App/Space v1 contract](../../packages/space-protocol/src/space-contract.ts)
+- [Generated App/Space v1 OpenAPI](../../packages/space-protocol/openapi/app-space-v1.openapi.json)
 - [Capability vocabulary](../../packages/space-protocol/src/space-capability.ts)
 - [`@unicas/space-client` transport](../../packages/space-client/src/client.ts)
 
@@ -31,13 +33,13 @@ The guide explains those sources; it does not define a second schema.
 
 The route version and capability version are intentionally independent:
 
-- public Space routes remain under `/v2/apps/{appId}/spaces/{spaceId}`;
-- current Space capability claims use `ver: 3`;
+- public Space routes use `/v1/apps/{appId}/spaces/{spaceId}`;
+- released Space capability claims use family-local `ver: 1`;
 - the required signed `spaceId` is the capability's sole Space scope; and
 - every operation requires one exact permission from the following set.
 
-In this guide, v3 always means the capability claim contract. There is no
-public `/v3` Space route family.
+The frozen Stack/Tenant capability also uses family-local `ver: 1`, but its
+required `tenantId` and scoped permissions form a disjoint grammar.
 
 ```text
 cas:nodes:read
@@ -49,9 +51,8 @@ cas:gc:execute
 ```
 
 Permissions do not imply one another. Both Root Ref permissions additionally
-require a valid signed `refDomain`. The old capability `ver: 2` broad
-permissions are disabled by default and exist only behind the bounded rollout
-described in [Version 2 migration](authorization.md#version-2-migration).
+require a valid signed `refDomain`. Prototype Space capability versions 2 and
+3 and their broad permissions are rejected without a compatibility cutoff.
 
 ## Actors and trust boundaries
 
@@ -143,7 +144,7 @@ architecture.
 4. Add a valid `refDomain` only when listing or updating Root Refs.
 5. Issue a short-lived capability for the configured UniCAS audience.
 6. Deliver it over the App's authenticated channel.
-7. Call `https://api.unicas.work/v2/apps/{appId}/spaces/{spaceId}/...`.
+7. Call `https://api.unicas.work/v1/apps/{appId}/spaces/{spaceId}/...`.
 8. Treat Root Ref commit, not upload completion, as the durable business-state
    boundary.
 9. Refresh expired capabilities through the App; never turn authorization
@@ -156,8 +157,9 @@ behavior does not add Space API authority.
 
 ## Compatibility and source-of-truth rules
 
-This guide documents only App/Space v2 routes under `/v2/apps/{appId}/spaces/`.
-It does not reinterpret historical routes, tokens, or storage names.
+This guide documents only released App/Space v1 routes under
+`/v1/apps/{appId}/spaces/`. It does not reinterpret historical routes, tokens,
+or storage names.
 
 When sources differ:
 

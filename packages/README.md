@@ -67,7 +67,7 @@ packages/                           @unicas org
 │
 ├── ■ 内核/库层（cloud-neutral）
 │   ├── service/           @unicas/service            data + admin HTTP actor
-│   │     精确匹配 v2 App/Space 与 frozen v1 protocol；定义 control/data SQL、
+│   │     精确匹配 v1 App/Space 与 frozen v1 protocol；定义 control/data SQL、
 │   │     blob、按 key 串行 actor 等平台端口；内置 App/Space 与 v1 capability
 │   │     校验、权限矩阵与有界 authority
 │   │     cache，以及 Root Ref 校验/幂等/投影/revision/retry 业务内核；不依赖
@@ -216,7 +216,7 @@ Current Space capability 归属 `space-protocol/src/space-capability.ts`，共�
 | **node GC 内核下沉 service** | 过期无引用候选、删除前复核、content-before-metadata 顺序与回收统计迁入 `@unicas/service`；D1/R2 adapter 保留候选 SQL、对象删除和 multiplicity-aware edge cascade |
 | **node usage 内核下沉 service** | logical/physical/reservation/readiness/lease 统计语义迁入 `@unicas/service`；D1/R2 adapter 只列 node、读取 canonical object 大小与 reservation 总量 |
 | **node read 内核下沉 service** | own-content HTTP range 解析、canonical payload offset 与 metadata/state shaping 迁入 `@unicas/service`；D1/R2 adapter 只读 node row、ordered edges 与 object range |
-| **lease-driven upload 内核下沉 service** | v2 lease 的 generation fencing、临时对象检查、canonical validation、child readiness 与 publication 编排迁入 `@unicas/service`；Cloudflare adapter 负责 D1/R2 facts 与 presigned PUT |
+| **lease-driven upload 内核下沉 service** | App/Space lease 的 generation fencing、临时对象检查、canonical validation、child readiness 与 publication 编排迁入 `@unicas/service`；Cloudflare adapter 负责 D1/R2 facts 与 presigned PUT |
 | **tenant Cloudflare 包收口** | D1/R2 repositories、tenant/domain DO、schema 与 audit RPC 迁入 `@unicas/service-cloudflare`，删除 `@unicas/server-cloudflare` |
 
 ## 待办（README 定方向）

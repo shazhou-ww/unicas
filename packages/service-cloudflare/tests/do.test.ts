@@ -414,7 +414,7 @@ function spaceLeaseRequest(hash: string, leaseDurationMs = 60_000): Request {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-CAS-Api-Version": "2",
+      "X-CAS-Route-Family": "app-space",
       "X-CAS-App-Id": STACK,
       "X-CAS-Space-Id": TENANT,
       "X-CAS-Hash": hash,

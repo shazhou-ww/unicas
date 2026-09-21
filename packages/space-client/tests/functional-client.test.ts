@@ -147,7 +147,7 @@ describe("functional tenant CAS client", () => {
     expect(errorResponse?.bodyUsed).toBe(true);
   });
 
-  it("uses the v2 App and Space route family with a versioned cache key", async () => {
+  it("uses the v1 App and Space route family with a versioned cache key", async () => {
     const requests: Request[] = [];
     const metadataKeys: unknown[] = [];
     const hash = "a".repeat(64);
@@ -196,13 +196,13 @@ describe("functional tenant CAS client", () => {
     await client.usage();
     await client.gc({ maxNodes: 25 });
 
-    expect(metadataKeys).toEqual([{ version: 2, appId: "app/1", spaceId: "space/1", hash }]);
+    expect(metadataKeys).toEqual([{ version: 1, appId: "app/1", spaceId: "space/1", hash }]);
     expect(requests.map((request) => new URL(request.url).pathname + new URL(request.url).search)).toEqual([
-      `/v2/apps/app%2F1/spaces/space%2F1/cas/nodes/${hash}/metadata`,
-      "/v2/apps/app%2F1/spaces/space%2F1/root-refs?limit=10&cursor=next",
-      "/v2/apps/app%2F1/spaces/space%2F1/root-refs",
-      "/v2/apps/app%2F1/spaces/space%2F1/cas/usage",
-      "/v2/apps/app%2F1/spaces/space%2F1/cas/gc",
+      `/v1/apps/app%2F1/spaces/space%2F1/cas/nodes/${hash}/metadata`,
+      "/v1/apps/app%2F1/spaces/space%2F1/root-refs?limit=10&cursor=next",
+      "/v1/apps/app%2F1/spaces/space%2F1/root-refs",
+      "/v1/apps/app%2F1/spaces/space%2F1/cas/usage",
+      "/v1/apps/app%2F1/spaces/space%2F1/cas/gc",
     ]);
     expect(requests.every((request) => request.headers.get("Authorization") === "Bearer space-token")).toBe(true);
     expect(requests.every((request) => !new URL(request.url).pathname.startsWith("/stacks/"))).toBe(true);

@@ -36,7 +36,7 @@ import {
 import { CloudflareNodeGcRepository } from "./node-gc.js";
 import { CloudflareNodeReadRepository } from "./node-read.js";
 import { CloudflareNodeUsageRepository } from "./node-usage.js";
-import { canonicalizeRootRefsUpdate, listSpaceRootRefs, parseRootRefsBody } from "./root-refs.js";
+import { canonicalizeRootRefsUpdate, listRootRefs, parseRootRefsBody } from "./root-refs.js";
 import { RootRefsErrorCodes, RootRefsValidationError } from "./root-refs.js";
 import { ServerTiming } from "./timing.js";
 import { R2UploadPresigner } from "./r2-upload-presigner.js";
@@ -98,7 +98,7 @@ export class CasDurableObject {
       } else if (url.pathname === "/rootRefs" && request.method === "GET") {
         const limit = parseRootRefsLimit(url.searchParams.get("limit"));
         const cursor = parseRootRefsCursor(url.searchParams.get("cursor"));
-        response = jsonResponse(await listSpaceRootRefs({
+        response = jsonResponse(await listRootRefs({
           db: store.db,
           appId: appId,
           spaceId: spaceId,
@@ -147,7 +147,7 @@ export class CasDurableObject {
 
   async #handleLease(request: Request, store: Parameters<typeof leaseReadyNode>[0]): Promise<unknown> {
     const hash = requireHeader(request, "X-CAS-Hash");
-    if (request.headers.get("X-CAS-Api-Version") === "2") {
+    if (request.headers.get("X-CAS-Route-Family") === "app-space") {
       return this.#handleSpaceLease(request, store, hash);
     }
     const leaseDurationMs = parseLeaseDuration(request.headers.get("X-CAS-Lease-Duration"));

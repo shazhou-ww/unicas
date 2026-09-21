@@ -1,8 +1,8 @@
 {
   "info": {
     "title": "UniCAS Space API",
-    "version": "2.0.0",
-    "description": "App-scoped Space API for immutable content-addressed nodes, leases, usage accounting, garbage collection, and atomic Root Ref commits.\n\nEvery request uses a version 3 JWT capability on the version 2 HTTP API. The registered issuer establishes App authority; the token's signed `spaceId` must match the route and its exact operation permission must authorize the request.\n\nPrincipal identity and Profile metadata are independent of Space ownership and authorization."
+    "version": "1.0.0",
+    "description": "App-scoped Space API for immutable content-addressed nodes, leases, usage accounting, garbage collection, and atomic Root Ref commits.\n\nEvery request uses a version 1 JWT capability on the version 1 HTTP API. The registered issuer establishes App authority; the token's signed `spaceId` must match the route and its exact operation permission must authorize the request.\n\nPrincipal identity and Profile metadata are independent of Space ownership and authorization."
   },
   "servers": [
     {
@@ -35,15 +35,15 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT",
-        "description": "Version 3 Space capability. Issuer authority and signed spaceId must match the request path, and the permission set must contain the operation's exact CAS authority."
+        "description": "Version 1 Space capability. Issuer authority and signed spaceId must match the request path, and the permission set must contain the operation's exact CAS authority."
       }
     }
   },
   "openapi": "3.1.1",
   "paths": {
-    "/v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/content": {
+    "/v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/content": {
       "get": {
-        "operationId": "readSpaceContent",
+        "operationId": "readContent",
         "summary": "Read immutable node content",
         "description": "Streams canonical bytes for a ready node in the requested Space. Requires cas:nodes:read.",
         "tags": [
@@ -254,8 +254,8 @@
               }
             }
           },
-          "500": {
-            "description": "500",
+          "503": {
+            "description": "503",
             "content": {
               "application/json": {
                 "schema": {
@@ -264,7 +264,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "INTERNAL_ERROR"
+                        "SERVICE_UNAVAILABLE"
                       ]
                     },
                     "message": {
@@ -281,9 +281,9 @@
         }
       }
     },
-    "/v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/metadata": {
+    "/v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/metadata": {
       "get": {
-        "operationId": "readSpaceMetadata",
+        "operationId": "readMetadata",
         "summary": "Read node metadata",
         "description": "Returns immutable metadata and mutable retention state for one Space node. Requires cas:nodes:read.",
         "tags": [
@@ -581,8 +581,8 @@
               }
             }
           },
-          "500": {
-            "description": "500",
+          "503": {
+            "description": "503",
             "content": {
               "application/json": {
                 "schema": {
@@ -591,7 +591,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "INTERNAL_ERROR"
+                        "SERVICE_UNAVAILABLE"
                       ]
                     },
                     "message": {
@@ -608,9 +608,9 @@
         }
       }
     },
-    "/v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/lease": {
+    "/v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/lease": {
       "post": {
-        "operationId": "leaseSpaceNode",
+        "operationId": "leaseNode",
         "summary": "Lease a node",
         "description": "Advances the lease-driven node state machine and returns the resulting ready, upload, replacement-upload, or dependency state. Requires cas:nodes:lease.",
         "tags": [
@@ -1045,8 +1045,8 @@
               }
             }
           },
-          "500": {
-            "description": "500",
+          "503": {
+            "description": "503",
             "content": {
               "application/json": {
                 "schema": {
@@ -1055,7 +1055,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "INTERNAL_ERROR"
+                        "SERVICE_UNAVAILABLE"
                       ]
                     },
                     "message": {
@@ -1072,9 +1072,9 @@
         }
       }
     },
-    "/v2/apps/{appId}/spaces/{spaceId}/cas/usage": {
+    "/v1/apps/{appId}/spaces/{spaceId}/cas/usage": {
       "get": {
-        "operationId": "getSpaceUsage",
+        "operationId": "getUsage",
         "summary": "Read Space CAS usage",
         "description": "Returns current operational accounting for one Space. Requires cas:usage:read.",
         "tags": [
@@ -1328,8 +1328,8 @@
               }
             }
           },
-          "500": {
-            "description": "500",
+          "503": {
+            "description": "503",
             "content": {
               "application/json": {
                 "schema": {
@@ -1338,7 +1338,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "INTERNAL_ERROR"
+                        "SERVICE_UNAVAILABLE"
                       ]
                     },
                     "message": {
@@ -1355,9 +1355,9 @@
         }
       }
     },
-    "/v2/apps/{appId}/spaces/{spaceId}/cas/gc": {
+    "/v1/apps/{appId}/spaces/{spaceId}/cas/gc": {
       "post": {
-        "operationId": "runSpaceGc",
+        "operationId": "runGc",
         "summary": "Run Space garbage collection",
         "description": "Runs one bounded and race-safe garbage-collection pass within the Space. Requires cas:gc:execute.",
         "tags": [
@@ -1606,8 +1606,8 @@
               }
             }
           },
-          "500": {
-            "description": "500",
+          "503": {
+            "description": "503",
             "content": {
               "application/json": {
                 "schema": {
@@ -1616,7 +1616,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "INTERNAL_ERROR"
+                        "SERVICE_UNAVAILABLE"
                       ]
                     },
                     "message": {
@@ -1633,9 +1633,9 @@
         }
       }
     },
-    "/v2/apps/{appId}/spaces/{spaceId}/root-refs": {
+    "/v1/apps/{appId}/spaces/{spaceId}/root-refs": {
       "get": {
-        "operationId": "listSpaceRootRefs",
+        "operationId": "listRootRefs",
         "summary": "List Space Root Ref balances",
         "description": "Returns a revision-stable page for the refDomain in the verified capability. Requires cas:root-refs:read and a valid signed refDomain.",
         "tags": [
@@ -1668,7 +1668,7 @@
             "schema": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 1000
+              "maximum": 200
             },
             "allowEmptyValue": true,
             "allowReserved": true
@@ -1918,8 +1918,8 @@
               }
             }
           },
-          "500": {
-            "description": "500",
+          "503": {
+            "description": "503",
             "content": {
               "application/json": {
                 "schema": {
@@ -1928,7 +1928,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "INTERNAL_ERROR"
+                        "SERVICE_UNAVAILABLE"
                       ]
                     },
                     "message": {
@@ -1945,7 +1945,7 @@
         }
       },
       "post": {
-        "operationId": "updateSpaceRootRefs",
+        "operationId": "updateRootRefs",
         "summary": "Apply Space Root Ref changes",
         "description": "Atomically applies signed Root Ref deltas in the capability's refDomain. Requires cas:root-refs:update and a valid signed refDomain.",
         "tags": [
@@ -1983,22 +1983,27 @@
                   "requestId": {
                     "type": "string",
                     "minLength": 1,
+                    "maxLength": 256,
                     "description": "Stable idempotency identity for this commit."
                   },
                   "changes": {
                     "type": "object",
                     "propertyNames": {
                       "type": "string",
-                      "pattern": "^[0-9a-f]{64}$",
-                      "description": "Lowercase hexadecimal SHA-256 digest of canonical CAS node bytes."
+                      "pattern": "^[0-9a-f]{64}$"
                     },
                     "additionalProperties": {
                       "type": "integer",
-                      "minimum": -9007199254740991,
-                      "maximum": 9007199254740991
+                      "minimum": -1000000,
+                      "maximum": 1000000,
+                      "not": {
+                        "const": 0
+                      }
                     },
                     "readOnly": true,
-                    "description": "Signed Root Ref deltas keyed by node digest."
+                    "minProperties": 1,
+                    "maxProperties": 1000,
+                    "description": "One to 1,000 non-zero signed Root Ref deltas keyed by lowercase SHA-256 digest."
                   }
                 },
                 "required": [
@@ -2208,8 +2213,8 @@
               }
             }
           },
-          "500": {
-            "description": "500",
+          "503": {
+            "description": "503",
             "content": {
               "application/json": {
                 "schema": {
@@ -2218,7 +2223,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "INTERNAL_ERROR"
+                        "SERVICE_UNAVAILABLE"
                       ]
                     },
                     "message": {

@@ -170,7 +170,7 @@ export class CloudflareRootRefRepository implements RootRefRepository {
   }
 }
 
-export async function listSpaceRootRefs(input: {
+export async function listRootRefs(input: {
   readonly db: D1Database;
   readonly appId: string;
   readonly spaceId: string;

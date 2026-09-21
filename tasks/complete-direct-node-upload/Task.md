@@ -191,7 +191,7 @@ The proposed replacement is specified in
 
 - [Current three-phase implementation](./CurrentThreePhaseImplementation.md)
 - [Proposed lease upload design](./LeaseUploadDesign.md)
-- [Space v2 contract](/packages/space-protocol/src/space-v2-contract.ts)
+- [Current Space contract](/packages/space-protocol/src/space-contract.ts)
 - [Node lease service kernel](/packages/service/src/node-lease.ts)
 - [Cloudflare node upload adapter](/packages/service-cloudflare/src/space-do.ts)
 - [R2 upload presigner](/packages/service-cloudflare/src/r2-upload-presigner.ts)

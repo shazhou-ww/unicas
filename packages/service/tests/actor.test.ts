@@ -108,7 +108,7 @@ describe("createUniCasService", () => {
 
   test("classifies App and Space routes separately from v1", () => {
     expect(matchUniCasServiceRoute(new Request(
-      "https://api.unicas.work/v2/apps/app-1/spaces/space-1/cas/usage",
+      "https://api.unicas.work/v1/apps/app-1/spaces/space-1/cas/usage",
     ))).toEqual({
       plane: "space",
       route: { operation: "usage", appId: "app-1", spaceId: "space-1" },
@@ -146,17 +146,20 @@ describe("createUniCasService", () => {
     ))).toBeNull();
   });
 
-  test("returns not implemented until v2 platform handlers are configured", async () => {
+  test("returns not implemented until App/Space platform handlers are configured", async () => {
     const actor = createUniCasService({
       platform,
       authorizeV1StackTenantRequest: vi.fn(),
     });
     expect((await actor.fetch(new Request(
-      "https://api.unicas.work/v2/apps/app-1/spaces/space-1/cas/usage",
+      "https://api.unicas.work/v1/apps/app-1/spaces/space-1/cas/usage",
     ))).status).toBe(501);
     expect((await actor.fetch(new Request(
       "https://console.unicas.work/admin/apps/app-1",
     ))).status).toBe(501);
+    expect((await actor.fetch(new Request(
+      "https://api.unicas.work/v2/apps/app-1/spaces/space-1/cas/usage",
+    ))).status).toBe(404);
   });
 
   test("dispatches Space requests from the authorized App and Space scope", async () => {
@@ -164,8 +167,8 @@ describe("createUniCasService", () => {
       appId: "app/a",
       spaceId: "space/b",
       subject: "caller",
-      jti: "request-v2",
-      kid: "key-v2",
+      jti: "request-v1",
+      kid: "key-v1",
       permissions: ["cas:usage:read"],
     }));
     const actor = createUniCasService({
@@ -175,7 +178,7 @@ describe("createUniCasService", () => {
       handleAppAdminRequest: vi.fn(),
     });
     const response = await actor.fetch(new Request(
-      "https://api.unicas.work/v2/apps/app%2Fa/spaces/space%2Fb/cas/usage",
+      "https://api.unicas.work/v1/apps/app%2Fa/spaces/space%2Fb/cas/usage",
       { headers: { "X-CAS-App-Id": "attacker", "X-CAS-Space-Id": "attacker" } },
     ));
     expect(await response.text()).toBe("space");
@@ -190,7 +193,7 @@ describe("createUniCasService", () => {
     expect(forwarded.headers.get("X-CAS-Tenant-Id")).toBeNull();
   });
 
-  test("forwards v2 lease JSON and rejects legacy upload headers", async () => {
+  test("forwards App/Space lease JSON and rejects legacy upload headers", async () => {
     const actor = createUniCasService({
       platform,
       authorizeV1StackTenantRequest: vi.fn(),
@@ -198,20 +201,20 @@ describe("createUniCasService", () => {
         appId: "app-1",
         spaceId: "space-1",
         subject: "caller",
-        jti: "request-v2-lease",
-        kid: "key-v2",
+        jti: "request-v1-lease",
+        kid: "key-v1",
         permissions: ["cas:nodes:lease"],
       }),
       handleAppAdminRequest: vi.fn(),
     });
-    const url = `https://api.unicas.work/v2/apps/app-1/spaces/space-1/cas/nodes/${"a".repeat(64)}/lease`;
+    const url = `https://api.unicas.work/v1/apps/app-1/spaces/space-1/cas/nodes/${"a".repeat(64)}/lease`;
     await actor.fetch(new Request(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ leaseDurationMs: 60_000 }),
     }));
     const [, forwarded] = spaceActorFetch.mock.calls.at(-1)!;
-    expect(forwarded.headers.get("X-CAS-Api-Version")).toBe("2");
+    expect(forwarded.headers.get("X-CAS-Route-Family")).toBe("app-space");
     expect(forwarded.headers.get("Content-Type")).toBe("application/json");
     await expect(forwarded.json()).resolves.toEqual({ leaseDurationMs: 60_000 });
 
@@ -240,7 +243,7 @@ describe("createUniCasService", () => {
     });
 
     const spaceResponse = await actor.fetch(new Request(
-      "https://api.unicas.work/v2/apps/app-1/spaces/space-1/cas/usage",
+      "https://api.unicas.work/v1/apps/app-1/spaces/space-1/cas/usage",
     ));
     expect(spaceResponse.status).toBe(403);
     await expect(spaceResponse.json()).resolves.toEqual({

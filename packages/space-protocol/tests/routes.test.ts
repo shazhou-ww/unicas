@@ -98,7 +98,7 @@ describe("CAS routes (canonical stack-scoped)", () => {
   });
 });
 
-describe("CAS v2 routes (App/Space)", () => {
+describe("CAS v1 routes (App/Space)", () => {
   test.each([
     ["GET", appSpaceRoutes.readContent({ appId: APP, spaceId: SPACE, hash: "abc" }), "readContent"],
     ["GET", appSpaceRoutes.readMetadata({ appId: APP, spaceId: SPACE, hash: "abc" }), "readMetadata"],
@@ -115,7 +115,7 @@ describe("CAS v2 routes (App/Space)", () => {
     });
   });
 
-  test("every v2 data route carries appId + spaceId", () => {
+  test("every App/Space data route carries appId + spaceId", () => {
     const routes: readonly AppSpaceRoute[] = [
       { operation: "readContent", appId: APP, spaceId: SPACE, hash: "a".repeat(64) },
       { operation: "readMetadata", appId: APP, spaceId: SPACE, hash: "a".repeat(64) },
@@ -131,26 +131,30 @@ describe("CAS v2 routes (App/Space)", () => {
     }
   });
 
-  test("freezes encoded v2 paths", () => {
+  test("freezes encoded v1 paths", () => {
     expect(appSpaceRoutes.readContent({ appId: "app/a", spaceId: "space/a", hash: "hash value" }))
-      .toBe("/v2/apps/app%2Fa/spaces/space%2Fa/cas/nodes/hash%20value/content");
+      .toBe("/v1/apps/app%2Fa/spaces/space%2Fa/cas/nodes/hash%20value/content");
     expect(appSpaceRoutes.listRootRefs(
       { appId: APP, spaceId: SPACE },
       { limit: 10, cursor: "abc" },
-    )).toBe(`/v2/apps/${APP}/spaces/space%2Fa/root-refs?limit=10&cursor=abc`);
+    )).toBe(`/v1/apps/${APP}/spaces/space%2Fa/root-refs?limit=10&cursor=abc`);
   });
 
-  test("keeps v1 and v2 route matchers disjoint", () => {
-    const v1 = casRoutes.usage({ stackId: STACK, tenantId: TENANT });
-    const v2 = appSpaceRoutes.usage({ appId: APP, spaceId: SPACE });
-    expect(matchAppSpaceRoute("GET", v1)).toBeNull();
-    expect(matchCasRoute("GET", v2)).toBeNull();
+  test("keeps App/Space and frozen Stack/Tenant route matchers disjoint", () => {
+    const stackTenant = casRoutes.usage({ stackId: STACK, tenantId: TENANT });
+    const appSpace = appSpaceRoutes.usage({ appId: APP, spaceId: SPACE });
+    expect(matchAppSpaceRoute("GET", stackTenant)).toBeNull();
+    expect(matchCasRoute("GET", appSpace)).toBeNull();
+  });
+
+  test("rejects prototype v2 routes", () => {
+    expect(matchAppSpaceRoute("GET", "/v2/apps/a/spaces/s/cas/usage")).toBeNull();
   });
 
   test("rejects unknown methods, malformed escapes, and incomplete scopes", () => {
     expect(matchAppSpaceRoute("PUT", appSpaceRoutes.lease({ appId: APP, spaceId: SPACE, hash: "h" }))).toBeNull();
-    expect(matchAppSpaceRoute("GET", "/v2/apps/%ZZ/spaces/s/cas/usage")).toBeNull();
-    expect(matchAppSpaceRoute("GET", "/v2/apps/a/cas/usage")).toBeNull();
+    expect(matchAppSpaceRoute("GET", "/v1/apps/%ZZ/spaces/s/cas/usage")).toBeNull();
+    expect(matchAppSpaceRoute("GET", "/v1/apps/a/cas/usage")).toBeNull();
   });
 });
 

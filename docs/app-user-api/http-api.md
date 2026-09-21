@@ -12,7 +12,7 @@ Base origin: `https://api.unicas.work`
 Every route is scoped by both `appId` and `spaceId`:
 
 ```text
-/v2/apps/{appId}/spaces/{spaceId}/...
+/v1/apps/{appId}/spaces/{spaceId}/...
 ```
 
 Send a Space capability through the HTTP bearer authentication scheme:
@@ -21,7 +21,7 @@ Send a Space capability through the HTTP bearer authentication scheme:
 Authorization: Bearer CAPABILITY
 ```
 
-The HTTP API remains v2. Its capability claim version is `3`: the signed
+The HTTP API and Space capability claim both use family-local version `1`: the signed
 `spaceId` must match the route and `permissions` must contain the operation's
 exact authority.
 
@@ -36,21 +36,21 @@ than modeling `Authorization` as an ordinary operation header.
 
 | Client operation | Method and path | Authority | Success |
 | --- | --- | --- | --- |
-| `readContent` | `GET /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/content` | `cas:nodes:read` | Streamed canonical bytes |
-| `readMetadata` | `GET /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/metadata` | `cas:nodes:read` | Metadata and retention state |
-| `leaseNode` | `POST /v2/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/lease` | `cas:nodes:lease` | Ready lease or direct-upload instructions |
-| `usage` | `GET /v2/apps/{appId}/spaces/{spaceId}/cas/usage` | `cas:usage:read` | Space accounting |
-| `gc` | `POST /v2/apps/{appId}/spaces/{spaceId}/cas/gc` | `cas:gc:execute` | Bounded collection result |
-| `listRootRefs` | `GET /v2/apps/{appId}/spaces/{spaceId}/root-refs` | `cas:root-refs:read` + `refDomain` | Revision-stable page |
-| `updateRootRefs` | `POST /v2/apps/{appId}/spaces/{spaceId}/root-refs` | `cas:root-refs:update` + `refDomain` | Atomic commit result |
+| `readContent` | `GET /v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/content` | `cas:nodes:read` | Streamed canonical bytes |
+| `readMetadata` | `GET /v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/metadata` | `cas:nodes:read` | Metadata and retention state |
+| `leaseNode` | `POST /v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/lease` | `cas:nodes:lease` | Ready lease or direct-upload instructions |
+| `usage` | `GET /v1/apps/{appId}/spaces/{spaceId}/cas/usage` | `cas:usage:read` | Space accounting |
+| `gc` | `POST /v1/apps/{appId}/spaces/{spaceId}/cas/gc` | `cas:gc:execute` | Bounded collection result |
+| `listRootRefs` | `GET /v1/apps/{appId}/spaces/{spaceId}/root-refs` | `cas:root-refs:read` + `refDomain` | Revision-stable page |
+| `updateRootRefs` | `POST /v1/apps/{appId}/spaces/{spaceId}/root-refs` | `cas:root-refs:update` + `refDomain` | Atomic commit result |
 
-There are no other public v2 Space operations in the current generated
+There are no other public v1 Space operations in the current generated
 OpenAPI.
 
 ## Read node content
 
 ```http
-GET /v2/apps/APP_ID/spaces/SPACE_ID/cas/nodes/HASH/content
+GET /v1/apps/APP_ID/spaces/SPACE_ID/cas/nodes/HASH/content
 Authorization: Bearer CAPABILITY
 Range: bytes=0-1023
 ```
@@ -87,7 +87,7 @@ honor cancellation.
 ## Read node metadata
 
 ```http
-GET /v2/apps/APP_ID/spaces/SPACE_ID/cas/nodes/HASH/metadata
+GET /v1/apps/APP_ID/spaces/SPACE_ID/cas/nodes/HASH/metadata
 Authorization: Bearer CAPABILITY
 ```
 
@@ -117,7 +117,7 @@ and may use configured metadata caching.
 ## Lease or upload a node
 
 ```http
-POST /v2/apps/APP_ID/spaces/SPACE_ID/cas/nodes/HASH/lease
+POST /v1/apps/APP_ID/spaces/SPACE_ID/cas/nodes/HASH/lease
 Authorization: Bearer CAPABILITY
 content-type: application/json
 
@@ -172,7 +172,7 @@ retry the same lease after active upload work has drained.
 ## Get Space usage
 
 ```http
-GET /v2/apps/APP_ID/spaces/SPACE_ID/cas/usage
+GET /v1/apps/APP_ID/spaces/SPACE_ID/cas/usage
 Authorization: Bearer CAPABILITY
 ```
 
@@ -196,7 +196,7 @@ values may change concurrently.
 ## Run bounded garbage collection
 
 ```http
-POST /v2/apps/APP_ID/spaces/SPACE_ID/cas/gc
+POST /v1/apps/APP_ID/spaces/SPACE_ID/cas/gc
 Authorization: Bearer CAPABILITY
 Content-Type: application/json
 
@@ -228,7 +228,7 @@ client retry is defined.
 ## List Root Refs
 
 ```http
-GET /v2/apps/APP_ID/spaces/SPACE_ID/root-refs?limit=100&cursor=CURSOR
+GET /v1/apps/APP_ID/spaces/SPACE_ID/root-refs?limit=100&cursor=CURSOR
 Authorization: Bearer CAPABILITY
 ```
 
@@ -236,7 +236,7 @@ Query:
 
 | Name | Constraint |
 | --- | --- |
-| `limit` | Optional integer from 1 through 1000 |
+| `limit` | Optional integer from 1 through 200 |
 | `cursor` | Optional non-empty opaque string |
 
 `200` response:
@@ -263,7 +263,7 @@ same capability domain. Pages are revision-stable.
 ## Atomically update Root Refs
 
 ```http
-POST /v2/apps/APP_ID/spaces/SPACE_ID/root-refs
+POST /v1/apps/APP_ID/spaces/SPACE_ID/root-refs
 Authorization: Bearer CAPABILITY
 Content-Type: application/json
 
@@ -321,7 +321,7 @@ Only `error` is required by OpenAPI. The shared operation error map is:
 | `409` | `CONFLICT` |
 | `413` | `PAYLOAD_TOO_LARGE` |
 | `429` | `RESOURCE_EXHAUSTED` |
-| `500` | `INTERNAL_ERROR` |
+| `503` | `SERVICE_UNAVAILABLE` |
 
 The service returns more specific stable authorization codes such as
 `missing_token`, `invalid_token`, `unknown_issuer`, `registry_unavailable`,
@@ -334,7 +334,7 @@ treat `message` as optional diagnostic text.
 
 The current sources have known representational gaps:
 
-1. The TypeScript contract models `readSpaceContent` as
+1. The TypeScript contract models `readContent` as
    `ReadableStream<Uint8Array>` using the canonical media type, while its
    generated OpenAPI `200` response has empty `content`.
 2. Runtime and the public client support byte ranges, but the TypeScript
@@ -348,6 +348,6 @@ The current sources have known representational gaps:
    error codes.
 
 Integrators must not infer new routes or fields from these gaps. The
-[generated OpenAPI](../../packages/space-protocol/openapi/space-v2.openapi.json)
+[generated OpenAPI](../../packages/space-protocol/openapi/app-space-v1.openapi.json)
 remains the operation inventory, and runtime-only behavior above is supported
 by service tests.

@@ -2,7 +2,7 @@ import { createApiReference } from "@scalar/api-reference";
 import "@scalar/api-reference/style.css";
 
 createApiReference("#api-reference", {
-  url: "/openapi/space-v2.openapi.json",
+  url: "/openapi/app-space-v1.openapi.json",
   theme: "default",
   layout: "modern",
   darkMode: false,

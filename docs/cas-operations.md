@@ -5,7 +5,7 @@ Runbooks, SLOs, and alerting for the independently deployed CAS middleware
 
 | Component | Worker / resource | Notes |
 |---|---|---|
-| UniCAS service (public) | `unicas` | Single `@unicas/service-cloudflare` Worker for `/v2/apps`, `/admin`, MCP/OAuth, and admin UI |
+| UniCAS service (public) | `unicas` | Single `@unicas/service-cloudflare` Worker for `/v1/apps`, `/admin`, MCP/OAuth, and admin UI |
 | Spaces file App | `unicas-spaces` | Separate `@unicas/spaces` Worker, Google user login, App-owned issuer, file catalog, and release smoke |
 | OAuth KV | dedicated `OAUTH_KV` namespace | OAuth clients, grants, token hashes, and encrypted authorization transactions |
 | Control D1 | `unicas-control` (`3a64d58d-…`) | Apps, issuers, members, and audit; physical tables still use Stack names |
@@ -26,7 +26,7 @@ in vars or source. Deployment credentials are supplied through
 | SLO | Target | Measurement | Error budget (30d) |
 |---|---|---|---|
 | Service availability | 99.9% | `/health` + Space/admin request success | 43.8 min |
-| Space + admin availability | 99.9% | `/v2/apps` + `/admin` success | 43.8 min |
+| Space + admin availability | 99.9% | `/v1/apps` + `/admin` success | 43.8 min |
 | Service p95 latency (live) | < 500 ms | Worker request duration | — |
 | Space node read p95 (cached/DB) | < 200 ms | node metadata/content reads | — |
 | Key rotation effectiveness | new key ≤ 60 s, revoked key ≤ 60 s | JWKS cache bounds (30 s TTL / 60 s hard stale) | — |
@@ -479,7 +479,7 @@ Operational checks:
 
 ### Incident checklist
 
-1. Confirm service `/health`; confirm `/v2/apps` + `/admin/apps` probes.
+1. Confirm service `/health`; confirm `/v1/apps` + `/admin/apps` probes.
 2. `wrangler deployments list` for `unicas` — recent deploy?
    Rollback first, diagnose later.
 3. Grep `cas_app_authorization` (and retained v1 `cas_stack_authorization`) for `fail_closed` / `unknown_issuer` —

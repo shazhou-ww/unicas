@@ -60,7 +60,6 @@ export interface SpaceEnv extends SpaceCasDoEnv, RootRefDomainDoEnv {
 export type Env = SpaceEnv & AdminBffEnv & McpEnv & {
   CAS_PUBLIC_ORIGIN?: string;
   CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS?: string;
-  CAS_SPACE_CAPABILITY_V2_ISSUED_BEFORE?: string;
 };
 
 const DATA_PLANE_STRIPPED_HEADERS = [
@@ -232,6 +231,7 @@ function publicRouteOwner(pathname: string): PublicRouteOwner | null {
   ) return "mcp";
   if (
     pathname === "/health"
+    || pathname.startsWith("/v1/apps/")
     || pathname.startsWith("/stacks/")
     || pathname.startsWith("/.well-known/")
   ) return "cas";
@@ -404,9 +404,6 @@ function spaceVerifierFor(env: Env): AppSpaceCapabilityVerifier {
     });
     verifier = new AppSpaceCapabilityVerifier({
       repository: new AppAuthorityRepository(env.CAS_CONTROL_DB),
-      legacyV2IssuedBefore: parseLegacyV2IssuedBefore(
-        env.CAS_SPACE_CAPABILITY_V2_ISSUED_BEFORE,
-      ),
       jwksFetcher: async (url, options) => {
         return new URL(url).protocol === "data:"
           ? fetch(url, options)
@@ -419,46 +416,6 @@ function spaceVerifierFor(env: Env): AppSpaceCapabilityVerifier {
     spaceVerifiers.set(key, verifier);
   }
   return verifier;
-}
-
-function parseLegacyV2IssuedBefore(value: string | undefined): number | undefined {
-  const trimmed = value?.trim();
-  if (!trimmed) return undefined;
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(?:Z|([+-])(\d{2}):(\d{2}))$/.exec(trimmed);
-  if (!match) {
-    throw new TypeError("CAS_SPACE_CAPABILITY_V2_ISSUED_BEFORE must be an RFC 3339 timestamp");
-  }
-  const [, yearText, monthText, dayText, hourText, minuteText, secondText, fractionText, offsetSign, offsetHourText, offsetMinuteText] = match;
-  const year = Number(yearText);
-  const month = Number(monthText);
-  const day = Number(dayText);
-  const hour = Number(hourText);
-  const minute = Number(minuteText);
-  const second = Number(secondText);
-  const offsetHour = Number(offsetHourText ?? 0);
-  const offsetMinute = Number(offsetMinuteText ?? 0);
-  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  if (
-    year === 0
-    || month < 1 || month > 12
-    || day < 1 || day > daysInMonth[month - 1]!
-    || hour > 23 || minute > 59 || second > 59
-    || offsetHour > 23 || offsetMinute > 59
-    || offsetSign === "-" && offsetHour === 0 && offsetMinute === 0
-  ) {
-    throw new TypeError("CAS_SPACE_CAPABILITY_V2_ISSUED_BEFORE must be an RFC 3339 timestamp");
-  }
-  const milliseconds = `${fractionText ?? ""}000`.slice(0, 3);
-  const localTimestamp = Date.parse(
-    `${yearText}-${monthText}-${dayText}T${hourText}:${minuteText}:${secondText}.${milliseconds}Z`,
-  );
-  const offsetMs = (offsetHour * 60 + offsetMinute) * 60_000;
-  const timestamp = localTimestamp + (offsetSign === "-" ? offsetMs : offsetSign === "+" ? -offsetMs : 0);
-  if (!Number.isSafeInteger(timestamp)) {
-    throw new TypeError("CAS_SPACE_CAPABILITY_V2_ISSUED_BEFORE must be an RFC 3339 timestamp");
-  }
-  return timestamp;
 }
 
 function platformFromEnv(env: Env, timing?: TimingSink): ServicePlatform {

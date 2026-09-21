@@ -68,27 +68,27 @@ task keeps that legacy surface isolated but does not remove it.
 
 ## Acceptance criteria
 
-- [ ] A reviewed contract inventory identifies every released App/Space v1
+- [x] A reviewed contract inventory identifies every released App/Space v1
       operation, operation ID, schema, error, limit, retry and idempotency rule,
       capability requirement, and generated OpenAPI entry.
-- [ ] The released App/Space base path is exactly
+- [x] The released App/Space base path is exactly
       `/v1/apps/{appId}/spaces/{spaceId}` across protocol constants, route
       builders, service matching, generated OpenAPI, SDK calls, examples,
       smoke commands, and current documentation.
-- [ ] The released Space capability uses exactly the reviewed claim version,
+- [x] The released Space capability uses exactly the reviewed claim version,
       grammar, resource binding, and exact-operation permission vocabulary;
       prototype claims, broad permissions, and migration cutoffs cannot
       authorize App/Space v1 requests.
-- [ ] One atomic mixed-sign Root Ref update operation is represented
+- [x] One atomic mixed-sign Root Ref update operation is represented
   consistently in protocol, OpenAPI, clients, service routing,
   authorization, examples, and migration guidance; any GC hint is derived
   from committed negative deltas rather than operation identity.
-- [ ] Prototype `/v2/apps/{appId}/spaces/{spaceId}` routes return no supported
+- [x] Prototype `/v2/apps/{appId}/spaces/{spaceId}` routes return no supported
       operation and are absent from maintained exports, route builders,
       generated OpenAPI, clients, examples, and current documentation.
-- [ ] Cross-version tests prove that prototype routes or capabilities cannot
+- [x] Cross-version tests prove that prototype routes or capabilities cannot
       be mixed with the released v1 route and authority.
-- [ ] The old Stack/Tenant surface remains behaviorally unchanged and isolated
+- [x] The old Stack/Tenant surface remains behaviorally unchanged and isolated
       pending its dedicated retirement task; no temporary alias translates
       between it and App/Space v1.
 - [ ] Protocol, client, higher-level workflow, service, Cloudflare, OpenAPI,

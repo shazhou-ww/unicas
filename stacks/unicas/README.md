@@ -23,7 +23,7 @@ pnpm smoke:v1 -- [baseUrl]   # frozen compatibility only
 
 Production deploys one `@unicas/service-cloudflare` Worker containing the
 Space and App admin HTTP service, admin BFF/UI, MCP ingress, and public routing.
-The default smoke entry exercises App/Space v2 and expects provisioned App
+The default smoke entry exercises App/Space v1 and expects provisioned App
 credentials under the gitignored `.wrangler/cas-deploy/` directory.
 
 The independently deployed `@unicas/spaces` file App owns

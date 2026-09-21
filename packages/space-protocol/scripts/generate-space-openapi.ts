@@ -3,7 +3,7 @@ import { dirname, relative, resolve } from "node:path";
 import { generateSpaceOpenApiDocument } from "./openapi.js";
 
 const document = await generateSpaceOpenApiDocument();
-const jsonPath = resolve(process.cwd(), "openapi/space-v2.openapi.json");
+const jsonPath = resolve(process.cwd(), "openapi/app-space-v1.openapi.json");
 
 await mkdir(dirname(jsonPath), { recursive: true });
 await writeFile(jsonPath, `${JSON.stringify(document, null, 2)}\n`, "utf8");

@@ -11,8 +11,8 @@ export {
   SpaceApiBasePath,
   SpaceApiErrorMap,
   spaceApiContract,
-} from "./space-v2-contract.js";
-export type { SpaceApiContract } from "./space-v2-contract.js";
+} from "./space-contract.js";
+export type { SpaceApiContract } from "./space-contract.js";
 
 export type {
   AppId,

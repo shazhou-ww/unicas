@@ -68,7 +68,7 @@ describe("cross-plane separation", () => {
       "app_issuer_space_capability",
       "v1_stack_issuer_jwt_capability",
     ]);
-    expect(casAuthPlanePolicy.spaceDataPlane.pathPrefix).toBe("/v2/apps");
+    expect(casAuthPlanePolicy.spaceDataPlane.pathPrefix).toBe("/v1/apps");
     expect(casAuthPlanePolicy.spaceDataPlane.credential).toBe(
       "app_issuer_space_capability",
     );

@@ -1,6 +1,6 @@
 # App/Space v1 interface review
 
-Status: Pending requesting-user approval.
+Status: Approved by the requesting user on 2026-09-21.
 
 ## Decision requested
 

@@ -128,7 +128,7 @@ export function createUniCasService(context: ServiceContext): HttpActor {
 }
 
 function notImplementedResponse(): Response {
-  return Response.json({ error: "UniCAS v2 endpoint is not configured" }, { status: 501 });
+  return Response.json({ error: "UniCAS endpoint is not configured" }, { status: 501 });
 }
 
 function v1AuthorizationErrorResponse(error: unknown): Response {
@@ -174,7 +174,7 @@ async function dispatchSpaceRequest(
     {
       "X-CAS-App-Id": call.appId,
       "X-CAS-Space-Id": call.spaceId,
-      "X-CAS-Api-Version": "2",
+      "X-CAS-Route-Family": "app-space",
     },
     call.refDomain,
   );
@@ -229,20 +229,20 @@ async function dispatchDataRequest(
       path = "/lease";
       method = "POST";
       headers["X-CAS-Hash"] = route.hash;
-      if (headers["X-CAS-Api-Version"] === "2") {
+      if (headers["X-CAS-Route-Family"] === "app-space") {
         if (
           request.headers.has(CasLeaseDurationHeader)
           || request.headers.has(CasUploadLengthHeader)
           || request.headers.has(CasUploadIdHeader)
         ) {
           return Response.json(
-            { error: "INVALID_REQUEST", message: "Legacy node lease headers are not supported by v2" },
+            { error: "INVALID_REQUEST", message: "Legacy node lease headers are not supported by App/Space" },
             { status: 400 },
           );
         }
         if (request.headers.get("Content-Type")?.split(";", 1)[0]?.trim() !== "application/json") {
           return Response.json(
-            { error: "INVALID_REQUEST", message: "v2 node lease requires application/json" },
+            { error: "INVALID_REQUEST", message: "App/Space node lease requires application/json" },
             { status: 400 },
           );
         }

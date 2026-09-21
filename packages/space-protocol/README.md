@@ -6,8 +6,8 @@ The package keeps two disjoint contracts:
 
 - frozen Stack/Tenant v1: `casTenantApiContract`, `casRoutes`, `ver: 1`,
   `tenantId`, and `tenants:` permissions;
-- App/Space v2 HTTP API: `spaceApiContract`, `appSpaceRoutes`, capability
-  `ver: 3`, signed `spaceId`, and exact `cas:{resource}:{action}` permissions.
+- App/Space v1 HTTP API: `spaceApiContract`, `appSpaceRoutes`, capability
+  `ver: 1`, signed `spaceId`, and exact `cas:{resource}:{action}` permissions.
 
 Both cover node, lease, usage, garbage collection, and Root Ref operations.
 Binary CAS node bodies remain streamable. Neither version reinterprets claims
@@ -28,13 +28,13 @@ Generate the OpenAPI 3.1 JSON from the repository root:
 
 ```text
 pnpm --filter @unicas/space-protocol docs:generate
-pnpm --filter @unicas/space-protocol docs:generate:v2
+pnpm --filter @unicas/space-protocol docs:generate:space
 ```
 
 The generated files are `openapi/tenant-v1.openapi.json` and
-`openapi/space-v2.openapi.json`. The package exports them as
-`./openapi-v1.json` and `./openapi-v2.json`. Generation commands are separate and never overwrite
-the frozen v1 artifact.
+`openapi/app-space-v1.openapi.json`. The package exports them as
+`./v1/openapi.json` and `./openapi.json`, respectively. Generation commands are
+separate and never overwrite the frozen v1 artifact.
 
 Validate with:
 

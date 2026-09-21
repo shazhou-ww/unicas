@@ -29,8 +29,8 @@ export function createBrowserCasNodeCache(
     databaseName: options.databaseName ?? "unicas-node-cache-v2",
     namespaceParts: (endpoint, principal) => ["v2", endpoint, principal],
     keyParts: (key, kind) => {
-      if (!("appId" in key) || key.version !== 2) {
-        throw new TypeError("App/Space cache requires a v2 cache key");
+      if (!("appId" in key) || key.version !== 1) {
+        throw new TypeError("App/Space cache requires a v1 cache key");
       }
       return ["v2", key.appId, key.spaceId, key.hash, kind];
     },

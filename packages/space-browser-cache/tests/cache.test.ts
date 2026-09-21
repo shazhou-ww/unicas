@@ -6,7 +6,7 @@ import {
   type BrowserCasNodeCache as V1BrowserCasNodeCache,
 } from "../src/v1.js";
 
-const key = { version: 2 as const, appId: "app", spaceId: "space", hash: "a".repeat(64) };
+const key = { version: 1 as const, appId: "app", spaceId: "space", hash: "a".repeat(64) };
 const legacyKey = { stackId: "app", tenantId: "space", hash: key.hash };
 const metadata = { hash: key.hash, size: 6, contentType: "text/plain", refs: [] };
 const caches: Array<BrowserCasNodeCache | V1BrowserCasNodeCache> = [];
@@ -73,7 +73,7 @@ test("uses a v2 App and Space namespace that cannot collide with v1", async () =
   const loadLegacy = vi.fn(async () => metadata);
   expect(await legacy.metadata(legacyKey, loadLegacy)).toEqual(metadata);
   expect(loadLegacy).not.toHaveBeenCalled();
-  await expect(space.metadata(legacyKey as never, async () => metadata)).rejects.toThrow("v2 cache key");
+  await expect(space.metadata(legacyKey as never, async () => metadata)).rejects.toThrow("v1 cache key");
   await expect(legacy.metadata(key as never, async () => metadata)).rejects.toThrow("v1 cache key");
 });
 

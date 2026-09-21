@@ -9,7 +9,7 @@ import type {
   SpaceNodeUploadRejection,
 } from "./types.js";
 
-export const SpaceApiBasePath = "/v2/apps/{appId}/spaces/{spaceId}";
+export const SpaceApiBasePath = "/v1/apps/{appId}/spaces/{spaceId}";
 export const DefaultSpaceNodeLeaseDurationMs = 15 * 60 * 1000;
 
 const ErrorDataSchema = z.object({ message: z.string().optional() }).readonly();
@@ -22,7 +22,7 @@ export const SpaceApiErrorMap = {
   CONFLICT: { status: 409, message: "The CAS mutation conflicts with current state", data: ErrorDataSchema },
   PAYLOAD_TOO_LARGE: { status: 413, message: "The CAS payload exceeds the configured limit", data: ErrorDataSchema },
   RESOURCE_EXHAUSTED: { status: 429, message: "The Space has too many active uploads", data: ErrorDataSchema },
-  INTERNAL_ERROR: { status: 500, message: "The CAS operation failed", data: ErrorDataSchema },
+  SERVICE_UNAVAILABLE: { status: 503, message: "The CAS operation is temporarily unavailable", data: ErrorDataSchema },
 } as const;
 
 const spaceProcedure = oc.errors(SpaceApiErrorMap);
@@ -116,9 +116,34 @@ const GcResultSchema = z.object({
   reclaimedContentBytes: z.number().int().nonnegative(),
 }).readonly().meta({ id: "SpaceGcResult" });
 const RefChangesSchema = z.record(HashSchema, z.number().int()).readonly()
+  .refine(
+    (changes) => {
+      const deltas = Object.values(changes);
+      return deltas.length >= 1
+        && deltas.length <= 1_000
+        && deltas.every((delta) => Number.isSafeInteger(delta) && delta !== 0 && Math.abs(delta) <= 1_000_000);
+    },
+    "Expected 1 to 1,000 non-zero safe-integer deltas with an absolute value no greater than 1,000,000",
+  )
   .describe("Signed Root Ref deltas keyed by node digest.");
+JSON_SCHEMA_INPUT_REGISTRY.add(RefChangesSchema, {
+  type: "object",
+  minProperties: 1,
+  maxProperties: 1_000,
+  propertyNames: {
+    type: "string",
+    pattern: "^[0-9a-f]{64}$",
+  },
+  additionalProperties: {
+    type: "integer",
+    minimum: -1_000_000,
+    maximum: 1_000_000,
+    not: { const: 0 },
+  },
+  description: "One to 1,000 non-zero signed Root Ref deltas keyed by lowercase SHA-256 digest.",
+});
 const RootRefUpdateSchema = z.object({
-  requestId: z.string().min(1).describe("Stable idempotency identity for this commit."),
+  requestId: z.string().min(1).max(256).describe("Stable idempotency identity for this commit."),
   changes: RefChangesSchema,
 }).readonly().meta({ id: "SpaceRootRefUpdate" });
 const RootRefsPageSchema = z.object({
@@ -131,11 +156,11 @@ const RootRefsPageSchema = z.object({
   nextCursor: z.string().min(1).nullable(),
 }).readonly().meta({ id: "SpaceRootRefsPage" });
 
-export const readSpaceContentContract = spaceProcedure
+export const readContentContract = spaceProcedure
   .route({
     method: "GET",
     path: `${SpaceApiBasePath}/cas/nodes/{hash}/content`,
-    operationId: "readSpaceContent",
+    operationId: "readContent",
     summary: "Read immutable node content",
     description: "Streams canonical bytes for a ready node in the requested Space. Requires cas:nodes:read.",
     inputStructure: "detailed",
@@ -144,11 +169,11 @@ export const readSpaceContentContract = spaceProcedure
   .input(z.object({ params: nodeParams }).readonly())
   .output(BinaryStreamSchema);
 
-export const readSpaceMetadataContract = spaceProcedure
+export const readMetadataContract = spaceProcedure
   .route({
     method: "GET",
     path: `${SpaceApiBasePath}/cas/nodes/{hash}/metadata`,
-    operationId: "readSpaceMetadata",
+    operationId: "readMetadata",
     summary: "Read node metadata",
     description: "Returns immutable metadata and mutable retention state for one Space node. Requires cas:nodes:read.",
     inputStructure: "detailed",
@@ -158,11 +183,11 @@ export const readSpaceMetadataContract = spaceProcedure
   .output(z.object({ metadata: NodeMetadataSchema, state: NodeStateSchema }).readonly()
     .meta({ id: "SpaceReadMetadataResponse" }));
 
-export const leaseSpaceNodeContract = spaceProcedure
+export const leaseNodeContract = spaceProcedure
   .route({
     method: "POST",
     path: `${SpaceApiBasePath}/cas/nodes/{hash}/lease`,
-    operationId: "leaseSpaceNode",
+    operationId: "leaseNode",
     summary: "Lease a node",
     description: "Advances the lease-driven node state machine and returns the resulting ready, upload, replacement-upload, or dependency state. Requires cas:nodes:lease.",
     inputStructure: "detailed",
@@ -174,11 +199,11 @@ export const leaseSpaceNodeContract = spaceProcedure
   }).readonly())
   .output(LeaseOperationResultSchema);
 
-export const getSpaceUsageContract = spaceProcedure
+export const getUsageContract = spaceProcedure
   .route({
     method: "GET",
     path: `${SpaceApiBasePath}/cas/usage`,
-    operationId: "getSpaceUsage",
+    operationId: "getUsage",
     summary: "Read Space CAS usage",
     description: "Returns current operational accounting for one Space. Requires cas:usage:read.",
     inputStructure: "detailed",
@@ -187,11 +212,11 @@ export const getSpaceUsageContract = spaceProcedure
   .input(z.object({ params: spaceParams }).readonly())
   .output(UsageSchema);
 
-export const runSpaceGcContract = spaceProcedure
+export const runGcContract = spaceProcedure
   .route({
     method: "POST",
     path: `${SpaceApiBasePath}/cas/gc`,
-    operationId: "runSpaceGc",
+    operationId: "runGc",
     summary: "Run Space garbage collection",
     description: "Runs one bounded and race-safe garbage-collection pass within the Space. Requires cas:gc:execute.",
     inputStructure: "detailed",
@@ -203,11 +228,11 @@ export const runSpaceGcContract = spaceProcedure
   }).readonly())
   .output(GcResultSchema);
 
-export const listSpaceRootRefsContract = spaceProcedure
+export const listRootRefsContract = spaceProcedure
   .route({
     method: "GET",
     path: `${SpaceApiBasePath}/root-refs`,
-    operationId: "listSpaceRootRefs",
+    operationId: "listRootRefs",
     summary: "List Space Root Ref balances",
     description: "Returns a revision-stable page for the refDomain in the verified capability. Requires cas:root-refs:read and a valid signed refDomain.",
     inputStructure: "detailed",
@@ -216,17 +241,17 @@ export const listSpaceRootRefsContract = spaceProcedure
   .input(z.object({
     params: spaceParams,
     query: z.object({
-      limit: z.number().int().min(1).max(1000).optional(),
+      limit: z.number().int().min(1).max(200).optional(),
       cursor: z.string().min(1).optional(),
     }).readonly().optional(),
   }).readonly())
   .output(RootRefsPageSchema);
 
-export const updateSpaceRootRefsContract = spaceProcedure
+export const updateRootRefsContract = spaceProcedure
   .route({
     method: "POST",
     path: `${SpaceApiBasePath}/root-refs`,
-    operationId: "updateSpaceRootRefs",
+    operationId: "updateRootRefs",
     summary: "Apply Space Root Ref changes",
     description: "Atomically applies signed Root Ref deltas in the capability's refDomain. Requires cas:root-refs:update and a valid signed refDomain.",
     inputStructure: "detailed",
@@ -241,12 +266,12 @@ export const updateSpaceRootRefsContract = spaceProcedure
 
 export const spaceApiContract = {
   nodes: {
-    readContent: readSpaceContentContract,
-    readMetadata: readSpaceMetadataContract,
-    lease: leaseSpaceNodeContract,
+    readContent: readContentContract,
+    readMetadata: readMetadataContract,
+    lease: leaseNodeContract,
   },
-  operations: { getUsage: getSpaceUsageContract, runGc: runSpaceGcContract },
-  rootRefs: { list: listSpaceRootRefsContract, update: updateSpaceRootRefsContract },
+  operations: { getUsage: getUsageContract, runGc: runGcContract },
+  rootRefs: { list: listRootRefsContract, update: updateRootRefsContract },
 };
 
 export type SpaceApiContract = typeof spaceApiContract;

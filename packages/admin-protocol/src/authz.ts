@@ -8,7 +8,7 @@
 /** Credential classes accepted by each authentication plane. */
 export const casAuthPlanePolicy = {
   spaceDataPlane: {
-    pathPrefix: "/v2/apps",
+    pathPrefix: "/v1/apps",
     credential: "app_issuer_space_capability",
     rejects: ["oidc_bff_session", "platform_operator_session"] as const,
   },

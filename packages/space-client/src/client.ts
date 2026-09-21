@@ -17,7 +17,7 @@ export const DEFAULT_SPACE_NODE_LEASE_OPTIONS: SpaceNodeLeaseOptions = Object.fr
 
 export function createSpaceCasClient(config: SpaceCasClientConfig): SpaceCasClient {
   const path = { appId: config.appId, spaceId: config.spaceId };
-  const scoped = createScopedCasClient(config, { version: 2, ...path }, {
+  const scoped = createScopedCasClient(config, { version: 1, ...path }, {
     readMetadata: hash => appSpaceRoutes.readMetadata({ ...path, hash }),
     readContent: hash => appSpaceRoutes.readContent({ ...path, hash }),
     lease: hash => appSpaceRoutes.lease({ ...path, hash }),

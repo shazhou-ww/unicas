@@ -9,13 +9,14 @@ const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const SITE_ROOT = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_OUTPUT = join(SITE_ROOT, "dist");
 const API_REFERENCE = ["app-user-api/reference", "API Reference", "Integrate"];
-const SPACE_OPENAPI_SOURCE = "packages/space-protocol/openapi/space-v2.openapi.json";
+const SPACE_OPENAPI_SOURCE = "packages/space-protocol/openapi/app-space-v1.openapi.json";
 
 export const DOCUMENTS = [
   ["app-user-api", "App-user API", "Integrate", "docs/app-user-api/README.md"],
   ["app-user-api/scenarios", "App-user scenarios", "Integrate", "docs/app-user-api/scenarios.md"],
   ["app-user-api/http-api", "App-user HTTP API", "Integrate", "docs/app-user-api/http-api.md"],
   ["app-user-api/authorization", "App-user authorization", "Integrate", "docs/app-user-api/authorization.md"],
+  ["app-user-api/migration-v2-to-v1", "Prototype v2 migration", "Integrate", "docs/app-user-api/migration-v2-to-v1.md"],
   ["cas-architecture", "CAS Architecture", "Architecture"],
   ["cas-binary-format", "CAS Binary Format", "Architecture"],
   ["cas-state-protection-and-gc", "State Protection and GC", "Architecture"],
@@ -33,7 +34,7 @@ export const DOCUMENTS = [
 const PACKAGE_REFERENCES = [
   ["packages", "Package Boundaries", "packages/README.md"],
   ["admin-protocol", "Admin Protocol", "packages/admin-protocol/README.md"],
-  ["space-protocol", "Tenant Protocol", "packages/space-protocol/README.md"],
+  ["space-protocol", "Space Protocol", "packages/space-protocol/README.md"],
   ["admin-cli", "Administrator CLI", "packages/admin-cli/README.md"],
 ];
 
@@ -207,7 +208,7 @@ function apiReferencePage() {
       <a class="wordmark" href="/"><span>U</span>UniCAS <b>DOCS</b></a>
       <nav class="top-actions" aria-label="API reference links">
         <a href="/app-user-api/">Integration guide</a>
-        <a href="/openapi/space-v2.openapi.json">OpenAPI JSON</a>
+        <a href="/openapi/app-space-v1.openapi.json">OpenAPI JSON</a>
         <a href="https://github.com/shazhou-ww/unicas">GitHub</a>
       </nav>
     </header>
@@ -315,7 +316,7 @@ export async function buildDocsSite(outputDir = DEFAULT_OUTPUT) {
     await copyFile(join(SITE_ROOT, "static", file), join(outputDir, "assets", file));
   }
   await mkdir(join(outputDir, "openapi"), { recursive: true });
-  await copyFile(join(ROOT, SPACE_OPENAPI_SOURCE), join(outputDir, "openapi", "space-v2.openapi.json"));
+  await copyFile(join(ROOT, SPACE_OPENAPI_SOURCE), join(outputDir, "openapi", "app-space-v1.openapi.json"));
   await buildBundle({
     entryPoints: [join(SITE_ROOT, "static", "api-reference.js")],
     bundle: true,

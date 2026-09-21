@@ -153,7 +153,7 @@ reviewed explicitly before the work named in the final column begins.
 ## References
 
 - [Current Console Usage placeholder](/packages/admin-webui/src/ui/views/usage.tsx)
-- [Space usage protocol contract](/packages/space-protocol/src/space-v2-contract.ts)
+- [Space usage protocol contract](/packages/space-protocol/src/space-contract.ts)
 - [Cloud-neutral Space usage operation](/packages/service/src/node-usage.ts)
 - [Cloudflare usage repository](/packages/service-cloudflare/src/node-usage.ts)
 - [Admin protocol](/packages/admin-protocol/src/app-v2-contract.ts)

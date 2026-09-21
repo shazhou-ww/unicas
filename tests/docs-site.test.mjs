@@ -29,7 +29,7 @@ describe("documentation static site", () => {
     for (const [route, title] of [
       ["reference/packages", "Package Boundaries"],
       ["reference/admin-protocol", "Admin Protocol"],
-      ["reference/space-protocol", "Tenant Protocol"],
+      ["reference/space-protocol", "Space Protocol"],
       ["reference/admin-cli", "Administrator CLI"],
     ]) {
       await expect(page(route)).resolves.toContain(title);
@@ -37,9 +37,9 @@ describe("documentation static site", () => {
     }
     await expect(readFile(join(outputDir, "assets", "docs.css"), "utf8")).resolves.toContain(".article-layout");
     await expect(readFile(join(outputDir, "assets", "docs.js"), "utf8")).resolves.toContain("nav-open");
-    await expect(readFile(join(outputDir, "assets", "api-reference.js"), "utf8")).resolves.toContain("space-v2.openapi.json");
+    await expect(readFile(join(outputDir, "assets", "api-reference.js"), "utf8")).resolves.toContain("app-space-v1.openapi.json");
     await expect(readFile(join(outputDir, "assets", "api-reference.css"), "utf8")).resolves.toContain("--scalar-color-accent");
-    await expect(readFile(join(outputDir, "openapi", "space-v2.openapi.json"), "utf8")).resolves.toContain("UniCAS Space API");
+    await expect(readFile(join(outputDir, "openapi", "app-space-v1.openapi.json"), "utf8")).resolves.toContain("UniCAS Space API");
     await expect(readFile(join(outputDir, "404.html"), "utf8")).resolves.toContain("No document at this address");
   });
 
@@ -57,7 +57,7 @@ describe("documentation static site", () => {
 
     const apiReference = await page("app-user-api/reference");
     expect(apiReference).toContain('id="api-reference"');
-    expect(apiReference).toContain('href="/openapi/space-v2.openapi.json"');
+    expect(apiReference).toContain('href="/openapi/app-space-v1.openapi.json"');
     expect(apiReference).toContain('src="/assets/api-reference.js"');
   });
 

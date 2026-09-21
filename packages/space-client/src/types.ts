@@ -27,7 +27,7 @@ export type {
 } from "./shared-types.js";
 
 export interface SpaceCasNodeCacheKey {
-  readonly version: 2;
+  readonly version: 1;
   readonly appId: string;
   readonly spaceId: string;
   readonly hash: CasHash;
