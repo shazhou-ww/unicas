@@ -56,6 +56,15 @@ export function spacesDeploymentPlan(options, environment = process.env) {
   return commands;
 }
 
+export function spacesBootstrapEnvironment(environment = process.env) {
+  return {
+    ...environment,
+    SPACES_GOOGLE_CLIENT_ID: environment.SPACES_GOOGLE_CLIENT_ID || "bootstrap-disabled",
+    SPACES_GOOGLE_CLIENT_SECRET: environment.SPACES_GOOGLE_CLIENT_SECRET || "bootstrap-disabled",
+    SPACES_SMOKE_ENABLED: "false",
+  };
+}
+
 export function runSpacesCommand(command, spawn = spawnSync) {
   console.log(`> ${command.join(" ")}`);
   const result = spawn(command[0], command.slice(1), {
@@ -80,11 +89,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     const options = parseSpacesDeployArgs(process.argv.slice(2));
     if (options.production || options.bootstrap) {
-      const environment = options.bootstrap
-        ? { ...process.env, SPACES_SMOKE_ENABLED: "false" }
-        : process.env;
+      const environment = options.bootstrap ? spacesBootstrapEnvironment() : process.env;
       writeProductionSpacesConfig(environment);
-      writeProductionSpacesSecrets();
+      writeProductionSpacesSecrets(environment);
     }
     try {
       for (const command of spacesDeploymentPlan(options)) runSpacesCommand(command);

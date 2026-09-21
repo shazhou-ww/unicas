@@ -71,6 +71,11 @@ authorized production bootstrap, deployment, live smoke, and user acceptance.
   now converts file URLs with Node's `fileURLToPath` rather than stripping a
   Windows-style leading slash; the same focused test passes on Windows and is
   ready for the required Linux CI rerun.
+- Production bootstrap now runs only as a manual `release`-branch workflow
+  behind the existing `Production` reviewer gate. It idempotently provisions
+  D1, deploys issuer metadata with smoke disabled, and separately bootstraps
+  user/smoke Principals after issuer activation. Normal production remains
+  disabled until `SPACES_RELEASE_ENABLED=true` and never skips live smoke.
 - No production deployment, App/issuer activation, production D1 bootstrap,
   real Google callback, or live Spaces smoke was run without explicit release
   authorization and credentials.

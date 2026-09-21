@@ -37,6 +37,7 @@ import {
 import {
   parseSpacesDeployArgs,
   runSpacesCommand,
+  spacesBootstrapEnvironment,
   spacesDeploymentPlan,
 } from "../stacks/unicas/spaces/deploy.mjs";
 
@@ -66,6 +67,14 @@ function productionJob() {
   return CI_WORKFLOW.slice(start, end);
 }
 
+function spacesBootstrapJob() {
+  const start = CI_WORKFLOW.indexOf("  bootstrap-spaces:");
+  const end = CI_WORKFLOW.indexOf("  deploy-production:");
+  expect(start).toBeGreaterThan(-1);
+  expect(end).toBeGreaterThan(start);
+  return CI_WORKFLOW.slice(start, end);
+}
+
 function productionTagJob() {
   const marker = "  tag-production:";
   const offset = CI_WORKFLOW.indexOf(marker);
@@ -75,7 +84,7 @@ function productionTagJob() {
 
 function validationJob() {
   const start = CI_WORKFLOW.indexOf("  validate:");
-  const end = CI_WORKFLOW.indexOf("  deploy-production:");
+  const end = CI_WORKFLOW.indexOf("  bootstrap-spaces:");
   expect(start).toBeGreaterThan(-1);
   expect(end).toBeGreaterThan(start);
   return CI_WORKFLOW.slice(start, end);
@@ -175,6 +184,22 @@ describe("standalone deployment plan", () => {
       .toThrow("Spaces deployment command failed");
   });
 
+  test("uses disabled Google placeholders only for the one-time Spaces bootstrap", () => {
+    expect(spacesBootstrapEnvironment({ SPACES_SMOKE_ENABLED: "true" })).toMatchObject({
+      SPACES_GOOGLE_CLIENT_ID: "bootstrap-disabled",
+      SPACES_GOOGLE_CLIENT_SECRET: "bootstrap-disabled",
+      SPACES_SMOKE_ENABLED: "false",
+    });
+    expect(spacesBootstrapEnvironment({
+      SPACES_GOOGLE_CLIENT_ID: "configured-client",
+      SPACES_GOOGLE_CLIENT_SECRET: "configured-secret",
+    })).toMatchObject({
+      SPACES_GOOGLE_CLIENT_ID: "configured-client",
+      SPACES_GOOGLE_CLIENT_SECRET: "configured-secret",
+      SPACES_SMOKE_ENABLED: "false",
+    });
+  });
+
   test("keeps production credentials and deployment commands out of validation", () => {
     const job = validationJob();
     expect(job).not.toContain("secrets.");
@@ -196,6 +221,8 @@ describe("standalone deployment plan", () => {
     const job = productionJob();
     expect(job).toContain("needs: validate");
     expect(job).toContain("github.ref == 'refs/heads/release'");
+    expect(job).toContain("vars.SPACES_RELEASE_ENABLED == 'true'");
+    expect(job).toContain("inputs.spaces_action == 'none'");
     expect(job).not.toContain("github.ref == 'refs/heads/main'");
     expect(job).toContain("github.event_name == 'push'");
     expect(job).toContain("github.event_name == 'workflow_dispatch'");
@@ -206,6 +233,23 @@ describe("standalone deployment plan", () => {
     expect(job).toContain("cancel-in-progress: false");
     expect(job).toContain("ref: ${{ github.sha }}");
     expect(job).not.toContain("contents: write");
+  });
+
+  test("protects one-time Spaces bootstrap behind release, validation, and Production review", () => {
+    const job = spacesBootstrapJob();
+    expect(workflowTriggers()).toContain("spaces_action:");
+    expect(job).toContain("github.ref == 'refs/heads/release'");
+    expect(job).toContain("github.event_name == 'workflow_dispatch'");
+    expect(job).toContain("needs: validate");
+    expect(job).toContain("environment: Production");
+    expect(job).toContain("group: unicas-production");
+    expect(job).toContain("inputs.spaces_action == 'provision-deploy'");
+    expect(job).toContain("wrangler d1 create unicas-spaces --location enam");
+    expect(job).toContain("run: pnpm deploy:spaces:bootstrap");
+    expect(job).toContain("inputs.spaces_action == 'principals'");
+    expect(job).toContain("pnpm spaces:bootstrap -- --mode google");
+    expect(job).toContain("pnpm spaces:bootstrap -- --mode smoke");
+    expect(job).toContain("if: ${{ always() && inputs.spaces_action == 'principals' }}");
   });
 
   test("does not run validation for tag pushes", () => {
