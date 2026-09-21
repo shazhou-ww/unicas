@@ -73,6 +73,10 @@ tasks:
     state: completed
     createdAt: "2026-09-14T09:30:47Z"
     updatedAt: "2026-09-19T05:12:49Z"
+  prepare-app-user-sdk-beta-packages:
+    state: backlog
+    createdAt: "2026-09-21T03:41:45Z"
+    updatedAt: "2026-09-21T03:41:45Z"
   promote-app-user-api-to-beta:
     state: backlog
     createdAt: "2026-09-21T03:18:47Z"
