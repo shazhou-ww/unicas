@@ -81,6 +81,10 @@ tasks:
     state: backlog
     createdAt: "2026-09-21T03:18:47Z"
     updatedAt: "2026-09-21T03:18:47Z"
+  publish-app-user-sdk-beta:
+    state: backlog
+    createdAt: "2026-09-21T03:42:32Z"
+    updatedAt: "2026-09-21T03:42:32Z"
   replace-active-app-oauth-issuer:
     state: completed
     createdAt: "2026-09-15T14:26:52Z"
