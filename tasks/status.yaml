@@ -30,9 +30,10 @@ tasks:
     createdAt: "2026-09-20T15:07:43Z"
     updatedAt: "2026-09-20T15:15:57Z"
   complete-app-space-concept-refactor:
-    state: backlog
+    state: ongoing
+    sourceBranch: task/complete-app-space-concept-refactor
     createdAt: "2026-09-20T14:26:56Z"
-    updatedAt: "2026-09-20T14:26:56Z"
+    updatedAt: "2026-09-21T03:59:06Z"
   complete-direct-node-upload:
     state: completed
     createdAt: "2026-09-20T07:36:32Z"
