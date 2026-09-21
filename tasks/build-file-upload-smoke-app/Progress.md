@@ -149,14 +149,18 @@ acceptance.
 - Authenticated latency sampling found session requests at roughly 0.7-5.6
   seconds and Root listing at 3-15.5 seconds. The App-owned D1 primary is in
   ENAM with read replication disabled, so dynamic requests execute several
-  remote D1 and UniCAS round trips. Smart Placement is enabled only for
-  reserved dynamic paths while SPA assets remain edge-served; the focused
-  deployment suite and Wrangler dry-run pass without the placed-assets warning.
+  remote D1 and UniCAS round trips. Explicit `aws:us-east-1` placement runs
+  dynamic requests at IAD near the ENAM primary while SPA assets remain
+  edge-served. Warm session requests measure 0.36-0.49 seconds and warm Root
+  listings 1.04-1.33 seconds; the focused deployment suite and Wrangler
+  dry-run pass without the placed-assets warning. Session heartbeat writes are
+  also throttled to once per five minutes, with 17 repository/Worker tests and
+  the Spaces typecheck passing.
 
 ## Blockers
 
-- Smart Placement must be deployed and measured after Cloudflare analyzes the
-  Worker traffic.
+- Explicit placement and session heartbeat throttling must be integrated and
+  rerun through the protected Production workflow.
 - The remaining manual file workflow checks in
   [UserAcceptance](./UserAcceptance.md) remain external gates. Delivery
   acceptance cannot be requested until that evidence is attached to the exact
