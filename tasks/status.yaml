@@ -12,6 +12,10 @@ tasks:
     state: backlog
     createdAt: "2026-09-17T07:47:55Z"
     updatedAt: "2026-09-19T05:12:49Z"
+  adopt-cloudflare-performance-tracing:
+    state: backlog
+    createdAt: "2026-09-21T11:23:41Z"
+    updatedAt: "2026-09-21T11:23:41Z"
   adopt-repoledger-cli:
     state: completed
     createdAt: "2026-09-15T08:13:24Z"
