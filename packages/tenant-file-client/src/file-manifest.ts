@@ -44,13 +44,17 @@ export function validateFileManifest(value: TenantFileManifestV1): void {
 }
 
 export function createFileManifest(entries: readonly TenantFileManifestEntry[]): TenantFileManifestV1 {
-  const sorted = entries.map((entry) => ({ ...entry })).sort((left, right) => left.path.localeCompare(right.path));
+  const sorted = entries.map((entry) => ({ ...entry })).sort((left, right) => compareFileManifestPaths(left.path, right.path));
   let ref = 0;
   const normalized = sorted.map((entry): TenantFileManifestEntry =>
     entry.type === "directory" ? entry : { ...entry, ref: ref++ });
   const manifest = { version: FileManifestVersion, entries: normalized } as const;
   validateFileManifest(manifest);
   return freezeManifest(manifest);
+}
+
+export function compareFileManifestPaths(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 export function encodeFileManifest(value: TenantFileManifestV1): Uint8Array {

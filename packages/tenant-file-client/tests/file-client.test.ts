@@ -135,6 +135,22 @@ describe("tenant file system", () => {
     await expect(root.stat("/temporary")).rejects.toThrow("Path not found");
   });
 
+  test("preserves mixed-case path references after reopening a committed Root", async () => {
+    const fileSystem = createTenantFileSystem({
+      cas: casFixture(),
+      catalog: catalogFixture(),
+      createId: () => "root-1",
+    });
+    const root = await fileSystem.createRoot("Files");
+    await root.write("/a.txt", new Blob(["lowercase"]), { contentType: "text/plain" });
+    await root.write("/B.txt", new Blob(["uppercase"]), { contentType: "text/plain" });
+    await root.commit();
+
+    const reopened = await fileSystem.openRoot("root-1");
+    await expect(new Response(await reopened.read("/a.txt")).text()).resolves.toBe("lowercase");
+    await expect(new Response(await reopened.read("/B.txt")).text()).resolves.toBe("uppercase");
+  });
+
   test("passes bounded blob options to the public blob client", () => {
     const cas = casFixture();
     const blobOptions = { chunkBytes: 1024, indexFanout: 4 };

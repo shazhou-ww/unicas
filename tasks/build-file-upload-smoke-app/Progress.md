@@ -12,8 +12,9 @@ non-interactive smoke, bootstrap/preflight tooling, protected release ordering,
 and stable operations documentation pass local validation. The production App,
 catalog, issuer, Principals, dedicated Google client, capability-v3 service, and
 R2 signing credentials are provisioned. The normal release deployed the service
-and Spaces Worker but exposed a smoke CLI argument-forwarding defect before a
-smoke session was created; the tested fix awaits release rerun and user
+and Spaces Worker, and both production smoke suites pass. Manual acceptance
+then exposed locale-dependent manifest ordering for mixed-case paths; the
+deterministic protocol-order fix is validated and awaits release rerun and user
 acceptance.
 
 ## Decisions
@@ -129,12 +130,23 @@ acceptance.
   S256 remain exact. A full production Spaces smoke passed authenticate, hash,
   lease, upload, commit, verify, and cleanup, followed by zero smoke Roots,
   open runs, or pending releases.
+- Protected release run `35572868420` completed successfully at
+  `c0883dacb3a47cce3d36667d49582926986f9b7c` and published immutable tag
+  `production-20260921-377`. Canonical service smoke, Spaces smoke, every
+  public-origin check, and post-smoke zero-residue verification passed.
+- Manual upload acceptance exposed that `localeCompare` could order mixed-case
+  paths differently from the manifest protocol's relational ordering, causing
+  `File manifest entries must be uniquely sorted by path`. Manifest entries
+  and their parallel CAS refs now share one deterministic comparator. Seven
+  focused client tests, including reopen/readback of `a.txt` and `B.txt`, the
+  client typecheck, and 22 Spaces file-service/Worker tests pass. The failed
+  upload left one valid user Root and zero pending Root releases.
 
 ## Blockers
 
-- The corrected fetch binding must be integrated and rerun through the
-  protected Production workflow so release tagging records the verified code.
-- Real-provider checks, the canonical Spaces smoke, and
+- The manifest ordering fix must be integrated and rerun through the protected
+  Production workflow.
+- The remaining manual file workflow checks in
   [UserAcceptance](./UserAcceptance.md) remain external gates. Delivery
   acceptance cannot be requested until that evidence is attached to the exact
   integrated primary revision.
