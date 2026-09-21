@@ -56,6 +56,9 @@ jobs:
       - name: Build deployment bundle
         run: pnpm --filter @unicas/service-cloudflare exec wrangler deploy --dry-run
 
+      - name: Build Spaces deployment bundle
+        run: pnpm deploy:spaces:plan
+
       - name: Build product-site deployment bundle
         run: pnpm deploy:site:plan
 
@@ -154,6 +157,21 @@ jobs:
         if: ${{ always() }}
         run: rm -f -- .wrangler/cas-deploy/github-actions-smoke-key.pem
 
+      - name: Deploy Spaces App and run release smoke
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          SPACES_D1_DATABASE_ID: ${{ vars.SPACES_D1_DATABASE_ID }}
+          SPACES_GOOGLE_CLIENT_ID: ${{ vars.SPACES_GOOGLE_CLIENT_ID }}
+          SPACES_GOOGLE_CLIENT_SECRET: ${{ secrets.SPACES_GOOGLE_CLIENT_SECRET }}
+          SPACES_SIGNING_KID: ${{ vars.SPACES_SIGNING_KID }}
+          SPACES_SIGNING_PRIVATE_KEY_PKCS8: ${{ secrets.SPACES_SIGNING_PRIVATE_KEY_PKCS8 }}
+          SPACES_SIGNING_PUBLIC_JWKS: ${{ vars.SPACES_SIGNING_PUBLIC_JWKS }}
+          SPACES_SMOKE_CREDENTIAL: ${{ secrets.SPACES_SMOKE_CREDENTIAL }}
+          SPACES_SMOKE_PRINCIPAL_ID: ${{ vars.SPACES_SMOKE_PRINCIPAL_ID }}
+          SPACES_UNICAS_AUDIENCE: ${{ vars.SPACES_UNICAS_AUDIENCE }}
+        run: pnpm deploy:spaces
+
       - name: Deploy product site
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -189,6 +207,22 @@ jobs:
           result="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 --retry-all-errors --connect-timeout 10 --max-time 60 --proto '=https' --max-redirs 0 --output /dev/null --write-out '%{http_code} %{redirect_url}' https://console.unicas.work/)"
           if [[ "$result" != "302 https://console.unicas.work/admin/" ]]; then
             echo "::error::Console origin returned '$result'; expected its HTTPS /admin/ redirect"
+            exit 1
+          fi
+
+      - name: Verify Spaces origin
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="$(mktemp)"
+          trap 'rm -f "$body"' EXIT
+          status="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 --retry-all-errors --connect-timeout 10 --max-time 60 --proto '=https' --output "$body" --write-out '%{http_code}' https://spaces.unicas.work/)"
+          if [[ "$status" != "200" ]]; then
+            echo "::error::Spaces origin returned HTTP $status; expected 200"
+            exit 1
+          fi
+          if ! grep --fixed-strings --quiet 'UniCAS Spaces' "$body"; then
+            echo "::error::Spaces origin did not return the file App"
             exit 1
           fi
 

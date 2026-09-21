@@ -1,6 +1,7 @@
 # Architecture review
 
-Status: Pending requesting-user approval.
+Status: Approved by the requesting user on 2026-09-21, with the package
+placement amendment below.
 
 ## Decision requested
 
@@ -16,20 +17,24 @@ reviews are also approved.
 ## Deployment and package boundary
 
 ```text
-stacks/unicas/spaces/
+packages/spaces/          # private workspace App package; never published
 |-- src/                 # Worker routes, OAuth, issuer, catalog adapters
 |-- ui/                  # responsive React file UI
-|-- migrations/          # App-owned D1 only
 |-- scripts/             # bootstrap and non-interactive smoke
-|-- wrangler.jsonc       # spaces.unicas.work, assets, D1, cron, observability
-`-- package.json         # private workspace application
+`-- package.json
+
+stacks/unicas/spaces/     # deployment composition only
+|-- migrations/          # App-owned D1 only
+`-- wrangler.jsonc       # spaces.unicas.work, assets, D1, cron, observability
 ```
 
-The App is not a package under `packages/` and is not bundled into
-`@unicas/service-cloudflare`. Its allowed UniCAS dependencies are the published
-protocol, transport, blob, and file clients. A boundary test rejects imports
-from service implementations or admin clients, and a configuration test rejects
-bindings to UniCAS-owned D1, R2, KV, or Durable Objects.
+The App is a private package under `packages/` so application source follows
+the repository's package ownership convention, but it is not published and is
+not bundled into `@unicas/service-cloudflare`. Deployment composition remains
+under `stacks/`. Its allowed UniCAS dependencies are the published protocol,
+transport, blob, and file clients. A boundary test rejects imports from service
+implementations or admin clients, and a configuration test rejects bindings to
+UniCAS-owned D1, R2, KV, or Durable Objects.
 
 The App receives only its own static assets, D1 catalog, secret bindings, and
 scheduled trigger. Signing keys, Google client secret, and smoke credential are

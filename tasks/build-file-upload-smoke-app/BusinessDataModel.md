@@ -1,6 +1,6 @@
 # Business and data model review
 
-Status: Pending requesting-user approval.
+Status: Approved by the requesting user on 2026-09-21.
 
 ## Decision requested
 
@@ -81,6 +81,13 @@ erDiagram
     string absolute_path PK
   }
 
+  PENDING_ROOT_RELEASE["PENDING_ROOT_RELEASE &lt;&lt;EI&gt;&gt;"] {
+    string request_id PK
+    string principal_id FK
+    string root_id
+    string manifest_hash
+  }
+
   SPACE {
     string app_id PK
     string space_id PK
@@ -99,9 +106,10 @@ erDiagram
   PRINCIPAL ||--o{ SESSION : holds
   PRINCIPAL ||--|| PRINCIPAL_SPACE : is_assigned
   PRINCIPAL_SPACE }o--|| SPACE : selects
-  PRINCIPAL ||--|| FILE_SYSTEM_ROOT : owns
+  PRINCIPAL ||--o| FILE_SYSTEM_ROOT : owns
   FILE_SYSTEM_ROOT ||--o{ PATH_ENTRY : snapshots
   FILE_SYSTEM_ROOT ||--|| ROOT_REF : retains_with
+  PRINCIPAL ||--o{ PENDING_ROOT_RELEASE : reconciles
   PRINCIPAL ||--o{ SMOKE_RUN : executes
   SMOKE_RUN ||--o{ SMOKE_RESOURCE : tracks
   SMOKE_RESOURCE }o--|| FILE_SYSTEM_ROOT : cleans_from
@@ -114,7 +122,10 @@ manifest and is not a D1 table: explicit directories and files are encoded by
 the published file client, while file entries reference immutable blob hashes.
 Canonical nodes, leases, edges, and content remain entirely inside UniCAS and
 are intentionally absent from App D1. Capabilities and presigned URLs are
-request-scoped values and are not durable entities.
+request-scoped values and are not durable entities. `PENDING_ROOT_RELEASE` is
+an App-owned recovery record: catalog revision and release intent commit in one
+D1 batch, then a stable public Root Ref request clears the old manifest before
+the record is removed.
 
 ## Lifecycle semantics
 
@@ -127,6 +138,7 @@ request-scoped values and are not durable entities.
 | `PATH_ENTRY` | A directory create, file write, file rename, or remove operation produces a replacement immutable manifest. File blob hashes remain stable when only names change. | Removal in a committed replacement manifest. | User file mutation or bounded smoke cleanup; root `/` is immutable. |
 | `SMOKE_RUN <<EI>>` | Run identity, Principal, and expiry are fixed; cleanup state advances idempotently. | All tracked roots are released, or an actionable cleanup failure remains. | Pruned after bounded evidence retention. |
 | `SMOKE_RESOURCE <<EI>>` | Binding is fixed after insertion. | Parent run cleanup releases the referenced root. | Removed after confirmed cleanup. |
+| `PENDING_ROOT_RELEASE <<EI>>` | Request ID, Principal, Root, and old manifest are fixed when the catalog revision advances. | Public Root Ref release is confirmed or its stable request is observed idempotently. | Removed only after reconciliation; scheduled work retries interrupted releases. |
 | `ROOT_REF` | Positive count changes only through UniCAS atomic Root Ref updates. | Positive count reaches zero. | UniCAS retention and GC semantics apply. |
 
 ## Governing invariants
@@ -137,10 +149,11 @@ request-scoped values and are not durable entities.
    Principal-to-Space mapping and cannot call the UniCAS admin plane.
 3. A Principal's file catalog resolves only through its assigned App, Space,
    and Root Ref domain. Cross-Space identifiers are rejected before data access.
-4. Each Principal owns exactly one file-system Root. Within a manifest, each
-  normalized absolute path is unique, its parent must be a directory, and a
-  path cannot be moved into itself or its descendant. The root `/` cannot be
-  renamed or deleted.
+4. Each admitted browser Principal owns exactly one file-system Root. The
+  dedicated smoke Principal owns no Root between runs and exactly one temporary
+  Root while a run is active. Within a manifest, each normalized absolute path
+  is unique, its parent must be a directory, and a path cannot be moved into
+  itself or its descendant. The root `/` cannot be renamed or deleted.
 5. A successful Root catalog revision references one positively retained
   manifest Root Ref. Folder creation, upload, rename, and removal become
   visible together only after commit; optimistic conflicts cannot overwrite a
@@ -149,7 +162,10 @@ request-scoped values and are not durable entities.
   file blob hash; it does not upload identical content again.
 7. Deletion and smoke cleanup are idempotent and converge through retry; stale
    smoke records carry an expiry so scheduled cleanup is bounded and discoverable.
-8. Signing keys, Google credentials, smoke credentials, capabilities, signed
+8. Replacing a catalog manifest persists the old-manifest release intent in the
+  same D1 batch. User requests and a bounded scheduled pass reconcile that
+  intent with a stable Root Ref request, including after process interruption.
+9. Signing keys, Google credentials, smoke credentials, capabilities, signed
    upload URLs, and uploaded bytes are never stored in App D1.
 
 ## Migration impact

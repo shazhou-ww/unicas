@@ -9,12 +9,15 @@ pnpm dev
 pnpm dev --docker
 pnpm deploy:plan
 pnpm deploy:production
+pnpm deploy:spaces:plan
+pnpm deploy:spaces
 pnpm deploy:site:plan
 pnpm deploy:site
 pnpm docs:check
 pnpm deploy:docs:plan
 pnpm deploy:docs
 pnpm smoke -- [baseUrl]
+pnpm spaces:smoke -- --base-url <url>
 pnpm smoke:v1 -- [baseUrl]   # frozen compatibility only
 ```
 
@@ -22,6 +25,13 @@ Production deploys one `@unicas/service-cloudflare` Worker containing the
 Space and App admin HTTP service, admin BFF/UI, MCP ingress, and public routing.
 The default smoke entry exercises App/Space v2 and expects provisioned App
 credentials under the gitignored `.wrangler/cas-deploy/` directory.
+
+The independently deployed `@unicas/spaces` file App owns
+`spaces.unicas.work`, its own D1 catalog, user sessions, issuer keys, and
+release smoke credential. Its deployment composition and migrations live under
+`spaces/`; application source remains under `packages/spaces`. See
+[`docs/spaces-smoke-app.md`](../../docs/spaces-smoke-app.md) for bootstrap,
+rotation, cleanup, and recovery.
 
 The product apex is a separate assets-only Worker under `site/`. Its deployment
 has no service bindings or secrets and must never claim the API, console, or
