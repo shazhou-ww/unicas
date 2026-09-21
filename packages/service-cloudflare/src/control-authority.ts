@@ -10,11 +10,11 @@ import type { D1Database } from "@cloudflare/workers-types";
 import type {
   AppAuthorityResolver,
   ResolvedAppAuthority,
-  ResolvedStackAuthority,
-  StackAuthorityResolver,
+  ResolvedV1StackAuthority,
+  V1StackAuthorityResolver,
 } from "@unicas/service";
 
-export class AuthorityRepository implements StackAuthorityResolver {
+export class AuthorityRepository implements V1StackAuthorityResolver {
   readonly #db: D1Database;
 
   constructor(db: D1Database) {
@@ -23,7 +23,7 @@ export class AuthorityRepository implements StackAuthorityResolver {
 
   /** Resolve a globally unique issuer to its stack authority; null when
    *  unknown. The issuer value is unique across stacks (registry invariant). */
-  async resolveIssuer(issuer: string): Promise<ResolvedStackAuthority | null> {
+  async resolveIssuer(issuer: string): Promise<ResolvedV1StackAuthority | null> {
     const oauthRow = await readIssuer(this.#db, issuer);
     if (!oauthRow || oauthRow.app_status !== "active") return null;
     return toAuthority(oauthRow);
@@ -51,7 +51,7 @@ export class AppAuthorityRepository implements AppAuthorityResolver {
   }
 }
 
-function toAuthority(row: IssuerRow): ResolvedStackAuthority {
+function toAuthority(row: IssuerRow): ResolvedV1StackAuthority {
   return {
     stackId: row.app_id,
     issuer: row.issuer,

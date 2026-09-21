@@ -49,14 +49,14 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
   async readNodeLease(scope: NodeLeaseScope, hash: string): Promise<NodeLeaseRecord | null> {
     const row = await timeOperation(this.timing, "cas_d1_lease", () => this.db.prepare(
       "SELECT lease_started_at, lease_expires_at FROM cas_nodes WHERE app_id = ? AND space_id = ? AND hash = ? AND ready = 1",
-    ).bind(scope.stackId, scope.tenantId, hash).first<{ lease_started_at: number; lease_expires_at: number }>());
+    ).bind(scope.appId, scope.spaceId, hash).first<{ lease_started_at: number; lease_expires_at: number }>());
     return row === null ? null : { leaseStartedAt: row.lease_started_at, leaseExpiresAt: row.lease_expires_at };
   }
 
   async readCanonicalNodeLease(scope: NodeLeaseScope, hash: string): Promise<CanonicalNodeLeaseRecord | null> {
     const row = await timeOperation(this.timing, "cas_d1_lease", () => this.db.prepare(
       "SELECT content_size, content_type, lease_started_at, lease_expires_at FROM cas_nodes WHERE app_id = ? AND space_id = ? AND hash = ? AND ready = 1",
-    ).bind(scope.stackId, scope.tenantId, hash).first<{
+    ).bind(scope.appId, scope.spaceId, hash).first<{
       content_size: number; content_type: string; lease_started_at: number; lease_expires_at: number;
     }>());
     return row === null ? null : {
@@ -70,13 +70,13 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
   async readNodeRefs(scope: NodeLeaseScope, hash: string): Promise<readonly string[]> {
     const edges = await timeOperation(this.timing, "cas_d1_refs", () => this.db.prepare(
       "SELECT child_hash FROM cas_edges WHERE app_id = ? AND space_id = ? AND parent_hash = ? ORDER BY ordinal ASC",
-    ).bind(scope.stackId, scope.tenantId, hash).all<{ child_hash: string }>());
+    ).bind(scope.appId, scope.spaceId, hash).all<{ child_hash: string }>());
     return edges.results.map((edge) => edge.child_hash);
   }
 
   async readCanonicalObject(scope: NodeLeaseScope, hash: string): Promise<CanonicalOrphanObject | null> {
     const object = await timeOperation(this.timing, "cas_r2_head", () =>
-      this.bucket.head(appCanonicalNodeKey(scope.stackId, scope.tenantId, hash)));
+      this.bucket.head(appCanonicalNodeKey(scope.appId, scope.spaceId, hash)));
     if (object === null) return null;
     return {
       storedBytes: object.size,
@@ -86,13 +86,13 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
 
   async readCanonicalBytes(scope: NodeLeaseScope, hash: string): Promise<Uint8Array | null> {
     const object = await timeOperation(this.timing, "cas_r2_read", () =>
-      this.bucket.get(appCanonicalNodeKey(scope.stackId, scope.tenantId, hash)));
+      this.bucket.get(appCanonicalNodeKey(scope.appId, scope.spaceId, hash)));
     return object === null ? null : new Uint8Array(await object.arrayBuffer());
   }
 
   async readCanonicalPrefix(scope: NodeLeaseScope, hash: string, length: number): Promise<ReadableStream<Uint8Array> | null> {
     const object = await timeOperation(this.timing, "cas_r2_prefix", () =>
-      this.bucket.get(appCanonicalNodeKey(scope.stackId, scope.tenantId, hash), { range: { offset: 0, length } }));
+      this.bucket.get(appCanonicalNodeKey(scope.appId, scope.spaceId, hash), { range: { offset: 0, length } }));
     if (object === null || object.body === undefined) return null;
     return object.body as unknown as ReadableStream<Uint8Array>;
   }
@@ -100,10 +100,10 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
   async isNodeReady(scope: NodeLeaseScope, hash: string): Promise<boolean> {
     const row = await timeOperation(this.timing, "cas_d1_ready", () => this.db.prepare(
       "SELECT 1 AS found FROM cas_nodes WHERE app_id = ? AND space_id = ? AND hash = ? AND ready = 1",
-    ).bind(scope.stackId, scope.tenantId, hash).first<{ found: number }>());
+    ).bind(scope.appId, scope.spaceId, hash).first<{ found: number }>());
     if (row === null) return false;
     const object = await timeOperation(this.timing, "cas_r2_head", () =>
-      this.bucket.head(appCanonicalNodeKey(scope.stackId, scope.tenantId, hash)));
+      this.bucket.head(appCanonicalNodeKey(scope.appId, scope.spaceId, hash)));
     if (object !== null) this.readyCache?.set(hash, cacheExpiry());
     return object !== null;
   }
@@ -111,7 +111,7 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
   async renewNodeLease(scope: NodeLeaseScope, hash: string, lease: NodeLeaseRecord): Promise<void> {
     await timeOperation(this.timing, "cas_d1_renew", () => this.db.prepare(
       "UPDATE cas_nodes SET lease_started_at = ?, lease_expires_at = ? WHERE app_id = ? AND space_id = ? AND hash = ?",
-    ).bind(lease.leaseStartedAt, lease.leaseExpiresAt, scope.stackId, scope.tenantId, hash).run());
+    ).bind(lease.leaseStartedAt, lease.leaseExpiresAt, scope.appId, scope.spaceId, hash).run());
   }
 
   async reserveCanonicalUpload(scope: NodeLeaseScope, reservation: CanonicalUploadReservation): Promise<void> {
@@ -119,14 +119,14 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
       `INSERT INTO cas_upload_reservations (app_id, space_id, hash, stored_bytes, created_at, expires_at)
        VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(app_id, space_id, hash) DO UPDATE SET stored_bytes = excluded.stored_bytes, expires_at = excluded.expires_at`,
-    ).bind(scope.stackId, scope.tenantId, reservation.hash, reservation.storedBytes, reservation.createdAt, reservation.expiresAt).run());
+    ).bind(scope.appId, scope.spaceId, reservation.hash, reservation.storedBytes, reservation.createdAt, reservation.expiresAt).run());
   }
 
   async readCanonicalUploadSession(scope: NodeLeaseScope, hash: string): Promise<CanonicalDirectUploadSession | null> {
     const row = await timeOperation(this.timing, "cas_d1_upload_session", () => this.db.prepare(
       `SELECT upload_id, temporary_object_key, stored_bytes, lease_duration_ms, created_at, expires_at
        FROM cas_direct_upload_sessions WHERE app_id = ? AND space_id = ? AND hash = ?`,
-    ).bind(scope.stackId, scope.tenantId, hash).first<{
+    ).bind(scope.appId, scope.spaceId, hash).first<{
       upload_id: string;
       temporary_object_key: string;
       stored_bytes: number;
@@ -159,8 +159,8 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
            created_at = excluded.created_at,
            expires_at = excluded.expires_at`,
       ).bind(
-        scope.stackId,
-        scope.tenantId,
+        scope.appId,
+        scope.spaceId,
         session.hash,
         session.uploadId,
         session.temporaryObjectKey,
@@ -177,8 +177,8 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
            created_at = excluded.created_at,
            expires_at = excluded.expires_at`,
       ).bind(
-        scope.stackId,
-        scope.tenantId,
+        scope.appId,
+        scope.spaceId,
         session.hash,
         session.storedBytes,
         session.createdAt,
@@ -192,7 +192,7 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
       `SELECT generation, temporary_object_key, created_at, expires_at, cleanup_at,
               rejection_code, rejection_message, stored_bytes, content_size, content_type, refs_json
        FROM cas_node_uploads WHERE app_id = ? AND space_id = ? AND hash = ?`,
-    ).bind(scope.stackId, scope.tenantId, hash).first<{
+    ).bind(scope.appId, scope.spaceId, hash).first<{
       generation: string;
       temporary_object_key: string;
       created_at: number;
@@ -233,7 +233,7 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
   async countLeaseDrivenUploads(scope: NodeLeaseScope): Promise<number> {
     const row = await timeOperation(this.timing, "cas_d1_node_upload_count", () => this.db.prepare(
       "SELECT COUNT(*) AS count FROM cas_node_uploads WHERE app_id = ? AND space_id = ?",
-    ).bind(scope.stackId, scope.tenantId).first<{ count: number }>());
+    ).bind(scope.appId, scope.spaceId).first<{ count: number }>());
     return row?.count ?? 0;
   }
 
@@ -262,7 +262,7 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
             rejection_code, rejection_message, stored_bytes, content_size, content_type, refs_json)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(app_id, space_id, hash) DO NOTHING`,
-      ).bind(scope.stackId, scope.tenantId, record.hash, ...values).run());
+      ).bind(scope.appId, scope.spaceId, record.hash, ...values).run());
       return result.meta.changes === 1;
     }
     const results = await timeOperation(this.timing, "cas_d1_node_upload_replace", () => this.db.batch([
@@ -271,13 +271,13 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
          SELECT app_id, space_id, temporary_object_key, cleanup_at FROM cas_node_uploads
          WHERE app_id = ? AND space_id = ? AND hash = ? AND generation = ?
          ON CONFLICT(app_id, space_id, temporary_object_key) DO UPDATE SET cleanup_at = excluded.cleanup_at`,
-      ).bind(scope.stackId, scope.tenantId, record.hash, expectedGeneration),
+      ).bind(scope.appId, scope.spaceId, record.hash, expectedGeneration),
       this.db.prepare(
         `UPDATE cas_node_uploads SET
            generation = ?, temporary_object_key = ?, created_at = ?, expires_at = ?, cleanup_at = ?,
            rejection_code = ?, rejection_message = ?, stored_bytes = ?, content_size = ?, content_type = ?, refs_json = ?
          WHERE app_id = ? AND space_id = ? AND hash = ? AND generation = ?`,
-      ).bind(...values, scope.stackId, scope.tenantId, record.hash, expectedGeneration),
+      ).bind(...values, scope.appId, scope.spaceId, record.hash, expectedGeneration),
     ]));
     return results[1].meta.changes === 1;
   }
@@ -297,8 +297,8 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
         validation.contentSize,
         validation.contentType,
         JSON.stringify(validation.refs),
-        scope.stackId,
-        scope.tenantId,
+        scope.appId,
+        scope.spaceId,
         hash,
         generation,
       ),
@@ -310,7 +310,7 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
            stored_bytes = excluded.stored_bytes,
            created_at = excluded.created_at,
            expires_at = excluded.expires_at`,
-      ).bind(validation.storedBytes, scope.stackId, scope.tenantId, hash, generation),
+      ).bind(validation.storedBytes, scope.appId, scope.spaceId, hash, generation),
     ]));
     return results[0].meta.changes === 1;
   }
@@ -332,7 +332,7 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
       this.bucket.delete(temporaryObjectKey));
     await timeOperation(this.timing, "cas_d1_node_upload_cleanup_ack", () => this.db.prepare(
       "DELETE FROM cas_node_upload_cleanup WHERE app_id = ? AND space_id = ? AND temporary_object_key = ?",
-    ).bind(_scope.stackId, _scope.tenantId, temporaryObjectKey).run());
+    ).bind(_scope.appId, _scope.spaceId, temporaryObjectKey).run());
   }
 
   async deleteLeaseDrivenUpload(
@@ -342,11 +342,11 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
   ): Promise<void> {
     await timeOperation(this.timing, "cas_d1_node_upload_delete", () => this.db.prepare(
       "DELETE FROM cas_node_uploads WHERE app_id = ? AND space_id = ? AND hash = ? AND generation = ?",
-    ).bind(scope.stackId, scope.tenantId, hash, generation).run());
+    ).bind(scope.appId, scope.spaceId, hash, generation).run());
   }
 
   async putVerifiedCanonicalBytes(scope: NodeLeaseScope, hash: string, bytes: Uint8Array): Promise<void> {
-    const key = appCanonicalNodeKey(scope.stackId, scope.tenantId, hash);
+    const key = appCanonicalNodeKey(scope.appId, scope.spaceId, hash);
     const stored = await timeOperation(this.timing, "cas_r2_put", () => this.bucket.put(
       key,
       bytes,
@@ -368,7 +368,7 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
       `SELECT hash, generation, temporary_object_key FROM cas_node_uploads
        WHERE app_id = ? AND space_id = ? AND cleanup_at <= ?
        ORDER BY cleanup_at ASC, hash ASC LIMIT ?`,
-    ).bind(scope.stackId, scope.tenantId, now, limit).all<{
+    ).bind(scope.appId, scope.spaceId, now, limit).all<{
       hash: string;
       generation: string;
       temporary_object_key: string;
@@ -385,17 +385,17 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
                WHERE app_id = ? AND space_id = ? AND hash = ? AND generation = ?
              )`,
         ).bind(
-          scope.stackId,
-          scope.tenantId,
+          scope.appId,
+          scope.spaceId,
           row.hash,
-          scope.stackId,
-          scope.tenantId,
+          scope.appId,
+          scope.spaceId,
           row.hash,
           row.generation,
         ),
         this.db.prepare(
           "DELETE FROM cas_node_uploads WHERE app_id = ? AND space_id = ? AND hash = ? AND generation = ?",
-        ).bind(scope.stackId, scope.tenantId, row.hash, row.generation),
+        ).bind(scope.appId, scope.spaceId, row.hash, row.generation),
       ]));
       deleted += results[1].meta.changes;
     }
@@ -405,7 +405,7 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
       `SELECT temporary_object_key FROM cas_node_upload_cleanup
        WHERE app_id = ? AND space_id = ? AND cleanup_at <= ?
        ORDER BY cleanup_at ASC, temporary_object_key ASC LIMIT ?`,
-    ).bind(scope.stackId, scope.tenantId, now, remaining).all<{ temporary_object_key: string }>());
+    ).bind(scope.appId, scope.spaceId, now, remaining).all<{ temporary_object_key: string }>());
     for (const row of superseded.results) {
       await this.deleteTemporaryUploadObject(scope, row.temporary_object_key);
       deleted += 1;
@@ -426,15 +426,15 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
              SELECT 1 FROM cas_direct_upload_sessions
              WHERE app_id = ? AND space_id = ? AND hash = ? AND upload_id = ?
            )`,
-      ).bind(scope.stackId, scope.tenantId, hash, scope.stackId, scope.tenantId, hash, uploadId),
+      ).bind(scope.appId, scope.spaceId, hash, scope.appId, scope.spaceId, hash, uploadId),
       this.db.prepare(
         "DELETE FROM cas_direct_upload_sessions WHERE app_id = ? AND space_id = ? AND hash = ? AND upload_id = ?",
-      ).bind(scope.stackId, scope.tenantId, hash, uploadId),
+      ).bind(scope.appId, scope.spaceId, hash, uploadId),
     ]).then(() => undefined));
   }
 
   async putCanonicalObject(scope: NodeLeaseScope, hash: string, body: ReadableStream<Uint8Array>): Promise<void> {
-    const key = appCanonicalNodeKey(scope.stackId, scope.tenantId, hash);
+    const key = appCanonicalNodeKey(scope.appId, scope.spaceId, hash);
     try {
       const stored = await timeOperation(this.timing, "cas_r2_put", () => this.bucket.put(
         key,
@@ -450,7 +450,7 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
     } catch (error) {
       // The cloud-neutral kernel sanitizes this into a stable client error;
       // keep the platform detail (e.g. R2 checksum failure) in the logs only.
-      console.error(`R2 canonical upload failed for ${scope.stackId}/${scope.tenantId}/${hash}`, error);
+      console.error(`R2 canonical upload failed for ${scope.appId}/${scope.spaceId}/${hash}`, error);
       throw error;
     }
   }
@@ -467,14 +467,14 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
           plan.leaseExpiresAt,
           plan.storedBytes,
           Date.now(),
-          scope.stackId,
-          scope.tenantId,
+          scope.appId,
+          scope.spaceId,
           plan.hash,
         ),
         this.db.prepare("DELETE FROM cas_upload_reservations WHERE app_id = ? AND space_id = ? AND hash = ?")
-          .bind(scope.stackId, scope.tenantId, plan.hash),
+          .bind(scope.appId, scope.spaceId, plan.hash),
         this.db.prepare("DELETE FROM cas_direct_upload_sessions WHERE app_id = ? AND space_id = ? AND hash = ?")
-          .bind(scope.stackId, scope.tenantId, plan.hash),
+          .bind(scope.appId, scope.spaceId, plan.hash),
       ]).then(() => undefined));
       this.readyCache?.set(plan.hash, cacheExpiry());
       return;
@@ -487,7 +487,7 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
       `INSERT INTO cas_upload_reservations (app_id, space_id, hash, stored_bytes, created_at, expires_at)
        VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(app_id, space_id, hash) DO UPDATE SET stored_bytes = excluded.stored_bytes`,
-    ).bind(scope.stackId, scope.tenantId, plan.hash, plan.storedBytes, plan.reservationCreatedAt, plan.reservationExpiresAt);
+    ).bind(scope.appId, scope.spaceId, plan.hash, plan.storedBytes, plan.reservationCreatedAt, plan.reservationExpiresAt);
     await this.commitNewNode(scope, { kind: "new", ...plan }, reservation);
   }
 
@@ -504,8 +504,8 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
          lease_expires_at, canonical_stored_bytes, canonical_observed_at
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
-      scope.stackId,
-      scope.tenantId,
+      scope.appId,
+      scope.spaceId,
       plan.hash,
       plan.contentSize,
       plan.contentType,
@@ -517,15 +517,15 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
     for (let index = 0; index < plan.refs.length; index++) {
       batch.push(
         this.db.prepare("INSERT INTO cas_edges (app_id, space_id, parent_hash, ordinal, child_hash) VALUES (?, ?, ?, ?, ?)")
-          .bind(scope.stackId, scope.tenantId, plan.hash, index, plan.refs[index]),
+          .bind(scope.appId, scope.spaceId, plan.hash, index, plan.refs[index]),
         this.db.prepare("UPDATE cas_nodes SET child_ref_count = child_ref_count + 1 WHERE app_id = ? AND space_id = ? AND hash = ?")
-          .bind(scope.stackId, scope.tenantId, plan.refs[index]),
+          .bind(scope.appId, scope.spaceId, plan.refs[index]),
       );
     }
     batch.push(this.db.prepare("DELETE FROM cas_upload_reservations WHERE app_id = ? AND space_id = ? AND hash = ?")
-      .bind(scope.stackId, scope.tenantId, plan.hash));
+      .bind(scope.appId, scope.spaceId, plan.hash));
     batch.push(this.db.prepare("DELETE FROM cas_direct_upload_sessions WHERE app_id = ? AND space_id = ? AND hash = ?")
-      .bind(scope.stackId, scope.tenantId, plan.hash));
+      .bind(scope.appId, scope.spaceId, plan.hash));
     await timeOperation(this.timing, "cas_d1_commit", () => this.db.batch(batch).then(() => undefined));
     // The node was uploaded by this same DO and the D1 row is now committed;
     // mark it ready so later child checks in the same flow skip the R2 HEAD.

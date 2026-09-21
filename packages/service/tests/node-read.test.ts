@@ -9,7 +9,7 @@ import {
   type NodeReadScope,
 } from "../src/index.js";
 
-const SCOPE = { stackId: "cas_stack_a", tenantId: "tenant-1" };
+const SCOPE = { appId: "cas_stack_a", spaceId: "tenant-1" };
 const NODE: NodeReadRecord = {
   contentSize: 10,
   contentType: "text/plain",

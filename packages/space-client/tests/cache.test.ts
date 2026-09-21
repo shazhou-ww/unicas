@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { createTenantCasClient } from "../src/client.js";
+import { createTenantCasClient } from "../src/v1.js";
 
 test("validates ranges and aborted reads before consulting a cache", () => {
   const cache = { metadata: vi.fn(), read: vi.fn() };

@@ -18,7 +18,7 @@ import {
 } from "@unicas/space-protocol/v1";
 
 /** Cloud-neutral authority data required to verify a tenant capability. */
-export interface ResolvedStackAuthority {
+export interface ResolvedV1StackAuthority {
   readonly stackId: string;
   readonly issuer: string;
   readonly audience: string;
@@ -27,8 +27,8 @@ export interface ResolvedStackAuthority {
 }
 
 /** Read-only authority lookup port. Platform adapters own its persistence. */
-export interface StackAuthorityResolver {
-  resolveIssuer(issuer: string): Promise<ResolvedStackAuthority | null>;
+export interface V1StackAuthorityResolver {
+  resolveIssuer(issuer: string): Promise<ResolvedV1StackAuthority | null>;
 }
 
 export type JwksFetcher = (url: string, options: {
@@ -38,7 +38,7 @@ export type JwksFetcher = (url: string, options: {
   readonly signal: AbortSignal;
 }) => Promise<Response>;
 
-export interface StackAuthEvent {
+export interface V1StackTenantAuthEvent {
   readonly kind: "authorized" | "rejected" | "registry_stale" | "fail_closed";
   readonly operation: CasRoute["operation"] | "unknown";
   readonly stackId?: string;
@@ -49,8 +49,8 @@ export interface StackAuthEvent {
   readonly reason?: string;
 }
 
-export interface StackVerifierOptions {
-  readonly repository: StackAuthorityResolver;
+export interface V1StackTenantVerifierOptions {
+  readonly repository: V1StackAuthorityResolver;
   /** Allowed algorithms; default [ES256]. */
   readonly allowedAlgorithms?: readonly string[];
   /** Serve cached authority records for this long without a registry read. */
@@ -59,10 +59,10 @@ export interface StackVerifierOptions {
   readonly hardStaleBoundMs?: number;
   readonly jwksFetcher?: JwksFetcher;
   readonly now?: () => number;
-  readonly onEvent?: (event: StackAuthEvent) => void;
+  readonly onEvent?: (event: V1StackTenantAuthEvent) => void;
 }
 
-export interface VerifiedStackCall {
+export interface VerifiedV1StackTenantCall {
   readonly stackId: string;
   readonly tenantId: string;
   /** Opaque audit identity; CAS never interprets subject prefixes. */
@@ -83,18 +83,18 @@ const CLOCK_TOLERANCE_SECONDS = 30;
  * database or runtime. Issuer records are cached for 30 seconds and are never
  * served past the 60-second hard stale bound when the registry is unavailable.
  */
-export class StackCapabilityVerifier {
-  readonly #repository: StackAuthorityResolver;
+export class V1StackTenantCapabilityVerifier {
+  readonly #repository: V1StackAuthorityResolver;
   readonly #algorithms: string[];
   readonly #cacheTtlMs: number;
   readonly #hardStaleBoundMs: number;
   readonly #jwksFetcher: JwksFetcher | undefined;
   readonly #now: () => number;
-  readonly #onEvent: (event: StackAuthEvent) => void;
+  readonly #onEvent: (event: V1StackTenantAuthEvent) => void;
   readonly #authorityCache = new Map<string, CachedAuthority>();
   readonly #remoteKeySets = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 
-  constructor(options: StackVerifierOptions) {
+  constructor(options: V1StackTenantVerifierOptions) {
     this.#repository = options.repository;
     this.#algorithms = [...(options.allowedAlgorithms ?? [CapabilityAlgorithm])];
     this.#cacheTtlMs = options.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
@@ -107,7 +107,7 @@ export class StackCapabilityVerifier {
     this.#onEvent = options.onEvent ?? (() => undefined);
   }
 
-  async verify(request: Request, route: CasRoute): Promise<VerifiedStackCall> {
+  async verify(request: Request, route: CasRoute): Promise<VerifiedV1StackTenantCall> {
     let capability: VerifiedPayload;
     try {
       capability = await this.#verifyToken(request, route);
@@ -206,7 +206,7 @@ export class StackCapabilityVerifier {
       throw new CapabilityAuthorizationError("resource_scope_mismatch", "CAS capability tenant does not match the requested path");
     }
 
-    const permission = permissionFor(route);
+    const permission = v1PermissionFor(route);
     if (!payload.permissions.includes(permission)) {
       throw new CapabilityAuthorizationError("insufficient_permission", `CAS ${route.operation} requires ${permission}`);
     }
@@ -228,7 +228,7 @@ export class StackCapabilityVerifier {
     return keySet;
   }
 
-  async #resolveAuthority(issuer: string): Promise<ResolvedStackAuthority | null> {
+  async #resolveAuthority(issuer: string): Promise<ResolvedV1StackAuthority | null> {
     const now = this.#now();
     const cached = this.#authorityCache.get(issuer);
     if (cached) {
@@ -296,7 +296,7 @@ export class StackCapabilityVerifier {
 }
 
 /** Exact operation-to-permission matrix. */
-export function permissionFor(route: CasRoute): string {
+export function v1PermissionFor(route: CasRoute): string {
   switch (route.operation) {
     case "readContent":
     case "readMetadata":
@@ -323,7 +323,7 @@ interface VerifiedPayload {
 }
 
 interface CachedAuthority {
-  readonly authority: ResolvedStackAuthority;
+  readonly authority: ResolvedV1StackAuthority;
   readonly fetchedAt: number;
 }
 

@@ -1,8 +1,7 @@
 import type {
-  CasNodeCache,
-  CasNodeMetadata,
-  SpaceCasNodeCacheKey,
-} from "@unicas/space-client";
+  TenantCasNodeCacheKey,
+  V1CasNodeCache,
+} from "@unicas/space-client/v1";
 import {
   clearBrowserNodeCachesCore,
   createBrowserNodeCacheCore,
@@ -16,7 +15,7 @@ export interface BrowserCasNodeCacheOptions {
   readonly maxEntryBytes?: number;
 }
 
-export interface BrowserCasNodeCache extends CasNodeCache {
+export interface BrowserCasNodeCache extends V1CasNodeCache {
   clear(): Promise<void>;
   close(): void;
 }
@@ -24,15 +23,15 @@ export interface BrowserCasNodeCache extends CasNodeCache {
 export function createBrowserCasNodeCache(
   options: BrowserCasNodeCacheOptions,
 ): BrowserCasNodeCache {
-  return createBrowserNodeCacheCore<SpaceCasNodeCacheKey>({
+  return createBrowserNodeCacheCore<TenantCasNodeCacheKey>({
     ...options,
-    databaseName: options.databaseName ?? "unicas-node-cache-v2",
-    namespaceParts: (endpoint, principal) => ["v2", endpoint, principal],
+    databaseName: options.databaseName ?? "unicas-node-cache-v1",
+    namespaceParts: (endpoint, principal) => [endpoint, principal],
     keyParts: (key, kind) => {
-      if (!("appId" in key) || key.version !== 2) {
-        throw new TypeError("App/Space cache requires a v2 cache key");
+      if (!("stackId" in key)) {
+        throw new TypeError("Stack/Tenant cache requires a v1 cache key");
       }
-      return ["v2", key.appId, key.spaceId, key.hash, kind];
+      return [key.stackId, key.tenantId, key.hash, kind];
     },
   });
 }
@@ -43,8 +42,6 @@ export function clearBrowserCasNodeCaches(options: {
 }): Promise<void> {
   return clearBrowserNodeCachesCore({
     principal: options.principal,
-    databaseName: options.databaseName ?? "unicas-node-cache-v2",
+    databaseName: options.databaseName ?? "unicas-node-cache-v1",
   });
 }
-
-export type { CasNodeMetadata };

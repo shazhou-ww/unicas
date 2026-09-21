@@ -1,5 +1,5 @@
 /**
- * @unicas/space-protocol — CAS tenant data-plane HTTP contracts.
+ * @unicas/space-protocol — CAS Space data-plane HTTP contracts.
  *
  * HTTP request/response types, route definitions, and the CAS capability
  * claim vocabulary. Wire encodings (node binary format, digest, blob index)
@@ -75,7 +75,7 @@ export type { CasErrorResponse } from "./http.js";
 export { appSpaceRoutes, matchAppSpaceRoute } from "./routes.js";
 export type { AppSpaceRoute } from "./routes.js";
 
-// CAS-neutral tenant capability claim vocabulary
+// Space capability claim vocabulary
 export {
   canonicalPermissionSegment,
   parseSpaceCapabilityPermission,
@@ -98,7 +98,7 @@ export {
   CapabilityAuthenticationError,
   CapabilityAuthorizationError,
   CapabilityError,
-} from "./capability.js";
+} from "./space-capability.js";
 export type {
   CapabilityErrorCode,
   CapabilityProtectedHeader,
@@ -107,4 +107,4 @@ export type {
   SpaceCapabilityPermission,
   SpaceCapabilityPermissionKind,
   VerifiedSpaceCapability,
-} from "./capability.js";
+} from "./space-capability.js";

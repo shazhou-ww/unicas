@@ -1,11 +1,9 @@
 import { HASH_SIZE, HEADER_SIZE } from "@unicas/codec";
 import type { CasNodeMetadata, CasNodeState } from "@unicas/space-protocol";
 import { NodeOpError, NodeOpErrorCodes } from "./node-errors.js";
+import type { AppSpaceScope } from "./space-scope.js";
 
-export interface NodeReadScope {
-  readonly stackId: string;
-  readonly tenantId: string;
-}
+export interface NodeReadScope extends AppSpaceScope { }
 
 export interface NodeReadRecord {
   readonly contentSize: number;

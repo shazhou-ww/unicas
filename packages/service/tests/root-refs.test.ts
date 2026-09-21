@@ -17,7 +17,7 @@ const TENANT = "tenant-1";
 const DOMAIN = "doc";
 const H1 = "a".repeat(64);
 const H2 = "b".repeat(64);
-const SCOPE = { stackId: STACK, tenantId: TENANT, refDomain: DOMAIN };
+const SCOPE = { appId: STACK, spaceId: TENANT, refDomain: DOMAIN };
 
 class MemoryRootRefRepository implements RootRefRepository {
   readonly nodes = new Map<string, number>();
@@ -39,7 +39,7 @@ class MemoryRootRefRepository implements RootRefRepository {
     return this.requests.get(requestId) ?? null;
   }
 
-  async readNodes(_scope: Pick<RootRefScope, "stackId" | "tenantId">, hashes: readonly string[]) {
+  async readNodes(_scope: Pick<RootRefScope, "appId" | "spaceId">, hashes: readonly string[]) {
     return hashes.flatMap((hash) => {
       const rootRefCount = this.nodes.get(hash);
       return rootRefCount === undefined ? [] : [{ hash, rootRefCount }];
@@ -47,7 +47,7 @@ class MemoryRootRefRepository implements RootRefRepository {
   }
 
   async findUnreadyNode(
-    _scope: Pick<RootRefScope, "stackId" | "tenantId">,
+    _scope: Pick<RootRefScope, "appId" | "spaceId">,
     hashes: readonly string[],
   ) {
     return hashes.find((hash) => !this.ready.has(hash)) ?? null;

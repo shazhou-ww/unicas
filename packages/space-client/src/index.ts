@@ -1,4 +1,4 @@
-/** Functional, tenant-bound CAS client. */
+/** Functional, Space-bound CAS client. */
 
 export type {
   CasGcOptions,

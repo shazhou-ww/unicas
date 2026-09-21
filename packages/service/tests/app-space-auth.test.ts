@@ -16,12 +16,12 @@ import {
 import { casReadPermission } from "@unicas/space-protocol/v1";
 import {
   AppSpaceCapabilityVerifier,
-  StackCapabilityVerifier,
+  V1StackTenantCapabilityVerifier,
   appSpacePermissionFor,
   type AppAuthorityResolver,
   type ResolvedAppAuthority,
-  type ResolvedStackAuthority,
-  type StackAuthorityResolver,
+  type ResolvedV1StackAuthority,
+  type V1StackAuthorityResolver,
 } from "../src/index.js";
 
 const ISSUER = "https://issuer.example";
@@ -51,10 +51,10 @@ class StubAppAuthorityResolver implements AppAuthorityResolver {
   }
 }
 
-class StubStackAuthorityResolver implements StackAuthorityResolver {
-  constructor(readonly authority: ResolvedStackAuthority) { }
+class StubV1StackAuthorityResolver implements V1StackAuthorityResolver {
+  constructor(readonly authority: ResolvedV1StackAuthority) { }
 
-  async resolveIssuer(issuer: string): Promise<ResolvedStackAuthority | null> {
+  async resolveIssuer(issuer: string): Promise<ResolvedV1StackAuthority | null> {
     return issuer === ISSUER ? this.authority : null;
   }
 }
@@ -63,7 +63,7 @@ async function fixture(): Promise<{
   now: number;
   privateKey: CryptoKey;
   appResolver: StubAppAuthorityResolver;
-  stackResolver: StubStackAuthorityResolver;
+  stackResolver: StubV1StackAuthorityResolver;
 }> {
   const now = 1_700_000_000_000;
   const { publicKey, privateKey } = await generateKeyPair("ES256", { extractable: true });
@@ -82,7 +82,7 @@ async function fixture(): Promise<{
       jwksUri,
       capabilityMaxLifetimeSeconds: 28_800,
     }),
-    stackResolver: new StubStackAuthorityResolver({
+    stackResolver: new StubV1StackAuthorityResolver({
       stackId: STACK,
       issuer: ISSUER,
       audience: AUDIENCE,
@@ -489,7 +489,7 @@ describe("AppSpaceCapabilityVerifier", () => {
   test("rejects v1 and v3 tokens across route families even when both scopes are present", async () => {
     const { now, privateKey, appResolver, stackResolver } = await fixture();
     const appVerifier = new AppSpaceCapabilityVerifier({ repository: appResolver, now: () => now });
-    const stackVerifier = new StackCapabilityVerifier({ repository: stackResolver, now: () => now });
+    const stackVerifier = new V1StackTenantCapabilityVerifier({ repository: stackResolver, now: () => now });
     const v1Token = await issue(privateKey, now, {
       ver: 1,
       tenantId: TENANT,

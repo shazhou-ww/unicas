@@ -6,7 +6,7 @@ import { describe, expect, test } from "vitest";
 /**
  * Browser-boundary proof: `src/ui` is the only code delivered to the browser.
  * It must never reference Google secrets, session signing material, storage
- * bindings, control-plane/server modules, or tenant-plane credentials.
+ * bindings, control-plane/server modules, or data-plane credentials.
  */
 
 const UI_DIR = join(dirname(fileURLToPath(import.meta.url)), "../src/ui");
@@ -34,7 +34,7 @@ const FORBIDDEN_TOKENS = [
   "R2Bucket",
   "cloudflare-cas",
 ];
-const TENANT_CREDENTIAL_TOKENS = ["Bearer", "Authorization"];
+const DATA_PLANE_CREDENTIAL_TOKENS = ["Bearer", "Authorization"];
 const FORBIDDEN_IMPORTS = [
   "../server/",
 ];
@@ -48,16 +48,16 @@ describe("cas-admin-webui browser boundary", () => {
       for (const token of FORBIDDEN_TOKENS) {
         expect(source, `${file} must not contain ${token}`).not.toContain(token);
       }
-      for (const token of TENANT_CREDENTIAL_TOKENS) {
+      for (const token of DATA_PLANE_CREDENTIAL_TOKENS) {
         expect(source, `${file} must not contain ${token}`).not.toContain(token);
       }
     }
   });
 
-  test("browser code does not import tenant client facades", () => {
+  test("browser code does not import data-plane client facades", () => {
     for (const file of listFiles(UI_DIR)) {
       const source = readFileSync(file, "utf8");
-      expect(source, `${file} must not import the tenant plane`).not.toContain("@unicas/tenant-");
+      expect(source, `${file} must not import removed data-plane packages`).not.toContain("@unicas/tenant-");
       expect(source).not.toContain("@unicas/space-protocol");
       expect(source).not.toContain("@unicas/codec");
     }

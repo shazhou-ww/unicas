@@ -140,7 +140,7 @@ protocol and lease behavior rather than duplicating or reverting its work.
 
 ## References
 
-- [Capability vocabulary](/packages/space-protocol/src/capability.ts)
+- [Capability vocabulary](/packages/space-protocol/src/space-capability.ts)
 - [Space capability verifier](/packages/service/src/app-space-auth.ts)
 - [Space v2 contract](/packages/space-protocol/src/space-v2-contract.ts)
 - [Space v2 OpenAPI](/packages/space-protocol/openapi/space-v2.openapi.json)

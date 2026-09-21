@@ -130,7 +130,7 @@ consume.
 
 - [Space v2 contract](/packages/space-protocol/src/space-v2-contract.ts)
 - [Space v2 OpenAPI](/packages/space-protocol/openapi/space-v2.openapi.json)
-- [Capability vocabulary](/packages/space-protocol/src/capability.ts)
+- [Capability vocabulary](/packages/space-protocol/src/space-capability.ts)
 - [Package and access-plane boundaries](/packages/README.md)
 - [UniCAS architecture](/docs/cas-architecture.md)
 - [State protection and garbage collection](/docs/cas-state-protection-and-gc.md)

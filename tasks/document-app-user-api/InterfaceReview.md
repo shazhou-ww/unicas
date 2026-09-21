@@ -40,7 +40,7 @@ The draft was checked against:
 
 - [Space v2 TypeScript contract](../../packages/space-protocol/src/space-v2-contract.ts)
 - [Generated Space v2 OpenAPI](../../packages/space-protocol/openapi/space-v2.openapi.json)
-- [Capability vocabulary](../../packages/space-protocol/src/capability.ts)
+- [Capability vocabulary](../../packages/space-protocol/src/space-capability.ts)
 - [Public transport client](../../packages/space-client/src/client.ts)
 - [Public transport client types](../../packages/space-client/src/types.ts)
 - [Service authorization](../../packages/service/src/app-space-auth.ts)

@@ -36,7 +36,7 @@ import {
 import { CloudflareNodeGcRepository } from "./node-gc.js";
 import { CloudflareNodeReadRepository } from "./node-read.js";
 import { CloudflareNodeUsageRepository } from "./node-usage.js";
-import { canonicalizeRootRefsUpdate, listTenantRootRefs, parseRootRefsBody } from "./root-refs.js";
+import { canonicalizeRootRefsUpdate, listSpaceRootRefs, parseRootRefsBody } from "./root-refs.js";
 import { RootRefsErrorCodes, RootRefsValidationError } from "./root-refs.js";
 import { ServerTiming } from "./timing.js";
 import { R2UploadPresigner } from "./r2-upload-presigner.js";
@@ -85,8 +85,8 @@ export class CasDurableObject {
     const store = {
       db: this.#env.CAS_DB,
       bucket: this.#env.CAS_R2,
-      stackId: appId,
-      tenantId: spaceId,
+      appId: appId,
+      spaceId: spaceId,
       timing,
       readyCache: this.#readyCache,
     };
@@ -98,10 +98,10 @@ export class CasDurableObject {
       } else if (url.pathname === "/rootRefs" && request.method === "GET") {
         const limit = parseRootRefsLimit(url.searchParams.get("limit"));
         const cursor = parseRootRefsCursor(url.searchParams.get("cursor"));
-        response = jsonResponse(await listTenantRootRefs({
+        response = jsonResponse(await listSpaceRootRefs({
           db: store.db,
-          stackId: appId,
-          tenantId: spaceId,
+          appId: appId,
+          spaceId: spaceId,
           refDomain: requireHeader(request, "X-CAS-Ref-Domain"),
           limit,
           cursor,
@@ -115,13 +115,13 @@ export class CasDurableObject {
       } else if (url.pathname === "/usage" && request.method === "GET") {
         response = jsonResponse(await readNodeUsage({
           repository: new CloudflareNodeUsageRepository(store.db, store.bucket),
-          scope: { stackId: store.stackId, tenantId: store.tenantId },
+          scope: { appId: store.appId, spaceId: store.spaceId },
         }));
       } else if (url.pathname === "/gc" && request.method === "POST") {
         response = jsonResponse(await this.#handleGc(request, store));
       } else {
         response = Response.json(
-          { error: "SERVICE_UNAVAILABLE", message: "tenant CAS operation not implemented yet" },
+          { error: "SERVICE_UNAVAILABLE", message: "Space CAS operation not implemented yet" },
           { status: 501 },
         );
       }
@@ -135,9 +135,9 @@ export class CasDurableObject {
           { status: error.status, headers: error.headers },
         ));
       }
-      console.error("Unexpected tenant CAS operation failure", error);
+      console.error("Unexpected Space CAS operation failure", error);
       return timing.decorate(Response.json(
-        { error: NodeOpErrorCodes.STORAGE, message: "tenant CAS operation failed" },
+        { error: NodeOpErrorCodes.STORAGE, message: "Space CAS operation failed" },
         { status: 503 },
       ));
     }
@@ -169,7 +169,7 @@ export class CasDurableObject {
       if (declaredLength === undefined) {
         throw new NodeOpError(411, NodeOpErrorCodes.INVALID_REQUEST, "Content-Length is required");
       }
-      const uploadKey = `${store.stackId}\0${store.tenantId}\0${hash}`;
+      const uploadKey = `${store.appId}\0${store.spaceId}\0${hash}`;
       let admission:
         | { readonly kind: "ready"; readonly result: unknown }
         | { readonly kind: "join"; readonly active: ActiveUpload }
@@ -252,7 +252,7 @@ export class CasDurableObject {
     }
     const now = Date.now();
     const uploadExpirySeconds = this.#uploadExpirySeconds();
-    const uploadKey = `${store.stackId}\0${store.tenantId}\0${hash}`;
+    const uploadKey = `${store.appId}\0${store.spaceId}\0${hash}`;
     const active = this.#activeLeaseEvaluations.get(uploadKey);
     if (active !== undefined) return active;
     const evaluation = this.#evaluateSpaceLease(
@@ -361,7 +361,7 @@ export class CasDurableObject {
     const hash = requireHeader(request, "X-CAS-Hash");
     const content = await readNodeContent({
       repository: new CloudflareNodeReadRepository(store.db, store.bucket, store.timing),
-      scope: { stackId: store.stackId, tenantId: store.tenantId },
+      scope: { appId: store.appId, spaceId: store.spaceId },
       hash,
       rangeHeader: request.headers.get("Range"),
     });
@@ -388,7 +388,7 @@ export class CasDurableObject {
     const hash = requireHeader(request, "X-CAS-Hash");
     const result = await readNodeMetadata({
       repository: new CloudflareNodeReadRepository(store.db, store.bucket, store.timing),
-      scope: { stackId: store.stackId, tenantId: store.tenantId },
+      scope: { appId: store.appId, spaceId: store.spaceId },
       hash,
     });
     if (result === null) {
@@ -407,7 +407,7 @@ export class CasDurableObject {
       await cleanupExpiredLeaseDrivenUploads(store, { now: Date.now(), limit: maxNodes });
       return collectExpiredUnreferencedNodes({
         repository: new CloudflareNodeGcRepository(store.db, store.bucket),
-        scope: { stackId: store.stackId, tenantId: store.tenantId },
+        scope: { appId: store.appId, spaceId: store.spaceId },
         maxNodes,
       });
     });
@@ -549,11 +549,11 @@ function requireHeader(request: Request, name: string): string {
 }
 
 function physicalScope(request: Request): { appId: string; spaceId: string } | Response {
-  const stackId = request.headers.get("X-CAS-Stack-Id");
-  const tenantId = request.headers.get("X-CAS-Tenant-Id");
+  const legacyStackId = request.headers.get("X-CAS-Stack-Id");
+  const legacyTenantId = request.headers.get("X-CAS-Tenant-Id");
   const appId = request.headers.get("X-CAS-App-Id");
   const spaceId = request.headers.get("X-CAS-Space-Id");
-  const hasV1 = stackId !== null || tenantId !== null;
+  const hasV1 = legacyStackId !== null || legacyTenantId !== null;
   const hasV2 = appId !== null || spaceId !== null;
 
   if (hasV1 && hasV2) {
@@ -562,7 +562,9 @@ function physicalScope(request: Request): { appId: string; spaceId: string } | R
       { status: 400 },
     );
   }
-  if (hasV1 && stackId && tenantId) return { appId: stackId, spaceId: tenantId };
+  if (hasV1 && legacyStackId && legacyTenantId) {
+    return { appId: legacyStackId, spaceId: legacyTenantId };
+  }
   if (hasV2 && appId && spaceId) return { appId, spaceId };
   return Response.json(
     { error: "INVALID_SCOPE_HEADERS", message: "one complete scope header family is required" },

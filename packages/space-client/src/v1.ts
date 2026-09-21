@@ -1,4 +1,4 @@
-export { createTenantCasClient } from "./client.js";
+export { createTenantCasClient } from "./v1/client.js";
 export { CasClientError } from "./errors.js";
 export type {
   CasGcOptions,
@@ -8,7 +8,6 @@ export type {
   CasLeaseOptions,
   CasLeaseResult,
   CasListRootRefsOptions,
-  CasNodeCache,
   CasNodeRange,
   CasNodeSource,
   CasRootRefUpdate,
@@ -19,4 +18,5 @@ export type {
   TenantCasClient,
   TenantCasClientConfig,
   TenantCasNodeCacheKey,
-} from "./types.js";
+  V1CasNodeCache,
+} from "./v1/types.js";

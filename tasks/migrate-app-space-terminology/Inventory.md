@@ -25,7 +25,7 @@ exports remain mandatory immediately before a destructive cutover.
 | Admin routes | [`admin-protocol/src/routes.ts`](/packages/admin-protocol/src/routes.ts) | `/admin/stacks/{stackId}` | Introduce App operations without silently changing a v1 operation schema. |
 | Admin JSON | [`admin-protocol/src/types.ts`](/packages/admin-protocol/src/types.ts), [`schemas.ts`](/packages/admin-protocol/src/schemas.ts) | `CasStack*`, `stackId`, `tenantId` | Define `App`, `AppMembership`, `AppOAuthIssuer`, `AppAuditEvent`, and App/Space fields. |
 | Data JSON | [`tenant-protocol/src/schemas.ts`](/packages/space-protocol/src/schemas.ts), [`http.ts`](/packages/space-protocol/src/http.ts) | Stack/Tenant-scoped usage and Root Ref payloads | Define v2 Space-scoped payloads while preserving Root Ref semantics. |
-| Capabilities | [`tenant-protocol/src/capability.ts`](/packages/space-protocol/src/capability.ts) | `ver: 1`, `tenantId`, `tenants:{tenantId}:cas:*` | Add `ver: 2`, `spaceId`, and `spaces:{spaceId}:cas:*`; never translate one version implicitly. |
+| Capabilities | [`tenant-protocol/src/capability.ts`](/packages/space-protocol/src/v1/capability.ts) | `ver: 1`, `tenantId`, `tenants:{tenantId}:cas:*` | Add `ver: 2`, `spaceId`, and `spaces:{spaceId}:cas:*`; never translate one version implicitly. |
 | OpenAPI | [`tenant-v1.openapi.json`](/packages/space-protocol/openapi/tenant-v1.openapi.json), `admin-v1.openapi.json` | Generated v1 artifacts | Keep v1 artifacts frozen and generate separately named v2 artifacts. |
 | CLI | [`admin-cli/src/cli.ts`](/packages/admin-cli/src/cli.ts) | `stacks`, `<stackId>`, `--tenant-id` | Add the accepted `apps`, `<appId>`, and `--space-id` vocabulary with an explicit contract transition. |
 | MCP | [`service-cloudflare/src/mcp/server.ts`](/packages/service-cloudflare/src/mcp/server.ts), [`admin-cli/src/mcp/catalog.ts`](/packages/admin-cli/src/mcp/catalog.ts) | `list_stacks`, `get_stack`, `stackId`, `tenantId` | Add App/Space tools and keep remote and stdio catalogs structurally identical. |
@@ -76,7 +76,7 @@ These identifiers are migration inputs, not blind rename targets:
 | --- | --- | --- |
 | Control D1 | [`control-schema.ts`](/packages/service-cloudflare/src/control-schema.ts) | `cas_stacks`, `cas_stack_members`, related `stack_id` columns |
 | Data D1 | [`schema.ts`](/packages/service-cloudflare/src/schema.ts) | `stack_id` and `tenant_id` dimensions across node, upload, Root Ref, usage, and GC state |
-| Durable Objects | [`do-names.ts`](/packages/service-cloudflare/src/do-names.ts), [`tenant-do.ts`](/packages/service-cloudflare/src/tenant-do.ts) | Composite Stack/Tenant coordinator names |
+| Durable Objects | [`do-names.ts`](/packages/service-cloudflare/src/do-names.ts), [`tenant-do.ts`](/packages/service-cloudflare/src/space-do.ts) | Composite Stack/Tenant coordinator names |
 | R2 | [`do-names.ts`](/packages/service-cloudflare/src/do-names.ts) | `stacks/{stackId}/tenants/{tenantId}/nodes-v2/{hash}` |
 | Browser cache | [`tenant-browser-cache/src/index.ts`](/packages/space-browser-cache/src/index.ts) | Endpoint/Principal/Stack/Tenant namespace |
 

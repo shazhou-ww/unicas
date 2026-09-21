@@ -1,11 +1,9 @@
 import type { CasGcResult } from "@unicas/space-protocol";
+import type { AppSpaceScope } from "./space-scope.js";
 
 export const DEFAULT_GC_MAX_NODES = 100;
 
-export interface NodeGcScope {
-  readonly stackId: string;
-  readonly tenantId: string;
-}
+export interface NodeGcScope extends AppSpaceScope { }
 
 export interface NodeGcCandidate {
   readonly hash: string;
@@ -24,7 +22,7 @@ export interface NodeGcDeletion {
 
 /**
  * Semantic persistence boundary for node collection. The caller must hold the
- * keyed single-writer scope for the tenant for the duration of a collection.
+ * keyed single-writer scope for the Space for the duration of a collection.
  */
 export interface NodeGcRepository {
   findExpiredUnreferenced(

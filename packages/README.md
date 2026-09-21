@@ -5,10 +5,10 @@ UniCAS 是独立可部署的 CAS 中间件（content-addressed storage + App 控
 中间件包及不发布的第一方集成 App。2026-08-29 重组后，本目录内**零
 `@unidocs/*` 依赖**，该承诺完全兑现。
 
-公共 v2 资源名是 **App** 和 **Space**。`tenant-*` 是既有数据访问面包族的
-稳定 package identifier，不表示 v2 资源仍叫 Tenant。该包族同时承载冻结的
-Stack/Tenant v1 与 App/Space v2 契约；物理 `stack_id`/`tenant_id` 名称在切换
-门禁通过前由显式 adapter 隔离，不得暴露到 v2 wire、CLI、MCP 或 WebUI。
+公共资源名是 **App** 和 **Space**，数据访问面包族统一使用 `space-*`。
+冻结的 Stack/Tenant v1 仅由 `space-protocol/v1`、`space-client/v1` 和
+`space-browser-cache/v1` 显式承载；物理或历史兼容字段由命名 adapter 隔离，
+不得暴露到当前 wire、CLI、MCP 或 WebUI。
 
 ## 命名规则
 
@@ -16,7 +16,7 @@ Stack/Tenant v1 与 App/Space v2 契约；物理 `stack_id`/`tenant_id` 名称�
    改名必须同时改目录名与 `package.json` 的 `name`（依赖 guard 强制校验，
   见 `tests/workspace-boundaries.test.mjs`）。
 2. **客户端按 actor 分两组**：
-  - `tenant-*` — 数据面 package family（frozen v1 + Space v2）
+  - `space-*` — Space 数据面 package family（root 为 current，`./v1` 为 frozen v1）
   - `admin-*` — App 管理控制面
 3. **编码层**：`codec` —— wire 编码，独立发布、独立测试，无 workspace 依赖。
 4. **契约包**：`space-protocol`（数据面 HTTP 契约 + capability）/
@@ -31,12 +31,11 @@ Stack/Tenant v1 与 App/Space v2 契约；物理 `stack_id`/`tenant_id` 名称�
 
 ## 客户端访问面固定结构
 
-admin 与 data 两类参与者的访问面保持分离，客户端包采用同一套角色。下图的
-`tenant` 是 package-family 名，不是 v2 public resource：
+admin 与 data 两类参与者的访问面保持分离，客户端包采用同一套角色：
 
 ```
 admin:  [admin-cli, admin-webui] -> admin-client -> admin-protocol
-tenant: [tenant-cli, tenant-webui] -> space-client -> space-protocol
+space: [space-cli, space-webui] -> space-client -> space-protocol
 ```
 
 - `protocol` 定义该访问面的 HTTP 接口、接口依赖的 request/response 类型，
@@ -60,7 +59,7 @@ packages/                           @unicas org
 │         （canonical-stream）、限额/校验（validation）——不含 blob 分片
 │
 ├── ■ 契约层（cloud-neutral、无 IO、冻结契约）
-│   ├── space-protocol/   @unicas/space-protocol    tenant 组 · 数据面
+│   ├── space-protocol/   @unicas/space-protocol    Space 数据面
 │   │     HTTP request/response 类型（types/http）+ 路由（routes）
 │   │     + capability 词汇（capability）；不 re-export 编码符号
 │   └── admin-protocol/    @unicas/admin-protocol     admin 组 · 控制面
@@ -89,24 +88,24 @@ packages/                           @unicas org
 ├── ■ client 层
     ├── admin-webui/       @unicas/admin-webui         admin 组 · 浏览器 UI（纯前端）
     │     经 @unicas/admin-client 取 admin-protocol 类型；不含任何服务端代码
-    ├── space-client/     @unicas/space-client       tenant 组 · 传输层
+    ├── space-client/     @unicas/space-client       Space 数据面 · 传输层
     │     纯 HTTP 封装，每个路由一个函数（readMetadata/readContent/
-    │     leaseNode/updateRootRefs/usage/gc）；`createTenantCasClient` 绑定 v1
-    │     Stack/Tenant，`createSpaceCasClient` 绑定 v2 App/Space；
+    │     leaseNode/updateRootRefs/usage/gc）；root 的 `createSpaceCasClient`
+    │     绑定 App/Space，`./v1` 的 `createTenantCasClient` 绑定 frozen v1；
     │     无编码、无业务封装，仅组装层使用
-    ├── space-blob-client/@unicas/space-blob-client  tenant 组 · 业务面
+    ├── space-blob-client/@unicas/space-blob-client  Space 数据面 · 业务面
     │     业务方唯一入口：storeBlob / openBlob(含元数据的句柄式随机读) /
     │     retain / release；底层能力统一经 unicasClient 访问
     │     + 节点写辅助（storeNodeContent/leaseNodeContent）
     │     + blob index CBOR（client 侧 manifest，服务端不解析）
-    ├── space-file-client/@unicas/space-file-client  tenant 组 · 文件系统业务面
+    ├── space-file-client/@unicas/space-file-client  Space 数据面 · 文件系统业务面
     │     WebDAV 风格 working tree（stat/readdir/read/write/mkdir/move/copy/remove）
     │     + 显式 commit/discard；文件 manifest 协议独立定义，root 名称与 revision
     │     经注入的业务 catalog port 持久化，CAS 仍不解析目录语义
-    ├── space-browser-cache/@unicas/space-browser-cache  tenant 组 · 浏览器缓存策略
+    ├── space-browser-cache/@unicas/space-browser-cache  Space 数据面 · 浏览器缓存策略
     │     实现 CasNodeCache；仅缓存不可变节点元数据和完整内容，内存 + IndexedDB LRU
-    │     v1 按 endpoint/principal/stack/tenant/hash，v2 按
-    │     endpoint/Principal/App/Space/hash/version 隔离，不持久化凭据或 working tree
+    │     root 按 endpoint/Principal/App/Space/hash/version 隔离；`./v1` 保留
+    │     endpoint/principal/stack/tenant/hash，不持久化凭据或 working tree
     ├── admin-client/      @unicas/admin-client        admin 组 · 控制面 HTTP client
     │     纯函数传输层（对标 space-client）：每操作一函数，类型直接来自
     │     @unicas/admin-protocol；session cookie + CSRF 由 session provider 提供
@@ -118,7 +117,7 @@ packages/                           @unicas org
     │
     └── ■ 私有第一方集成 App
         └── spaces/            @unicas/spaces              文件工作流与 release smoke
-          独立部署且不发布；只消费公开 tenant client，部署配置与 App-owned
+          独立部署且不发布；只消费公开 Space client，部署配置与 App-owned
           D1 migration 位于 stacks/unicas/spaces
 ```
 
@@ -138,26 +137,25 @@ packages/                           @unicas org
 
 - **codec 是最底层**：无 workspace 依赖，仅外部 `cborg`；`space-protocol`
   不 re-export codec 符号（强制迁移，2026-08-29 决策）。
-- **space-client 是纯函数传输层**：与 HTTP 路由一一对应。冻结 v1 factory
-  绑定 `stackId`/`tenantId`，v2 factory 绑定 `appId`/`spaceId`；两者只组装 JWT
+- **space-client 是纯函数传输层**：与 HTTP 路由一一对应。root factory 绑定
+  `appId`/`spaceId`；`./v1` factory 绑定 `stackId`/`tenantId`。两者只组装 JWT
   与公共传输参数，无编码、无业务封装、无对象模式（`node()` 已移除）。
 - **业务方只用 space-blob-client**：其接口覆盖完整数据面
   （blob 写/随机读 + 节点元数据/续租/root-refs + usage/gc），应用栈不再直接
-  依赖 space-client；`createTenantCasClient` 只在组装点喂给
-  `createCasBlobClient`。
+  依赖 space-client；当前业务层只接收 `SpaceCasClient`。
 - 契约层：`space-protocol` 持有数据面共享类型；`admin-protocol` 仅通过允许的
   单向依赖复用 App/Space identity 类型，反向依赖禁止。
-- `service` 同时依赖 tenant/admin protocol，统一两套服务端 HTTP surface；
-  平台 context 显式提供 control/tenant SQL、blob 与 keyed actor 端口。tenant
-  capability 校验属于该 cloud-neutral actor：authority 只经只读 resolver port
+- `service` 同时依赖 Space/admin protocol，统一 current、frozen-v1 与 Admin HTTP surface；
+  平台 context 显式提供 control/Space SQL、blob 与 keyed actor 端口。capability
+  校验属于该 cloud-neutral actor：authority 只经只读 resolver port
   注入，D1 `AuthorityRepository` 仍由 Cloudflare adapter 构造。
 - `service-cloudflare` 是 UniCAS 中间件唯一部署包，持有 D1/R2/KV/DO 和公网 route；生产及
   本地 Miniflare 均不再通过 tenant/admin/MCP service bindings 拆分 UniCAS。
-- tenant D1/R2 repositories、DO 生命周期与 audit RPC 已并入
+- Space D1/R2 repositories、DO 生命周期与 legacy audit RPC 已并入
   `service-cloudflare`，原 `server-cloudflare`、`control-plane`、`control-plane-mcp`
   迁移包已删除；admin BFF/OIDC（src/admin-bff）与 MCP/OAuth ingress（src/mcp）
   也已并入 `service-cloudflare`，`admin-webui` 只剩浏览器 UI。
-- 数据面不得依赖 admin 组包；admin 实现包不得依赖 tenant 实现包。
+- 数据面不得依赖 admin 组包；admin 实现包不得依赖 Space 实现包。
   唯一协议级单向例外是 `admin-protocol -> space-protocol`，用于复用两面
   公共协议类型，反向禁止（由 `admin-protocol/tests/cross-plane.test.ts` 与
   各包 `tests/boundary.test.ts` 断言）。
@@ -194,11 +192,9 @@ refs 一致性若需兜底，由应用栈侧在写入前自检（`refsFromSValue
 
 ## 能力（capability）词汇归属
 
-CAS 中立租户能力契约（claims / permissions / errors —— `iss, aud, sub, iat,
-nbf?, exp, jti, tenantId, permissions[], refDomain?`）**归属
-`space-protocol/src/capability.ts`**（单一事实源）。`@unidocs/service-auth`
-（应用栈签发/校验实现）re-export 同一批符号，公共 API 不变，消费者零改动。
-capability 是 JWT claim 词汇而非编码，故不进 `codec` 包。
+Current Space capability 归属 `space-protocol/src/space-capability.ts`，共享算法、
+错误与 refDomain 规则归属 `shared-capability.ts`，冻结 v1 claim/permission 归属
+`src/v1/capability.ts`。capability 是 JWT claim 词汇而非编码，故不进 `codec` 包。
 
 ## 本轮重组记录（2026-08-29）
 

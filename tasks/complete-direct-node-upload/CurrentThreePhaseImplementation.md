@@ -14,7 +14,7 @@ The implementation sources are:
 - [Space v2 contract](/packages/space-protocol/src/space-v2-contract.ts)
 - [Tenant client](/packages/space-client/src/client.ts)
 - [Cloud-neutral node lease kernel](/packages/service/src/node-lease.ts)
-- [Cloudflare Space Durable Object](/packages/service-cloudflare/src/tenant-do.ts)
+- [Cloudflare Space Durable Object](/packages/service-cloudflare/src/space-do.ts)
 - [Cloudflare node lease repository](/packages/service-cloudflare/src/node-lease.ts)
 - [R2 upload presigner](/packages/service-cloudflare/src/r2-upload-presigner.ts)
 

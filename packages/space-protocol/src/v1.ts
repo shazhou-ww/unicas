@@ -58,7 +58,7 @@ export {
   sessionReadPermission,
   sessionWritePermission,
   validateRefDomainClaim,
-} from "./capability.js";
+} from "./v1/capability.js";
 export type {
   CapabilityClaims,
   CapabilityClaimsBase,
@@ -70,7 +70,7 @@ export type {
   SessionCapabilityClaims,
   TenantCapabilityClaims,
   VerifiedCapability,
-} from "./capability.js";
+} from "./v1/capability.js";
 
 export type {
   CasGcResult,

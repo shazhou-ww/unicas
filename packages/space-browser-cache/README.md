@@ -11,7 +11,6 @@ import { createBrowserCasNodeCache, clearBrowserCasNodeCaches } from "@unicas/sp
 const principal = JSON.stringify([identity.identityIssuer, identity.subject]);
 const cache = createBrowserCasNodeCache({
   namespace: { endpoint: casBaseUrl, principal },
-  version: 2,
   maxBytes: 64 * 1024 * 1024,
   maxMemoryBytes: 8 * 1024 * 1024,
   maxEntryBytes: 4 * 1024 * 1024,
@@ -19,14 +18,15 @@ const cache = createBrowserCasNodeCache({
 const cas = createSpaceCasClient({ baseUrl: casBaseUrl, appId, spaceId, getToken, cache });
 
 // At logout, stop new reads before clearing every endpoint for this principal.
-await clearBrowserCasNodeCaches({ principal, version: 2 });
+await clearBrowserCasNodeCaches({ principal });
 cache.close();
 ```
 
 ## Contract
 
-- V2 keys include endpoint, authenticated Principal, App, Space, hash, read kind,
-  and an explicit version. V1 retains its original Stack/Tenant key shape.
+- Current keys include endpoint, authenticated Principal, App, Space, hash, read kind,
+  and an explicit version. Frozen v1 consumers import the same function names
+  from `@unicas/space-browser-cache/v1`, which retains the original Stack/Tenant key shape.
   Use an immutable identity key, never an access token or display email. The endpoint
   must not contain credentials, a query or a fragment.
 - Stores only immutable node metadata (`hash`, `size`, `contentType`, `refs`) and
@@ -63,10 +63,10 @@ or encrypted secret store; any same-origin script can access it. Cached bytes do
 not prove that a node is still leased, retained, present on the server, or accessible
 under current permissions. Use explicit live server operations for those decisions.
 
-Default databases are `unicas-node-cache-v1` and `unicas-node-cache-v2`, selected
-by `version`. Their namespaces and scope-key shapes cannot collide.
-`databaseName` can isolate independent applications/tests; pass the same name
-and version to Principal-wide clearing.
+Default databases are `unicas-node-cache-v2` at the package root and
+`unicas-node-cache-v1` at `./v1`. Their namespaces and scope-key shapes cannot
+collide. `databaseName` can isolate independent applications/tests; use the
+same entrypoint and name for Principal-wide clearing.
 
 ## Verification
 

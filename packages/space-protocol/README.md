@@ -1,8 +1,6 @@
 # @unicas/space-protocol
 
-Cloud-neutral UniCAS data-plane contracts and capability vocabulary. The
-`space-protocol` package name is a stable access-plane identifier; the public
-v2 resource is Space.
+Cloud-neutral UniCAS Space data-plane contracts and capability vocabulary.
 
 The package keeps two disjoint contracts:
 
@@ -19,7 +17,8 @@ Derive an implementation or client type from the shared contract:
 
 ```ts
 import type { ContractRouterClient } from "@orpc/contract";
-import { casTenantApiContract, spaceApiContract } from "@unicas/space-protocol";
+import { spaceApiContract } from "@unicas/space-protocol";
+import { casTenantApiContract } from "@unicas/space-protocol/v1";
 
 type TenantClient = ContractRouterClient<typeof casTenantApiContract>;
 type SpaceClient = ContractRouterClient<typeof spaceApiContract>;
@@ -33,8 +32,8 @@ pnpm --filter @unicas/space-protocol docs:generate:v2
 ```
 
 The generated files are `openapi/tenant-v1.openapi.json` and
-`openapi/space-v2.openapi.json`. The package exports them as `./openapi.json`
-and `./openapi-v2.json`. Generation commands are separate and never overwrite
+`openapi/space-v2.openapi.json`. The package exports them as
+`./openapi-v1.json` and `./openapi-v2.json`. Generation commands are separate and never overwrite
 the frozen v1 artifact.
 
 Validate with:

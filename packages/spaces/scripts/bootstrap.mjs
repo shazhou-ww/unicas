@@ -5,7 +5,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { importPKCS8, SignJWT } from "jose";
 import { createSpaceCasClient } from "@unicas/space-client";
-import { createTenantFileSystem } from "@unicas/space-file-client";
+import { createSpaceFileSystem } from "@unicas/space-file-client";
 import {
   CapabilityAlgorithm,
   CapabilityTokenType,
@@ -177,7 +177,7 @@ export async function bootstrapSpacesPrincipal(config, execute = executeD1) {
     getToken: async () => token,
   });
   const catalog = memoryCatalog();
-  const files = createTenantFileSystem({ cas, catalog, blobOptions: { chunkBytes: 1024 * 1024 } });
+  const files = createSpaceFileSystem({ cas, catalog, blobOptions: { chunkBytes: 1024 * 1024 } });
   const root = await files.createRoot("Files");
   try {
     await execute(config, bootstrapInsertSql(config, root.info, Date.now()));

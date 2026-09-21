@@ -36,8 +36,8 @@ export { READY_CACHE_TTL_MS } from "./node-lease.js";
 export interface NodeStore {
   readonly db: D1Database;
   readonly bucket: R2Bucket;
-  readonly stackId: string;
-  readonly tenantId: string;
+  readonly appId: string;
+  readonly spaceId: string;
   readonly limits?: CanonicalNodeLimits;
   readonly timing?: TimingSink;
   /** Per-DO positive ready-cache shared by every repository built from this store. */
@@ -76,7 +76,7 @@ export function parseRefsHeader(header: string | null): string[] {
 export function leaseCanonicalNode(store: NodeStore, input: LeaseCanonicalNodeInput): Promise<CasLeaseResult> {
   return leaseCanonicalNodeKernel({
     repository: repository(store),
-    scope: { stackId: store.stackId, tenantId: store.tenantId },
+    scope: { appId: store.appId, spaceId: store.spaceId },
     ...input,
     limits: store.limits,
   });
@@ -88,7 +88,7 @@ export function beginCanonicalNodeLease(
 ): Promise<CanonicalNodeLeaseBeginResult> {
   return beginCanonicalNodeLeaseKernel({
     repository: repository(store),
-    scope: { stackId: store.stackId, tenantId: store.tenantId },
+    scope: { appId: store.appId, spaceId: store.spaceId },
     ...input,
     limits: store.limits,
   });
@@ -105,7 +105,7 @@ export function prepareCanonicalNodeUpload(
 ): Promise<CanonicalDirectUploadPrepareResult> {
   return prepareCanonicalNodeUploadKernel({
     repository: repository(store),
-    scope: { stackId: store.stackId, tenantId: store.tenantId },
+    scope: { appId: store.appId, spaceId: store.spaceId },
     ...input,
     limits: store.limits,
   });
@@ -117,7 +117,7 @@ export function admitCanonicalNodeUploadFinalization(
 ): Promise<CanonicalDirectUploadFinalizeAdmission> {
   return admitCanonicalNodeUploadFinalizationKernel({
     repository: repository(store),
-    scope: { stackId: store.stackId, tenantId: store.tenantId },
+    scope: { appId: store.appId, spaceId: store.spaceId },
     ...input,
     limits: store.limits,
   });
@@ -129,7 +129,7 @@ export function deleteCanonicalNodeUploadSession(
   uploadId: string,
 ): Promise<void> {
   return repository(store).deleteCanonicalUploadSession(
-    { stackId: store.stackId, tenantId: store.tenantId },
+    { appId: store.appId, spaceId: store.spaceId },
     hash,
     uploadId,
   );
@@ -142,7 +142,7 @@ export function uploadCanonicalNode(
 ): Promise<void> {
   return uploadCanonicalNodeKernel({
     repository: repository(store),
-    scope: { stackId: store.stackId, tenantId: store.tenantId },
+    scope: { appId: store.appId, spaceId: store.spaceId },
     plan,
     body,
   });
@@ -155,7 +155,7 @@ export function finalizeCanonicalNodeLease(
 ): Promise<CasLeaseResult> {
   return finalizeCanonicalNodeLeaseKernel({
     repository: repository(store),
-    scope: { stackId: store.stackId, tenantId: store.tenantId },
+    scope: { appId: store.appId, spaceId: store.spaceId },
     plan,
     limits: store.limits,
     ...(parsed === undefined ? {} : { parsed }),
@@ -165,7 +165,7 @@ export function finalizeCanonicalNodeLease(
 export function leaseReadyNode(store: NodeStore, input: { hash: string; leaseDurationMs: number }): Promise<CasLeaseResult> {
   return leaseReadyNodeKernel({
     repository: repository(store),
-    scope: { stackId: store.stackId, tenantId: store.tenantId },
+    scope: { appId: store.appId, spaceId: store.spaceId },
     ...input,
     limits: store.limits,
   });
@@ -186,7 +186,7 @@ export function leaseDrivenNodeUpload(
 ): Promise<LeaseDrivenNodeUploadResult> {
   return leaseDrivenNodeUploadKernel({
     repository: repository(store),
-    scope: { stackId: store.stackId, tenantId: store.tenantId },
+    scope: { appId: store.appId, spaceId: store.spaceId },
     ...input,
     limits: store.limits,
   });
@@ -197,7 +197,7 @@ export function cleanupExpiredLeaseDrivenUploads(
   input: { readonly now: number; readonly limit: number },
 ): Promise<number> {
   return repository(store).cleanupExpiredLeaseDrivenUploads(
-    { stackId: store.stackId, tenantId: store.tenantId },
+    { appId: store.appId, spaceId: store.spaceId },
     input.now,
     input.limit,
   );

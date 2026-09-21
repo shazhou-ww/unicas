@@ -385,7 +385,8 @@ export interface CasGcResult {
 
 A `SpaceCasClient` is created with one `(appId, spaceId)`, an asynchronous
 token provider, and an optional immutable-node cache strategy. Individual
-methods cannot select another App or Space. `createTenantCasClient` remains a
+methods cannot select another App or Space. `createTenantCasClient` under
+`@unicas/space-client/v1` remains a
 separate frozen v1 factory; neither factory translates credentials.
 
 `leaseNode()` is the only lease operation. With a canonical node source it

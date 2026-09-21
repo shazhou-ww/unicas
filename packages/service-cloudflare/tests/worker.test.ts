@@ -68,7 +68,7 @@ vi.mock("@unicas/service", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@unicas/service")>();
   return {
     ...actual,
-    StackCapabilityVerifier: class {
+    V1StackTenantCapabilityVerifier: class {
       verify = handlers.verify;
     },
     AppSpaceCapabilityVerifier: class {

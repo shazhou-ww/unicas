@@ -12,10 +12,18 @@ file workflow exports only `SpaceFile*` names. Workspace consumers, build
 paths, TypeScript references, the lockfile, current documentation links, and
 the private Spaces App have migrated together.
 
-The next implementation stage is to rename cloud-neutral and Cloudflare
-current/shared scopes from Stack/Tenant to App/Space, isolate the remaining v1
-ingress and control-record adapters, and add the reviewed reason-bearing
-terminology guard.
+Cloud-neutral node and Root Ref ports and Cloudflare repositories now carry
+only `{ appId, spaceId }`. The Space Durable Object keeps its deployed class
+and identity while its source module and shared actor port use Space names.
+Frozen v1 authorization, routes, claims, clients, caches, and protected-resource
+metadata are visibly versioned; private legacy Admin/audit and Microsoft OIDC
+terms remain only in classified adapters. A reason-bearing terminology guard
+rejects obsolete package identities, unclassified legacy identifiers, and
+stale allowances.
+
+Implementation and agent-verifiable acceptance checks are complete. The next
+action is source publication, primary integration, and delivery acceptance for
+the exact integrated commit.
 
 ## Decisions
 
@@ -35,6 +43,14 @@ terminology guard.
 - Preserve both wire contracts, capability versions and permissions,
   persistence schemas, object keys, and Durable Object identities during this
   naming-only stage.
+- Use one vocabulary-neutral transport core and browser-cache core while the
+  package roots expose only App/Space keys and explicit `./v1` adapters own
+  Stack/Tenant keys.
+- Split capability ownership into shared mechanics, current Space vocabulary,
+  and frozen-v1 vocabulary without changing error identity or token grammar.
+- Require every retained identifier to have one exact path/term allowance with
+  a category, reason, and removal condition. Exclude tasks and generated output
+  structurally rather than through broad allowances.
 
 ## Human approvals
 
@@ -66,19 +82,36 @@ terminology guard.
   manifest tests passed with the clean `SpaceFile*` API.
 - `pnpm --filter @unicas/spaces test`: 59 private consumer tests passed after
   package and file API migration.
-- `pnpm check:repo`: task, deployment, documentation, workspace-boundary, and
-  OpenAPI checks passed 129 tests. The unchanged repoledger temporary-Git test
-  exceeded its default five-second budget, then passed in 9.9 seconds with
-  `--testTimeout=15000`.
+- `pnpm check:repo`: task, deployment, documentation, workspace-boundary,
+  OpenAPI, and terminology checks passed 130 tests. The unchanged repoledger
+  temporary-Git test exceeded its default five-second budget, then passed in
+  9.7 seconds with `--testTimeout=15000`.
+- `pnpm --filter @unicas/admin-protocol test`: 59 Admin contract and
+  cross-plane tests passed after adding current Space and explicit v1 policy
+  entries.
+- Focused Cloudflare scope validation passed 63 Root Ref, audit, and Durable
+  Object tests; Worker and Durable Object module validation passed another 57
+  tests after the explicit v1/Space module split.
+- `pnpm --filter @unicas/space-browser-cache test`: 12 persistence, isolation,
+  invalidation, cancellation, and v1/current collision tests passed.
+- `pnpm check:terminology`: the complete maintained-source inventory passed
+  with no old package identities, unclassified identifiers, or stale entries.
+- `pnpm docs:check`: all three documentation inventory, anchor/link rewrite,
+  and generated-link checks passed.
+- `pnpm test:packages`: all 14 workspace package test targets passed.
+- `pnpm build`: all 14 workspace package build targets passed; Vite reported
+  only existing third-party sourcemap warnings.
 
 ## Blockers
 
-- None for the next implementation stage.
+- None for source publication or primary integration. Delivery acceptance
+  remains the final human checkpoint.
 
 ## Outcome
 
-Maintained consumers now identify the public data plane by Space rather than
-Tenant. Frozen Stack/Tenant compatibility remains testable and behaviorally
-unchanged behind explicit versioned imports, while current consumers cannot
-accidentally import its route, claim, or client-construction vocabulary from a
-canonical package root.
+Maintained consumers and current/shared internals now identify the public data
+plane by App and Space. Frozen Stack/Tenant compatibility remains testable and
+behaviorally unchanged behind explicit versioned imports and ingress adapters.
+Current consumers cannot accidentally import its route, claim, client, or cache
+vocabulary from a canonical package root, and CI rejects reintroduction of old
+package identities or unexplained legacy terms.

@@ -193,7 +193,7 @@ The proposed replacement is specified in
 - [Proposed lease upload design](./LeaseUploadDesign.md)
 - [Space v2 contract](/packages/space-protocol/src/space-v2-contract.ts)
 - [Node lease service kernel](/packages/service/src/node-lease.ts)
-- [Cloudflare node upload adapter](/packages/service-cloudflare/src/tenant-do.ts)
+- [Cloudflare node upload adapter](/packages/service-cloudflare/src/space-do.ts)
 - [R2 upload presigner](/packages/service-cloudflare/src/r2-upload-presigner.ts)
 - [Public tenant client](/packages/space-client/src/client.ts)
 - [Canonical binary format](/docs/cas-binary-format.md)

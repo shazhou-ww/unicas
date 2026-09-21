@@ -1,11 +1,4 @@
-/**
- * Canonical stack-scoped CAS tenant HTTP contracts.
- *
- * Every tenant service route carries `stackId + tenantId`; the tenant
- * matcher never recognizes `/admin` (that plane belongs to
- * `@unicas/admin-protocol`). The retired owner-assignment and
- * portable-node and pre-stack HTTP contracts are removed.
- */
+/** Headers and error response shared by the current Space and frozen v1 contracts. */
 
 export const CasLeaseDurationHeader = "X-CAS-Lease-Duration";
 export const CasUploadLengthHeader = "X-CAS-Upload-Length";

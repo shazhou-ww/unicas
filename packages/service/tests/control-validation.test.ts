@@ -7,7 +7,7 @@ import {
   normalizeEmailConstraint,
   parseControlListLimit,
   sha256Hex,
-  stackOAuthResource,
+  v1StackOAuthResource,
   validateDisplayName,
   validateEmailConstraint,
   validateInvitationToken,
@@ -33,9 +33,9 @@ describe("control-plane validation", () => {
   });
 
   test("Stack OAuth resources are derived from deployment origin and opaque stack ID", () => {
-    expect(stackOAuthResource("https://cas.example/admin", "cas_stack/a"))
+    expect(v1StackOAuthResource("https://cas.example/admin", "cas_stack/a"))
       .toBe("https://cas.example/stacks/cas_stack%2Fa");
-    expect(() => stackOAuthResource("file:///tmp/cas", "cas_stack"))
+    expect(() => v1StackOAuthResource("file:///tmp/cas", "cas_stack"))
       .toThrow("must be HTTP(S)");
   });
 

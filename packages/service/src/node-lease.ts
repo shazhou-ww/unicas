@@ -16,6 +16,7 @@ import type {
   SpaceNodeUploadRejection,
 } from "@unicas/space-protocol";
 import { NodeOpError, NodeOpErrorCodes } from "./node-errors.js";
+import type { AppSpaceScope } from "./space-scope.js";
 
 export const DEFAULT_LEASE_MS = 15 * 60 * 1000;
 export const MIN_LEASE_MS = 60 * 1000;
@@ -24,10 +25,7 @@ export const DEFAULT_UPLOAD_SESSION_MS = 15 * 60 * 1000;
 export const DEFAULT_UPLOAD_CLEANUP_MS = 24 * 60 * 60 * 1000;
 export const DEFAULT_MAX_ACTIVE_UPLOADS = 1024;
 
-export interface NodeLeaseScope {
-  readonly stackId: string;
-  readonly tenantId: string;
-}
+export interface NodeLeaseScope extends AppSpaceScope { }
 
 export interface NodeLeaseRecord {
   readonly leaseStartedAt: number;

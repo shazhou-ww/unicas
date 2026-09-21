@@ -20,7 +20,7 @@ import type {
   ProviderKind,
 } from "@unicas/admin-protocol";
 import { AppAccountAuditQuerySchema, CAS_ADMIN_IDEMPOTENCY_RETENTION_MS, parseCasAdminETag, PlatformAccountAuditQuerySchema, PlatformAccountQuerySchema } from "@unicas/admin-protocol";
-import { generateAccountId, generateEventId, generateExternalIdentityId, generateInvitationId, generateInvitationToken, generateNonce, generateOAuthInspectionId, generateStackId } from "./control-ids.js";
+import { generateAccountId, generateAppId, generateEventId, generateExternalIdentityId, generateInvitationId, generateInvitationToken, generateNonce, generateOAuthInspectionId } from "./control-ids.js";
 import { decodeControlListCursor, encodeControlListCursor } from "./control-cursor.js";
 import { extractJwsPayload, extractJwsProtectedHeader, verifyCompactJwsProof } from "./control-possession.js";
 import { buildOAuthIssuerInspectionChallenge, canonicalizeOAuthIssuer, OAUTH_ISSUER_INSPECTION_TTL_MS, parseOAuthIssuerInspectionChallenge, type DiscoveredOAuthJwk, type OAuthDiscoveryPort } from "./oauth-discovery.js";
@@ -705,7 +705,7 @@ export class AccountService {
     const challenge = buildOAuthIssuerInspectionChallenge({
       nonce: (this.options.generateNonce ?? generateNonce)(),
       inspectionId,
-      stackId: input.appId,
+      appId: input.appId,
       issuer,
       audience,
       metadataDigest: discovered.metadataDigest,
@@ -796,7 +796,7 @@ export class AccountService {
     const challenge = extractJwsPayload(input.activationProof);
     const parsed = challenge === null ? null : parseOAuthIssuerInspectionChallenge(challenge);
     if (!challenge || !parsed || await sha256Hex(challenge) !== inspection.challengeHash
-      || parsed.inspectionId !== inspection.inspectionId || parsed.stackId !== inspection.appId
+      || parsed.inspectionId !== inspection.inspectionId || parsed.appId !== inspection.appId
       || parsed.issuer !== inspection.issuer || parsed.audience !== inspection.audience
       || parsed.metadataDigest !== inspection.metadataDigest || parsed.jwksDigest !== inspection.jwksDigest
       || parsed.capabilityMaxLifetimeSeconds !== inspection.capabilityMaxLifetimeSeconds
@@ -1265,7 +1265,7 @@ export class AccountService {
       if (existing) return this.#resolveAppIdempotency(existing, payloadHash);
     }
     const app: App = {
-      appId: generateStackId(), displayName: input.displayName.trim(), description: "",
+      appId: generateAppId(), displayName: input.displayName.trim(), description: "",
       status: "active", createdAt: now, revision: 1,
     };
     const idempotency: AccountAppIdempotencyRecord | null = input.idempotencyKey === undefined ? null : {
