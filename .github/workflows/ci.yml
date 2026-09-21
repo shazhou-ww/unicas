@@ -310,7 +310,7 @@ jobs:
           SPACES_BOOTSTRAP_APP_ID: ${{ vars.SPACES_BOOTSTRAP_APP_ID }}
           SPACES_SIGNING_KID: ${{ vars.SPACES_SIGNING_KID }}
           SPACES_SIGNING_PRIVATE_KEY_PKCS8: ${{ secrets.SPACES_SIGNING_PRIVATE_KEY_PKCS8 }}
-        run: node stacks/unicas/deploy/cut-over-app-space-v1-issuers.mjs
+        run: pnpm exec tsx stacks/unicas/deploy/cut-over-app-space-v1-issuers.mjs
 
       - name: Deploy API and console service, then run canonical smoke
         env:

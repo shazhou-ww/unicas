@@ -4,6 +4,7 @@ import {
   appSpaceV1Audience,
   cutOverAppSpaceV1Issuers,
 } from "../stacks/unicas/deploy/cut-over-app-space-v1-issuers.mjs";
+import { buildOAuthIssuerInspectionChallenge } from "../packages/service/src/oauth-discovery.ts";
 
 describe("App/Space v1 production issuer cutover", () => {
   test("inspects, proves, activates, and verifies an old audience", async () => {
@@ -14,16 +15,30 @@ describe("App/Space v1 production issuer cutover", () => {
       const request = new Request(url, init);
       calls.push(request);
       if (request.method === "POST") {
+        const challenge = buildOAuthIssuerInspectionChallenge({
+          nonce: "nonce-1",
+          inspectionId: "inspection-1",
+          appId: "app/1",
+          issuer: "https://issuer.example",
+          audience: "https://api.unicas.work/v1/apps/app%2F1",
+          metadataDigest: "metadata-digest",
+          jwksDigest: "jwks-digest",
+          capabilityMaxLifetimeSeconds: 1_800,
+          expiresAt: Date.now() + 60_000,
+        });
         return Response.json({
           inspectionId: "inspection-1",
-          challenge: "prove-app-space-v1",
-          audience: "https://api.unicas.work/v1/apps/app%2F1",
+          metadataUrl: "https://issuer.example/.well-known/openid-configuration",
+          jwksUri: "https://issuer.example/jwks.json",
+          challenge,
+          expiresAt: Date.now() + 60_000,
+          keys: [{ kid: "key-1", alg: "ES256", kty: "EC" }],
         });
       }
       if (request.method === "PUT") {
         const body = await request.json();
         const verified = await compactVerify(body.activationProof, publicKey);
-        expect(new TextDecoder().decode(verified.payload)).toBe("prove-app-space-v1");
+        expect(new TextDecoder().decode(verified.payload)).toContain("https://api.unicas.work/v1/apps/app%2F1");
         expect(verified.protectedHeader).toMatchObject({ alg: "ES256", kid: "key-1" });
         activated = true;
         return new Response(null, { status: 204 });
