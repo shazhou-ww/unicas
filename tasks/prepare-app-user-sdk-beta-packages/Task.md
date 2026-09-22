@@ -6,7 +6,9 @@ Created: 2026-09-21
 
 Produce a reviewed set of publishable App-user SDK beta tarballs whose package
 names, exports, declarations, dependencies, runtime support, metadata, and
-external-consumer behavior match the final App/Space v1 contract.
+external-consumer behavior match the final App/Space v1 contract, together
+with a protected tag-triggered GitHub Action that publishes the complete
+unified-version package set.
 
 ## Context
 
@@ -19,9 +21,11 @@ fail for consumers installing packed artifacts.
 Final package names and compatibility treatment depend on the App/Space
 concept refactor. The supported methods and protocol exports also depend on
 the App/Space v1 cutover and Stack/Tenant retirement. This task turns that
-settled source surface into reproducible release artifacts; the separate
-`publish-app-user-sdk-beta` task owns registry credentials, provenance,
-protected publication, and first-release execution.
+settled source surface into reproducible release artifacts and one automatic
+publication path. The separate `publish-app-user-sdk-beta` task owns external
+npm trusted-publisher configuration, the explicit first-release authorization,
+creation of the immutable release tag, workflow observation, recovery, and
+registry verification.
 
 ## Scope
 
@@ -30,8 +34,9 @@ protected publication, and first-release execution.
   refactor. Cover only the protocol, transport, blob, file, browser-cache, and
   codec layers intentionally supported for external use.
 - Define the package and export matrix, supported Node and browser runtimes,
-  semantic version or prerelease policy, npm dist-tag policy, dependency
-  ranges, and dependency publication order.
+  one package-set semantic version or prerelease policy, npm dist-tag policy,
+  dependency ranges, and dependency publication order. Every public package
+  in one release must have the same exact version.
 - Finalize each public package manifest, entry points, conditional exports,
   type declarations, runtime files, `files` allowlist, side-effect metadata
   where applicable, README, license inclusion, repository metadata, and
@@ -50,6 +55,15 @@ protected publication, and first-release execution.
 - Add focused CI or repository checks for package metadata, generated
   declarations and contracts, tarball contents, dependency order, external
   installation, runtime exports, and release-manifest drift.
+- Add one protected GitHub Actions workflow triggered only by an immutable
+  `npm/app-user-sdk/v<version>` tag. It must verify that the tag version, all
+  six package versions, packed manifests, and release manifest agree before
+  publishing the complete package set in dependency order under the reviewed
+  dist-tag with npm trusted-publishing provenance.
+- Add a local tag/release planner and workflow tests that fail closed for a
+  tag not reachable from primary, a noncanonical or mismatched version, an
+  incomplete package set, existing-version conflicts, release-manifest drift,
+  unsafe permissions, or any attempt to use a long-lived npm token.
 - Document installation, supported entry points and runtimes, package
   relationships, beta compatibility policy, and consumer migration from any
   prototype package names or exports.
@@ -61,8 +75,11 @@ protected publication, and first-release execution.
 - Changing the App/Space v1 HTTP, capability, permission, or Root Ref contract.
 - Retaining Stack/Tenant API exports or package aliases contrary to the
   reviewed cleanup and compatibility decisions.
-- Publishing packages to npm, configuring registry identity, creating
-  provenance attestations, or changing protected publication workflows.
+- Creating or pushing a release tag, configuring the npm organization or
+  package trusted-publisher records, approving the GitHub `npm` environment,
+  executing the first registry write, moving a live dist-tag, or verifying a
+  live npm release. Those operational actions belong to
+  `publish-app-user-sdk-beta`.
 - Publishing service implementations, Cloudflare adapters, administrator
   packages, private WebUIs, first-party application stacks, tests, fixtures,
   or `@unidocs/*` dependencies.
@@ -73,6 +90,9 @@ protected publication, and first-release execution.
 - [ ] A reviewed package matrix identifies every supported public package,
       package name, version policy, dist-tag policy, runtime, entry point,
       export, dependency range, and publication-order edge.
+- [ ] One reviewed version is applied uniformly to all six public package
+  manifests and every internal packed dependency resolves to that exact
+  version; mixed-version release sets fail validation.
 - [ ] The accepted App/Space concept-refactor output determines final package
       names and compatibility behavior; no temporary Stack/Tenant name or
       alias is preserved accidentally.
@@ -96,6 +116,16 @@ protected publication, and first-release execution.
 - [ ] The generated release manifest records expected package names, versions,
       tarball integrity, exports, dependency ranges, and publication order and
       fails validation when source or generated artifacts drift.
+- [ ] A tag-triggered GitHub Action accepts only
+  `npm/app-user-sdk/v<version>`, verifies the tag target is an accepted
+  primary revision, rebuilds and validates the deterministic package set,
+  performs registry preflight, and publishes all packages in dependency
+  order with public access, the reviewed dist-tag, trusted identity, and
+  provenance.
+- [ ] Workflow and planner tests prove that no branch push, pull request,
+  manual dispatch, noncanonical tag, mixed version, stale manifest,
+  existing immutable version, missing dependency, or token-based fallback
+  can cause a registry write.
 - [ ] Installation and migration documentation agrees with the packed
       artifacts and clearly distinguishes package semver, HTTP version,
       capability version, and beta product maturity.
@@ -120,9 +150,11 @@ protected publication, and first-release execution.
 - Keep fixtures hermetic and credential-free. External-consumer validation may
   use mocks or local test servers but must not depend on private bindings or
   production secrets.
-- Do not publish or reserve an npm version during task registration,
-  implementation, or review; registry writes belong to the protected
-  publication task.
+- Do not create or push a release tag, publish or reserve an npm version, move
+  a live dist-tag, or configure external npm/GitHub environment state during
+  task implementation or review. The implemented Action remains inert until
+  the protected publication task explicitly authorizes and pushes its first
+  immutable tag.
 
 ## Human review checkpoints
 
@@ -132,9 +164,9 @@ reviewed explicitly before the work named in the final column begins.
 | Checkpoint | Applicability | Reviewer | Planned review artifact | Approval required before |
 | --- | --- | --- | --- | --- |
 | Scope | Required | Requesting user | This task's public package boundary, artifact and consumer validation, publication exclusion, dependencies, constraints, and acceptance criteria. | Substantive implementation. |
-| Interface | Required | Requesting user or delegated package owner | Task-local package contract containing names, versions and dist-tags, exports, runtime support, dependency ranges, compatibility treatment, installation guidance, and migration path. | Changing manifests or public exports, versioning packages, or removing compatibility names. |
+| Interface | Required | Requesting user or delegated package owner | Task-local package and release-trigger contract containing names, one unified version and dist-tag, exports, runtime support, dependency ranges, tag grammar, compatibility treatment, installation guidance, and migration path. | Changing manifests or public exports, versioning packages, encoding the tag contract, or removing compatibility names. |
 | Business and data model | Not applicable: package assembly changes distribution metadata and executable artifacts without changing domain entities, ownership, persistence, or lifecycle. | Not applicable | Not applicable | Not applicable |
-| Architecture | Required | Requesting user or delegated SDK owner | Task-local package graph and validation design covering dependency direction, build and pack inputs, declaration generation, tarball policy, clean consumer fixtures, runtime matrix, and release manifest. | Changing package boundaries, build outputs, dependency graphs, or CI validation. |
+| Architecture | Required | Requesting user or delegated SDK/release owner | Task-local package graph and publication design covering dependency direction, build and pack inputs, declaration generation, tarball policy, clean consumer fixtures, runtime matrix, release manifest, tag-triggered GitHub Action, trusted-publishing permissions, preflight, ordering, and fail-closed tests. | Changing package boundaries, build outputs, dependency graphs, CI validation, or adding the publication Action. |
 | Delivery acceptance | Required | Requesting user | Published implementation, package and export matrix, packed-artifact inventory, external-consumer results, release manifest, and workspace validation. | Running `task complete` for the exact approved primary commit. |
 
 ## References

@@ -4,43 +4,45 @@ Created: 2026-09-21
 
 ## Goal
 
-Add and use a protected, repeatable npm publication path that publishes the
-reviewed App-user SDK beta package set from an exact primary revision with
-trusted identity, provenance, immutable-version safety, and registry-backed
-verification.
+Activate and use the prepared tag-triggered npm publication path to publish
+the reviewed unified-version App-user SDK beta package set from an exact
+primary revision with trusted identity, provenance, immutable-version safety,
+and registry-backed verification.
 
 ## Context
 
-The repository has package-level publication metadata but no accepted release
-contract or protected npm workflow for the App-user SDK family. Manual local
-publication would not prove which revision was built, whether generated files
-or tarballs drifted, whether packages were ordered correctly, or whether an
-existing immutable version was handled safely.
+The package-preparation task owns the accepted release contract, unified
+versions, deterministic tarballs and release manifest, release planner, and
+tag-triggered GitHub workflow. Manual local publication would not prove which
+revision was built, whether generated files or tarballs drifted, whether
+packages were ordered correctly, or whether an existing immutable version was
+handled safely.
 
-The `prepare-app-user-sdk-beta-packages` task owns package names, contents,
-exports, versions, dependency ranges, tarball validation, and the release
-manifest. This task consumes that immutable input and owns registry identity,
-workflow protection, publication ordering, partial-failure recovery, and npm
-verification. It does not redesign package contents while releasing them.
+This task consumes that immutable input and owns external npm trusted-publisher
+identity, GitHub environment protection, explicit authorization and creation
+of the first `npm/app-user-sdk/v<version>` tag, workflow observation,
+partial-failure recovery decisions, and npm verification. It does not redesign
+package contents or the workflow while releasing them.
 
 ## Scope
 
-- Define and approve the npm release contract for the reviewed package set,
-  semantic versions or prereleases, dist-tags, dependency order, registry
-  visibility, provenance, rerun behavior, and first-beta promotion sequence.
-- Add a protected repository workflow that accepts or derives an exact primary
-  revision, checks out that immutable revision, installs with the frozen
-  lockfile, and builds, tests, packs, and validates the same artifacts that are
-  eligible for publication.
-- Use repository-approved npm trusted publishing and provenance where
-  available, with environment protection and least privilege instead of a
-  long-lived registry token.
+- Review the prepared npm release contract and prove the exact package set,
+  unified version, dist-tag, dependency order, registry visibility,
+  provenance, rerun behavior, and first-beta promotion sequence are still
+  current.
+- Configure and verify repository-approved npm trusted publishing plus the
+  protected GitHub `npm` environment with least privilege and no long-lived
+  registry token.
+- Authorize and create one immutable
+  `npm/app-user-sdk/v<package-set-version>` tag at the exact accepted primary
+  revision. Tag creation is the sole publication instruction.
 - Verify the package-preparation release manifest and fail closed on source,
   generated-artifact, dependency, version, tarball, or working-tree drift.
 - Query npm before each write, reject an unexpected existing version, and
   verify any already-published package before treating a retry as complete.
-- Publish packages in dependency order and apply the reviewed dist-tag
-  transition only when the required package set is present and verified.
+- Observe the prepared Action publishing packages in dependency order and
+  applying the reviewed dist-tag only when the required package set is present
+  and verified; do not invoke a second publication command.
 - Make reruns safe after interruption without overwriting versions,
   republishing completed artifacts incorrectly, or advancing tags to an
   incomplete or inconsistent package set.
@@ -60,6 +62,8 @@ verification. It does not redesign package contents while releasing them.
 
 - Choosing package names, exports, dependency ranges, runtime support, or
   tarball contents before `prepare-app-user-sdk-beta-packages` is accepted.
+- Adding a second publication workflow, changing the tag grammar, independently
+  versioning one package, or redesigning the prepared Action during release.
 - Changing the App/Space HTTP, capability, authorization, storage, or business
   contract while preparing a release.
 - Publishing service implementations, Cloudflare adapters, administrator
@@ -73,13 +77,13 @@ verification. It does not redesign package contents while releasing them.
 
 ## Acceptance criteria
 
-- [ ] A reviewed release contract identifies the exact public packages,
-      versions, dist-tags, dependency order, visibility, trusted identity,
-      provenance, approval gates, rerun semantics, and recovery procedure.
-- [ ] A protected workflow builds and tests an exact primary revision from a
-      clean checkout with the frozen lockfile and cannot publish from a dirty
-      workspace, implementation branch, mutable local build, or unreviewed
-      revision.
+- [ ] The prepared release contract identifies the exact public packages, one
+  unified version, dist-tag, dependency order, visibility, trusted
+  identity, provenance, approval gates, tag grammar, rerun semantics, and
+  recovery procedure, and remains unchanged during execution.
+- [ ] The prepared protected workflow and planner pass their complete dry-run
+  and negative test suite for the exact accepted primary revision before
+  any release tag is created.
 - [ ] Publication uses repository-approved trusted publishing with provenance
       and least privilege; no long-lived npm token is required where the
       registry supports trusted identity.
@@ -111,12 +115,14 @@ verification. It does not redesign package contents while releasing them.
 ## Constraints
 
 - Complete and integrate `prepare-app-user-sdk-beta-packages` before adding
-  final package identities to the workflow or performing any registry write.
+  external trusted-publisher configuration, creating a release tag, or
+  performing any registry write.
 - Treat npm versions as immutable. A version conflict or evidence mismatch
   fails closed and requires investigation or a new reviewed version.
 - Require explicit user or delegated release-owner authorization immediately
   before the first registry write; authorization must identify the exact
-  primary commit, package versions, dist-tag, and successful dry-run evidence.
+  primary commit, one package-set version, dist-tag, immutable tag, and
+  successful dry-run evidence.
 - Use the repository's protected workflow and approved identity boundary;
   never publish directly from a developer worktree or expose credentials to a
   build, pull request, fork, package script, or untrusted environment.
@@ -134,9 +140,9 @@ reviewed explicitly before the work named in the final column begins.
 | Checkpoint | Applicability | Reviewer | Planned review artifact | Approval required before |
 | --- | --- | --- | --- | --- |
 | Scope | Required | Requesting user | This task's protected publication outcome, registry boundary, package-preparation dependency, exclusions, constraints, and acceptance criteria. | Substantive implementation. |
-| Interface | Required | Requesting user or delegated package owner | Task-local release contract covering exact packages, versions, dist-tags, visibility, registry metadata, compatibility expectations, and consumer verification. | Encoding package identities or version policy in the workflow and publishing packages. |
+| Interface | Required | Requesting user or delegated package owner | Review of the prepared release contract covering exact packages, unified version, tag, dist-tag, visibility, registry metadata, compatibility expectations, and consumer verification. | Creating the first release tag or publishing packages. |
 | Business and data model | Not applicable: npm distribution changes package availability and metadata without changing UniCAS domain entities, persisted customer data, ownership, or lifecycle. | Not applicable | Not applicable | Not applicable |
-| Architecture | Required | Requesting user or delegated release owner | Task-local publication design covering trusted identity, environment protection, exact-revision provenance, build and validation stages, dependency ordering, registry preflight, reruns, partial-failure recovery, and audit evidence. | Adding the protected workflow, configuring trusted publication, or performing the first registry write. |
+| Architecture | Required | Requesting user or delegated release owner | Activation plan for the prepared publication design covering trusted identity, environment protection, exact-revision provenance, immutable tag creation, registry preflight, workflow observation, reruns, partial-failure recovery, and audit evidence. | Configuring trusted publication, creating the tag, or performing the first registry write. |
 | Delivery acceptance | Required | Requesting user | Published workflow, dry-run and negative-test evidence, exact primary revision, npm provenance and registry checks, clean registry-consumer validation, and recorded recovery behavior. | Running `task complete` for the exact approved primary commit. |
 
 ## References

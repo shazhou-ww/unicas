@@ -7,12 +7,13 @@ Status: Pending review.
 Approve the first public App-user SDK beta as six final `@unicas/*` packages,
 all versioned `0.1.0-beta.1`, published later under the `beta` dist-tag, with
 the package exports, runtime support, dependency policy, artifact contents,
-and compatibility treatment described below.
+compatibility treatment, and unified release-tag contract described below.
 
-This task prepares and validates tarballs only. It does not write to npm,
-configure registry identity, move a dist-tag, or deploy a service. Those
-actions remain protected by `publish-app-user-sdk-beta` and the beta promotion
-capstone.
+This task prepares and validates tarballs and implements the inert automatic
+publication Action. It does not create or push a release tag, write to npm,
+configure external trusted-publisher identity, move a live dist-tag, or deploy
+a service. Those operational actions remain protected by
+`publish-app-user-sdk-beta` and the beta promotion capstone.
 
 ## Current packing evidence
 
@@ -48,9 +49,11 @@ of this release set.
 ## Version and registry policy
 
 - Every package uses `0.1.0-beta.1` for the first reviewed set.
-- The six-package set moves in lockstep for the first beta. A changed artifact
-  after publication uses a new immutable prerelease such as
-  `0.1.0-beta.2`; no published version is overwritten.
+- The six-package set always moves in lockstep, not only for the first beta.
+  A changed artifact after publication uses one new immutable package-set
+  prerelease such as `0.1.0-beta.2`; unchanged packages receive that same
+  version so one tag always identifies one coherent SDK set. No published
+  version is overwritten.
 - Internal `@unicas/*` dependencies are exact prerelease dependencies. Source
   manifests retain `workspace:*`, and the package manager must transform them
   to exact `0.1.0-beta.1` values during packing.
@@ -76,6 +79,34 @@ the existing fallback behavior.
 
 No package polyfills globals. Applications targeting older runtimes own any
 deliberate polyfill and must still satisfy the documented behavior.
+
+## Automatic publication trigger
+
+The package set has one release key, `app-user-sdk`, and one immutable tag
+grammar:
+
+```text
+npm/app-user-sdk/v<package-set-version>
+```
+
+The first proposed instruction is:
+
+```text
+npm/app-user-sdk/v0.1.0-beta.1
+```
+
+Only a push of that exact tag family may trigger the publication workflow.
+Branch pushes, pull requests, release-branch merges, production deployment
+tags, and `workflow_dispatch` must never publish npm packages. The tag target
+must be reachable from authoritative `main`, and the tag version must exactly
+match all six source manifests and the deterministic release manifest.
+
+The Action publishes all six packages under `beta` in dependency order. It is
+not valid to tag or publish one package independently. Registry preflight must
+find the complete version absent before the first write. A rerun may accept an
+already published package only after the protected publication task defines
+and verifies immutable artifact equivalence; otherwise it fails closed and a
+new unified version is required.
 
 ## Export and compatibility policy
 
@@ -117,7 +148,8 @@ All six manifests declare:
 - `sideEffects: false`;
 - ESM package type;
 - the accepted files allowlist and public export map; and
-- `publishConfig.access: "public"` plus the accepted `beta` tag.
+- `publishConfig.access: "public"`; the Action supplies the accepted `beta`
+  tag explicitly.
 
 The four packages currently missing README files receive package-specific
 installation, runtime, entry-point, and minimal-usage guidance. Existing
@@ -170,7 +202,9 @@ not a supported compatibility path.
 
 ## Review question
 
-Approve the six-package set, `0.1.0-beta.1` lockstep version, `beta` dist-tag,
-public ESM-only exports, Node/browser support boundary, exact internal
-dependencies, tarball content policy, metadata, dependency graph, and no-alias
-compatibility policy, with no registry write in this task?
+Approve the six-package set, permanently unified version, first version
+`0.1.0-beta.1`, `beta` dist-tag, immutable
+`npm/app-user-sdk/v<version>` trigger, public ESM-only exports, Node/browser
+support boundary, exact internal dependencies, tarball content policy,
+metadata, dependency graph, and no-alias compatibility policy, with no tag or
+registry write in this task?

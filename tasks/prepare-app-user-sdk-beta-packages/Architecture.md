@@ -8,11 +8,13 @@ Approve a deterministic package-preparation pipeline that builds the six
 reviewed SDK packages from maintained source, packs them twice with pnpm,
 validates their transformed manifests and exact archive contents, installs
 only those archives into an external consumer, runs Node and real-browser
-checks, and records a tracked release manifest for the later protected npm
-publication task.
+checks, records a tracked release manifest, and supplies one tag-triggered
+trusted-publishing GitHub Action for the complete package set.
 
-The pipeline cannot publish, authenticate to npm, reserve versions, mutate
-dist-tags, or deploy UniCAS.
+The preparation command cannot publish, authenticate to npm, reserve versions,
+mutate dist-tags, or deploy UniCAS. The Action contains publication behavior
+but remains inert until the separate protected publication task configures
+external trusted identity and pushes an approved immutable tag.
 
 ## Maintained inputs and outputs
 
@@ -23,7 +25,10 @@ sdk/
 |-- package-matrix.json          # reviewed package/runtime/order contract
 `-- release-manifest.json        # deterministic generated artifact evidence
 scripts/
-`-- prepare-sdk-release.mjs      # clean/build/pack/install/verify orchestrator
+|-- prepare-sdk-release.mjs      # clean/build/pack/install/verify orchestrator
+`-- prepare-npm-release.mjs      # tag/version/primary release planner
+.github/workflows/
+`-- publish-npm.yml              # tag-triggered complete-set publisher
 tests/
 |-- sdk-release.test.mjs         # metadata, drift, and negative guards
 `-- fixtures/sdk-consumer/
@@ -36,9 +41,10 @@ Tarballs, temporary package manifests, external-consumer lockfiles,
 operating-system temporary directory and are never committed.
 
 `package-matrix.json` is maintained input. It names exactly six packages and
-records the accepted version, runtime class, exports, direct internal edges,
-and publication order. The script rejects any extra public package or mismatch
-between this matrix and a package manifest.
+records one accepted package-set version, runtime class, exports, direct
+internal edges, and publication order. The script rejects any extra public
+package, mixed version, independently versioned package, or mismatch between
+this matrix and a package manifest.
 
 `release-manifest.json` is generated evidence. It records sorted package
 names, versions, archive filenames, SRI SHA-512 integrity, byte sizes, exact
@@ -137,16 +143,50 @@ dry runs. Fast package unit tests remain unchanged; release-like packing and
 browser installation stay in the focused SDK check so failures identify the
 artifact boundary directly.
 
+### 8. Tag-triggered GitHub publication
+
+`.github/workflows/publish-npm.yml` listens only to:
+
+```yaml
+on:
+  push:
+    tags:
+      - npm/app-user-sdk/v*
+```
+
+It has no `workflow_dispatch` and no branch or pull-request publication path.
+The job uses the protected `npm` environment, `contents: read`, and
+`id-token: write`; it receives no `NPM_TOKEN` or `NODE_AUTH_TOKEN`. Concurrency
+is keyed by the immutable tag and never cancels an in-progress publication.
+
+The job checks out the tag commit with history, proves the commit is reachable
+from fetched `origin/main`, parses one canonical SemVer from the tag, and runs
+`prepare-npm-release.mjs` to require exact agreement among the tag, all six
+manifests, the package matrix, and the tracked release manifest. It installs
+with the frozen lockfile, runs the full focused SDK preparation check, queries
+npm for immutable-version conflicts, and only then publishes in the matrix's
+dependency order using public access, `beta`, provenance, and trusted OIDC.
+
+Workflow tests parse the YAML and planner outputs and use injected registry
+responses plus a no-write publisher port. They cover wrong events and refs,
+unreachable commits, malformed tags, mixed versions, stale manifests,
+existing versions, incomplete dependencies, interrupted ordering, unsafe
+permissions, secret environment variables, and accidental local publication.
+No test or preparation command invokes a live registry write.
+
 ## Package-manager and registry boundary
 
-pnpm is the only manifest transformer. The script invokes no `publish`,
-`unpublish`, `deprecate`, `dist-tag`, login, token, provenance, or registry
-write command. Official registry visibility may be read for diagnostics, but
-name ownership and trusted publishing remain unresolved until the protected
-publication task.
+pnpm is the only manifest transformer. The local preparation and planner
+scripts invoke no `publish`, `unpublish`, `deprecate`, `dist-tag`, login, token,
+provenance, or registry write command. Only the tag-triggered Action may invoke
+`npm publish`. Official registry visibility may be read for diagnostics, but
+name ownership and trusted-publisher configuration remain unresolved until
+the protected publication task.
 
-The later publication workflow consumes the exact matrix and release manifest
-rather than rebuilding package identity policy independently.
+The later publication task consumes this Action, matrix, and release manifest
+rather than rebuilding package identity policy independently. It configures
+the external trust relationship, authorizes one exact tag, observes the run,
+and verifies npm.
 
 ## Failure behavior
 
@@ -155,6 +195,9 @@ rather than rebuilding package identity policy independently.
   artifact is accepted.
 - A transformed manifest containing `workspace:`, a wrong prerelease, or an
   unreviewed dependency fails closed.
+- A tag or Action candidate with mixed public-package versions, a version that
+  differs from its tag, or a tag target outside primary fails before registry
+  preflight.
 - An unavailable public registry or absent package name does not mutate the
   reviewed tarballs and cannot be treated as publication authorization.
 - Temporary directories are removed after success and retained only on an
@@ -169,12 +212,16 @@ registry or service rollback because this task performs neither write.
 
 Each package owns its public source, README, manifest, and build output. The
 root SDK preparation script owns cross-package order and artifact evidence.
-The publication task owns npm identity, provenance, protected environment,
-registry writes, dist-tags, and partial-publication recovery.
+This task owns the inert tag-triggered Action and release planner. The
+publication task owns npm trusted-publisher identity, protected environment
+configuration, explicit tag creation, first registry execution, dist-tag and
+provenance verification, and partial-publication recovery decisions.
 
 ## Review question
 
-Approve the reviewed matrix plus deterministic clean/build/double-pack
-pipeline, exact archive validation, tracked release manifest, external
-temporary consumer, Node and real-Chrome checks, CI integration, fail-closed
-behavior, and strict no-registry-write boundary?
+Approve the reviewed unified-version matrix plus deterministic
+clean/build/double-pack pipeline, exact archive validation, tracked release
+manifest, external temporary consumer, Node and real-Chrome checks, CI
+integration, `npm/app-user-sdk/v<version>` release planner and protected
+trusted-publishing Action, fail-closed behavior, and no-tag/no-live-write
+implementation boundary?
