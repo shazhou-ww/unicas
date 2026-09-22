@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { CapabilityAuthorizationError } from "@unicas/space-protocol";
 import {
   createUniCasService,
@@ -13,40 +13,36 @@ const platform = {
 } as unknown as ServicePlatform;
 
 describe("createUniCasService", () => {
-  test("dispatches frozen v1 Stack/Tenant requests and rejects legacy administrator routes", async () => {
-    const authorizeV1StackTenantRequest = vi.fn(async () => ({
-      stackId: "s1",
-      tenantId: "t1",
-      subject: "caller",
-      jti: "request-1",
-      kid: "key-1",
-      permissions: ["cas:manage:t1"],
-    }));
+  beforeEach(() => spaceActorFetch.mockClear());
+
+  test("does not match, authorize, or dispatch retired Stack/Tenant routes", async () => {
+    const authorizeSpaceRequest = vi.fn();
     const actor = createUniCasService({
       platform,
-      authorizeV1StackTenantRequest,
+      authorizeSpaceRequest,
     });
 
-    expect(await (await actor.fetch(new Request(
-      "https://cas.example/stacks/s1/tenants/t1/cas/usage",
-    ))).text()).toBe("space");
-    expect(authorizeV1StackTenantRequest).toHaveBeenCalledWith(expect.objectContaining({
-      platform,
-      route: { operation: "usage", stackId: "s1", tenantId: "t1" },
-    }));
-    expect(spaceActorFetch).toHaveBeenCalledWith(
-      "s1|t1",
-      expect.objectContaining({ url: "https://space.internal/usage" }),
-    );
+    for (const [method, path] of [
+      ["GET", "/stacks/s1/tenants/t1/cas/nodes/hash/content"],
+      ["GET", "/stacks/s1/tenants/t1/cas/nodes/hash/metadata"],
+      ["POST", "/stacks/s1/tenants/t1/cas/nodes/hash/lease"],
+      ["GET", "/stacks/s1/tenants/t1/cas/usage"],
+      ["POST", "/stacks/s1/tenants/t1/cas/gc"],
+      ["GET", "/stacks/s1/tenants/t1/root-refs"],
+      ["POST", "/stacks/s1/tenants/t1/root-refs"],
+    ]) {
+      const request = new Request(`https://cas.example${path}`, { method });
+      expect(matchUniCasServiceRoute(request), path).toBeNull();
+      expect((await actor.fetch(request)).status, path).toBe(404);
+    }
 
     expect((await actor.fetch(new Request("https://cas.example/admin/stacks/s1"))).status).toBe(404);
+    expect(authorizeSpaceRequest).not.toHaveBeenCalled();
+    expect(spaceActorFetch).not.toHaveBeenCalled();
   });
 
   test("does not claim BFF, MCP, static asset, or unknown routes", async () => {
-    const context = {
-      platform,
-      authorizeV1StackTenantRequest: vi.fn(),
-    } as unknown as ServiceContext;
+    const context = { platform } as ServiceContext;
     const actor = createUniCasService(context);
 
     for (const path of [
@@ -60,29 +56,28 @@ describe("createUniCasService", () => {
       expect(matchUniCasServiceRoute(request), path).toBeNull();
       expect((await actor.fetch(request)).status, path).toBe(404);
     }
-    expect(context.authorizeV1StackTenantRequest).not.toHaveBeenCalled();
   });
 
   test("builds trusted Root Ref actor requests from the authorized call", async () => {
     const actor = createUniCasService({
       platform,
-      authorizeV1StackTenantRequest: async () => ({
-        stackId: "stack/a",
-        tenantId: "tenant/b",
+      authorizeSpaceRequest: async () => ({
+        appId: "app/a",
+        spaceId: "space/b",
         subject: "caller",
         jti: "request-2",
         kid: "key-1",
-        permissions: ["cas:write:tenant/b"],
+        permissions: ["cas:root-refs:update"],
         refDomain: "doc",
       }),
     });
     const response = await actor.fetch(new Request(
-      "https://cas.example/stacks/stack%2Fa/tenants/tenant%2Fb/root-refs",
+      "https://cas.example/v1/apps/app%2Fa/spaces/space%2Fb/root-refs",
       {
         method: "POST",
         headers: {
-          "X-CAS-Stack-Id": "attacker",
-          "X-CAS-Tenant-Id": "attacker",
+          "X-CAS-App-Id": "attacker",
+          "X-CAS-Space-Id": "attacker",
           "X-CAS-Ref-Domain": "attacker",
         },
         body: JSON.stringify({ requestId: "r1", changes: { abc: 1 } }),
@@ -90,23 +85,23 @@ describe("createUniCasService", () => {
     ));
     expect(await response.text()).toBe("space");
     const [key, forwarded] = spaceActorFetch.mock.calls.at(-1)!;
-    expect(key).toBe("stack%2Fa|tenant%2Fb");
-    expect(forwarded.headers.get("X-CAS-Stack-Id")).toBe("stack/a");
-    expect(forwarded.headers.get("X-CAS-Tenant-Id")).toBe("tenant/b");
+    expect(key).toBe("app%2Fa|space%2Fb");
+    expect(forwarded.headers.get("X-CAS-App-Id")).toBe("app/a");
+    expect(forwarded.headers.get("X-CAS-Space-Id")).toBe("space/b");
     expect(forwarded.headers.get("X-CAS-Ref-Domain")).toBe("doc");
 
     await actor.fetch(new Request(
-      "https://cas.example/stacks/stack%2Fa/tenants/tenant%2Fb/root-refs?limit=10&cursor=abc",
+      "https://cas.example/v1/apps/app%2Fa/spaces/space%2Fb/root-refs?limit=10&cursor=abc",
       { headers: { "X-CAS-Ref-Domain": "attacker" } },
     ));
     const [readKey, readForwarded] = spaceActorFetch.mock.calls.at(-1)!;
-    expect(readKey).toBe("stack%2Fa|tenant%2Fb");
+    expect(readKey).toBe("app%2Fa|space%2Fb");
     expect(readForwarded.url).toBe("https://space.internal/rootRefs?limit=10&cursor=abc");
     expect(readForwarded.method).toBe("GET");
     expect(readForwarded.headers.get("X-CAS-Ref-Domain")).toBe("doc");
   });
 
-  test("classifies App and Space routes separately from v1", () => {
+  test("classifies App/Space and administrator routes", () => {
     expect(matchUniCasServiceRoute(new Request(
       "https://api.unicas.work/v1/apps/app-1/spaces/space-1/cas/usage",
     ))).toEqual({
@@ -149,7 +144,6 @@ describe("createUniCasService", () => {
   test("returns not implemented until App/Space platform handlers are configured", async () => {
     const actor = createUniCasService({
       platform,
-      authorizeV1StackTenantRequest: vi.fn(),
     });
     expect((await actor.fetch(new Request(
       "https://api.unicas.work/v1/apps/app-1/spaces/space-1/cas/usage",
@@ -173,7 +167,6 @@ describe("createUniCasService", () => {
     }));
     const actor = createUniCasService({
       platform,
-      authorizeV1StackTenantRequest: vi.fn(),
       authorizeSpaceRequest,
       handleAppAdminRequest: vi.fn(),
     });
@@ -196,7 +189,6 @@ describe("createUniCasService", () => {
   test("forwards App/Space lease JSON and rejects legacy upload headers", async () => {
     const actor = createUniCasService({
       platform,
-      authorizeV1StackTenantRequest: vi.fn(),
       authorizeSpaceRequest: async () => ({
         appId: "app-1",
         spaceId: "space-1",
@@ -231,14 +223,13 @@ describe("createUniCasService", () => {
     expect(spaceActorFetch).toHaveBeenCalledTimes(callsBeforeRejection);
   });
 
-  test("returns stable Space authorization codes without changing the v1 envelope", async () => {
+  test("returns stable Space authorization codes", async () => {
     const denial = new CapabilityAuthorizationError(
       "insufficient_permission",
       "CAS usage requires cas:usage:read",
     );
     const actor = createUniCasService({
       platform,
-      authorizeV1StackTenantRequest: async () => { throw denial; },
       authorizeSpaceRequest: async () => { throw denial; },
     });
 
@@ -251,20 +242,12 @@ describe("createUniCasService", () => {
       message: "CAS usage requires cas:usage:read",
     });
 
-    const v1Response = await actor.fetch(new Request(
-      "https://cas.example/stacks/stack-1/tenants/tenant-1/cas/usage",
-    ));
-    expect(v1Response.status).toBe(403);
-    await expect(v1Response.json()).resolves.toEqual({
-      error: "CAS usage requires cas:usage:read",
-    });
   });
 
-  test("dispatches App administrator requests through the v2 handler", async () => {
+  test("dispatches App administrator requests through the admin handler", async () => {
     const handleAppAdminRequest = vi.fn(async () => new Response("app-admin"));
     const actor = createUniCasService({
       platform,
-      authorizeV1StackTenantRequest: vi.fn(),
       authorizeSpaceRequest: vi.fn(),
       handleAppAdminRequest,
     });

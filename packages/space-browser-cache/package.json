@@ -11,12 +11,6 @@
       "development": "./src/index.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
-    },
-    "./v1": {
-      "types": "./src/v1.ts",
-      "development": "./src/v1.ts",
-      "import": "./dist/v1.js",
-      "default": "./dist/v1.js"
     }
   },
   "files": [
@@ -43,10 +37,6 @@
       ".": {
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
-      },
-      "./v1": {
-        "types": "./dist/v1.d.ts",
-        "import": "./dist/v1.js"
       }
     }
   }

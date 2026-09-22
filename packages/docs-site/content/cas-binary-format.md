@@ -139,16 +139,16 @@ A D1 implementation must preserve this order, typically with an `ordinal` column
 ## 6. Current physical Cloudflare compatibility storage
 
 The canonical layout is the digest preimage and portable interchange
-representation. The production Cloudflare adapter currently maps logical
-App/Space dimensions onto physical Stack/Tenant schema and object names. These
-names are not part of the v2 public contract.
+representation. The production Cloudflare adapter stores nodes under current
+App/Space dimensions. Binding and Durable Object class names are deployment
+details and are not part of the public contract.
 
 ### 6.1 R2
 
 R2 stores only `ownContent`:
 
 ```text
-stacks/{stackId}/tenants/{tenantId}/nodes/{hash}
+apps/{appId}/spaces/{spaceId}/nodes-v2/{hash}
 ```
 
 The R2 object length must equal `contentSize`.

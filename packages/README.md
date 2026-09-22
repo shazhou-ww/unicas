@@ -6,9 +6,8 @@ UniCAS 是独立可部署的 CAS 中间件（content-addressed storage + App 控
 `@unidocs/*` 依赖**，该承诺完全兑现。
 
 公共资源名是 **App** 和 **Space**，数据访问面包族统一使用 `space-*`。
-冻结的 Stack/Tenant v1 仅由 `space-protocol/v1`、`space-client/v1` 和
-`space-browser-cache/v1` 显式承载；物理或历史兼容字段由命名 adapter 隔离，
-不得暴露到当前 wire、CLI、MCP 或 WebUI。
+已退役的 Stack/Tenant wire、SDK 与 capability 不再由任何 package 导出；物理或
+历史兼容字段由命名 adapter 隔离，不得暴露到当前 wire、CLI、MCP 或 WebUI。
 
 ## 命名规则
 
@@ -16,7 +15,7 @@ UniCAS 是独立可部署的 CAS 中间件（content-addressed storage + App 控
    改名必须同时改目录名与 `package.json` 的 `name`（依赖 guard 强制校验，
   见 `tests/workspace-boundaries.test.mjs`）。
 2. **客户端按 actor 分两组**：
-  - `space-*` — Space 数据面 package family（root 为 current，`./v1` 为 frozen v1）
+  - `space-*` — Space 数据面 package family
   - `admin-*` — App 管理控制面
 3. **编码层**：`codec` —— wire 编码，独立发布、独立测试，无 workspace 依赖。
 4. **契约包**：`space-protocol`（数据面 HTTP 契约 + capability）/
@@ -67,9 +66,9 @@ packages/                           @unicas org
 │
 ├── ■ 内核/库层（cloud-neutral）
 │   ├── service/           @unicas/service            data + admin HTTP actor
-│   │     精确匹配 v1 App/Space 与 frozen v1 protocol；定义 control/data SQL、
-│   │     blob、按 key 串行 actor 等平台端口；内置 App/Space 与 v1 capability
-│   │     校验、权限矩阵与有界 authority
+│   │     精确匹配 App/Space v1 protocol；定义 control/data SQL、blob、按 key
+│   │     串行 actor 等平台端口；内置 App/Space capability 校验、权限矩阵与
+│   │     有界 authority
 │   │     cache，以及 Root Ref 校验/幂等/投影/revision/retry 业务内核；不依赖
 │   │     Cloudflare 类型或 control-plane 实现；node GC 的候选复核、删除顺序与
 │   │     回收统计、Space node usage、node content range/metadata read，以及
@@ -95,9 +94,8 @@ packages/                           @unicas org
     │     经 @unicas/admin-client 取 admin-protocol 类型；不含任何服务端代码
     ├── space-client/     @unicas/space-client       Space 数据面 · 传输层
     │     纯 HTTP 封装，每个路由一个函数（readMetadata/readContent/
-    │     leaseNode/updateRootRefs/usage/gc）；root 的 `createSpaceCasClient`
-    │     绑定 App/Space，`./v1` 的 `createTenantCasClient` 绑定 frozen v1；
-    │     无编码、无业务封装，仅组装层使用
+    │     leaseNode/updateRootRefs/usage/gc）；`createSpaceCasClient` 绑定
+    │     App/Space；无编码、无业务封装，仅组装层使用
     ├── space-blob-client/@unicas/space-blob-client  Space 数据面 · 业务面
     │     业务方唯一入口：storeBlob / openBlob(含元数据的句柄式随机读) /
     │     retain / release；底层能力统一经 unicasClient 访问
@@ -108,9 +106,8 @@ packages/                           @unicas org
     │     + 显式 commit/discard；文件 manifest 协议独立定义，root 名称与 revision
     │     经注入的业务 catalog port 持久化，CAS 仍不解析目录语义
     ├── space-browser-cache/@unicas/space-browser-cache  Space 数据面 · 浏览器缓存策略
-    │     实现 CasNodeCache；仅缓存不可变节点元数据和完整内容，内存 + IndexedDB LRU
-    │     root 按 endpoint/Principal/App/Space/hash/version 隔离；`./v1` 保留
-    │     endpoint/principal/stack/tenant/hash，不持久化凭据或 working tree
+    │     实现 CasNodeCache；仅缓存不可变节点元数据和完整内容，内存 + IndexedDB LRU，
+    │     按 endpoint/Principal/App/Space/hash/version 隔离；不持久化凭据或 working tree
     ├── admin-client/      @unicas/admin-client        admin 组 · 控制面 HTTP client
     │     纯函数传输层（对标 space-client）：每操作一函数，类型直接来自
     │     @unicas/admin-protocol；session cookie + CSRF 由 session provider 提供
@@ -143,18 +140,18 @@ space-protocol OpenAPI 导出 ← docs-site（仅构建时读取，不形成运�
 
 - **codec 是最底层**：无 workspace 依赖，仅外部 `cborg`；`space-protocol`
   不 re-export codec 符号（强制迁移，2026-08-29 决策）。
-- **space-client 是纯函数传输层**：与 HTTP 路由一一对应。root factory 绑定
-  `appId`/`spaceId`；`./v1` factory 绑定 `stackId`/`tenantId`。两者只组装 JWT
-  与公共传输参数，无编码、无业务封装、无对象模式（`node()` 已移除）。
+- **space-client 是纯函数传输层**：与 HTTP 路由一一对应。factory 绑定
+  `appId`/`spaceId`，只组装 JWT 与公共传输参数，无编码、无业务抽象、无对象模式
+  （`node()` 已移除）。
 - **业务方只用 space-blob-client**：其接口覆盖完整数据面
   （blob 写/随机读 + 节点元数据/续租/root-refs + usage/gc），应用栈不再直接
   依赖 space-client；当前业务层只接收 `SpaceCasClient`。
 - 契约层：`space-protocol` 持有数据面共享类型；`admin-protocol` 仅通过允许的
   单向依赖复用 App/Space identity 类型，反向依赖禁止。
-- `service` 同时依赖 Space/admin protocol，统一 current、frozen-v1 与 Admin HTTP surface；
+- `service` 同时依赖 Space/admin protocol，统一 App/Space 与 Admin HTTP surface；
   平台 context 显式提供 control/Space SQL、blob 与 keyed actor 端口。capability
   校验属于该 cloud-neutral actor：authority 只经只读 resolver port
-  注入，D1 `AuthorityRepository` 仍由 Cloudflare adapter 构造。
+  注入，D1 `AppAuthorityRepository` 仍由 Cloudflare adapter 构造。
 - `service-cloudflare` 是 UniCAS 中间件唯一部署包，持有 D1/R2/KV/DO 和公网 route；生产及
   本地 Miniflare 均不再通过 tenant/admin/MCP service bindings 拆分 UniCAS。
 - Space D1/R2 repositories、DO 生命周期与 legacy audit RPC 已并入

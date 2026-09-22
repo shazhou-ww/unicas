@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import type { D1Database, D1PreparedStatement } from "@cloudflare/workers-types";
-import { AppAuthorityRepository, AuthorityRepository } from "../src/control-authority.js";
+import { AppAuthorityRepository } from "../src/control-authority.js";
 import { migrateControlSchema } from "../src/control-schema.js";
 
 let miniflare: Miniflare | undefined;
@@ -13,7 +13,7 @@ afterEach(async () => {
   db = undefined;
 });
 
-async function createRepository(): Promise<AuthorityRepository> {
+async function createRepository(): Promise<AppAuthorityRepository> {
   miniflare = new Miniflare(convertV4MiniflareOptions({
     workers: [{
       name: "control-authority-test",
@@ -26,23 +26,23 @@ async function createRepository(): Promise<AuthorityRepository> {
   await miniflare.ready;
   db = await miniflare.getD1Database("DB", "control-authority-test");
   await migrateControlSchema(db);
-  return new AuthorityRepository(db);
+  return new AppAuthorityRepository(db);
 }
 
 function oauthIssuerInserts(rows: Array<{
-  stackId: string;
+  appId: string;
   issuer: string;
 }>, includeApps = true): D1PreparedStatement[] {
-  return rows.flatMap(({ stackId, issuer }) => [
+  return rows.flatMap(({ appId, issuer }) => [
     ...(includeApps ? [db!.prepare(
       "INSERT INTO cas_apps (app_id, display_name, created_at) VALUES (?, 'Authority fixture', 0)",
-    ).bind(stackId)] : []),
+    ).bind(appId)] : []),
     db!.prepare(
       "INSERT INTO cas_app_oauth_issuers (app_id, issuer, audience, metadata_url, metadata_type, authorization_endpoint, token_endpoint, jwks_uri, status, jwks_digest, capability_max_lifetime_seconds) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', 'digest', ?)",
     ).bind(
-      stackId,
+      appId,
       issuer,
-      "https://cas.example/stacks/" + stackId,
+      "https://cas.example/v1/apps/" + appId,
       "https://oauth.example/.well-known/oauth-authorization-server",
       "oauth",
       "https://oauth.example/authorize",
@@ -52,77 +52,38 @@ function oauthIssuerInserts(rows: Array<{
     )]);
 }
 
-describe("AuthorityRepository (read-only)", () => {
-  test("resolves an active OAuth issuer to its stack authority and discovered JWKS URI", async () => {
-    const repository = await createRepository();
-    await db!.batch(oauthIssuerInserts([{ stackId: "cas_s", issuer: "https://issuer.example" }]));
-    const authority = await repository.resolveIssuer("https://issuer.example");
-    expect(authority).toMatchObject({
-      stackId: "cas_s",
-      issuer: "https://issuer.example",
-      audience: "https://cas.example/stacks/cas_s",
-      jwksUri: "https://oauth.example/jwks",
-      capabilityMaxLifetimeSeconds: 600,
-    });
-  });
-
-  test("unknown issuers resolve to null (fail closed)", async () => {
-    const repository = await createRepository();
-    expect(await repository.resolveIssuer("https://unknown.example")).toBeNull();
-    expect(await repository.resolveIssuer("")).toBeNull();
-  });
-
-  test("the legacy active issuer key snapshot table is removed", async () => {
-    const repository = await createRepository();
-    expect(repository).toBeDefined();
-    expect(await db!.prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'cas_stack_oauth_issuer_keys'",
-    ).first()).toBeNull();
-  });
-
-  test("a pending issuer is never an authority", async () => {
-    const repository = await createRepository();
-    await db!.prepare(
-      "INSERT INTO cas_app_oauth_issuers (app_id, issuer, audience, metadata_url, metadata_type, authorization_endpoint, token_endpoint, jwks_uri, status, jwks_digest, capability_max_lifetime_seconds) VALUES ('cas_pending', 'https://pending.example', 'cas', 'https://pending.example/.well-known/oauth-authorization-server', 'oauth', 'https://pending.example/authorize', 'https://pending.example/token', 'https://pending.example/jwks', 'pending', 'digest', 600)",
-    ).run();
-    expect(await repository.resolveIssuer("https://pending.example")).toBeNull();
-  });
-});
-
 describe("AppAuthorityRepository", () => {
   test("fails closed when an issuer has no owning App", async () => {
     await createRepository();
-    await db!.batch(oauthIssuerInserts([{ stackId: "cas_missing", issuer: "https://orphan.example" }], false));
+    await db!.batch(oauthIssuerInserts([{ appId: "cas_missing", issuer: "https://orphan.example" }], false));
     const repository = new AppAuthorityRepository(db!);
     await expect(repository.resolveIssuer("https://orphan.example")).resolves.toBeNull();
   });
 
   test("maps one active physical App issuer to its authority", async () => {
     await createRepository();
-    await db!.batch(oauthIssuerInserts([{ stackId: "cas_app", issuer: "https://app-issuer.example" }]));
+    await db!.batch(oauthIssuerInserts([{ appId: "cas_app", issuer: "https://app-issuer.example" }]));
     const repository = new AppAuthorityRepository(db!);
     await expect(repository.resolveIssuer("https://app-issuer.example")).resolves.toMatchObject({
       appId: "cas_app",
       appStatus: "active",
       issuer: "https://app-issuer.example",
-      audience: "https://cas.example/stacks/cas_app",
+      audience: "https://cas.example/v1/apps/cas_app",
       jwksUri: "https://oauth.example/jwks",
       capabilityMaxLifetimeSeconds: 600,
     });
   });
 
   test("tracks suspension and restoration for external issuers", async () => {
-    const legacy = await createRepository();
+    await createRepository();
     const issuer = "https://external.example";
-    await db!.batch(oauthIssuerInserts([{ stackId: "cas_status", issuer }]));
+    await db!.batch(oauthIssuerInserts([{ appId: "cas_status", issuer }]));
     const repository = new AppAuthorityRepository(db!);
     await expect(repository.resolveIssuer(issuer)).resolves.toMatchObject({ appStatus: "active" });
     await db!.prepare("UPDATE cas_apps SET status = 'suspended' WHERE app_id = 'cas_status'").run();
     await expect(repository.resolveIssuer(issuer)).resolves.toMatchObject({ appStatus: "suspended" });
-    await expect(legacy.resolveIssuer(issuer)).resolves.toBeNull();
     await db!.prepare("UPDATE cas_apps SET status = 'active' WHERE app_id = 'cas_status'").run();
     await expect(repository.resolveIssuer(issuer)).resolves.toMatchObject({ appStatus: "active" });
-    await expect(legacy.resolveIssuer(issuer)).resolves.toMatchObject({ stackId: "cas_status" });
   });
 
   test("fails closed for unknown and inactive App issuers", async () => {

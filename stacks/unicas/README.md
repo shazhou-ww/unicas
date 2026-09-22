@@ -18,7 +18,6 @@ pnpm deploy:docs:plan
 pnpm deploy:docs
 pnpm smoke -- [baseUrl]
 pnpm spaces:smoke -- --base-url <url>
-pnpm smoke:v1 -- [baseUrl]   # frozen compatibility only
 ```
 
 Production deploys one `@unicas/service-cloudflare` Worker containing the

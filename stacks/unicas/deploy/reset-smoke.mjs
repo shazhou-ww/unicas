@@ -221,7 +221,7 @@ export function validateResetInventory(inventory, expectedStackId) {
   if (
     issuer.stack_id !== expectedStackId
     || issuer.issuer !== EXPECTED_SMOKE_ISSUER
-    || issuer.audience !== `${EXPECTED_API_ORIGIN}/stacks/${expectedStackId}`
+    || issuer.audience !== `${EXPECTED_API_ORIGIN}/v1/apps/${expectedStackId}`
     || issuer.status !== "active"
   ) {
     throw new Error("external smoke issuer does not match the expected production binding");

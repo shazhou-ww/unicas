@@ -273,8 +273,8 @@ set `UNICAS_SMOKE_APP_ID`, `UNICAS_SMOKE_ISSUER`, `UNICAS_SMOKE_AUDIENCE`,
 `UNICAS_SMOKE_KID`, and `UNICAS_SMOKE_KEY_FILE`; optional
 `UNICAS_SMOKE_SPACE_ID` defaults to `deploy-smoke`. The default smoke covers
 lease, read, metadata, Root Ref idempotency, usage, GC, cross-Space isolation,
-and bidirectional v1/v2 denial. `pnpm smoke:v1` retains the separate frozen v1
-flow. Never commit the key files or print their contents.
+prototype-version denial, retired-claim denial, and retired-route `404`. Never
+commit the key files or print their contents.
 
 ## GitHub Actions production deployment
 
@@ -382,12 +382,10 @@ For the one-time App/Space v1 cutover, set the Production environment variable
 `https://api.unicas.work/v1/apps/{UNICAS_SMOKE_APP_ID}` before promoting the
 tested revision to `release`. The protected deployment updates both active App
 issuer audiences idempotently, runs the App/Space smoke with prototype route,
-claim-version, and broad-permission rejection probes. Every production release
-also runs the frozen Stack/Tenant v1 route and claim grammar against the same
-active App authority audience; the audience identifies the App authority and
-does not select the route family. After both smoke suites, origin checks, and
-the production tag succeed, set `APP_SPACE_V1_CUTOVER_ENABLED=false`; later
-releases must not repeat the one-time issuer step.
+claim-version, broad-permission, retired-route, and retired-claim rejection
+probes. After the smoke, origin checks, and production tag succeed, set
+`APP_SPACE_V1_CUTOVER_ENABLED=false`; later releases must not repeat the
+one-time issuer step.
 
 For the one-time Account-model production cutover, configure a required
 reviewer on the `Production` Environment before merging the promotion pull

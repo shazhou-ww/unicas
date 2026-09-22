@@ -1,7 +1,8 @@
 ---
 name: repoledger
-description: "Authoritative lifecycle for user-invoked task-new and task-exec flows and existing repository tasks. Ordinary implementation requests remain task-free."
-user-invocable: false
+description: "Create, execute, inspect, complete, or abandon explicitly opted-in repository tasks through Repoledger. Ordinary implementation requests remain task-free."
+argument-hint: "<new [--language <tag>] [context]|exec [task]|status [task]|complete [task]|abandon [task]>"
+user-invocable: true
 ---
 
 # Repoledger
@@ -10,9 +11,35 @@ Manage explicitly opted-in implementation work as stable repository state on a
 shared primary branch. Repoledger validates and publishes lifecycle facts; it
 does not decide intent, semantic overlap, human approval, or code correctness.
 
+## Route The Request
+
+For an explicit `/repoledger` invocation, route by the first argument. Treat it
+as a verb, not as free-form task context:
+
+- `new [--language <tag>] [context]`: admit one accepted implementation
+  outcome and register it in backlog. `--language` overrides the user
+  preference for this task only. Stop after registration; do not start or
+  implement it.
+- `exec [task]`: resolve one existing task, start or resume it, and follow the
+  lifecycle until it is terminal or genuinely blocked.
+- `status [task]`: list tasks when no task is supplied, or report and remotely
+  check one resolved task. Do not mutate task state or implementation files.
+- `complete [task]`: resume one ongoing task at the delivery boundary. Verify
+  all completion requirements and request approval for the exact current
+  primary commit. The invocation itself is not delivery approval and must not
+  call `task complete` directly.
+- `abandon [task]`: resolve one nonterminal task and require an explicit human
+  decision to abandon that outcome before changing its state.
+
+For a missing or unknown verb, show the supported forms and stop without
+changing task or implementation state. Repository instructions may also load
+this skill for an explicit request to manage an existing registered task; route
+that request as `exec`. Never infer `new` from an ordinary implementation
+request, task size, duration, or a suggestion from the agent.
+
 ## Admit Work
 
-- Create a task only after the user explicitly invokes `task-new`.
+- Create a task only after the user explicitly invokes `/repoledger new`.
 - Admit only an accepted outcome expected to change at least one tracked path
   outside the configured `tasksDirectory`. Source, tests, docs, configuration,
   workflows, scripts, instructions, and skills all count.
@@ -25,6 +52,34 @@ For cross-repository work, the repository owning the primary implementation
 owns the source task. Create a linked task only when another repository owns an
 independent implementation outcome.
 
+## Task Language
+
+Every registered task has one stable language track recorded in `Task.md` as
+`Language: <canonical-tag>`. The tag is canonical BCP 47, such as `en` or
+`zh-CN`. It controls narrative prose, not machine protocol.
+
+For `/repoledger new`, run
+`repoledger config resolve --global task-language [--language <tag>] --json`
+before preparing `Task.md`. Pass `--language` only when the invocation includes
+the one-task override. Resolution is deterministic: invocation override, then
+the user preference, then `en`. Record the returned value in `Task.md`; never
+record the preference source or user configuration path. Manage the persistent
+user preference with `repoledger config get --global task-language` and
+`repoledger config set --global task-language <tag>`. User preferences stay
+outside repositories and never modify `repoledger.yaml`.
+
+For every existing task, read its recorded `Language` from the authoritative
+`Task.md` or `repoledger status`; do not re-resolve the current user's
+preference. A legacy task without `Language` uses `en`. Never infer language
+from prose, translate existing artifacts, or change a task's language during
+resume or handoff.
+
+Write narrative titles, goals, context, scope, criteria, decisions, validation,
+blockers, evidence, and user instructions in the task language. Keep required
+Markdown headings, checkpoint names, applicability and approval values,
+outcomes, acceptance statuses, commands, identifiers, and other validated
+protocol markers in English exactly as the templates define them.
+
 ## Prepare Task Work
 
 1. Read repository instructions and the repository task profile.
@@ -32,7 +87,8 @@ independent implementation outcome.
    plausible overlaps.
 3. Run `repoledger status <task-name>` and
    `repoledger check <task-name> --remote` before resuming one task.
-4. Read its stable `Task.md` and any existing `Progress.md` from primary.
+4. Read its stable `Task.md`, task language, and any existing `Progress.md`
+  from primary.
 5. Preserve unrelated work and stop on semantic overlap or same-task conflicts.
 
 The configured primary repository and branch are authoritative. Their
@@ -44,12 +100,29 @@ accepted work must return to primary.
 
 ## Create And Start
 
-After `task-new` admission:
+After `/repoledger new` admission:
 
-1. Prepare `<tasksDirectory>/<task-name>/Task.md` from the task template.
-2. Run `repoledger task register <task-name>`. It snapshots that local task
+1. Resolve the task language as described above.
+2. Prepare `<tasksDirectory>/<task-name>/Task.md` from the task template and
+  record the resolved canonical `Language`.
+3. Run `repoledger task register <task-name>`. It snapshots that local task
    directory and publishes the backlog record and artifacts to primary.
-3. Do not start or implement unless the user also requested execution.
+4. Synchronize the caller's local primary checkout as described below, then
+  stop without starting or implementing the task. A later `/repoledger exec`
+  invocation owns that transition.
+
+Registration publishes from an isolated worktree and deliberately leaves the
+caller's checkout unchanged. After successful publication, use the returned
+`primaryAfter` commit to fast-forward the caller's checked-out primary branch
+to the exact published commit. First verify that the current branch is the
+configured primary branch. Temporarily move the local task directory outside
+the worktree, fast-forward to `primaryAfter`, compare the restored tracked task
+directory with the saved input, and remove the saved copy only when they are
+identical. Preserve unrelated index and worktree changes. If the branch cannot
+fast-forward or the directories differ, restore or retain the saved input and
+report the blocker; never reset, silently switch branches, or discard content.
+Do not finish `/repoledger new` with remote primary ahead of the checked-out
+local primary branch.
 
 When execution begins, run `repoledger task start <task-name>`. The source
 defaults to `task/<task-name>` in the primary repository; use
@@ -66,6 +139,8 @@ journal, not a transcript or a mirror of Git.
   modifies, renames, or deletes at least one path outside `tasksDirectory`.
 - In that same commit, record only outcome-relevant implementation changes,
   material decisions, validation, blockers, and the next action.
+- Write narrative Progress content in the task's recorded language while
+  preserving the template's English headings and canonical review values.
 - Never create a standalone Progress commit for fetches, checks, pushes, commit
   hashes, reachability, status transitions, resumes, handoffs, review requests,
   approvals without implementation, or task-only document edits.
@@ -98,9 +173,6 @@ and architecture review apply when those surfaces change.
   Progress update.
 - Reopen a checkpoint when later changes materially alter the reviewed result.
 
-When installed, `ui-change-review` and `business-data-model-review` are
-optional communication aids for their corresponding checkpoints. Their absence never blocks a checkpoint, and neither skill owns lifecycle state or approval.
-
 Do not cross a protected implementation gate until its required decision is
 explicit. Routine non-force publication needs no separate permission.
 
@@ -119,6 +191,8 @@ physical interaction, or subjective judgment that the agent cannot verify.
 Publish it with an implementation delta. Record only the result the user
 reports, and require explicit delivery approval separately unless one response
 clearly supplies both decisions.
+Write its narrative instructions in the task language while preserving the
+English headings and canonical acceptance statuses.
 
 ## Complete Or Abandon
 
@@ -162,6 +236,8 @@ tasks/
     `-- Task.md
 ```
 
-Run local `repoledger check` after task artifact changes and
-`repoledger check --remote` for CI or shared-state validation. Follow the
+Run local `repoledger check` after task artifact changes, `repoledger check
+--staged` for the index candidate, and `repoledger check --commit HEAD` for CI
+on the checked-out commit. Use `repoledger check --remote` when CI or a human
+must also validate refreshed primary and ongoing source refs. Follow the
 [adoption guide](./references/adoption.md) for setup and legacy migration.

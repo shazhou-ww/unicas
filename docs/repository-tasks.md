@@ -4,7 +4,8 @@ This repository uses the installed
 [`repoledger`](/.agents/skills/repoledger/SKILL.md) with
 [`repoledger.yaml`](/repoledger.yaml) and [`tasks/status.yaml`](/tasks/status.yaml).
 GitHub Issues remain the open intake surface; accepted implementation work is
-registered in this repository only after an explicit `task-new` invocation.
+registered in this repository only after an explicit `/repoledger new`
+invocation.
 
 ## Skill installation
 
@@ -14,8 +15,15 @@ hashes. Restore them after cloning with `npx skills experimental_install`.
 Update them deliberately with:
 
 ```sh
-npx skills update repoledger task-new task-exec ui-change-review business-data-model-review publish --project --yes
+npx skills update repoledger ui-change-review business-data-model-review publish --project --yes
 ```
+
+The `repoledger` skill comes from `shazhou-ww/repoledger`; the other shared
+skills continue to use their sources recorded in `skills-lock.json`. Repoledger
+exposes one command namespace: `/repoledger new`, `/repoledger exec`,
+`/repoledger status`, `/repoledger complete`, and `/repoledger abandon`.
+The CLI is pinned to an immutable commit from that repository until its first
+post-split npm version is published.
 
 Review the resulting repository diff and run `pnpm check:tasks`. The `publish`
 skill is explicit-invocation-only and remains unusable unless this repository
@@ -69,9 +77,10 @@ on GitHub and in VS Code.
 implementation through the repository's normal non-force path; never force-push
 or discard concurrent work.
 
-Run `pnpm check:tasks` for local validation after changing task artifacts,
-repository instructions, installed skills, or `skills-lock.json`. CI runs the
-same command with `--remote` so it validates refreshed `origin/main` state.
+Run `pnpm check:tasks` for worktree validation after changing task artifacts,
+repository instructions, installed skills, or `skills-lock.json`. CI runs
+`pnpm check:tasks:commit` for the checked-out commit, and main-branch CI also
+runs `pnpm check:tasks --remote` against refreshed `origin/main` state.
 Before resuming one task, run `repoledger status <task-name>` and
 `repoledger check <task-name> --remote` as required by the installed skill.
 

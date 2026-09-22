@@ -24,11 +24,10 @@ cache.close();
 
 ## Contract
 
-- Current keys include endpoint, authenticated Principal, App, Space, hash, read kind,
-  and an explicit version. Frozen v1 consumers import the same function names
-  from `@unicas/space-browser-cache/v1`, which retains the original Stack/Tenant key shape.
-  Use an immutable identity key, never an access token or display email. The endpoint
-  must not contain credentials, a query or a fragment.
+- Keys include endpoint, authenticated Principal, App, Space, hash, read kind,
+  and an explicit version. Use an immutable identity key, never an access token
+  or display email. The endpoint must not contain credentials, a query or a
+  fragment.
 - Stores only immutable node metadata (`hash`, `size`, `contentType`, `refs`) and
   completely consumed node own-content. Neither mutable node state nor file-root
   working copies, catalog revisions, leases, GC results or usage are persisted.
@@ -63,10 +62,9 @@ or encrypted secret store; any same-origin script can access it. Cached bytes do
 not prove that a node is still leased, retained, present on the server, or accessible
 under current permissions. Use explicit live server operations for those decisions.
 
-Default databases are `unicas-node-cache-v2` at the package root and
-`unicas-node-cache-v1` at `./v1`. Their namespaces and scope-key shapes cannot
-collide. `databaseName` can isolate independent applications/tests; use the
-same entrypoint and name for Principal-wide clearing.
+The default database is `unicas-node-cache-v2`. `databaseName` can isolate
+independent applications/tests; use the same entrypoint and name for
+Principal-wide clearing.
 
 ## Verification
 

@@ -14,22 +14,10 @@
       "computedHash": "6f8a76bfdfed46d502b3119b3557be2eb7221d84e46f18bdd309519db3c239a1"
     },
     "repoledger": {
-      "source": "shazhou-ww/skills",
+      "source": "shazhou-ww/repoledger",
       "sourceType": "github",
       "skillPath": "skills/repoledger/SKILL.md",
-      "computedHash": "eb14529a04a694a435e25e30cf88f15da0364854d474f84fba2b302979b57088"
-    },
-    "task-exec": {
-      "source": "shazhou-ww/skills",
-      "sourceType": "github",
-      "skillPath": "skills/task-exec/SKILL.md",
-      "computedHash": "551dc3435cd24416c4324a376dcbd30c5a3af288194b87d9dc0e3fb7be77fc18"
-    },
-    "task-new": {
-      "source": "shazhou-ww/skills",
-      "sourceType": "github",
-      "skillPath": "skills/task-new/SKILL.md",
-      "computedHash": "c8e5e9a4010bd09028ca57aded5f44e9db3c95f29460b588d59fd87e1c6a8a40"
+      "computedHash": "48887365f0f9d0a96cd7ca4cbcf2220c09b6e0ee27c80d609b35041cb88fefab"
     },
     "ui-change-review": {
       "source": "shazhou-ww/skills",

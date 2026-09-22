@@ -19,9 +19,9 @@ period.
 5. Deploy the service and every maintained client or App consumer from the
    same accepted repository revision.
 
-SDK method names and client configuration do not change. Frozen Stack/Tenant
-v1 remains available only through the explicit `@unicas/space-protocol/v1`,
-`@unicas/space-client/v1`, and `@unicas/space-browser-cache/v1` subpaths.
+SDK method names and client configuration do not change. The unpublished
+Stack/Tenant package subpaths, routes, and claim grammar have been removed
+without aliases.
 
 ## Root Ref updates
 
@@ -38,8 +38,10 @@ negative deltas.
 - Prototype Space claim versions 2 and 3 return `401 invalid_token`.
 - Broad prototype permissions are invalid claim values and return
   `401 invalid_token`.
-- A released Space claim cannot authorize frozen Stack/Tenant routes, and a
-  frozen Stack/Tenant claim cannot authorize App/Space routes.
+- Retired Stack/Tenant routes return `404` without capability verification or
+   storage dispatch.
+- Retired Stack/Tenant claim shapes cannot authorize App/Space routes and
+   return `401 invalid_token`.
 - App, Space, exact permission, and Root Ref domain mismatches continue to fail
   closed with the documented authorization errors.
 

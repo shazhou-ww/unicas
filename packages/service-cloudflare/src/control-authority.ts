@@ -10,25 +10,7 @@ import type { D1Database } from "@cloudflare/workers-types";
 import type {
   AppAuthorityResolver,
   ResolvedAppAuthority,
-  ResolvedV1StackAuthority,
-  V1StackAuthorityResolver,
 } from "@unicas/service";
-
-export class AuthorityRepository implements V1StackAuthorityResolver {
-  readonly #db: D1Database;
-
-  constructor(db: D1Database) {
-    this.#db = db;
-  }
-
-  /** Resolve a globally unique issuer to its stack authority; null when
-   *  unknown. The issuer value is unique across stacks (registry invariant). */
-  async resolveIssuer(issuer: string): Promise<ResolvedV1StackAuthority | null> {
-    const oauthRow = await readIssuer(this.#db, issuer);
-    if (!oauthRow || oauthRow.app_status !== "active") return null;
-    return toAuthority(oauthRow);
-  }
-}
 
 export class AppAuthorityRepository implements AppAuthorityResolver {
   readonly #db: D1Database;
@@ -49,16 +31,6 @@ export class AppAuthorityRepository implements AppAuthorityResolver {
       capabilityMaxLifetimeSeconds: row.capability_max_lifetime_seconds,
     };
   }
-}
-
-function toAuthority(row: IssuerRow): ResolvedV1StackAuthority {
-  return {
-    stackId: row.app_id,
-    issuer: row.issuer,
-    audience: row.audience,
-    jwksUri: row.jwks_uri,
-    capabilityMaxLifetimeSeconds: row.capability_max_lifetime_seconds,
-  };
 }
 
 function readIssuer(db: D1Database, issuer: string): Promise<IssuerRow | null> {

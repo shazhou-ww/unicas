@@ -13,9 +13,10 @@ tasks:
     createdAt: "2026-09-17T07:47:55Z"
     updatedAt: "2026-09-19T05:12:49Z"
   adopt-cloudflare-performance-tracing:
-    state: backlog
+    state: ongoing
+    sourceBranch: task/adopt-cloudflare-performance-tracing
     createdAt: "2026-09-21T11:23:41Z"
-    updatedAt: "2026-09-21T11:23:41Z"
+    updatedAt: "2026-09-22T05:35:08Z"
   adopt-repoledger-cli:
     state: completed
     createdAt: "2026-09-15T08:13:24Z"
@@ -81,10 +82,9 @@ tasks:
     createdAt: "2026-09-14T09:30:47Z"
     updatedAt: "2026-09-19T05:12:49Z"
   package-documentation-site:
-    state: ongoing
-    sourceBranch: task/package-documentation-site
+    state: completed
     createdAt: "2026-09-22T02:21:38Z"
-    updatedAt: "2026-09-22T02:26:34Z"
+    updatedAt: "2026-09-22T05:25:00Z"
   prepare-app-user-sdk-beta-packages:
     state: backlog
     createdAt: "2026-09-21T03:41:45Z"
@@ -114,9 +114,10 @@ tasks:
     createdAt: "2026-09-20T02:30:21Z"
     updatedAt: "2026-09-20T03:21:40Z"
   retire-stack-tenant-data-plane:
-    state: backlog
+    state: ongoing
+    sourceBranch: task/retire-stack-tenant-data-plane
     createdAt: "2026-09-21T03:41:05Z"
-    updatedAt: "2026-09-21T03:41:05Z"
+    updatedAt: "2026-09-22T05:14:29Z"
   simplify-console-administration-navigation:
     state: completed
     createdAt: "2026-09-17T04:16:49Z"

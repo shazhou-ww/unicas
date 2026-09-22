@@ -9,7 +9,6 @@ import {
   spaceRootRefsUpdatePermission,
   spaceUsageReadPermission,
 } from "../src/index.js";
-import { casReadPermission, parseCapabilityPermission } from "../src/v1.js";
 
 describe("Space capability v1 vocabulary", () => {
   test("uses an explicit version and operation permission grammar", () => {
@@ -35,15 +34,9 @@ describe("Space capability v1 vocabulary", () => {
 
   test("rejects scoped, broad, and unknown Space permissions", () => {
     expect(parseSpaceCapabilityPermission("spaces:space%2Fa:cas:read")).toBeNull();
+    expect(parseSpaceCapabilityPermission("tenants:scope-a:cas:read")).toBeNull();
     expect(parseSpaceCapabilityPermission("cas:read")).toBeNull();
     expect(parseSpaceCapabilityPermission("cas:nodes:write")).toBeNull();
     expect(parseSpaceCapabilityPermission("cas:root-refs:lease")).toBeNull();
-  });
-
-  test("keeps Space and frozen Stack/Tenant permission parsers disjoint", () => {
-    const tenantPermission = casReadPermission("scope-a");
-    const spacePermission = spaceNodeReadPermission();
-    expect(parseSpaceCapabilityPermission(tenantPermission)).toBeNull();
-    expect(parseCapabilityPermission(spacePermission)).toBeNull();
   });
 });

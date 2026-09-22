@@ -11,36 +11,23 @@ import {
   spaceUsageReadPermission,
   type AppSpaceRoute,
 } from "@unicas/space-protocol";
-import { casReadPermission } from "@unicas/space-protocol/v1";
 import {
   AppSpaceCapabilityVerifier,
-  V1StackTenantCapabilityVerifier,
   appSpacePermissionFor,
   type AppAuthorityResolver,
   type ResolvedAppAuthority,
-  type ResolvedV1StackAuthority,
-  type V1StackAuthorityResolver,
 } from "../src/index.js";
 
 const ISSUER = "https://issuer.example";
 const AUDIENCE = "unicas-cas";
 const APP = "cas_app_a";
 const SPACE = "space-1";
-const STACK = "cas_stack_a";
-const TENANT = "tenant-1";
 const APP_ROUTE = {
   operation: "readContent" as const,
   appId: APP,
   spaceId: SPACE,
   hash: "a".repeat(64),
 };
-const V1_ROUTE = {
-  operation: "readContent" as const,
-  stackId: STACK,
-  tenantId: TENANT,
-  hash: "a".repeat(64),
-};
-
 class StubAppAuthorityResolver implements AppAuthorityResolver {
   constructor(readonly authority: ResolvedAppAuthority) { }
 
@@ -49,19 +36,10 @@ class StubAppAuthorityResolver implements AppAuthorityResolver {
   }
 }
 
-class StubV1StackAuthorityResolver implements V1StackAuthorityResolver {
-  constructor(readonly authority: ResolvedV1StackAuthority) { }
-
-  async resolveIssuer(issuer: string): Promise<ResolvedV1StackAuthority | null> {
-    return issuer === ISSUER ? this.authority : null;
-  }
-}
-
 async function fixture(): Promise<{
   now: number;
   privateKey: CryptoKey;
   appResolver: StubAppAuthorityResolver;
-  v1Resolver: StubV1StackAuthorityResolver;
 }> {
   const now = 1_700_000_000_000;
   const { publicKey, privateKey } = await generateKeyPair("ES256", { extractable: true });
@@ -75,13 +53,6 @@ async function fixture(): Promise<{
     appResolver: new StubAppAuthorityResolver({
       appId: APP,
       appStatus: "active",
-      issuer: ISSUER,
-      audience: AUDIENCE,
-      jwksUri,
-      capabilityMaxLifetimeSeconds: 28_800,
-    }),
-    v1Resolver: new StubV1StackAuthorityResolver({
-      stackId: STACK,
       issuer: ISSUER,
       audience: AUDIENCE,
       jwksUri,
@@ -411,24 +382,16 @@ describe("AppSpaceCapabilityVerifier", () => {
       .rejects.toMatchObject({ status: 401, code: "invalid_token" });
   });
 
-  test("rejects version-1 claims across route families", async () => {
-    const { now, privateKey, appResolver, v1Resolver } = await fixture();
+  test("rejects the retired Tenant claim shape", async () => {
+    const { now, privateKey, appResolver } = await fixture();
     const appVerifier = new AppSpaceCapabilityVerifier({ repository: appResolver, now: () => now });
-    const v1Verifier = new V1StackTenantCapabilityVerifier({ repository: v1Resolver, now: () => now });
     const tenantToken = await issue(privateKey, now, {
       ver: 1,
-      tenantId: TENANT,
-      permissions: [casReadPermission(TENANT)],
-    });
-    const spaceToken = await issue(privateKey, now, {
-      ver: SpaceCapabilityVersion,
-      spaceId: SPACE,
-      permissions: [spaceNodeReadPermission()],
+      tenantId: "tenant-1",
+      permissions: ["tenants:tenant-1:cas:read"],
     });
 
     await expect(appVerifier.verify(request(tenantToken), APP_ROUTE))
-      .rejects.toMatchObject({ status: 401, code: "invalid_token" });
-    await expect(v1Verifier.verify(request(spaceToken), V1_ROUTE))
       .rejects.toMatchObject({ status: 401, code: "invalid_token" });
   });
 
@@ -438,7 +401,7 @@ describe("AppSpaceCapabilityVerifier", () => {
     const token = await issue(privateKey, now, {
       ver: SpaceCapabilityVersion,
       spaceId: SPACE,
-      permissions: [casReadPermission(SPACE)],
+      permissions: [`tenants:${SPACE}:cas:read`],
     });
     await expect(verifier.verify(request(token), APP_ROUTE))
       .rejects.toMatchObject({ status: 401, code: "invalid_token" });

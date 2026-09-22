@@ -20,7 +20,13 @@ import {
   validateRefDomainClaim,
   type AppSpaceRoute,
 } from "@unicas/space-protocol";
-import type { JwksFetcher } from "./v1/tenant-auth.js";
+
+export type JwksFetcher = (url: string, options: {
+  readonly headers: Headers;
+  readonly method: "GET";
+  readonly redirect: "manual";
+  readonly signal: AbortSignal;
+}) => Promise<Response>;
 
 export interface ResolvedAppAuthority {
   readonly appId: string;

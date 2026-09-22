@@ -1,15 +1,10 @@
 import "fake-indexeddb/auto";
 import { afterEach, expect, test, vi } from "vitest";
 import { clearBrowserCasNodeCaches, createBrowserCasNodeCache, type BrowserCasNodeCache, type BrowserCasNodeCacheOptions } from "../src/index.js";
-import {
-  createBrowserCasNodeCache as createV1BrowserCasNodeCache,
-  type BrowserCasNodeCache as V1BrowserCasNodeCache,
-} from "../src/v1.js";
 
 const key = { version: 1 as const, appId: "app", spaceId: "space", hash: "a".repeat(64) };
-const legacyKey = { stackId: "app", tenantId: "space", hash: key.hash };
 const metadata = { hash: key.hash, size: 6, contentType: "text/plain", refs: [] };
-const caches: Array<BrowserCasNodeCache | V1BrowserCasNodeCache> = [];
+const caches: BrowserCasNodeCache[] = [];
 let databaseNumber = 0;
 function setup(overrides: Partial<BrowserCasNodeCacheOptions> = {}) {
   const options = { namespace: { endpoint: "https://cas.example", principal: "issuer:subject" }, databaseName: `test-cache-${++databaseNumber}`, ...overrides };
@@ -54,27 +49,6 @@ test("isolates endpoint, Principal, App and Space, and clones metadata", async (
   await cache.metadata({ ...key, appId: "other" }, load);
   await cache.metadata({ ...key, spaceId: "other" }, load);
   expect(load).toHaveBeenCalledTimes(4);
-});
-
-test("uses a v2 App and Space namespace that cannot collide with v1", async () => {
-  const databaseName = `test-cache-version-${++databaseNumber}`;
-  const namespace = { endpoint: "https://cas.example", principal: "issuer:subject" };
-  const legacy = createV1BrowserCasNodeCache({ namespace, databaseName });
-  const space = createBrowserCasNodeCache({ namespace, databaseName });
-  caches.push(legacy, space);
-  await legacy.metadata(legacyKey, async () => metadata);
-  const loadSpace = vi.fn(async () => metadata);
-  expect(await space.metadata(key, loadSpace)).toEqual(metadata);
-  expect(loadSpace).toHaveBeenCalledOnce();
-  await space.metadata({ ...key, appId: "other-app" }, loadSpace);
-  await space.metadata({ ...key, spaceId: "other-space" }, loadSpace);
-  expect(loadSpace).toHaveBeenCalledTimes(3);
-
-  const loadLegacy = vi.fn(async () => metadata);
-  expect(await legacy.metadata(legacyKey, loadLegacy)).toEqual(metadata);
-  expect(loadLegacy).not.toHaveBeenCalled();
-  await expect(space.metadata(legacyKey as never, async () => metadata)).rejects.toThrow("v1 cache key");
-  await expect(legacy.metadata(key as never, async () => metadata)).rejects.toThrow("v1 cache key");
 });
 
 test("range misses and oversized reads are not persisted", async () => {

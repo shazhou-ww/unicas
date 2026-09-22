@@ -21,6 +21,6 @@ UniCAS is an independently deployable middleware. Keep `packages/` free of runti
 
 - Deploy UniCAS as one service; Space data and admin are HTTP access planes, not separate server deployment units.
 - Separate server packages by portability. `@unicas/service` is the cloud-neutral service actor and platform-port contract; `@unicas/service-cloudflare` is the Cloudflare Worker and platform adapter.
-- The cloud-neutral service actor implements current Space, frozen-v1, and admin protocol routes. Keep browser BFF/OIDC, static assets, MCP/OAuth ingress, schema migration, and Worker lifecycle in the platform adapter or presentation packages.
+- The cloud-neutral service actor implements current Space and admin protocol routes. Keep browser BFF/OIDC, static assets, MCP/OAuth ingress, schema migration, and Worker lifecycle in the platform adapter or presentation packages.
 - Model storage and concurrency requirements as explicit platform ports. In particular, preserve the keyed single-writer semantics currently supplied by Durable Objects; generic database and blob interfaces alone are insufficient.
 - Server implementations and deployment adapters must not become dependencies of protocol or client packages.

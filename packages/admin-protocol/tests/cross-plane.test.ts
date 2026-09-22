@@ -66,21 +66,12 @@ describe("cross-plane separation", () => {
     expect(casAuthPlanePolicy.appAdminPlane.credential).toBe("google_oidc_bff_session");
     expect(casAuthPlanePolicy.appAdminPlane.rejects).toEqual([
       "app_issuer_space_capability",
-      "v1_stack_issuer_jwt_capability",
     ]);
     expect(casAuthPlanePolicy.spaceDataPlane.pathPrefix).toBe("/v1/apps");
     expect(casAuthPlanePolicy.spaceDataPlane.credential).toBe(
       "app_issuer_space_capability",
     );
     expect(casAuthPlanePolicy.spaceDataPlane.rejects).toEqual([
-      "oidc_bff_session",
-      "platform_operator_session",
-    ]);
-    expect(casAuthPlanePolicy.v1StackTenantDataPlane.pathPrefix).toBe("/stacks");
-    expect(casAuthPlanePolicy.v1StackTenantDataPlane.credential).toBe(
-      "v1_stack_issuer_jwt_capability",
-    );
-    expect(casAuthPlanePolicy.v1StackTenantDataPlane.rejects).toEqual([
       "oidc_bff_session",
       "platform_operator_session",
     ]);

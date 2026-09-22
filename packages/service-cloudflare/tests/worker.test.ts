@@ -25,14 +25,6 @@ const handlers = vi.hoisted(() => ({
   })),
   spaceIdFromName: vi.fn((name: string) => `do:${name}`),
   spaceGet: vi.fn((_id: string) => ({ fetch: undefined as unknown })),
-  verify: vi.fn(async (_request: Request, route: { stackId: string; tenantId: string }) => ({
-    stackId: route.stackId,
-    tenantId: route.tenantId,
-    subject: "caller",
-    jti: "request-1",
-    kid: "key-1",
-    permissions: [],
-  })),
   verifySpace: vi.fn(async (_request: Request, route: { appId: string; spaceId: string }) => ({
     appId: route.appId,
     spaceId: route.spaceId,
@@ -67,16 +59,12 @@ vi.mock("@unicas/service", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@unicas/service")>();
   return {
     ...actual,
-    V1StackTenantCapabilityVerifier: class {
-      verify = handlers.verify;
-    },
     AppSpaceCapabilityVerifier: class {
       verify = handlers.verifySpace;
     },
   };
 });
 vi.mock("../src/control-authority.js", () => ({
-  AuthorityRepository: class { },
   AppAuthorityRepository: class { },
 }));
 vi.mock("../src/admin-bff/index.js", () => ({
@@ -210,78 +198,33 @@ describe("service-cloudflare public routing", () => {
     }
   });
 
-  test("publishes RFC 9728 metadata only for stacks with an active OAuth issuer", async () => {
-    const all = vi.fn(async () => ({
-      results: [
-        { issuer: "https://gateway.example/oauth" },
-      ]
-    }));
+  test("returns 404 for every retired Stack/Tenant route without initializing or dispatching", async () => {
+    const prepare = vi.fn();
     const metadataEnv = {
       ...env,
-      CAS_CONTROL_DB: {
-        prepare: vi.fn(() => ({ bind: vi.fn(() => ({ all })) })),
-      },
+      CAS_CONTROL_DB: { prepare },
+      CAS_DB: {},
     } as unknown as Env;
-    const response = await worker.fetch(new Request(
-      "https://cas.example/.well-known/oauth-protected-resource/stacks/cas_stack_a",
-    ), metadataEnv, ctx);
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      resource: "https://cas.example/stacks/cas_stack_a",
-      authorization_servers: [
-        "https://gateway.example/oauth",
-      ],
-      scopes_supported: ["cas:read", "cas:write", "cas:manage"],
-    });
-    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
-    expect(handlers.migrateControl).toHaveBeenCalledTimes(1);
-    expect(metadataEnv.CAS_CONTROL_DB.prepare).toHaveBeenCalledWith(expect.stringContaining("JOIN cas_apps AS app"));
-    expect(metadataEnv.CAS_CONTROL_DB.prepare).toHaveBeenCalledWith(expect.stringContaining("app.status = 'active'"));
 
-    all.mockResolvedValueOnce({ results: [] });
-    const missing = await worker.fetch(new Request(
-      "https://cas.example/.well-known/oauth-protected-resource/stacks/cas_stack_missing",
-    ), metadataEnv, ctx);
-    expect(missing.status).toBe(404);
-    expect(missing.headers.get("Cache-Control")).toBe("no-store");
-  });
-
-  test("routes tenant protocol requests without admin cookies or internal secrets", async () => {
-    const spaceEnv = { ...env, CAS_DB: {} } as Env;
-    const response = await worker.fetch(new Request(
-      "https://cas.example/stacks/s1/tenants/t1/cas/usage",
-      {
-        headers: {
-          Authorization: "Bearer tenant-capability",
-          Cookie: "cas_admin_session=secret",
-          "X-Internal-Token": "internal",
-          "X-Cas-Audit-Reader-Key": "reader",
-        },
-      },
-    ), spaceEnv, ctx);
-
-    const authorizationRequest = handlers.verify.mock.calls[0]![0] as Request;
-    expect(authorizationRequest.headers.get("Authorization")).toBe("Bearer tenant-capability");
-    expect(authorizationRequest.headers.get("Cookie")).toBeNull();
-    expect(authorizationRequest.headers.get("X-Internal-Token")).toBeNull();
-    expect(authorizationRequest.headers.get("X-Cas-Audit-Reader-Key")).toBeNull();
-
-    const actorRequest = handlers.spaceActor.mock.calls[0]![0] as Request;
-    expect(actorRequest.headers.get("Authorization")).toBeNull();
-    expect(actorRequest.headers.get("X-CAS-Stack-Id")).toBe("s1");
-    expect(actorRequest.headers.get("X-CAS-Tenant-Id")).toBe("t1");
-    expect(response.headers.get("Server-Timing")).toMatch(/cas_schema;dur=/);
-    expect(response.headers.get("Server-Timing")).toMatch(/cas_auth;dur=/);
-    expect(response.headers.get("Server-Timing")).toMatch(/cas_do;dur=/);
-    expect(response.headers.get("Server-Timing")).toMatch(/cas_edge;dur=/);
-    expect(response.headers.get("Timing-Allow-Origin")).toBe("*");
-    expect(handlers.migrate).toHaveBeenCalledTimes(1);
-
-    await worker.fetch(new Request(
-      "https://cas.example/stacks/s1/tenants/t1/cas/usage",
-      { headers: { Authorization: "Bearer tenant-capability" } },
-    ), spaceEnv, ctx);
-    expect(handlers.migrate).toHaveBeenCalledTimes(1);
+    for (const [method, path] of [
+      ["GET", "/.well-known/oauth-protected-resource/stacks/s1"],
+      ["GET", "/stacks/s1/tenants/t1/cas/nodes/hash/content"],
+      ["GET", "/stacks/s1/tenants/t1/cas/nodes/hash/metadata"],
+      ["POST", "/stacks/s1/tenants/t1/cas/nodes/hash/lease"],
+      ["GET", "/stacks/s1/tenants/t1/cas/usage"],
+      ["POST", "/stacks/s1/tenants/t1/cas/gc"],
+      ["GET", "/stacks/s1/tenants/t1/root-refs"],
+      ["POST", "/stacks/s1/tenants/t1/root-refs"],
+    ]) {
+      const response = await worker.fetch(new Request(`https://cas.example${path}`, { method }), metadataEnv, ctx);
+      expect(response.status, path).toBe(404);
+    }
+    expect(prepare).not.toHaveBeenCalled();
+    expect(handlers.migrateControl).not.toHaveBeenCalled();
+    expect(handlers.migrate).not.toHaveBeenCalled();
+    expect(handlers.verifySpace).not.toHaveBeenCalled();
+    expect(handlers.spaceActor).not.toHaveBeenCalled();
+    expect(handlers.spaceIdFromName).not.toHaveBeenCalled();
   });
 
   test("authorizes Space routes through the released verifier and trusted scope", async () => {
@@ -306,7 +249,6 @@ describe("service-cloudflare public routing", () => {
       expect.any(Request),
       { operation: "usage", appId: "app-1", spaceId: "space-1" },
     );
-    expect(handlers.verify).not.toHaveBeenCalled();
     expect(handlers.spaceIdFromName).toHaveBeenCalledWith("app-1|space-1");
     const spaceRequest = handlers.spaceActor.mock.calls[0]![0] as Request;
     expect(spaceRequest.headers.get("X-CAS-App-Id")).toBe("app-1");
@@ -318,101 +260,23 @@ describe("service-cloudflare public routing", () => {
     expect(handlers.migrateControl).toHaveBeenCalledTimes(1);
   });
 
-  test("dispatches tenant operations to the canonical Durable Object with trusted headers", async () => {
-    const hash = "a".repeat(64);
-    await worker.fetch(new Request(
-      `https://cas.example/stacks/s1/tenants/t1/cas/nodes/${hash}/content`,
-      {
-        headers: {
-          Authorization: "Bearer tenant-capability",
-          Range: "bytes=10-19",
-          "X-CAS-Stack-Id": "forged-stack",
-          "X-CAS-Tenant-Id": "forged-tenant",
-          "X-CAS-Hash": "forged-hash",
-        },
-      },
-    ), env, ctx);
-
-    expect(handlers.spaceIdFromName).toHaveBeenLastCalledWith("s1|t1");
-    expect(handlers.spaceGet).toHaveBeenLastCalledWith("do:s1|t1");
-    const readRequest = handlers.spaceActor.mock.calls[0]![0] as Request;
-    expect(new URL(readRequest.url).pathname).toBe("/read");
-    expect(readRequest.headers.get("Authorization")).toBeNull();
-    expect(readRequest.headers.get("X-CAS-Stack-Id")).toBe("s1");
-    expect(readRequest.headers.get("X-CAS-Tenant-Id")).toBe("t1");
-    expect(readRequest.headers.get("X-CAS-Hash")).toBe(hash);
-    expect(readRequest.headers.get("Range")).toBe("bytes=10-19");
-
-    await worker.fetch(new Request(
-      `https://cas.example/stacks/s1/tenants/t1/cas/nodes/${hash}/lease`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer tenant-capability",
-          "Content-Type": "application/vnd.unidocs.cas-node.v1",
-          "X-CAS-Lease-Duration": "120000",
-          "X-CAS-Ref-Domain": "forged-domain",
-        },
-        body: "node-content",
-      },
-    ), env, ctx);
-    const leaseRequest = handlers.spaceActor.mock.calls[1]![0] as Request;
-    expect(new URL(leaseRequest.url).pathname).toBe("/lease");
-    expect(leaseRequest.headers.get("X-CAS-Hash")).toBe(hash);
-    expect(leaseRequest.headers.get("X-CAS-Lease-Duration")).toBe("120000");
-    expect(leaseRequest.headers.get("Content-Type")).toBe("application/vnd.unidocs.cas-node.v1");
-    expect(leaseRequest.headers.get("X-CAS-Ref-Domain")).toBeNull();
-    expect(await leaseRequest.text()).toBe("node-content");
-
-    handlers.verify.mockResolvedValueOnce({
-      stackId: "s1",
-      tenantId: "t1",
-      subject: "caller",
-      jti: "request-2",
-      kid: "key-1",
-      permissions: [],
-      refDomain: "doc",
-    });
-    await worker.fetch(new Request(
-      "https://cas.example/stacks/s1/tenants/t1/root-refs",
-      {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer tenant-capability",
-          "Content-Type": "application/json",
-          "X-CAS-Ref-Domain": "forged-domain",
-        },
-        body: JSON.stringify({ requestId: "r1", changes: { [hash]: 1 } }),
-      },
-    ), env, ctx);
-    const rootRefsRequest = handlers.spaceActor.mock.calls[2]![0] as Request;
-    expect(new URL(rootRefsRequest.url).pathname).toBe("/updateRootRefs");
-    expect(rootRefsRequest.headers.get("X-CAS-Stack-Id")).toBe("s1");
-    expect(rootRefsRequest.headers.get("X-CAS-Tenant-Id")).toBe("t1");
-    expect(rootRefsRequest.headers.get("X-CAS-Ref-Domain")).toBe("doc");
-    await expect(rootRefsRequest.json()).resolves.toEqual({
-      requestId: "r1",
-      changes: { [hash]: 1 },
-    });
-  });
-
-  test("returns verifier authentication and authorization failures without Durable Object dispatch", async () => {
-    handlers.verify.mockRejectedValueOnce(new CapabilityAuthenticationError(
+  test("returns Space verifier failures without Durable Object dispatch", async () => {
+    handlers.verifySpace.mockRejectedValueOnce(new CapabilityAuthenticationError(
       "missing_token",
       "CAS capability token is required",
     ));
     const unauthenticated = await worker.fetch(new Request(
-      "https://cas.example/stacks/s1/tenants/t1/cas/usage",
+      "https://cas.example/v1/apps/app-1/spaces/space-1/cas/usage",
     ), env, ctx);
     expect(unauthenticated.status).toBe(401);
 
-    handlers.verify.mockRejectedValueOnce(new CapabilityAuthorizationError(
+    handlers.verifySpace.mockRejectedValueOnce(new CapabilityAuthorizationError(
       "resource_scope_mismatch",
-      "CAS capability stack does not match the requested path",
+      "CAS capability Space does not match the requested path",
     ));
     const forbidden = await worker.fetch(new Request(
-      "https://cas.example/stacks/s1/tenants/t1/cas/usage",
-      { headers: { Authorization: "Bearer wrong-stack-capability" } },
+      "https://cas.example/v1/apps/app-1/spaces/space-1/cas/usage",
+      { headers: { Authorization: "Bearer wrong-space-capability" } },
     ), env, ctx);
     expect(forbidden.status).toBe(403);
     expect(handlers.spaceActor).not.toHaveBeenCalled();

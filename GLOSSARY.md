@@ -103,7 +103,7 @@ semantics.
 | **capability** | 对 Principal、Space、权限和可选 Root Ref domain 进行约束的已签名授权声明。 | The HTTP v2 API uses capability `ver: 3`, one signed `spaceId`, and exact `cas:{resource}:{action}` permissions. A capability authorizes an operation; it is not a public document identifier. |
 | **issuer** | 签发并可被验证信任令牌的身份提供方。 | A registered issuer establishes App authority; verified Space claims and permissions must agree with the request path. |
 | **`refDomain`** | Root Ref 的正交审计和授权维度。 | It does not replace `appId` or `spaceId` and is not a storage partition by itself. |
-| **v1 Stack/Tenant identifiers** | 冻结兼容合同中的 `stackId`、`tenantId` 与 `tenants:` 权限。 | Retained for `unicas.shazhou.work`, v1 artifacts, tests, and physical adapters. Never reinterpret them as App/Space claims. |
+| **retired Stack/Tenant identifiers** | 已退役原型合同中的 `stackId`、`tenantId` 与 `tenants:` 权限。 | Retained only in historical records, the frozen `unicas.shazhou.work` environment, negative guards, and isolated physical/audit adapters. Never reinterpret them as App/Space claims. |
 
 See [Capability Key Operations](docs/capability-key-operations.md) and
 [UniCAS OAuth Discovery and Issuer Migration](packages/docs-site/content/cas-oauth-discovery-and-issuer-migration.md)

@@ -4,11 +4,12 @@
 
 Load and follow the
 [`repoledger` skill](.agents/skills/repoledger/SKILL.md)
-only when the user invokes `task-new`, invokes `task-exec`, or asks to manage
-an existing repository task. Then apply the UniCAS-specific profile in
+only when the user explicitly invokes `/repoledger`, or asks to manage an
+existing registered repository task. Then apply the UniCAS-specific profile in
 [`docs/repository-tasks.md`](docs/repository-tasks.md). Ordinary implementation
 requests remain task-free.
 
+- Create a task only through an explicit `/repoledger new` invocation.
 - Treat `origin/main` as the authoritative task state. Run
   `pnpm exec repoledger task list`, `pnpm exec repoledger status <task-name>`,
   and `pnpm exec repoledger check <task-name> --remote` as directed by the
@@ -49,10 +50,12 @@ requests remain task-free.
 
 ## Validation
 
-- `pnpm check:tasks` runs the pinned local `repoledger check`; CI adds
-  `--remote` to validate canonical `origin/main` state.
+- `pnpm check:tasks` validates the worktree. CI also runs
+  `pnpm check:tasks:commit`, and main-branch CI runs `pnpm check:tasks --remote`
+  against canonical repository state.
 - Use `pnpm exec repoledger task list`, `status`, and focused `check` commands
-  for task readiness. Repoledger 0.7 has no identity or `doctor` workflow.
+  for task readiness. Use `check --staged` or `check --unstaged` to validate a
+  specific local candidate.
 - Run the narrowest relevant executable test after implementation edits.
 - Before completing a task, run the validation required by its acceptance
   criteria and publish the final implementation-linked `Progress.md` update.
