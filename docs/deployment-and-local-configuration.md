@@ -377,6 +377,17 @@ Initial provisioning is an explicit bootstrap operation:
    approved operator credential store until rotation or recovery no longer
    requires it.
 
+For the one-time App/Space v1 cutover, set the Production environment variable
+`APP_SPACE_V1_CUTOVER_ENABLED=true` and set `UNICAS_SMOKE_AUDIENCE` to
+`https://api.unicas.work/v1/apps/{UNICAS_SMOKE_APP_ID}` before promoting the
+tested revision to `release`. The protected deployment updates both active App
+issuer audiences idempotently, runs the App/Space smoke with prototype route,
+claim-version, and broad-permission rejection probes, then runs the frozen
+Stack/Tenant v1 regression smoke against its derived `/stacks/{appId}`
+audience. After the full deployment, origin checks, and production tag succeed,
+set `APP_SPACE_V1_CUTOVER_ENABLED=false`; later releases must not repeat the
+one-time issuer step.
+
 For the one-time Account-model production cutover, configure a required
 reviewer on the `Production` Environment before merging the promotion pull
 request. Let the release revision pass `validate` and stop at that environment

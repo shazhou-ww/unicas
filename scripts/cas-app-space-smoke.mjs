@@ -21,9 +21,7 @@ import { createSpaceCasClient } from "../packages/space-client/dist/index.js";
 import {
   CapabilityAlgorithm,
   CapabilityTokenType,
-  CapabilityVersion,
   SpaceCapabilityVersion,
-  casManagePermission,
   spaceGcExecutePermission,
   spaceNodeLeasePermission,
   spaceNodeReadPermission,
@@ -31,6 +29,10 @@ import {
   spaceRootRefsUpdatePermission,
   spaceUsageReadPermission,
 } from "../packages/space-protocol/dist/index.js";
+import {
+  CapabilityVersion,
+  casManagePermission,
+} from "../packages/space-protocol/dist/v1.js";
 
 const BASE = normalizeSmokeBaseUrl(
   process.argv[2] ?? "https://api.unicas.work",
@@ -56,6 +58,14 @@ function requiredEnv(name) {
 function assert(condition, message) {
   if (!condition) throw new Error(`ASSERT FAILED: ${message}`);
   console.log(`  ok: ${message}`);
+}
+
+function assertInvalidToken(response, message) {
+  const challenge = response.headers.get("WWW-Authenticate") ?? "";
+  assert(
+    response.status === 401 && challenge.includes('error="invalid_token"'),
+    `${message} -> ${response.status} (401 invalid_token)`,
+  );
 }
 
 async function nodeOf(content, refs = []) {
@@ -160,8 +170,43 @@ async function main() {
     );
 
     const prefix = `/v1/apps/${encodeURIComponent(APP_ID)}/spaces/${encodeURIComponent(SPACE_ID)}`;
+    const prototypeUrl = new URL([
+      "v2",
+      "apps",
+      encodeURIComponent(APP_ID),
+      "spaces",
+      encodeURIComponent(SPACE_ID),
+      "cas",
+      "usage",
+    ].join("/"), `${BASE}/`);
+    let response = await fetch(
+      prototypeUrl,
+      { redirect: "manual" },
+    );
+    assert(response.status === 404, `prototype App/Space v2 route -> ${response.status} (404)`);
+    for (const version of [2, 3]) {
+      const prototypeToken = await sign({
+        ver: version,
+        spaceId: SPACE_ID,
+        permissions: [spaceUsageReadPermission()],
+      });
+      response = await fetch(`${BASE}${prefix}/cas/usage`, {
+        headers: { Authorization: `Bearer ${prototypeToken}` },
+      });
+      assertInvalidToken(response, `prototype Space claim v${version}`);
+    }
+    const broadPermissionToken = await sign({
+      ver: SpaceCapabilityVersion,
+      spaceId: SPACE_ID,
+      permissions: [`spaces:${SPACE_ID}:cas:read`],
+    });
+    response = await fetch(`${BASE}${prefix}/cas/usage`, {
+      headers: { Authorization: `Bearer ${broadPermissionToken}` },
+    });
+    assertInvalidToken(response, "broad prototype Space permission");
+
     const isolationToken = await issueSpace(ISOLATION_SPACE_ID);
-    let response = await fetch(`${BASE}${prefix}/cas/nodes/${parent.hash}/content`, {
+    response = await fetch(`${BASE}${prefix}/cas/nodes/${parent.hash}/content`, {
       headers: { Authorization: `Bearer ${isolationToken}` },
     });
     assert(response.status === 403, `cross-Space read -> ${response.status} (403)`);

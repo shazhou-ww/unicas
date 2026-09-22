@@ -1,6 +1,6 @@
 # Progress
 
-Updated: 2026-09-21
+Updated: 2026-09-22
 
 ## Current state
 
@@ -14,8 +14,13 @@ entrypoints.
 
 Focused package validation, OpenAPI drift, documentation generation,
 workspace-boundary checks, full typechecking, exhaustive tests, a clean build,
-and deployment-plan validation pass. Deployed smoke, source publication,
-primary integration, and delivery acceptance remain.
+and deployment-plan validation pass. The third protected production run
+successfully replaced both active issuer audiences and deployed the v1 API,
+then stopped when canonical smoke imported frozen capability symbols from the
+root protocol entrypoint. The smoke now imports those symbols from the
+explicit frozen-v1 entrypoint, and the one-time release path now runs both
+App/Space rejection probes and frozen Stack/Tenant regression smoke. Release
+smoke, deployed acceptance, and delivery acceptance remain.
 
 ## Decisions
 
@@ -89,17 +94,42 @@ primary integration, and delivery acceptance remain.
   dependency: plain Node imports it successfully, its strict local parser is
   tested equal to the service parser for the formal 10-line challenge grammar,
   and the focused suite passes 39 tests.
+- Production retry `35613934883` deployed the v1 API, replaced both active App
+  issuer audiences with their `/v1/apps/{appId}` resources, and completed the
+  ordinary API redeployment. Canonical smoke then failed during module loading
+  because its frozen `CapabilityVersion` and `casManagePermission` imports
+  incorrectly targeted the root App/Space protocol entrypoint. The smoke now
+  imports them from `dist/v1.js`, while released App/Space symbols remain on
+  the root entrypoint.
+- The Production `UNICAS_SMOKE_AUDIENCE` variable now matches the activated v1
+  resource. Canonical smoke also verifies prototype HTTP v2 rejection,
+  prototype Space claim versions 2 and 3, and broad-permission rejection; the
+  one-time release path runs frozen Stack/Tenant v1 smoke before deleting its
+  signing key.
+- `node scripts/cas-app-space-smoke.mjs` and
+  `node scripts/cas-middleware-smoke.mjs` against freshly rebuilt protocol
+  output resolve all runtime imports and reach their expected local credential
+  guards.
+- `pnpm exec vitest run tests/deploy-plan.test.mjs
+  packages/service/tests/app-space-auth.test.ts`: all 49 tests passed,
+  including release ordering, explicit frozen-v1 runtime imports, and exact
+  prototype-capability rejection behavior.
+- `pnpm check:repo`: all 135 repository tests passed; Repoledger reported only
+  the expected pending delivery-approval warnings.
 
 ## Blockers
 
-- The protected production retry must complete both issuer activations and all
-  deployed smoke steps; follow [UserAcceptance.md](./UserAcceptance.md) for the
-  remaining manual probes after that run.
+- The smoke import fix must be integrated through primary and the protected
+  release path. Its idempotent retry must complete canonical smoke, the Spaces
+  deployment and smoke, origin verification, and deployment tagging; then
+  follow [UserAcceptance.md](./UserAcceptance.md) for the remaining manual
+  probes.
 - Delivery acceptance remains the final human checkpoint after primary
   integration.
 
 ## Outcome
 
-The repository implementation and all agent-verifiable acceptance checks are
-complete. Pending source publication, primary integration, deployed smoke, and
-delivery acceptance.
+The repository implementation and all local agent-verifiable acceptance checks
+are complete. Both production issuer audiences now target App/Space v1.
+Pending smoke-fix integration, protected release retry, deployed acceptance,
+and delivery acceptance.
