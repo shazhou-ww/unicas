@@ -1,6 +1,6 @@
 # App-user SDK beta publication activation review
 
-Status: Pending requesting-user approval.
+Status: Approved by the requesting user on 2026-09-22.
 
 ## Decision requested
 
@@ -34,8 +34,9 @@ owner as reviewer before deployment. Store no npm token in the repository or
 environment. The workflow filename, environment claim, permissions, and
 GitHub-hosted runner remain unchanged.
 
-The environment is currently absent. It may be created only after this review
-is approved, then re-read through the GitHub API to prove its protection rules.
+The approved environment is configured with `shazhou-ww` as required reviewer,
+permits no branch-policy bypass, and contains no secrets or variables. GitHub
+API readback verified the protection rule before any registry write.
 
 ### npm
 
@@ -59,9 +60,11 @@ provenance.
 
 Read-only registry checks return `E404` for all six package names. npm's
 published setup flow adds a trusted publisher from an existing package's
-Settings page; no package Settings surface exists yet. The current browser is
-also stopped at npm's human security verification, and the local npm CLI is not
-authenticated.
+Settings page; no package Settings surface exists yet. The organization owner
+authenticated through the system browser and npm CLI, but both supported empty
+package-name forms returned `forbidden` without creating a record. npm 11.19.1
+`npm trust` also authenticated and then returned `E404` because the package
+does not exist.
 
 Therefore no release tag may be created until the release owner completes npm
 human authentication and one of these statements is proven through the npm UI:
@@ -70,11 +73,11 @@ human authentication and one of these statements is proven through the npm UI:
    version of each package exists; or
 2. npm requires an owner bootstrap publication to create each package record.
 
-If statement 1 is true, configure all six publishers and continue with the
-prepared token-free workflow. If statement 2 is true, stop and separately
-review a one-time owner bootstrap procedure. This task will not improvise a
-local publish, request a token through chat, add `NPM_TOKEN`, publish placeholder
-contents, or consume `0.1.0-beta.1` before the procedure is approved.
+Statement 2 is proven. The separately approved procedure is recorded in
+[BootstrapReview.md](./BootstrapReview.md). It uses one reviewed unified
+`0.0.0-bootstrap.0` release with a non-user-facing `bootstrap` dist-tag and
+preserves `0.1.0-beta.1` for the protected OIDC workflow. It does not add a
+token, publish placeholder contents, or create the beta release tag.
 
 ## Exact-commit authorization gate
 

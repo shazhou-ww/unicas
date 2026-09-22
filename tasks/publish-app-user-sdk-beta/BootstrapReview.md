@@ -1,6 +1,6 @@
 # App-user SDK npm first-package bootstrap review
 
-Status: Pending requesting-user approval.
+Status: Approved by the requesting user on 2026-09-22.
 
 ## Decision requested
 

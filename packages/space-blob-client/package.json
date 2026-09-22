@@ -1,6 +1,6 @@
 {
   "name": "@unicas/space-blob-client",
-  "version": "0.1.0-beta.1",
+  "version": "0.0.0-bootstrap.0",
   "description": "Blob layer above @unicas/space-client: chunked storage, random-access handles, and root retention",
   "license": "MIT",
   "sideEffects": false,
