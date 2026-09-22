@@ -50,9 +50,8 @@ pnpm --filter @unicas/service-cloudflare exec wrangler tail
 
 The current structured events are:
 
-- `cas_app_authorization`: App/Space v2 capability authorization decisions.
-- `cas_stack_authorization`: retained v1 telemetry identifier for frozen
-  Stack/Tenant capability decisions. Both payloads include the decision kind.
+- `cas_app_authorization`: App/Space v1 capability authorization decisions,
+  including the decision kind.
 - `admin_oidc_callback_failed`: administrator OIDC callback failures with a
   bounded reason such as `state_mismatch` or `id_token_invalid`.
 - `cas_usage_reconciliation`: bounded App usage maintenance counts (`examined`,

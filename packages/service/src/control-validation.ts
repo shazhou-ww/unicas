@@ -30,12 +30,6 @@ export function validateDisplayName(value: unknown): string | null {
 /** Fixed cap for discovered App OAuth issuers; not administrator configurable. */
 export const OAUTH_CAPABILITY_MAX_LIFETIME_SECONDS = 30 * 60;
 
-/** Canonical OAuth resource/audience owned by this UniCAS deployment. */
-export function v1StackOAuthResource(publicOrigin: string, stackId: string): string {
-  const origin = oauthResourceOrigin(publicOrigin);
-  return `${origin}/stacks/${encodeURIComponent(stackId)}`;
-}
-
 function oauthResourceOrigin(publicOrigin: string): string {
   let url: URL;
   try {

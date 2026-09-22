@@ -8,7 +8,6 @@ import {
   normalizeEmailConstraint,
   parseControlListLimit,
   sha256Hex,
-  v1StackOAuthResource,
   validateDisplayName,
   validateEmailConstraint,
   validateInvitationToken,
@@ -31,13 +30,6 @@ describe("control-plane validation", () => {
     expect(validateEmailConstraint("bad-email")).not.toBeNull();
     expect(normalizeEmailConstraint("  Person@Example.COM ")).toBe("person@example.com");
     expect(normalizeEmailConstraint(undefined)).toBeNull();
-  });
-
-  test("Stack OAuth resources are derived from deployment origin and opaque stack ID", () => {
-    expect(v1StackOAuthResource("https://cas.example/admin", "cas_stack/a"))
-      .toBe("https://cas.example/stacks/cas_stack%2Fa");
-    expect(() => v1StackOAuthResource("file:///tmp/cas", "cas_stack"))
-      .toThrow("must be HTTP(S)");
   });
 
   test("App OAuth resources use the released v1 audience", () => {

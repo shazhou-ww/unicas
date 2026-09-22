@@ -122,12 +122,11 @@ pnpm deploy:spaces:plan
 pnpm deploy:spaces
 pnpm deploy:site
 pnpm deploy:docs
-pnpm smoke                    # App/Space v2; run twice 70s apart
+pnpm smoke                    # App/Space v1; run twice 70s apart
 pnpm spaces:smoke -- --base-url https://spaces.unicas.work
-pnpm smoke:v1                 # explicit frozen v1 compatibility check only
 ```
 
-The v2 smoke script uses one dedicated `deploy-smoke` Space, per-run node hashes,
+The App/Space smoke script uses one dedicated `deploy-smoke` Space, per-run node hashes,
 and per-run request IDs. After acquiring the parent Root Ref, it releases that
 ref in a `finally` path even when a later assertion fails, so subsequent runs
 do not accumulate positive Root Refs. It also checks an empty isolation Space
@@ -304,8 +303,8 @@ metadata repair, membership and invitation administration, issuer repair,
 audit, and Restore. Suspension neither releases Root Refs nor initiates GC.
 Restore leaves data and configuration intact; verifiers observe it on refresh.
 The existing authorization event stream records suspension denials without
-recording bearer capabilities. Frozen v1 issuer resolution also refuses a
-suspended owning App so it cannot bypass this operational stop.
+recording bearer capabilities. The App/Space verifier refuses a suspended
+owning App so it cannot bypass this operational stop.
 
 ### Inspect App usage
 

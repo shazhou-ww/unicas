@@ -65,11 +65,6 @@ export {
   SpaceSchema,
 } from "./schemas.js";
 
-export {
-  CasLeaseDurationHeader,
-  CasUploadIdHeader,
-  CasUploadLengthHeader,
-} from "./http.js";
 export type { CasErrorResponse } from "./http.js";
 
 export { appSpaceRoutes, matchAppSpaceRoute } from "./routes.js";

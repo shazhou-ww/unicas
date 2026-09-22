@@ -25,8 +25,8 @@ exports remain mandatory immediately before a destructive cutover.
 | Admin routes | [`admin-protocol/src/routes.ts`](/packages/admin-protocol/src/routes.ts) | `/admin/stacks/{stackId}` | Introduce App operations without silently changing a v1 operation schema. |
 | Admin JSON | [`admin-protocol/src/types.ts`](/packages/admin-protocol/src/types.ts), [`schemas.ts`](/packages/admin-protocol/src/schemas.ts) | `CasStack*`, `stackId`, `tenantId` | Define `App`, `AppMembership`, `AppOAuthIssuer`, `AppAuditEvent`, and App/Space fields. |
 | Data JSON | [`tenant-protocol/src/schemas.ts`](/packages/space-protocol/src/schemas.ts), [`http.ts`](/packages/space-protocol/src/http.ts) | Stack/Tenant-scoped usage and Root Ref payloads | Define v2 Space-scoped payloads while preserving Root Ref semantics. |
-| Capabilities | [`tenant-protocol/src/capability.ts`](/packages/space-protocol/src/v1/capability.ts) | `ver: 1`, `tenantId`, `tenants:{tenantId}:cas:*` | Add `ver: 2`, `spaceId`, and `spaces:{spaceId}:cas:*`; never translate one version implicitly. |
-| OpenAPI | [`tenant-v1.openapi.json`](/packages/space-protocol/openapi/tenant-v1.openapi.json), `admin-v1.openapi.json` | Generated v1 artifacts | Keep v1 artifacts frozen and generate separately named v2 artifacts. |
+| Capabilities | [`tenant-protocol/src/capability.ts`](https://github.com/shazhou-ww/unicas/blob/166e8a23203c00515e993d57379587221ef7b277/packages/space-protocol/src/v1/capability.ts) | `ver: 1`, `tenantId`, `tenants:{tenantId}:cas:*` | Add `ver: 2`, `spaceId`, and `spaces:{spaceId}:cas:*`; never translate one version implicitly. |
+| OpenAPI | [`tenant-v1.openapi.json`](https://github.com/shazhou-ww/unicas/blob/a6d8dcc00853790849d70ab3b2a23bb5b6c64238/packages/space-protocol/openapi/tenant-v1.openapi.json), `admin-v1.openapi.json` | Generated v1 artifacts | Keep v1 artifacts frozen and generate separately named v2 artifacts. |
 | CLI | [`admin-cli/src/cli.ts`](/packages/admin-cli/src/cli.ts) | `stacks`, `<stackId>`, `--tenant-id` | Add the accepted `apps`, `<appId>`, and `--space-id` vocabulary with an explicit contract transition. |
 | MCP | [`service-cloudflare/src/mcp/server.ts`](/packages/service-cloudflare/src/mcp/server.ts), [`admin-cli/src/mcp/catalog.ts`](/packages/admin-cli/src/mcp/catalog.ts) | `list_stacks`, `get_stack`, `stackId`, `tenantId` | Add App/Space tools and keep remote and stdio catalogs structurally identical. |
 | WebUI | [`admin-webui/src/ui/app.tsx`](/packages/admin-webui/src/ui/app.tsx), [`views`](/packages/admin-webui/src/ui/views) | `#/stacks/{stackId}` and Stack labels | Move to `#/apps/{appId}` and accepted App/Space labels after protocol types exist. |
@@ -35,7 +35,7 @@ exports remain mandatory immediately before a destructive cutover.
 The current route and authorization tests intentionally freeze v1 behavior in
 [`tenant-protocol/tests/routes.test.ts`](/packages/space-protocol/tests/routes.test.ts),
 [`admin-protocol/tests/routes.test.ts`](/packages/admin-protocol/tests/routes.test.ts),
-and [`service/tests/v1-auth.test.ts`](/packages/service/tests/v1-auth.test.ts).
+and [`service/tests/v1-auth.test.ts`](https://github.com/shazhou-ww/unicas/blob/89c9247af402885e62ffadafe7bcb66a49839711/packages/service/tests/v1-auth.test.ts).
 There is no v2 route matcher or capability parser today, and `ver: 2` is
 currently rejected.
 

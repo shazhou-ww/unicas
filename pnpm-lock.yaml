@@ -388,9 +388,6 @@ importers:
 
   packages/space-client:
     dependencies:
-      '@unicas/codec':
-        specifier: workspace:*
-        version: link:../codec
       '@unicas/space-protocol':
         specifier: workspace:*
         version: link:../space-protocol

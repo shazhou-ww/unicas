@@ -38,9 +38,6 @@ The route version and capability version are intentionally independent:
 - the required signed `spaceId` is the capability's sole Space scope; and
 - every operation requires one exact permission from the following set.
 
-The frozen Stack/Tenant capability also uses family-local `ver: 1`, but its
-required `tenantId` and scoped permissions form a disjoint grammar.
-
 ```text
 cas:nodes:read
 cas:nodes:lease

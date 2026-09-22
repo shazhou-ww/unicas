@@ -71,11 +71,9 @@ export {
 export type {
   AppAdminRequestContext,
   AuthorizedSpaceCall,
-  AuthorizedV1StackTenantCall,
   HttpActor,
   ServiceContext,
   SpaceRequestContext,
-  V1StackTenantRequestContext,
   UniCasServiceRoute,
 } from "./actor.js";
 export type {
@@ -90,18 +88,6 @@ export type {
 } from "./ports.js";
 export type { AppSpaceScope } from "./space-scope.js";
 export {
-  v1PermissionFor,
-  V1StackTenantCapabilityVerifier,
-} from "./v1/tenant-auth.js";
-export type {
-  JwksFetcher,
-  ResolvedV1StackAuthority,
-  V1StackTenantAuthEvent,
-  V1StackAuthorityResolver,
-  V1StackTenantVerifierOptions,
-  VerifiedV1StackTenantCall,
-} from "./v1/tenant-auth.js";
-export {
   appSpacePermissionFor,
   AppSpaceCapabilityVerifier,
 } from "./app-space-auth.js";
@@ -109,6 +95,7 @@ export type {
   AppAuthorityResolver,
   AppSpaceAuthEvent,
   AppSpaceVerifierOptions,
+  JwksFetcher,
   ResolvedAppAuthority,
   VerifiedAppSpaceCall,
 } from "./app-space-auth.js";
@@ -262,7 +249,6 @@ export {
   normalizeEmailConstraint,
   parseControlListLimit,
   sha256Hex,
-  v1StackOAuthResource,
   APP_ID_PATTERN,
   SUPPORTED_KEY_ALGORITHMS,
   validateDisplayName,

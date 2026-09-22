@@ -343,15 +343,6 @@ jobs:
           UNICAS_SMOKE_KEY_FILE: github-actions-smoke-key.pem
         run: pnpm deploy:production
 
-      - name: Run frozen Stack/Tenant v1 regression smoke
-        env:
-          UNICAS_SMOKE_STACK_ID: ${{ vars.UNICAS_SMOKE_APP_ID }}
-          UNICAS_SMOKE_ISSUER: ${{ vars.UNICAS_SMOKE_ISSUER }}
-          UNICAS_SMOKE_AUDIENCE: ${{ vars.UNICAS_SMOKE_AUDIENCE }}
-          UNICAS_SMOKE_KID: ${{ vars.UNICAS_SMOKE_KID }}
-          UNICAS_SMOKE_KEY_FILE: github-actions-smoke-key.pem
-        run: pnpm smoke:v1
-
       - name: Remove production smoke signing key
         if: ${{ always() }}
         run: rm -f -- .wrangler/cas-deploy/github-actions-smoke-key.pem
