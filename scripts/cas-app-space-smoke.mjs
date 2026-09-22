@@ -21,9 +21,7 @@ import { createSpaceCasClient } from "../packages/space-client/dist/index.js";
 import {
   CapabilityAlgorithm,
   CapabilityTokenType,
-  CapabilityVersion,
   SpaceCapabilityVersion,
-  casManagePermission,
   spaceGcExecutePermission,
   spaceNodeLeasePermission,
   spaceNodeReadPermission,
@@ -31,6 +29,10 @@ import {
   spaceRootRefsUpdatePermission,
   spaceUsageReadPermission,
 } from "../packages/space-protocol/dist/index.js";
+import {
+  CapabilityVersion,
+  casManagePermission,
+} from "../packages/space-protocol/dist/v1.js";
 
 const BASE = normalizeSmokeBaseUrl(
   process.argv[2] ?? "https://api.unicas.work",

@@ -647,6 +647,9 @@ describe("standalone deployment plan", () => {
     const packageJson = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
     expect(wrapper).toContain("cas-app-space-smoke.mjs");
     expect(appSpaceSmoke).toContain("SpaceCapabilityVersion");
+    expect(appSpaceSmoke).toMatch(
+      /import \{\s*CapabilityVersion,\s*casManagePermission,\s*\} from "\.\.\/packages\/space-protocol\/dist\/v1\.js";/,
+    );
     expect(appSpaceSmoke).toContain("createSpaceCasClient");
     expect(appSpaceSmoke).toContain("GC keeps current leased nodes");
     expect(appSpaceSmoke).not.toContain("gc.deleted === 0");
