@@ -458,7 +458,6 @@ describe("standalone deployment plan", () => {
     const issuerCutoverDeploy = job.indexOf("Deploy API and Console for App/Space v1 issuer cutover");
     const issuerCutover = job.indexOf("Cut over App/Space v1 issuer audiences");
     const service = job.indexOf("run: pnpm deploy:production");
-    const frozenSmoke = job.indexOf("Run frozen Stack/Tenant v1 regression smoke");
     const spaces = job.indexOf("run: pnpm deploy:spaces");
     const site = job.indexOf("run: pnpm deploy:site");
     const docs = job.indexOf("run: pnpm deploy:docs");
@@ -466,8 +465,7 @@ describe("standalone deployment plan", () => {
     expect(issuerCutoverDeploy).toBeGreaterThan(-1);
     expect(issuerCutover).toBeGreaterThan(issuerCutoverDeploy);
     expect(service).toBeGreaterThan(issuerCutover);
-    expect(frozenSmoke).toBeGreaterThan(service);
-    expect(spaces).toBeGreaterThan(frozenSmoke);
+    expect(spaces).toBeGreaterThan(service);
     expect(site).toBeGreaterThan(spaces);
     expect(docs).toBeGreaterThan(site);
 
@@ -509,10 +507,10 @@ describe("standalone deployment plan", () => {
     expect(job).toContain("if: vars.APP_SPACE_V1_CUTOVER_ENABLED == 'true'");
     expect(job).toContain("UNICAS_RELEASE_ADMIN_SESSION: ${{ secrets.UNICAS_RELEASE_ADMIN_SESSION }}");
     expect(job).toContain("run: node stacks/unicas/deploy/cut-over-app-space-v1-issuers.mjs");
-    expect(job).toContain("UNICAS_SMOKE_STACK_ID: ${{ vars.UNICAS_SMOKE_APP_ID }}");
     expect(job).toContain("UNICAS_SMOKE_AUDIENCE: ${{ vars.UNICAS_SMOKE_AUDIENCE }}");
     expect(job).not.toContain("format('https://api.unicas.work/stacks/{0}'");
-    expect(job).toContain("run: pnpm smoke:v1");
+    expect(job).not.toContain("UNICAS_SMOKE_STACK_ID");
+    expect(job).not.toContain("run: pnpm smoke:v1");
   });
 
   test("creates missing encryption secrets before a production deployment", () => {
@@ -699,16 +697,13 @@ describe("standalone deployment plan", () => {
     expect(result.stdout).toContain("stacks/unicas/deploy/smoke.mjs");
   });
 
-  test("uses App/Space smoke by default and retains an explicit v1 smoke", () => {
+  test("uses App/Space smoke with retirement rejection probes", () => {
     const wrapper = readFileSync(join(ROOT, "stacks/unicas/deploy/smoke.mjs"), "utf8");
     const appSpaceSmoke = readFileSync(join(ROOT, "scripts/cas-app-space-smoke.mjs"), "utf8");
-    const legacySmoke = readFileSync(join(ROOT, "scripts/cas-middleware-smoke.mjs"), "utf8");
     const packageJson = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
     expect(wrapper).toContain("cas-app-space-smoke.mjs");
     expect(appSpaceSmoke).toContain("SpaceCapabilityVersion");
-    expect(appSpaceSmoke).toMatch(
-      /import \{\s*CapabilityVersion,\s*casManagePermission,\s*\} from "\.\.\/packages\/space-protocol\/dist\/v1\.js";/,
-    );
+    expect(appSpaceSmoke).not.toContain("space-protocol/dist/v1.js");
     expect(appSpaceSmoke).toContain("createSpaceCasClient");
     expect(appSpaceSmoke).toContain("GC keeps current leased nodes");
     expect(appSpaceSmoke).not.toContain("gc.deleted === 0");
@@ -717,13 +712,9 @@ describe("standalone deployment plan", () => {
     expect(appSpaceSmoke).toContain("prototype Space claim v");
     expect(appSpaceSmoke).toContain("broad prototype Space permission");
     expect(appSpaceSmoke).toContain("mixed-sign Root Ref replacement succeeds atomically");
-    expect(appSpaceSmoke).toContain("frozen token on App/Space v1 route");
-    expect(appSpaceSmoke).toContain("Space v1 token on frozen route");
-    expect(legacySmoke).toContain("CapabilityVersion");
-    expect(legacySmoke).toContain('from "../packages/space-protocol/dist/v1.js"');
-    expect(legacySmoke).toContain("GC keeps current leased nodes");
-    expect(legacySmoke).not.toContain("gcBody.deleted === 0");
-    expect(packageJson.scripts["smoke:v1"]).toContain("cas-middleware-smoke.mjs");
+    expect(appSpaceSmoke).toContain("retired Tenant claim on App/Space v1 route");
+    expect(appSpaceSmoke).toContain("App/Space token on retired route");
+    expect(packageJson.scripts["smoke:v1"]).toBeUndefined();
   });
 
   test("the smoke reset requires an explicit target and backup or waiver", () => {
@@ -795,7 +786,7 @@ describe("standalone deployment plan", () => {
         stack_id: stackId,
         mode: "external",
         issuer: "https://unicas.work/deploy-smoke",
-        audience: `https://api.unicas.work/stacks/${stackId}`,
+        audience: `https://api.unicas.work/v1/apps/${stackId}`,
         metadata_url: "https://unicas.work/.well-known/oauth-authorization-server/deploy-smoke",
         metadata_type: "oauth",
         authorization_endpoint: "https://unicas.work/deploy-smoke/authorize",
@@ -917,7 +908,7 @@ describe("standalone deployment plan", () => {
         stack_id: "cas_smoke",
         mode: "external",
         issuer: "https://unicas.work/deploy-smoke",
-        audience: "https://api.unicas.work/stacks/cas_smoke",
+        audience: "https://api.unicas.work/v1/apps/cas_smoke",
         metadata_url: "https://unicas.work/.well-known/oauth-authorization-server/deploy-smoke",
         metadata_type: "oauth",
         authorization_endpoint: "https://unicas.work/deploy-smoke/authorize",
@@ -967,7 +958,7 @@ describe("standalone deployment plan", () => {
       });
       expect(database.prepare("SELECT issuer, audience, status FROM cas_app_oauth_issuers").get()).toEqual({
         issuer: "https://unicas.work/deploy-smoke",
-        audience: "https://api.unicas.work/stacks/cas_smoke",
+        audience: "https://api.unicas.work/v1/apps/cas_smoke",
         status: "active",
       });
       expect(database.prepare("SELECT COUNT(*) AS count FROM cas_platform_audit_events").get()).toEqual({ count: 2 });

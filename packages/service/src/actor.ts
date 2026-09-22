@@ -7,32 +7,16 @@ import {
   matchAppSpaceRoute,
   type AppSpaceRoute,
 } from "@unicas/space-protocol";
-import { matchCasRoute, type CasRoute } from "@unicas/space-protocol/v1";
-import {
-  CasLeaseDurationHeader,
-  CasUploadIdHeader,
-  CasUploadLengthHeader,
-} from "@unicas/space-protocol";
 import type { ServicePlatform } from "./ports.js";
+
+const RETIRED_LEASE_HEADERS = [
+  "X-CAS-Lease-Duration",
+  "X-CAS-Upload-Length",
+  "X-CAS-Upload-Id",
+] as const;
 
 export interface HttpActor {
   fetch(request: Request): Promise<Response>;
-}
-
-export interface V1StackTenantRequestContext {
-  readonly request: Request;
-  readonly route: CasRoute;
-  readonly platform: ServicePlatform;
-}
-
-export interface AuthorizedV1StackTenantCall {
-  readonly stackId: string;
-  readonly tenantId: string;
-  readonly subject: string;
-  readonly jti: string;
-  readonly kid: string;
-  readonly permissions: readonly string[];
-  readonly refDomain?: string;
 }
 
 export interface SpaceRequestContext {
@@ -59,22 +43,16 @@ export interface AppAdminRequestContext {
 
 export interface ServiceContext {
   readonly platform: ServicePlatform;
-  authorizeV1StackTenantRequest(
-    context: V1StackTenantRequestContext,
-  ): Promise<AuthorizedV1StackTenantCall>;
   authorizeSpaceRequest?(context: SpaceRequestContext): Promise<AuthorizedSpaceCall>;
   handleAppAdminRequest?(context: AppAdminRequestContext): Promise<Response>;
 }
 
 export type UniCasServiceRoute =
-  | { readonly plane: "v1-stack-tenant"; readonly route: CasRoute }
   | { readonly plane: "space"; readonly route: AppSpaceRoute }
   | { readonly plane: "app-admin"; readonly route: AppAdminRoute };
 
 export function matchUniCasServiceRoute(request: Request): UniCasServiceRoute | null {
   const pathname = new URL(request.url).pathname;
-  const v1Route = matchCasRoute(request.method, pathname);
-  if (v1Route) return { plane: "v1-stack-tenant", route: v1Route };
   const spaceRoute = matchAppSpaceRoute(request.method, pathname);
   if (spaceRoute) return { plane: "space", route: spaceRoute };
   const appAdminRoute = matchAppAdminRoute(request.method, pathname);
@@ -91,18 +69,6 @@ export function createUniCasService(context: ServiceContext): HttpActor {
           { error: "Unknown UniCAS endpoint" },
           { status: 404 },
         ));
-      }
-      if (matched.plane === "v1-stack-tenant") {
-        const v1Context = {
-          request,
-          route: matched.route,
-          platform: context.platform,
-        };
-        return context.authorizeV1StackTenantRequest(v1Context)
-          .then(
-            (call) => dispatchV1StackTenantRequest(v1Context, call),
-            v1AuthorizationErrorResponse,
-          );
       }
       if (matched.plane === "space") {
         if (!context.authorizeSpaceRequest) return Promise.resolve(notImplementedResponse());
@@ -131,13 +97,6 @@ function notImplementedResponse(): Response {
   return Response.json({ error: "UniCAS endpoint is not configured" }, { status: 501 });
 }
 
-function v1AuthorizationErrorResponse(error: unknown): Response {
-  if (error instanceof CapabilityError) {
-    return Response.json({ error: error.message }, { status: error.status });
-  }
-  return Response.json({ error: "CAS capability validation failed" }, { status: 401 });
-}
-
 function spaceAuthorizationErrorResponse(error: unknown): Response {
   if (error instanceof CapabilityError) {
     return Response.json(
@@ -146,20 +105,6 @@ function spaceAuthorizationErrorResponse(error: unknown): Response {
     );
   }
   return Response.json({ error: "CAS capability validation failed" }, { status: 401 });
-}
-
-async function dispatchV1StackTenantRequest(
-  context: V1StackTenantRequestContext,
-  call: AuthorizedV1StackTenantCall,
-): Promise<Response> {
-  return dispatchDataRequest(
-    context.request,
-    context.route,
-    context.platform,
-    canonicalActorKey(call.stackId, call.tenantId),
-    { "X-CAS-Stack-Id": call.stackId, "X-CAS-Tenant-Id": call.tenantId },
-    call.refDomain,
-  );
 }
 
 async function dispatchSpaceRequest(
@@ -182,7 +127,7 @@ async function dispatchSpaceRequest(
 
 async function dispatchDataRequest(
   request: Request,
-  route: CasRoute | AppSpaceRoute,
+  route: AppSpaceRoute,
   platform: ServicePlatform,
   actorKey: string,
   headers: Record<string, string>,
@@ -229,38 +174,20 @@ async function dispatchDataRequest(
       path = "/lease";
       method = "POST";
       headers["X-CAS-Hash"] = route.hash;
-      if (headers["X-CAS-Route-Family"] === "app-space") {
-        if (
-          request.headers.has(CasLeaseDurationHeader)
-          || request.headers.has(CasUploadLengthHeader)
-          || request.headers.has(CasUploadIdHeader)
-        ) {
-          return Response.json(
-            { error: "INVALID_REQUEST", message: "Legacy node lease headers are not supported by App/Space" },
-            { status: 400 },
-          );
-        }
-        if (request.headers.get("Content-Type")?.split(";", 1)[0]?.trim() !== "application/json") {
-          return Response.json(
-            { error: "INVALID_REQUEST", message: "App/Space node lease requires application/json" },
-            { status: 400 },
-          );
-        }
-        headers["Content-Type"] = "application/json";
-        body = await request.text();
-        break;
+      if (RETIRED_LEASE_HEADERS.some((header) => request.headers.has(header))) {
+        return Response.json(
+          { error: "INVALID_REQUEST", message: "Legacy node lease headers are not supported by App/Space" },
+          { status: 400 },
+        );
       }
-      const duration = request.headers.get(CasLeaseDurationHeader);
-      if (duration) headers[CasLeaseDurationHeader] = duration;
-      const contentType = request.headers.get("Content-Type");
-      if (contentType) headers["Content-Type"] = contentType;
-      const contentLength = request.headers.get("Content-Length");
-      if (contentLength) headers["Content-Length"] = contentLength;
-      const uploadLength = request.headers.get(CasUploadLengthHeader);
-      if (uploadLength) headers[CasUploadLengthHeader] = uploadLength;
-      const uploadId = request.headers.get(CasUploadIdHeader);
-      if (uploadId) headers[CasUploadIdHeader] = uploadId;
-      body = request.body;
+      if (request.headers.get("Content-Type")?.split(";", 1)[0]?.trim() !== "application/json") {
+        return Response.json(
+          { error: "INVALID_REQUEST", message: "App/Space node lease requires application/json" },
+          { status: 400 },
+        );
+      }
+      headers["Content-Type"] = "application/json";
+      body = await request.text();
       break;
     }
     case "usage":

@@ -16,9 +16,6 @@
   "references": [
     {
       "path": "../space-protocol"
-    },
-    {
-      "path": "../codec"
     }
   ]
 }

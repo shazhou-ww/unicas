@@ -83,8 +83,8 @@ Generated invocation logs are disabled because Cloudflare includes the full
 request URL. UniCAS persists only explicitly emitted structured events. Current
 event families include:
 
-- `cas_app_authorization` and the separately retiring
-  `cas_stack_authorization`: bounded authorization decisions and operation.
+- `cas_app_authorization`: bounded App/Space v1 authorization decisions and
+  operation.
 - `cas_usage_reconciliation`: bounded maintenance counts with no App, Space,
   hash, or usage amount.
 - `admin_oidc_callback_failed`, `admin_oidc_login_failed`, and
@@ -186,8 +186,10 @@ storage initialization and timing entries.
 
 ## Durable audit
 
-Control mutations and Root Ref changes append authoritative audit records.
-Read them through authenticated surfaces:
+Control mutations append audit records containing the App, stable Account,
+exact authenticated External Identity, action, target, request identity, trace
+identity, caller channel, and timestamp. Read
+those records through authenticated control-plane surfaces:
 
 ```powershell
 unicas app-audit control <appId> --limit 50

@@ -37,8 +37,6 @@ export const casAdminThreatModel = {
     adminSessionNeverAcceptedOnSpaceRoutes: true,
     stripSpaceAuthorizationOnAdminDispatch: true,
     stripAdminSessionOnSpaceDispatch: true,
-    v1StackTenantCapabilityNeverAcceptedOnAdminRoutes: true,
-    adminSessionNeverAcceptedOnV1StackTenantRoutes: true,
   },
   webuiCsrfSessionTheft: {
     sessionCookie: "HttpOnly+Secure+SameSite",

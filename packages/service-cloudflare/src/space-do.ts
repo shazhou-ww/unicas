@@ -9,11 +9,8 @@
  * cycle.
  */
 
-import { CanonicalNodeContentType, parseCanonicalNodeStream } from "@unicas/codec";
 import type { D1Database, R2Bucket, DurableObjectNamespace } from "@cloudflare/workers-types";
-import { CasUploadIdHeader, CasUploadLengthHeader } from "@unicas/space-protocol";
 import {
-  type CanonicalNodeUploadPlan,
   collectExpiredUnreferencedNodes,
   DEFAULT_GC_MAX_NODES,
   NodeOpError,
@@ -21,17 +18,12 @@ import {
   readNodeContent,
   readNodeMetadata,
   readNodeUsage,
-  type ParsedUploadedNodeMetadata,
 } from "@unicas/service";
 import { canonicalComposite } from "./do-names.js";
 import {
-  beginCanonicalNodeLease,
   cleanupExpiredLeaseDrivenUploads,
-  finalizeCanonicalNodeLease,
   leaseDrivenNodeUpload,
   leaseReadyNode,
-  parseLeaseDuration,
-  uploadCanonicalNode,
 } from "./nodes.js";
 import { CloudflareNodeGcRepository } from "./node-gc.js";
 import { CloudflareNodeReadRepository } from "./node-read.js";
@@ -55,19 +47,9 @@ export interface SpaceCasDoEnv {
   CAS_UPLOAD_URL_EXPIRY_SECONDS?: string;
 }
 
-type UploadOutcome =
-  | { readonly ok: true }
-  | { readonly ok: false; readonly error: unknown };
-
-interface ActiveUpload {
-  readonly completion: Promise<UploadOutcome>;
-  readonly settle: (outcome: UploadOutcome) => void;
-}
-
 export class CasDurableObject {
   readonly #env: SpaceCasDoEnv;
   #mutationTail: Promise<void> = Promise.resolve();
-  readonly #activeUploads = new Map<string, ActiveUpload>();
   readonly #activeLeaseEvaluations = new Map<string, Promise<unknown>>();
   /** Positive node-ready cache (hash -> expiry) shared by every repository
    *  built in this DO, so child-ready checks and renewals skip the R2 HEAD. */
@@ -149,89 +131,7 @@ export class CasDurableObject {
 
   async #handleLease(request: Request, store: Parameters<typeof leaseReadyNode>[0]): Promise<unknown> {
     const hash = requireHeader(request, "X-CAS-Hash");
-    if (request.headers.get("X-CAS-Route-Family") === "app-space") {
-      return this.#handleSpaceLease(request, store, hash);
-    }
-    const leaseDurationMs = parseLeaseDuration(request.headers.get("X-CAS-Lease-Duration"));
-    const contentType = request.headers.get("Content-Type");
-    const uploadLengthHeader = request.headers.get(CasUploadLengthHeader);
-    const uploadId = request.headers.get(CasUploadIdHeader);
-    if (uploadLengthHeader !== null || uploadId !== null) {
-      throw new NodeOpError(400, NodeOpErrorCodes.UPLOAD_INVALID, "Direct upload headers are no longer supported");
-    }
-    if (contentType !== null) {
-      if (contentType !== CanonicalNodeContentType || request.body === null) {
-        throw new NodeOpError(415, NodeOpErrorCodes.INVALID_REQUEST, `Content-Type must be ${CanonicalNodeContentType}`);
-      }
-      const lengthHeader = request.headers.get("Content-Length");
-      const declaredLength = lengthHeader === null ? undefined : Number(lengthHeader);
-      if (declaredLength !== undefined && (!Number.isSafeInteger(declaredLength) || declaredLength < 0)) {
-        throw new NodeOpError(400, NodeOpErrorCodes.INVALID_REQUEST, "Invalid Content-Length");
-      }
-      if (declaredLength === undefined) {
-        throw new NodeOpError(411, NodeOpErrorCodes.INVALID_REQUEST, "Content-Length is required");
-      }
-      const uploadKey = `${store.appId}\0${store.spaceId}\0${hash}`;
-      let admission:
-        | { readonly kind: "ready"; readonly result: unknown }
-        | { readonly kind: "join"; readonly active: ActiveUpload }
-        | {
-          readonly kind: "upload";
-          readonly plan: CanonicalNodeUploadPlan;
-          readonly active: ActiveUpload;
-        };
-      try {
-        admission = await this.#withMutation(async () => {
-          const active = this.#activeUploads.get(uploadKey);
-          if (active !== undefined) return { kind: "join", active };
-          const begin = await beginCanonicalNodeLease(store, {
-            hash,
-            leaseDurationMs,
-            declaredLength,
-          });
-          if (begin.kind === "ready") return begin;
-          const newActive = deferredUpload();
-          this.#activeUploads.set(uploadKey, newActive);
-          return { kind: "upload", plan: begin.plan, active: newActive };
-        });
-      } catch (error) {
-        cancelBody(request.body, "Canonical upload rejected");
-        throw error;
-      }
-
-      if (admission.kind === "ready") {
-        cancelBody(request.body, "Node is already ready");
-        return admission.result;
-      }
-      if (admission.kind === "join") {
-        cancelBody(request.body, "Identical node upload is already in progress");
-        const outcome = await admission.active.completion;
-        if (!outcome.ok) throw outcome.error;
-        return this.#withMutation(() => leaseReadyNode(store, { hash, leaseDurationMs }));
-      }
-
-      try {
-        const parsed = await this.#streamCanonicalUpload(
-          store, admission.plan, request.body, declaredLength,
-        );
-        const result = await this.#withMutation(() =>
-          finalizeCanonicalNodeLease(store, admission.plan, parsed));
-        admission.active.settle({ ok: true });
-        return result;
-      } catch (error) {
-        admission.active.settle({ ok: false, error });
-        throw error;
-      } finally {
-        if (this.#activeUploads.get(uploadKey) === admission.active) {
-          this.#activeUploads.delete(uploadKey);
-        }
-      }
-    }
-    await request.body?.cancel("Bodyless lease");
-    return this.#withMutation(() => leaseReadyNode(store, {
-      hash,
-      leaseDurationMs,
-    }));
+    return this.#handleSpaceLease(request, store, hash);
   }
 
   async #handleSpaceLease(
@@ -334,32 +234,6 @@ export class CasDurableObject {
       throw new NodeOpError(503, NodeOpErrorCodes.STORAGE, "Direct upload expiry is invalid");
     }
     return configured;
-  }
-
-  /** Store the canonical body in R2 while tee-parsing its metadata from the
-   *  exact bytes being stored. Returns the parsed header so the finalize step
-   *  can commit D1 metadata without a post-upload R2 read-back. */
-  async #streamCanonicalUpload(
-    store: Parameters<typeof leaseReadyNode>[0],
-    plan: CanonicalNodeUploadPlan,
-    body: ReadableStream<Uint8Array>,
-    declaredLength: number,
-  ): Promise<ParsedUploadedNodeMetadata> {
-    const abort = new AbortController();
-    const prepared = typeof FixedLengthStream === "undefined"
-      ? { stream: body, pumping: Promise.resolve() }
-      : fixedLengthBody(body, declaredLength, abort);
-    const [uploadStream, parseStream] = prepared.stream.tee();
-    const uploading = uploadCanonicalNode(store, plan, uploadStream);
-    const parsing = parseUploadedBody(parseStream, declaredLength, store.limits);
-    try {
-      const [parsed] = await Promise.all([parsing, uploading, prepared.pumping]);
-      return parsed;
-    } catch (error) {
-      abort.abort(error);
-      await Promise.allSettled([parsing, uploading, prepared.pumping]);
-      throw error;
-    }
   }
 
   async #handleRead(request: Request, store: Parameters<typeof leaseReadyNode>[0]): Promise<Response> {
@@ -491,56 +365,6 @@ function parseRootRefsCursor(value: string | null): string {
   return value;
 }
 
-function deferredUpload(): ActiveUpload {
-  let settle!: (outcome: UploadOutcome) => void;
-  const completion = new Promise<UploadOutcome>((resolve) => {
-    settle = resolve;
-  });
-  return { completion, settle };
-}
-
-function fixedLengthBody(
-  body: ReadableStream<Uint8Array>,
-  declaredLength: number,
-  abort: AbortController,
-): { stream: ReadableStream<Uint8Array>; pumping: Promise<void> } {
-  const fixed = new FixedLengthStream(declaredLength);
-  const pumping = body.pipeTo(fixed.writable, { signal: abort.signal });
-  return { stream: fixed.readable, pumping };
-}
-
-/** Parse the canonical header/refs from a tee branch of the bytes being
- *  uploaded. Only the bounded prefix is consumed; the replayable remainder is
- *  cancelled so the R2 upload branch drains freely. Errors map like the old
- *  post-upload read-back inspection did. */
-async function parseUploadedBody(
-  stream: ReadableStream<Uint8Array>,
-  declaredLength: number,
-  limits: Parameters<typeof parseCanonicalNodeStream>[2],
-): Promise<ParsedUploadedNodeMetadata> {
-  try {
-    const parsed = await parseCanonicalNodeStream(stream, declaredLength, limits);
-    await parsed.body.cancel("Canonical prefix parsed; R2 upload consumes the rest")
-      .catch(() => undefined);
-    return {
-      contentSize: parsed.contentSize,
-      contentType: parsed.contentType,
-      refs: parsed.refs,
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new NodeOpError(
-      message.includes("too large") ? 413 : 400,
-      NodeOpErrorCodes.INVALID_REQUEST,
-      message,
-    );
-  }
-}
-
-function cancelBody(body: ReadableStream<Uint8Array>, reason: string): void {
-  void body.cancel(reason).catch(() => undefined);
-}
-
 function jsonResponse(value: unknown): Response {
   return Response.json(value);
 }
@@ -558,19 +382,16 @@ function physicalScope(request: Request): { appId: string; spaceId: string } | R
   const legacyTenantId = request.headers.get("X-CAS-Tenant-Id");
   const appId = request.headers.get("X-CAS-App-Id");
   const spaceId = request.headers.get("X-CAS-Space-Id");
-  const hasV1 = legacyStackId !== null || legacyTenantId !== null;
-  const hasV2 = appId !== null || spaceId !== null;
+  const hasLegacyScope = legacyStackId !== null || legacyTenantId !== null;
+  const hasAppSpaceScope = appId !== null || spaceId !== null;
 
-  if (hasV1 && hasV2) {
+  if (hasLegacyScope) {
     return Response.json(
-      { error: "INVALID_SCOPE_HEADERS", message: "mixed v1 and v2 scope headers are forbidden" },
+      { error: "INVALID_SCOPE_HEADERS", message: "legacy scope headers are forbidden" },
       { status: 400 },
     );
   }
-  if (hasV1 && legacyStackId && legacyTenantId) {
-    return { appId: legacyStackId, spaceId: legacyTenantId };
-  }
-  if (hasV2 && appId && spaceId) return { appId, spaceId };
+  if (hasAppSpaceScope && appId && spaceId) return { appId, spaceId };
   return Response.json(
     { error: "INVALID_SCOPE_HEADERS", message: "one complete scope header family is required" },
     { status: 400 },

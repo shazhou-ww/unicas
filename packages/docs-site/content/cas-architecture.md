@@ -10,11 +10,10 @@ formats without making those formats part of the service contract.
 
 The node encoding referenced below is defined in [CAS Binary Format](./cas-binary-format.md).
 
-The public App/Space v1 contract uses App and Space. The current Cloudflare adapter still
-maps those logical dimensions to physical `stack_id`/`tenant_id` columns and
-`stacks/.../tenants/...` object keys until the reviewed storage cutover. Those
-physical names are compatibility details, not public aliases. Frozen v1 routes
-remain documented separately where compatibility behavior matters.
+The public App/Space v1 contract, current D1 schema, and R2 object keys use App
+and Space dimensions. Historical binding, Durable Object class, audit-port,
+and audit-record names remain isolated implementation details rather than
+public aliases.
 
 ## 1. Goals
 
@@ -385,9 +384,8 @@ export interface CasGcResult {
 
 A `SpaceCasClient` is created with one `(appId, spaceId)`, an asynchronous
 token provider, and an optional immutable-node cache strategy. Individual
-methods cannot select another App or Space. `createTenantCasClient` under
-`@unicas/space-client/v1` remains a
-separate frozen v1 factory; neither factory translates credentials.
+methods cannot select another App or Space. No compatibility client translates
+retired Stack/Tenant routes or credentials.
 
 `leaseNode()` is the only lease operation. With a canonical node source it
 ensures the node is ready and leases it; without a source it leases an already

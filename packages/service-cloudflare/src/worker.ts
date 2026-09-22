@@ -14,7 +14,6 @@ import {
   AppSpaceCapabilityVerifier,
   createUniCasService,
   matchUniCasServiceRoute,
-  V1StackTenantCapabilityVerifier,
   type BlobStore,
   type KeyedActorPort,
   type ServicePlatform,
@@ -26,7 +25,7 @@ import {
   listRootDomainRefs,
   listRootDomains,
 } from "./audit-reads.js";
-import { AppAuthorityRepository, AuthorityRepository } from "./control-authority.js";
+import { AppAuthorityRepository } from "./control-authority.js";
 import { migrateControlSchema } from "./control-schema.js";
 import { ControlSessionStore } from "./control-sessions.js";
 import { D1PlatformInvitationRepository } from "./platform-invitation-repository.js";
@@ -125,35 +124,12 @@ export default {
     if (isPrefixed(pathname, "/admin/stacks")) {
       return new Response("Not Found", { status: 404 });
     }
-    const v1StackId = matchV1StackProtectedResourcePath(pathname);
-    if (v1StackId !== null) {
-      if (request.method !== "GET") return new Response("Method Not Allowed", { status: 405, headers: { Allow: "GET" } });
-      await ensureControlSchema(env);
-      return v1StackProtectedResourceMetadata(env, v1StackId);
-    }
     const timing = new ServerTiming();
     const platform = platformFromEnv(env, timing);
     const auditReader = localAuditReader(env);
-    const verifier = verifierFor(env);
     const spaceVerifier = spaceVerifierFor(env);
     const actor = createUniCasService({
       platform,
-      authorizeV1StackTenantRequest: async ({ request: v1Request, route }) => {
-        try {
-          return await traceCapabilityVerification(ctx.tracing, route.operation, () =>
-            timing.time("cas_auth", () => verifier.verify(
-              dataPlaneAuthorizationRequest(v1Request), route,
-            )));
-        } catch (error) {
-          if (!(error instanceof Error) || error.name === "Error") {
-            logUnexpectedError(
-              { event: "unicas_authorization_failed", plane: "v1-stack-tenant" },
-              error,
-            );
-          }
-          throw error;
-        }
-      },
       handleAppAdminRequest: async ({ request: adminRequest, route }) =>
         handleAppAdminCompatibilityRequest(
           stripAdminHeaders(adminRequest),
@@ -177,7 +153,7 @@ export default {
 
     const serviceRoute = matchUniCasServiceRoute(request);
     if (serviceRoute) {
-      if (serviceRoute.plane === "v1-stack-tenant" || serviceRoute.plane === "space") {
+      if (serviceRoute.plane === "space") {
         await timing.time("cas_schema", () => ensureSpaceSchema(env));
       }
       try {
@@ -243,7 +219,6 @@ function publicRouteOwner(pathname: string): PublicRouteOwner | null {
   if (
     pathname === "/health"
     || pathname.startsWith("/v1/apps/")
-    || pathname.startsWith("/stacks/")
     || pathname.startsWith("/.well-known/")
   ) return "cas";
   return null;
@@ -264,52 +239,6 @@ function isOwnedPublicOrigin(requestUrl: URL, configuredOrigin: string | undefin
   }
 }
 
-function matchV1StackProtectedResourcePath(pathname: string): string | null {
-  const match = /^\/\.well-known\/oauth-protected-resource\/stacks\/([^/]+)$/.exec(pathname);
-  if (!match) return null;
-  try {
-    const stackId = decodeURIComponent(match[1]!);
-    return stackId.length > 0 ? stackId : null;
-  } catch {
-    return null;
-  }
-}
-
-async function v1StackProtectedResourceMetadata(env: Env, stackId: string): Promise<Response> {
-  const result = await env.CAS_CONTROL_DB.prepare(
-    `SELECT issuer_record.issuer FROM cas_app_oauth_issuers AS issuer_record
-     JOIN cas_apps AS app ON app.app_id = issuer_record.app_id
-     WHERE issuer_record.app_id = ? AND issuer_record.status = 'active'
-       AND issuer_record.mode = 'external' AND app.status = 'active'`,
-  ).bind(stackId).all<{ issuer: string }>();
-  const issuers = (result.results ?? []).map((row) => row.issuer);
-  if (issuers.length === 0) return Response.json({ error: "OAUTH_ISSUER_NOT_ACTIVE" }, {
-    status: 404,
-    headers: { "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" },
-  });
-  const configuredOrigin = env.CAS_PUBLIC_ORIGIN ?? env.PUBLIC_ORIGIN;
-  if (!configuredOrigin) {
-    return Response.json({ error: "PUBLIC_ORIGIN_NOT_CONFIGURED" }, { status: 503 });
-  }
-  let origin: string;
-  try {
-    origin = new URL(configuredOrigin).origin;
-  } catch {
-    return Response.json({ error: "PUBLIC_ORIGIN_NOT_CONFIGURED" }, { status: 503 });
-  }
-  return Response.json({
-    resource: `${origin}/stacks/${encodeURIComponent(stackId)}`,
-    authorization_servers: issuers,
-    scopes_supported: ["cas:read", "cas:write", "cas:manage"],
-  }, {
-    headers: {
-      "Cache-Control": "public, max-age=60",
-      "Access-Control-Allow-Origin": "*",
-    },
-  });
-}
-
-const verifiers = new WeakMap<object, V1StackTenantCapabilityVerifier>();
 const spaceVerifiers = new WeakMap<object, AppSpaceCapabilityVerifier>();
 const controlSchemaInitializations = new WeakMap<object, Promise<void>>();
 const spaceSchemaInitializations = new WeakMap<object, Promise<void>>();
@@ -381,29 +310,6 @@ function adminHandlerFor(env: Env): Promise<(request: Request) => Promise<Respon
 function parseOriginAllowlist(value: string | undefined): readonly string[] | undefined {
   if (value === undefined || value.trim() === "") return undefined;
   return [...new Set(value.split(",").map((origin) => origin.trim()).filter(Boolean))];
-}
-
-function verifierFor(env: Env): V1StackTenantCapabilityVerifier {
-  const key = env as object;
-  let verifier = verifiers.get(key);
-  if (!verifier) {
-    const jwksPort = new CloudflareOAuthDiscoveryPort({
-      allowedOrigins: parseOriginAllowlist(env.CAS_OAUTH_DISCOVERY_ALLOWED_ORIGINS),
-    });
-    verifier = new V1StackTenantCapabilityVerifier({
-      repository: new AuthorityRepository(env.CAS_CONTROL_DB),
-      jwksFetcher: async (url, options) => {
-        return new URL(url).protocol === "data:"
-          ? fetch(url, options)
-          : jwksPort.fetchJwks(url, options);
-      },
-      onEvent: (event) => {
-        console.log(JSON.stringify({ event: "cas_stack_authorization", ...event }));
-      },
-    });
-    verifiers.set(key, verifier);
-  }
-  return verifier;
 }
 
 function spaceVerifierFor(env: Env): AppSpaceCapabilityVerifier {
@@ -584,9 +490,6 @@ function stripMcpBrowserHeaders(request: Request): Request {
   else headers.delete("Cookie");
   return new Request(request, { headers });
 }
-
-export { V1StackTenantCapabilityVerifier, v1PermissionFor } from "@unicas/service";
-export type { V1StackTenantAuthEvent, VerifiedV1StackTenantCall } from "@unicas/service";
 
 export { migrateAppSpaceSchema } from "./schema.js";
 

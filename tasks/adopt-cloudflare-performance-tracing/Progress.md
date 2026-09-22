@@ -30,6 +30,13 @@ audit. The repository-local `unicas-observability` skill contains the same
 investigation, instrumentation, validation, and data-safety workflow and is
 intentionally absent from `skills-lock.json`.
 
+After the implementation was first published, primary revision
+`56cae80a6a63ad5ef21b67b59822e2bba6abd73e` completed the separate
+Stack/Tenant data-plane retirement. That primary revision was merged into this
+source branch. The observability implementation now targets only the current
+App/Space v1 verifier and event; no legacy authorization callback, span plane,
+or current-documentation event was reintroduced.
+
 The task remains ongoing and provider-blocked. Cloudflare automatic tracing
 retains full URLs, storage keys/metadata, Durable Object SQL bindings and IDs,
 KV keys/metadata, and D1 SQL text, but exposes no verified pre-persistence
@@ -73,20 +80,21 @@ boundary.
   tests passed.
 - `pnpm --filter @unicas/service --filter @unicas/service-cloudflare --filter
   @unicas/spaces test`: every touched package suite passed; the cloud-neutral
-  service contributed 148 tests and the Cloudflare adapter contributed 271.
+  service contributed 135 tests and the Cloudflare adapter contributed 258
+  after the legacy surface was removed.
 - Focused custom-span, canary, Worker, Durable Object, audit RPC, Admin OIDC,
   and Spaces scheduled-worker tests passed, including the Workers-runtime
   module shim used only by Node-based Vitest.
-- `pnpm check:workspace`: all 130 deployment-plan and workspace-boundary tests
-  passed.
+- `pnpm check:workspace`: all 133 deployment-plan, workspace-boundary, and
+  Stack/Tenant retirement guard tests passed.
 - `pnpm docs:check`: all 7 content, link, artifact, determinism, and
   provenance tests passed.
 - `pnpm typecheck`: all 15 workspace package typechecks passed.
 - `pnpm deploy:plan`: the protected service deployment sequence rendered
   without executing production commands.
 - `pnpm --filter @unicas/service-cloudflare build` followed by direct Wrangler
-  `deploy --dry-run`: the service bundle and TOML observability schema passed
-  non-publishing validation.
+  `deploy --dry-run`: the reconciled App/Space-only service bundle and TOML
+  observability schema passed non-publishing validation.
 - `pnpm deploy:spaces:plan`: the Spaces UI/Worker build and Wrangler dry run
   passed with the checked-in observability policy.
 

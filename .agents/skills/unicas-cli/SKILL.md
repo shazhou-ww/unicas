@@ -14,7 +14,7 @@ operations as shell commands and a stdio MCP server.
 Use it for:
 
 - App administration: list, inspect, create, and update Apps.
-- Member management: list App administrators, invite a member, and remove a Principal.
+- Member management: list App administrators, invite a member, and remove an Account.
 - App OAuth issuer configuration: inspect and activate an issuer.
 - Audit and observability: App control events and Space Root Ref balances/events.
 
@@ -50,7 +50,7 @@ and stores the session. Check local state without a network request with
 Read operations (`control:read`):
 
 ```text
-unicas principal
+unicas account
 unicas apps list [--limit N] [--cursor C]
 unicas apps get <appId>
 unicas app-members list <appId> [--limit N] [--cursor C]
@@ -72,7 +72,7 @@ Security operations (`control:security`):
 
 ```text
 unicas app-members invite <appId> <email> [--idempotency-key K]
-unicas app-members remove <appId> --issuer <url> --subject <sub> [--etag E] --confirm-subject <sub>
+unicas app-members remove <appId> <accountId> --confirm-account-id <accountId>
 unicas app-oauth-issuer inspect <appId> <issuer>
 unicas app-oauth-issuer activate <appId> <inspectionId> --activation-proof <jws> [--etag E]
 ```
@@ -80,10 +80,9 @@ unicas app-oauth-issuer activate <appId> <inspectionId> --activation-proof <jws>
 Session commands are `unicas login`, `unicas logout`, and `unicas status`.
 Run `unicas mcp` to expose the complete App catalog over stdio.
 
-The old `whoami`, `stacks`, `members`, `oauth-issuer`, `ref-domains`, and
-`audit` commands are frozen v1 compatibility surfaces. Use them only when the
-task explicitly targets the Stack/Tenant contract; never treat their fields as
-aliases for App/Space.
+The old `principal`, `whoami`, `stacks`, `members`, `oauth-issuer`,
+`ref-domains`, and `audit` commands are retired and have no compatibility
+aliases. Use the current commands above.
 
 ## Guardrails
 
@@ -145,4 +144,4 @@ must use `shell: true`, invoke `%LOCALAPPDATA%\pnpm\bin\unicas.CMD`, or run
 - `packages/docs-site/content/cas-control-plane-cli.md`: CLI overview and integration guidance.
 - `packages/admin-cli/README.md`: complete command reference and guardrails.
 - `packages/admin-protocol/src/app-mcp-catalog.ts`: shared App MCP catalog.
-- `packages/admin-cli/src/mcp/catalog.ts`: combined App and v1 stdio catalog.
+- `packages/admin-cli/src/mcp/catalog.ts`: current App stdio catalog.

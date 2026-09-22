@@ -1,7 +1,7 @@
 import { CapabilityError, type AppSpaceRoute } from "@unicas/space-protocol";
 
 export type UnexpectedErrorEvent =
-  | { readonly event: "unicas_authorization_failed"; readonly plane: "v1-stack-tenant" | "space" }
+  | { readonly event: "unicas_authorization_failed"; readonly plane: "space" }
   | { readonly event: "unicas_service_actor_failed" }
   | { readonly event: "unicas_admin_request_failed" }
   | { readonly event: "unicas_app_usage_read_failed" }

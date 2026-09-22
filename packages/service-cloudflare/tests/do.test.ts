@@ -179,7 +179,7 @@ describe("RootRefDomainDurableObject", () => {
 });
 
 describe("CasDurableObject (Space DO)", () => {
-  test("accepts one complete App/Space header family and rejects mixed scopes", async () => {
+  test("accepts App/Space scope and rejects legacy, partial, or mixed headers", async () => {
     await createStore();
     const doInstance = new CasDurableObject(
       {} as DurableObjectState,
@@ -190,16 +190,21 @@ describe("CasDurableObject (Space DO)", () => {
     }));
     expect(v2.status).toBe(200);
 
-    const mixed = await doInstance.fetch(new Request("https://tenant.internal/usage", {
-      headers: {
+    for (const headers of [
+      { "X-CAS-Stack-Id": STACK, "X-CAS-Tenant-Id": TENANT },
+      { "X-CAS-Stack-Id": STACK },
+      { "X-CAS-Tenant-Id": TENANT },
+      {
         "X-CAS-Stack-Id": STACK,
         "X-CAS-Tenant-Id": TENANT,
         "X-CAS-App-Id": STACK,
         "X-CAS-Space-Id": TENANT,
       },
-    }));
-    expect(mixed.status).toBe(400);
-    await expect(mixed.json()).resolves.toMatchObject({ error: "INVALID_SCOPE_HEADERS" });
+    ]) {
+      const rejected = await doInstance.fetch(new Request("https://tenant.internal/usage", { headers }));
+      expect(rejected.status).toBe(400);
+      await expect(rejected.json()).resolves.toMatchObject({ error: "INVALID_SCOPE_HEADERS" });
+    }
   });
 
   test("forwards ONE canonical command to the domain DO and passes the response through", async () => {
@@ -227,8 +232,8 @@ describe("CasDurableObject (Space DO)", () => {
     const response = await doInstance.fetch(new Request("https://tenant.internal/updateRootRefs", {
       method: "POST",
       headers: {
-        "X-CAS-Stack-Id": STACK,
-        "X-CAS-Tenant-Id": TENANT,
+        "X-CAS-App-Id": STACK,
+        "X-CAS-Space-Id": TENANT,
         "X-CAS-Ref-Domain": DOMAIN,
       },
       body: JSON.stringify({ requestId: "r1", changes: { [H1]: 1 } }),
@@ -264,7 +269,7 @@ describe("CasDurableObject (Space DO)", () => {
     const body = `{"requestId":"r","changes":{"${H1}":1,"${H1}":2}}`;
     const response = await doInstance.fetch(new Request("https://tenant.internal/updateRootRefs", {
       method: "POST",
-      headers: { "X-CAS-Stack-Id": STACK, "X-CAS-Tenant-Id": TENANT, "X-CAS-Ref-Domain": DOMAIN },
+      headers: { "X-CAS-App-Id": STACK, "X-CAS-Space-Id": TENANT, "X-CAS-Ref-Domain": DOMAIN },
       body,
     }));
     expect(response.status).toBe(400);
@@ -292,8 +297,8 @@ describe("CasDurableObject (Space DO)", () => {
     const mutation = doInstance.fetch(new Request("https://tenant.internal/updateRootRefs", {
       method: "POST",
       headers: {
-        "X-CAS-Stack-Id": STACK,
-        "X-CAS-Tenant-Id": TENANT,
+        "X-CAS-App-Id": STACK,
+        "X-CAS-Space-Id": TENANT,
         "X-CAS-Ref-Domain": DOMAIN,
       },
       body: JSON.stringify({ requestId: "blocked", changes: { [H1]: 1 } }),
@@ -301,9 +306,9 @@ describe("CasDurableObject (Space DO)", () => {
     await forwarded.promise;
 
     const [read, metadata, usage] = await Promise.all([
-      doInstance.fetch(v1Request("/read", "GET", { "X-CAS-Hash": H1 })),
-      doInstance.fetch(v1Request("/metadata", "GET", { "X-CAS-Hash": H1 })),
-      doInstance.fetch(v1Request("/usage", "GET")),
+      doInstance.fetch(spaceRequest("/read", "GET", { "X-CAS-Hash": H1 })),
+      doInstance.fetch(spaceRequest("/metadata", "GET", { "X-CAS-Hash": H1 })),
+      doInstance.fetch(spaceRequest("/usage", "GET")),
     ]);
     expect(read.status).toBe(404);
     expect(metadata.status).toBe(404);
@@ -358,37 +363,6 @@ function nodeHostedStreamBucket(): R2Bucket {
   });
 }
 
-function blockingUploadBucket(): {
-  bucket: R2Bucket;
-  putCount: () => number;
-  waitForPut: (ordinal: number) => Promise<void>;
-  release: () => void;
-} {
-  const target = nodeHostedStreamBucket();
-  const started = [deferred<void>(), deferred<void>()];
-  const released = deferred<void>();
-  let putCount = 0;
-  return {
-    bucket: new Proxy(target, {
-      get(_target, property) {
-        if (property === "put") {
-          return async (...args: Parameters<R2Bucket["put"]>) => {
-            putCount += 1;
-            started[putCount - 1]?.resolve();
-            await released.promise;
-            return target.put(...args);
-          };
-        }
-        const member = Reflect.get(target, property);
-        return typeof member === "function" ? member.bind(target) : member;
-      },
-    }),
-    putCount: () => putCount,
-    waitForPut: (ordinal) => started[ordinal - 1]!.promise,
-    release: () => released.resolve(),
-  };
-}
-
 function failFirstDeleteBucket(): R2Bucket {
   const target = nodeHostedStreamBucket();
   let failed = false;
@@ -425,7 +399,7 @@ function store(): NodeStore {
   return { db: db!, bucket: bucket!, appId: STACK, spaceId: TENANT };
 }
 
-function v1Request(
+function spaceRequest(
   path: string,
   method: string,
   headers: Record<string, string> = {},
@@ -433,7 +407,12 @@ function v1Request(
 ): Request {
   return new Request(`https://tenant.internal${path}`, {
     method,
-    headers: { "X-CAS-Stack-Id": STACK, "X-CAS-Tenant-Id": TENANT, ...headers },
+    headers: {
+      "X-CAS-App-Id": STACK,
+      "X-CAS-Space-Id": TENANT,
+      "X-CAS-Route-Family": "app-space",
+      ...headers,
+    },
     body: body as unknown as BodyInit | undefined,
   });
 }
@@ -602,7 +581,7 @@ describe("CasDurableObject (Space DO) — node storage operations", () => {
     await db!.prepare(
       "UPDATE cas_node_upload_cleanup SET cleanup_at = 1 WHERE app_id = ? AND space_id = ? AND temporary_object_key = ?",
     ).bind(STACK, TENANT, session!.temporary_object_key).run();
-    const gc = await doInstance.fetch(v1Request(
+    const gc = await doInstance.fetch(spaceRequest(
       "/gc",
       "POST",
       { "Content-Type": "application/json" },
@@ -743,7 +722,7 @@ describe("CasDurableObject (Space DO) — node storage operations", () => {
       "UPDATE cas_node_uploads SET cleanup_at = 1 WHERE app_id = ? AND space_id = ? AND hash = ?",
     ).bind(STACK, TENANT, hash).run();
 
-    const gc = await doInstance.fetch(v1Request(
+    const gc = await doInstance.fetch(spaceRequest(
       "/gc",
       "POST",
       { "Content-Type": "application/json" },
@@ -772,52 +751,21 @@ describe("CasDurableObject (Space DO) — node storage operations", () => {
     expect(new Uint8Array(await (await bucket!.get("stream-probe"))!.arrayBuffer())).toEqual(content);
   });
 
-  test("v1 inline lease streams a complete canonical node to R2 and reads only own content", async () => {
-    await createStore();
-    const content = new TextEncoder().encode("canonical payload");
-    const contentType = "application/octet-stream";
-    const header = encodeHeader(content.length, contentType, 0);
-    const canonical = concatenateNodeBytes(header, new TextEncoder().encode(contentType), [], content);
-    const hash = hashToHex(await sha256(canonical));
-    const doInstance = spaceDo(nodeHostedStreamBucket());
-
-    const lease = await doInstance.fetch(v1Request("/lease", "POST", {
-      "X-CAS-Hash": hash,
-      "Content-Type": CanonicalNodeContentType,
-      "Content-Length": String(canonical.length),
-    }, canonical));
-    const leaseText = await lease.text();
-    expect(lease.status, leaseText).toBe(200);
-    expect(JSON.parse(leaseText)).toMatchObject({ hash, ready: true });
-
-    const stored = await bucket!.get(appCanonicalNodeKey(STACK, TENANT, hash));
-    expect(new Uint8Array(await stored!.arrayBuffer())).toEqual(canonical);
-    const read = await doInstance.fetch(v1Request("/read", "GET", { "X-CAS-Hash": hash }));
-    expect(new Uint8Array(await read.arrayBuffer())).toEqual(content);
-
-    const renewed = await doInstance.fetch(v1Request("/lease", "POST", {
-      "X-CAS-Hash": hash,
-      "X-CAS-Lease-Duration": "180000",
-    }));
-    expect(renewed.status).toBe(200);
-  });
-
   test("canonical node reads apply HTTP ranges to own content", async () => {
     await createStore();
     const content = new TextEncoder().encode("0123456789");
     const contentType = "text/plain";
-    const header = encodeHeader(content.length, contentType, 0);
-    const canonical = concatenateNodeBytes(header, new TextEncoder().encode(contentType), [], content);
-    const hash = hashToHex(await sha256(canonical));
+    const hash = await digestOf("0123456789", contentType);
+    await leaseNode(store(), {
+      hash,
+      contentType,
+      refs: [],
+      leaseDurationMs: 60_000,
+      content,
+    });
     const doInstance = spaceDo(nodeHostedStreamBucket());
-    const lease = await doInstance.fetch(v1Request("/lease", "POST", {
-      "X-CAS-Hash": hash,
-      "Content-Type": CanonicalNodeContentType,
-      "Content-Length": String(canonical.length),
-    }, canonical));
-    expect(lease.status).toBe(200);
 
-    const middle = await doInstance.fetch(v1Request("/read", "GET", {
+    const middle = await doInstance.fetch(spaceRequest("/read", "GET", {
       "X-CAS-Hash": hash,
       Range: "bytes=2-5",
     }));
@@ -825,14 +773,14 @@ describe("CasDurableObject (Space DO) — node storage operations", () => {
     expect(middle.headers.get("Content-Range")).toBe("bytes 2-5/10");
     expect(await middle.text()).toBe("2345");
 
-    const suffix = await doInstance.fetch(v1Request("/read", "GET", {
+    const suffix = await doInstance.fetch(spaceRequest("/read", "GET", {
       "X-CAS-Hash": hash,
       Range: "bytes=-3",
     }));
     expect(suffix.status).toBe(206);
     expect(await suffix.text()).toBe("789");
 
-    const unsatisfiable = await doInstance.fetch(v1Request("/read", "GET", {
+    const unsatisfiable = await doInstance.fetch(spaceRequest("/read", "GET", {
       "X-CAS-Hash": hash,
       Range: "bytes=10-",
     }));
@@ -840,127 +788,7 @@ describe("CasDurableObject (Space DO) — node storage operations", () => {
     expect(unsatisfiable.headers.get("Content-Range")).toBe("bytes */10");
   });
 
-  test("v1 inline lease digest failures leave no object but retain the recovery fence", async () => {
-    await createStore();
-    const content = new TextEncoder().encode("wrong hash");
-    const contentType = "text/plain";
-    const canonical = concatenateNodeBytes(
-      encodeHeader(content.length, contentType, 0),
-      new TextEncoder().encode(contentType),
-      [],
-      content,
-    );
-    const doInstance = spaceDo(nodeHostedStreamBucket());
-    const response = await doInstance.fetch(v1Request("/lease", "POST", {
-      "X-CAS-Hash": H1,
-      "Content-Type": CanonicalNodeContentType,
-      "Content-Length": String(canonical.length),
-    }, canonical));
-    expect(response.status).toBe(400);
-    expect(await bucket!.head(appCanonicalNodeKey(STACK, TENANT, H1))).toBeNull();
-    const reservation = await db!.prepare(
-      "SELECT COUNT(*) AS count FROM cas_upload_reservations WHERE app_id = ? AND space_id = ? AND hash = ?",
-    ).bind(STACK, TENANT, H1).first<{ count: number }>();
-    expect(reservation?.count).toBe(1);
-  });
-
-  test("different canonical uploads stream concurrently outside the mutation gate", async () => {
-    await createStore();
-    const firstContent = new TextEncoder().encode("first concurrent node");
-    const secondContent = new TextEncoder().encode("second concurrent node");
-    const firstCanonical = concatenateNodeBytes(
-      encodeHeader(firstContent.length, "text/plain", 0),
-      new TextEncoder().encode("text/plain"),
-      [],
-      firstContent,
-    );
-    const secondCanonical = concatenateNodeBytes(
-      encodeHeader(secondContent.length, "text/plain", 0),
-      new TextEncoder().encode("text/plain"),
-      [],
-      secondContent,
-    );
-    const firstHash = hashToHex(await sha256(firstCanonical));
-    const secondHash = hashToHex(await sha256(secondCanonical));
-    const controlled = blockingUploadBucket();
-    const doInstance = spaceDo(controlled.bucket);
-
-    const first = doInstance.fetch(v1Request("/lease", "POST", {
-      "X-CAS-Hash": firstHash,
-      "Content-Type": CanonicalNodeContentType,
-      "Content-Length": String(firstCanonical.length),
-    }, firstCanonical));
-    await controlled.waitForPut(1);
-    const second = doInstance.fetch(v1Request("/lease", "POST", {
-      "X-CAS-Hash": secondHash,
-      "Content-Type": CanonicalNodeContentType,
-      "Content-Length": String(secondCanonical.length),
-    }, secondCanonical));
-    await controlled.waitForPut(2);
-    expect(controlled.putCount()).toBe(2);
-
-    controlled.release();
-    expect((await first).status).toBe(200);
-    expect((await second).status).toBe(200);
-  });
-
-  test("same-hash canonical uploads share one in-flight R2 write", async () => {
-    await createStore();
-    const content = new TextEncoder().encode("deduplicated concurrent node");
-    const canonical = concatenateNodeBytes(
-      encodeHeader(content.length, "text/plain", 0),
-      new TextEncoder().encode("text/plain"),
-      [],
-      content,
-    );
-    const hash = hashToHex(await sha256(canonical));
-    const controlled = blockingUploadBucket();
-    const doInstance = spaceDo(controlled.bucket);
-    const request = () => v1Request("/lease", "POST", {
-      "X-CAS-Hash": hash,
-      "Content-Type": CanonicalNodeContentType,
-      "Content-Length": String(canonical.length),
-    }, canonical);
-
-    const first = doInstance.fetch(request());
-    await controlled.waitForPut(1);
-    const second = doInstance.fetch(request());
-    await Promise.resolve();
-    expect(controlled.putCount()).toBe(1);
-
-    controlled.release();
-    expect((await first).status).toBe(200);
-    expect((await second).status).toBe(200);
-    const rows = await db!.prepare(
-      "SELECT COUNT(*) AS count FROM cas_nodes WHERE app_id = ? AND space_id = ? AND hash = ?",
-    ).bind(STACK, TENANT, hash).first<{ count: number }>();
-    expect(rows?.count).toBe(1);
-  });
-
-  test("v1 bodyless lease adopts a verified canonical R2 orphan", async () => {
-    await createStore();
-    const content = new TextEncoder().encode("orphan");
-    const contentType = "text/plain";
-    const canonical = concatenateNodeBytes(
-      encodeHeader(content.length, contentType, 0),
-      new TextEncoder().encode(contentType),
-      [],
-      content,
-    );
-    const hash = hashToHex(await sha256(canonical));
-    await bucket!.put(appCanonicalNodeKey(STACK, TENANT, hash), canonical, { sha256: hash });
-
-    const response = await spaceDo().fetch(v1Request("/lease", "POST", {
-      "X-CAS-Hash": hash,
-    }));
-    expect(response.status).toBe(200);
-    const row = await db!.prepare(
-      "SELECT content_size FROM cas_nodes WHERE app_id = ? AND space_id = ? AND hash = ?",
-    ).bind(STACK, TENANT, hash).first<{ content_size: number }>();
-    expect(row).toEqual({ content_size: content.length });
-  });
-
-  test("canonical lease stores content and records edges; read/metadata/usage round-trip", async () => {
+  test("App/Space read, metadata, and usage round-trip preserves node edges", async () => {
     await createStore();
     const childContent = "child";
     const childHash = await digestOf(childContent);
@@ -973,41 +801,31 @@ describe("CasDurableObject (Space DO) — node storage operations", () => {
     });
     const parentContent = "parent";
     const hash = await digestOf(parentContent, "text/plain", [childHash]);
+    await leaseNode(store(), {
+      hash,
+      contentType: "text/plain",
+      refs: [childHash],
+      leaseDurationMs: 120_000,
+      content: new TextEncoder().encode(parentContent),
+    });
     const doInstance = spaceDo(nodeHostedStreamBucket());
-    const parentBytes = new TextEncoder().encode(parentContent);
-    const children = [hexToHash(childHash)];
-    const canonical = concatenateNodeBytes(
-      encodeHeader(parentBytes.length, "text/plain", children.length),
-      new TextEncoder().encode("text/plain"),
-      children,
-      parentBytes,
-    );
-    const lease = await doInstance.fetch(v1Request("/lease", "POST", {
-      "X-CAS-Hash": hash,
-      "Content-Type": CanonicalNodeContentType,
-      "Content-Length": String(canonical.length),
-      "X-CAS-Lease-Duration": "120000",
-    }, canonical));
-    expect(lease.status).toBe(200);
-    const leaseBody = await lease.json();
-    expect(leaseBody).toMatchObject({ hash, ready: true });
-    expect((await bucket!.head(appCanonicalNodeKey(STACK, TENANT, hash)))?.size).toBe(canonical.length);
+    expect(await bucket!.head(appCanonicalNodeKey(STACK, TENANT, hash))).not.toBeNull();
 
-    const read = await doInstance.fetch(v1Request("/read", "GET", { "X-CAS-Hash": hash }));
+    const read = await doInstance.fetch(spaceRequest("/read", "GET", { "X-CAS-Hash": hash }));
     expect(read.status).toBe(200);
     expect(new Uint8Array(await read.arrayBuffer())).toEqual(new TextEncoder().encode(parentContent));
 
-    const metadata = await doInstance.fetch(v1Request("/metadata", "GET", { "X-CAS-Hash": hash }));
+    const metadata = await doInstance.fetch(spaceRequest("/metadata", "GET", { "X-CAS-Hash": hash }));
     expect(metadata.status).toBe(200);
     const { metadata: meta, state } = await metadata.json();
     expect(meta).toMatchObject({ hash, size: parentContent.length, contentType: "text/plain", refs: [childHash] });
     expect(state.childRefCount).toBe(0);
 
-    const childMeta = await doInstance.fetch(v1Request("/metadata", "GET", { "X-CAS-Hash": childHash }));
+    const childMeta = await doInstance.fetch(spaceRequest("/metadata", "GET", { "X-CAS-Hash": childHash }));
     const childBody = await childMeta.json();
     expect(childBody.state.childRefCount).toBe(1);
 
-    const usageResponse = await doInstance.fetch(v1Request("/usage", "GET"));
+    const usageResponse = await doInstance.fetch(spaceRequest("/usage", "GET"));
     expect(usageResponse.status).toBe(200);
     const usageBody = await usageResponse.json();
     expect(usageBody).toMatchObject({
@@ -1031,44 +849,6 @@ describe("CasDurableObject (Space DO) — node storage operations", () => {
       leased_node_count: usageBody.leasedNodeCount,
       unobserved_node_count: 0,
     });
-  });
-
-  test("canonical lease rejects digest mismatches and missing children", async () => {
-    await createStore();
-    const doInstance = spaceDo(nodeHostedStreamBucket());
-    const content = new TextEncoder().encode("mismatch");
-    const wrongCanonical = concatenateNodeBytes(
-      encodeHeader(content.length, "text/plain", 0),
-      new TextEncoder().encode("text/plain"),
-      [],
-      content,
-    );
-    const wrong = await doInstance.fetch(v1Request("/lease", "POST", {
-      "X-CAS-Hash": H1,
-      "Content-Type": CanonicalNodeContentType,
-      "Content-Length": String(wrongCanonical.length),
-    }, wrongCanonical));
-    expect(wrong.status).toBe(400);
-    await expect(wrong.json()).resolves.toMatchObject({ error: NodeOpErrorCodes.INVALID_REQUEST });
-
-    // Child not ready → 409 before anything is written.
-    const childHash = "e".repeat(64);
-    const parentContent = "parent-with-child";
-    const hash = await digestOf(parentContent, "text/plain", [childHash]);
-    const missingBytes = new TextEncoder().encode(parentContent);
-    const missingChildren = [hexToHash(childHash)];
-    const missingCanonical = concatenateNodeBytes(
-      encodeHeader(missingBytes.length, "text/plain", 1),
-      new TextEncoder().encode("text/plain"),
-      missingChildren,
-      missingBytes,
-    );
-    const missingChild = await doInstance.fetch(v1Request("/lease", "POST", {
-      "X-CAS-Hash": hash,
-      "Content-Type": CanonicalNodeContentType,
-      "Content-Length": String(missingCanonical.length),
-    }, missingCanonical));
-    expect(missingChild.status).toBe(409);
   });
 
   test("canonical lease honors stricter service limits", async () => {
@@ -1100,33 +880,6 @@ describe("CasDurableObject (Space DO) — node storage operations", () => {
     )).rejects.toMatchObject({ status: 400, code: NodeOpErrorCodes.INVALID_REQUEST });
   });
 
-  test("v1 bodyless lease extends a ready lease and 404s missing nodes", async () => {
-    await createStore();
-    const content = "abc";
-    const hash = await digestOf(content);
-    await leaseNode(store(), {
-      hash,
-      contentType: "text/plain",
-      refs: [],
-      leaseDurationMs: 60_000,
-      content: new TextEncoder().encode(content),
-    });
-    const doInstance = spaceDo(nodeHostedStreamBucket());
-    const extended = await doInstance.fetch(v1Request("/lease", "POST", {
-      "X-CAS-Hash": hash,
-      "X-CAS-Lease-Duration": "180000",
-    }));
-    expect(extended.status).toBe(200);
-    const body = await extended.json();
-    expect(body).toMatchObject({ hash, ready: true });
-
-    const missing = await doInstance.fetch(v1Request("/lease", "POST", {
-      "X-CAS-Hash": "1".repeat(64),
-    }));
-    expect(missing.status).toBe(404);
-    await expect(missing.json()).resolves.toMatchObject({ error: NodeOpErrorCodes.NOT_FOUND });
-  });
-
   test("GC deletes unreferenced expired nodes but keeps referenced and leased nodes", async () => {
     await createStore();
     for (const content of ["keep", "held"]) {
@@ -1147,7 +900,7 @@ describe("CasDurableObject (Space DO) — node storage operations", () => {
     await bucket!.put(appCanonicalNodeKey(STACK, TENANT, dead), new TextEncoder().encode("dead!"));
 
     const doInstance = spaceDo(nodeHostedStreamBucket());
-    const gc = await doInstance.fetch(v1Request("/gc", "POST", {}, new TextEncoder().encode("{}")));
+    const gc = await doInstance.fetch(spaceRequest("/gc", "POST", {}, new TextEncoder().encode("{}")));
     expect(gc.status).toBe(200);
     await expect(gc.json()).resolves.toMatchObject({ examined: 1, deleted: 1, reclaimedContentBytes: 5 });
 
@@ -1172,14 +925,14 @@ describe("CasDurableObject (Space DO) — node storage operations", () => {
     await bucket!.put(appCanonicalNodeKey(STACK, TENANT, hash), new TextEncoder().encode("node!"));
     const doInstance = spaceDo(nodeHostedStreamBucket());
 
-    const fenced = await doInstance.fetch(v1Request("/gc", "POST", {}, new TextEncoder().encode("{}")));
+    const fenced = await doInstance.fetch(spaceRequest("/gc", "POST", {}, new TextEncoder().encode("{}")));
     await expect(fenced.json()).resolves.toEqual({ examined: 0, deleted: 0, reclaimedContentBytes: 0 });
     expect(await bucket!.head(appCanonicalNodeKey(STACK, TENANT, hash))).not.toBeNull();
 
     await db!.prepare(
       "UPDATE cas_upload_reservations SET expires_at = 1 WHERE app_id = ? AND space_id = ? AND hash = ?",
     ).bind(STACK, TENANT, hash).run();
-    const expired = await doInstance.fetch(v1Request("/gc", "POST", {}, new TextEncoder().encode("{}")));
+    const expired = await doInstance.fetch(spaceRequest("/gc", "POST", {}, new TextEncoder().encode("{}")));
     await expect(expired.json()).resolves.toMatchObject({ examined: 1, deleted: 1 });
   });
 
@@ -1206,7 +959,7 @@ describe("CasDurableObject (Space DO) — node storage operations", () => {
     ]);
 
     const doInstance = spaceDo(nodeHostedStreamBucket());
-    const first = await doInstance.fetch(v1Request(
+    const first = await doInstance.fetch(spaceRequest(
       "/gc",
       "POST",
       {},
@@ -1218,7 +971,7 @@ describe("CasDurableObject (Space DO) — node storage operations", () => {
     ).bind(STACK, TENANT, child).first<{ child_ref_count: number }>();
     expect(childRow?.child_ref_count).toBe(0);
 
-    const second = await doInstance.fetch(v1Request(
+    const second = await doInstance.fetch(spaceRequest(
       "/gc",
       "POST",
       {},
@@ -1228,10 +981,10 @@ describe("CasDurableObject (Space DO) — node storage operations", () => {
     expect(await bucket!.get(appCanonicalNodeKey(STACK, TENANT, child))).toBeNull();
   });
 
-  test("nodes, leases, usage, and GC are isolated per stack for the same tenant id", async () => {
+  test("nodes, usage, and GC are isolated per App for the same Space id", async () => {
     await createStore();
-    const otherStack = "cas_stack_b";
-    const content = "stack-a";
+    const otherApp = "cas_app_b";
+    const content = "app-a";
     const hash = await digestOf(content);
     await leaseNode(store(), {
       hash,
@@ -1242,33 +995,33 @@ describe("CasDurableObject (Space DO) — node storage operations", () => {
     });
     const doInstance = spaceDo(nodeHostedStreamBucket());
 
-    // Same tenant id under another stack: the node is invisible.
+    // Same Space id under another App: the node is invisible.
     const otherDo = new CasDurableObject(
       {} as DurableObjectState,
       { CAS_DB: db!, CAS_R2: bucket!, CAS_DOMAIN_DO: {} as SpaceCasDoEnv["CAS_DOMAIN_DO"] },
     );
     const otherRead = await otherDo.fetch(new Request("https://tenant.internal/read", {
       method: "GET",
-      headers: { "X-CAS-Stack-Id": otherStack, "X-CAS-Tenant-Id": TENANT, "X-CAS-Hash": hash },
+      headers: { "X-CAS-App-Id": otherApp, "X-CAS-Space-Id": TENANT, "X-CAS-Hash": hash },
     }));
     expect(otherRead.status).toBe(404);
 
-    // Usage counts only the owning stack's nodes.
-    const usageA = await doInstance.fetch(v1Request("/usage", "GET"));
+    // Usage counts only the owning App's nodes.
+    const usageA = await doInstance.fetch(spaceRequest("/usage", "GET"));
     const usageB = await otherDo.fetch(new Request("https://tenant.internal/usage", {
       method: "GET",
-      headers: { "X-CAS-Stack-Id": otherStack, "X-CAS-Tenant-Id": TENANT },
+      headers: { "X-CAS-App-Id": otherApp, "X-CAS-Space-Id": TENANT },
     }));
     expect((await usageA.json()).nodeCount).toBe(1);
     expect((await usageB.json()).nodeCount).toBe(0);
 
-    // GC in the other stack must not delete this stack's unreferenced nodes.
+    // GC in the other App must not delete this App's unreferenced nodes.
     await db!.prepare(
       "INSERT INTO cas_nodes (app_id, space_id, hash, content_size, content_type, lease_started_at, lease_expires_at, child_ref_count, root_ref_count) VALUES (?, ?, ?, 5, 'text/plain', 1, 1, 0, 0)",
-    ).bind(otherStack, TENANT, "e".repeat(64)).run();
+    ).bind(otherApp, TENANT, "e".repeat(64)).run();
     const gcB = await otherDo.fetch(new Request("https://tenant.internal/gc", {
       method: "POST",
-      headers: { "X-CAS-Stack-Id": otherStack, "X-CAS-Tenant-Id": TENANT },
+      headers: { "X-CAS-App-Id": otherApp, "X-CAS-Space-Id": TENANT },
       body: "{}",
     }));
     expect(gcB.status).toBe(200);

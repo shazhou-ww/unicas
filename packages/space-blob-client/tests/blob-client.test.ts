@@ -1,6 +1,6 @@
 /**
  * Functional blob-layer tests: `createCasBlobClient` over an in-memory
- * `TenantCasClient` (no HTTP, no transport). Covers deterministic chunk-tree
+ * `SpaceCasClient` (no HTTP, no transport). Covers deterministic chunk-tree
  * store, handle-shaped reads (whole / ranged / bounded), retention operations,
  * and access to the underlying tenant client.
  */

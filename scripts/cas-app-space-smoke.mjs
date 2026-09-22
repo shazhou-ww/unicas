@@ -29,10 +29,6 @@ import {
   spaceRootRefsUpdatePermission,
   spaceUsageReadPermission,
 } from "../packages/space-protocol/dist/index.js";
-import {
-  CapabilityVersion,
-  casManagePermission,
-} from "../packages/space-protocol/dist/v1.js";
 
 const BASE = normalizeSmokeBaseUrl(
   process.argv[2] ?? "https://api.unicas.work",
@@ -231,19 +227,19 @@ async function main() {
     });
     assert((await isolationClient.usage()).nodeCount === 0, "isolation Space remains empty");
 
-    const v1Token = await sign({
-      ver: CapabilityVersion,
+    const retiredToken = await sign({
+      ver: SpaceCapabilityVersion,
       tenantId: SPACE_ID,
-      permissions: [casManagePermission(SPACE_ID)],
+      permissions: [`tenants:${SPACE_ID}:cas:manage`],
     });
     response = await fetch(`${BASE}${prefix}/cas/usage`, {
-      headers: { Authorization: `Bearer ${v1Token}` },
+      headers: { Authorization: `Bearer ${retiredToken}` },
     });
-    assert(response.status === 401, `frozen token on App/Space v1 route -> ${response.status} (401)`);
+    assert(response.status === 401, `retired Tenant claim on App/Space v1 route -> ${response.status} (401)`);
     response = await fetch(`${BASE}/stacks/${encodeURIComponent(APP_ID)}/tenants/${encodeURIComponent(SPACE_ID)}/cas/usage`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    assert(response.status === 401, `Space v1 token on frozen route -> ${response.status} (401)`);
+    assert(response.status === 404, `App/Space token on retired route -> ${response.status} (404)`);
   } catch (error) {
     smokeFailure = error;
     throw error;

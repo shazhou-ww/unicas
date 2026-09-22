@@ -48,8 +48,7 @@ production tracing, and external telemetry destinations are disabled by the
 
 Existing structured events (JSON to Worker stdout and sampled Workers Logs):
 
-- `cas_app_authorization` — App/Space v2 authorization decisions.
-- `cas_stack_authorization` — retained v1 telemetry identifier. Both events use `kind` ∈
+- `cas_app_authorization` — App/Space v1 authorization decisions. Events use `kind` ∈
    `authorized`, `rejected`, `fail_closed`, `registry_stale`. **`fail_closed`
    is an incident signal** (registry unreachable past the hard bound, or a cold
    outage). Rejected requests carry stable capability error codes such as
@@ -83,7 +82,7 @@ unavailable until the tracing data-safety gate can be satisfied.
 
 ### Lease-driven upload cleanup
 
-App/Space v2 creates at most 1024 active node-upload generations per Space.
+App/Space v1 creates at most 1024 active node-upload generations per Space.
 Presigned PUT URLs default to five minutes. Uploaded or abandoned temporary
 objects remain eligible for recovery until their 24-hour cleanup deadline;
 the bounded Space GC path removes expired records, reservations, and temporary
@@ -130,12 +129,11 @@ pnpm deploy:spaces:plan
 pnpm deploy:spaces
 pnpm deploy:site
 pnpm deploy:docs
-pnpm smoke                    # App/Space v2; run twice 70s apart
+pnpm smoke                    # App/Space v1; run twice 70s apart
 pnpm spaces:smoke -- --base-url https://spaces.unicas.work
-pnpm smoke:v1                 # explicit frozen v1 compatibility check only
 ```
 
-The v2 smoke script uses one dedicated `deploy-smoke` Space, per-run node hashes,
+The App/Space smoke script uses one dedicated `deploy-smoke` Space, per-run node hashes,
 and per-run request IDs. After acquiring the parent Root Ref, it releases that
 ref in a `finally` path even when a later assertion fails, so subsequent runs
 do not accumulate positive Root Refs. It also checks an empty isolation Space
@@ -312,8 +310,8 @@ metadata repair, membership and invitation administration, issuer repair,
 audit, and Restore. Suspension neither releases Root Refs nor initiates GC.
 Restore leaves data and configuration intact; verifiers observe it on refresh.
 The existing authorization event stream records suspension denials without
-recording bearer capabilities. Frozen v1 issuer resolution also refuses a
-suspended owning App so it cannot bypass this operational stop.
+recording bearer capabilities. The App/Space verifier refuses a suspended
+owning App so it cannot bypass this operational stop.
 
 ### Inspect App usage
 
@@ -490,7 +488,7 @@ Operational checks:
 1. Confirm service `/health`; confirm `/v1/apps` + `/admin/apps` probes.
 2. `wrangler deployments list` for `unicas` — recent deploy?
    Rollback first, diagnose later.
-3. Grep `cas_app_authorization` (and retained v1 `cas_stack_authorization`) for `fail_closed` / `unknown_issuer` —
+3. Query `cas_app_authorization` for `fail_closed` / `unknown_issuer` —
    registry reachability vs key/issuer config.
 4. Check the service Worker's D1 bindings (`CAS_CONTROL_DB`,
    `unicas-control`) and `wrangler d1 execute ... SELECT` reachability.

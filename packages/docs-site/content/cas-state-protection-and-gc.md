@@ -8,8 +8,8 @@ This document explains the state and lifecycle model behind UniCAS. It complemen
 [CAS Architecture](./cas-architecture.md), which specifies the concrete node,
 storage, lease, and garbage-collection behavior, together with the multi-App
 service boundary and Root Refs audit API. In the current public model this is a
-multi-App boundary; Stack/Tenant names remain only in physical adapters and
-frozen v1 contracts.
+multi-App boundary; historical Stack/Tenant names remain only in isolated
+physical or audit adapters.
 
 The purpose of this document is to establish one conceptual model and a set of
 invariants for reasoning about:

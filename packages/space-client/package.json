@@ -1,7 +1,7 @@
 {
   "name": "@unicas/space-client",
   "version": "0.1.0",
-  "description": "Cloud-neutral HTTP client for UniCAS App/Space v2 and frozen Stack/Tenant v1 data planes",
+  "description": "Cloud-neutral HTTP client for the UniCAS App/Space v1 data plane",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -11,12 +11,6 @@
       "development": "./src/index.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
-    },
-    "./v1": {
-      "types": "./src/v1.ts",
-      "development": "./src/v1.ts",
-      "import": "./dist/v1.js",
-      "default": "./dist/v1.js"
     }
   },
   "files": [
@@ -29,8 +23,7 @@
     "clean": "rimraf --glob dist \"*.tsbuildinfo\""
   },
   "dependencies": {
-    "@unicas/space-protocol": "workspace:*",
-    "@unicas/codec": "workspace:*"
+    "@unicas/space-protocol": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.9.0",
@@ -43,10 +36,6 @@
       ".": {
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
-      },
-      "./v1": {
-        "types": "./dist/v1.d.ts",
-        "import": "./dist/v1.js"
       }
     }
   }
