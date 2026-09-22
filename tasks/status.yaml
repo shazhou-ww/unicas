@@ -86,9 +86,10 @@ tasks:
     createdAt: "2026-09-22T02:21:38Z"
     updatedAt: "2026-09-22T05:25:00Z"
   prepare-app-user-sdk-beta-packages:
-    state: backlog
+    state: ongoing
+    sourceBranch: task/prepare-app-user-sdk-beta-packages
     createdAt: "2026-09-21T03:41:45Z"
-    updatedAt: "2026-09-21T03:41:45Z"
+    updatedAt: "2026-09-22T07:02:52Z"
   promote-app-user-api-to-beta:
     state: backlog
     createdAt: "2026-09-21T03:18:47Z"
@@ -114,10 +115,9 @@ tasks:
     createdAt: "2026-09-20T02:30:21Z"
     updatedAt: "2026-09-20T03:21:40Z"
   retire-stack-tenant-data-plane:
-    state: ongoing
-    sourceBranch: task/retire-stack-tenant-data-plane
+    state: completed
     createdAt: "2026-09-21T03:41:05Z"
-    updatedAt: "2026-09-22T05:14:29Z"
+    updatedAt: "2026-09-22T06:50:49Z"
   simplify-console-administration-navigation:
     state: completed
     createdAt: "2026-09-17T04:16:49Z"

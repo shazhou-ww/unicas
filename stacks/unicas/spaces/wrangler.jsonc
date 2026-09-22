@@ -44,7 +44,20 @@
     ]
   },
   "observability": {
-    "enabled": true
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 0.05,
+      "invocation_logs": false,
+      "persist": true,
+      "destinations": []
+    },
+    "traces": {
+      "enabled": false,
+      "head_sampling_rate": 0,
+      "persist": false,
+      "destinations": []
+    }
   },
   "vars": {
     "PUBLIC_ORIGIN": "https://spaces.unicas.work",

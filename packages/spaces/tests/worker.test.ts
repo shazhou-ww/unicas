@@ -70,6 +70,25 @@ async function fixture() {
 }
 
 describe("Spaces Worker", () => {
+  test("does not persist caller-provided correlation values", async () => {
+    const { env } = await fixture();
+    const messages: string[] = [];
+    vi.spyOn(console, "error").mockImplementation((message) => messages.push(String(message)));
+    const canary = "Bearer secret-capability";
+
+    const response = await createSpacesWorker().fetch(new Request(
+      "https://spaces.example.test/api/unknown",
+      { headers: { "X-Request-Id": canary } },
+    ), env);
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ error: { correlationId: canary } });
+    expect(messages).toEqual([
+      JSON.stringify({ event: "spaces_request_failed", code: "session_required", status: 401 }),
+    ]);
+    expect(messages[0]).not.toContain(canary);
+  });
+
   test("serves static assets while reserved paths never fall back to the SPA", async () => {
     const { assets, env } = await fixture();
     const worker = createSpacesWorker();
@@ -476,9 +495,35 @@ describe("Spaces Worker", () => {
       }),
     });
     let scheduled: Promise<unknown> | undefined;
-    await worker.scheduled({}, env, { waitUntil(promise) { scheduled = promise; } });
+    const spans: Array<{ name: string; attributes: Record<string, unknown> }> = [];
+    await worker.scheduled({}, env, {
+      waitUntil(promise) { scheduled = promise; },
+      tracing: {
+        enterSpan(name, callback) {
+          const entry: { name: string; attributes: Record<string, unknown> } = {
+            name,
+            attributes: {},
+          };
+          spans.push(entry);
+          return callback({
+            isTraced: true,
+            setAttribute(key, value) {
+              entry.attributes[key] = value;
+            },
+          });
+        },
+      },
+    });
     await scheduled;
 
     expect(reconcilePendingReleases).toHaveBeenCalledWith(20);
+    expect(spans).toEqual([{
+      name: "unicas.cleanup.run",
+      attributes: {
+        "unicas.cleanup.examined": 1,
+        "unicas.cleanup.failed": 0,
+        "unicas.outcome": "ok",
+      },
+    }]);
   });
 });

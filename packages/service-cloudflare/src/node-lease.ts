@@ -16,6 +16,7 @@ import type {
   UploadedCanonicalNodeCommit,
 } from "@unicas/service";
 import { appCanonicalNodeKey } from "./do-names.js";
+import { logUnexpectedError } from "./observability.js";
 import { timeOperation, type TimingSink } from "./timing.js";
 
 /**
@@ -450,7 +451,7 @@ export class CloudflareNodeLeaseRepository implements CanonicalNodeLeaseReposito
     } catch (error) {
       // The cloud-neutral kernel sanitizes this into a stable client error;
       // keep the platform detail (e.g. R2 checksum failure) in the logs only.
-      console.error(`R2 canonical upload failed for ${scope.appId}/${scope.spaceId}/${hash}`, error);
+      logUnexpectedError({ event: "unicas_r2_canonical_upload_failed" }, error);
       throw error;
     }
   }

@@ -70,6 +70,7 @@ import {
   GoogleProviderAdapter,
   ProviderAdapterError,
 } from "./providers.js";
+import { logUnexpectedError } from "../observability.js";
 
 export interface CreateAdminBffOptions {
   readonly config: AdminBffConfig;
@@ -201,7 +202,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       return await dispatch(request);
     } catch (error) {
       // Unexpected failure: keep the response structured and observable.
-      console.error("cas-admin BFF unhandled error", error);
+      logUnexpectedError({ event: "unicas_admin_request_failed" }, error);
       return json({ error: "SERVICE_UNAVAILABLE", message: "admin request failed" }, 500);
     }
   };
@@ -505,7 +506,6 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       console.error(JSON.stringify({
         event: "admin_oidc_callback_failed",
         reason,
-        ...(caught instanceof Error ? { message: caught.message } : {}),
       }));
       await auditLoginFailure(reason);
       return oidcCallbackFailure(preLogin, reason);
@@ -1784,7 +1784,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       if (error instanceof AppUsageUnavailableError) {
         return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, error.message);
       }
-      console.error("App usage read failed", error);
+      logUnexpectedError({ event: "unicas_app_usage_read_failed" }, error);
       return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "App usage is unavailable");
     }
   }

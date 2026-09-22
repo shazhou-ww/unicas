@@ -32,6 +32,8 @@ import { canonicalizeRootRefsUpdate, listRootRefs, parseRootRefsBody } from "./r
 import { RootRefsErrorCodes, RootRefsValidationError } from "./root-refs.js";
 import { ServerTiming } from "./timing.js";
 import { R2UploadPresigner } from "./r2-upload-presigner.js";
+import { logUnexpectedError, traceNodeValidation } from "./observability.js";
+import { runtimeTracing } from "./runtime-tracing.js";
 
 export interface SpaceCasDoEnv {
   CAS_DB: D1Database;
@@ -117,7 +119,7 @@ export class CasDurableObject {
           { status: error.status, headers: error.headers },
         ));
       }
-      console.error("Unexpected Space CAS operation failure", error);
+      logUnexpectedError({ event: "unicas_space_operation_failed" }, error);
       return timing.decorate(Response.json(
         { error: NodeOpErrorCodes.STORAGE, message: "Space CAS operation failed" },
         { status: 503 },
@@ -186,6 +188,9 @@ export class CasDurableObject {
       createIdentifiers: () => {
         const id = crypto.randomUUID();
         return { generation: id, temporaryObjectKey: `_uploads/v2/${id}` };
+      },
+      instrumentation: {
+        validate: (operation) => traceNodeValidation(runtimeTracing, operation),
       },
       now: () => now,
     }));

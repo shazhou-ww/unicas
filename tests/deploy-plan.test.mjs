@@ -51,10 +51,34 @@ const OPERATIONS_GUIDE = readFileSync(
   join(ROOT, "packages/docs-site/content/cas-operations.md"),
   "utf8",
 );
+const OBSERVABILITY_GUIDE = readFileSync(
+  join(ROOT, "packages/docs-site/content/observability.md"),
+  "utf8",
+);
+const OBSERVABILITY_SKILL = readFileSync(
+  join(ROOT, ".agents/skills/unicas-observability/SKILL.md"),
+  "utf8",
+);
 const SPACES_WRANGLER_CONFIG = JSON.parse(readFileSync(
   join(ROOT, "stacks/unicas/spaces/wrangler.jsonc"),
   "utf8",
 ));
+const OBSERVABILITY_POLICY = {
+  enabled: true,
+  logs: {
+    enabled: true,
+    head_sampling_rate: 0.05,
+    invocation_logs: false,
+    persist: true,
+    destinations: [],
+  },
+  traces: {
+    enabled: false,
+    head_sampling_rate: 0,
+    persist: false,
+    destinations: [],
+  },
+};
 
 function workflowTriggers() {
   const end = CI_WORKFLOW.indexOf("jobs:");
@@ -100,6 +124,25 @@ function git(cwd, args) {
 }
 
 describe("standalone deployment plan", () => {
+  test("discovers the repository observability skill and keeps its safety gate aligned", () => {
+    expect(OBSERVABILITY_SKILL).toMatch(/^---\r?\nname: unicas-observability\r?\n/);
+    expect(OBSERVABILITY_SKILL).toContain("investigating UniCAS latency");
+    for (const span of [
+      "unicas.capability.verify",
+      "unicas.node.validate",
+      "unicas.root_refs.commit",
+      "unicas.cleanup.run",
+    ]) {
+      expect(OBSERVABILITY_SKILL).toContain(span);
+      expect(OBSERVABILITY_GUIDE).toContain(span);
+    }
+    expect(OBSERVABILITY_GUIDE).toContain('"invocation_logs": false');
+    expect(OBSERVABILITY_GUIDE).toContain("production tracing is explicitly");
+    expect(OBSERVABILITY_GUIDE).toContain("Sampling is not a confidentiality control");
+    const skillsLock = readFileSync(join(ROOT, "skills-lock.json"), "utf8");
+    expect(skillsLock).not.toContain("unicas-observability");
+  });
+
   test("keeps the Spaces App on its own public bindings", () => {
     expect(SPACES_WRANGLER_CONFIG.main).toBe("../../../packages/spaces/src/worker.ts");
     expect(SPACES_WRANGLER_CONFIG.placement).toEqual({ region: "aws:us-east-1" });
@@ -112,6 +155,7 @@ describe("standalone deployment plan", () => {
     expect(SPACES_WRANGLER_CONFIG.assets.run_worker_first).toEqual([
       "/api", "/api/*", "/auth", "/auth/*", "/.well-known", "/.well-known/*", "/oauth", "/oauth/*",
     ]);
+    expect(SPACES_WRANGLER_CONFIG.observability).toEqual(OBSERVABILITY_POLICY);
     expect(JSON.stringify(SPACES_WRANGLER_CONFIG)).not.toMatch(/CAS_CONTROL_DB|CAS_DB|CAS_R2|durable_objects|kv_namespaces/);
   });
 
@@ -138,6 +182,7 @@ describe("standalone deployment plan", () => {
       SPACES_SMOKE_PRINCIPAL_ID: "smoke-principal",
       UNICAS_AUDIENCE: "https://api.unicas.work",
     });
+    expect(config.observability).toEqual(OBSERVABILITY_POLICY);
     expect(JSON.stringify(config)).not.toContain("google-secret");
     expect(JSON.stringify(config)).not.toContain("private-key");
     expect(JSON.stringify(config)).not.toContain("smoke-secret");
@@ -967,20 +1012,40 @@ describe("standalone deployment plan", () => {
 
   test("assigns product and service origins to separate Workers", () => {
     const serviceConfig = readFileSync(join(ROOT, "packages/service-cloudflare/wrangler.toml"), "utf8");
+    const normalizedServiceConfig = serviceConfig.replaceAll("\r\n", "\n");
     const siteConfig = JSON.parse(readFileSync(join(ROOT, "stacks/unicas/site/wrangler.jsonc"), "utf8"));
     const siteHtml = readFileSync(join(ROOT, "stacks/unicas/site/public/index.html"), "utf8");
     const docsConfig = JSON.parse(readFileSync(join(ROOT, "packages/docs-site/wrangler.jsonc"), "utf8"));
     expect(serviceConfig).toContain('pattern = "api.unicas.work"');
     expect(serviceConfig).toContain('pattern = "console.unicas.work"');
+    expect(normalizedServiceConfig).toContain([
+      "[observability]",
+      "enabled = true",
+      "",
+      "[observability.logs]",
+      "enabled = true",
+      "head_sampling_rate = 0.05",
+      "invocation_logs = false",
+      "persist = true",
+      "destinations = []",
+      "",
+      "[observability.traces]",
+      "enabled = false",
+      "head_sampling_rate = 0",
+      "persist = false",
+      "destinations = []",
+    ].join("\n"));
     expect(serviceConfig).not.toContain('pattern = "unicas.work"');
     expect(serviceConfig).not.toContain("docs.unicas.work");
     expect(siteConfig.routes).toEqual([{ pattern: "unicas.work", custom_domain: true }]);
     expect(siteConfig.assets.directory).toBe("./public");
+    expect(siteConfig).not.toHaveProperty("observability");
     expect(JSON.stringify(siteConfig)).not.toContain("docs.unicas.work");
     expect(siteHtml).toContain('href="https://docs.unicas.work"');
     expect(docsConfig.routes).toEqual([{ pattern: "docs.unicas.work", custom_domain: true }]);
     expect(docsConfig.assets.directory).toBe("./dist");
     expect(docsConfig).not.toHaveProperty("main");
+    expect(docsConfig).not.toHaveProperty("observability");
     expect(JSON.stringify(docsConfig)).not.toMatch(/d1_databases|durable_objects|kv_namespaces|r2_buckets|services|vars|secrets|oauth/i);
   });
 

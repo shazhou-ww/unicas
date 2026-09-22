@@ -32,6 +32,14 @@ export interface NodeLeaseRecord {
   readonly leaseExpiresAt: number;
 }
 
+export type LeaseDrivenNodeValidationResult = Awaited<ReturnType<typeof validateLeaseDrivenUpload>>;
+
+export interface LeaseDrivenNodeInstrumentation {
+  validate(
+    operation: () => Promise<LeaseDrivenNodeValidationResult>,
+  ): Promise<LeaseDrivenNodeValidationResult>;
+}
+
 export interface CanonicalOrphanObject {
   readonly storedBytes: number;
   readonly sha256Hex?: string;
@@ -292,6 +300,7 @@ export async function leaseDrivenNodeUpload(input: {
   readonly uploadSessionMs?: number;
   readonly uploadCleanupMs?: number;
   readonly maxActiveUploads?: number;
+  readonly instrumentation?: LeaseDrivenNodeInstrumentation;
   readonly now?: () => number;
 }): Promise<LeaseDrivenNodeUploadResult> {
   validateLeaseHash(input.hash);
@@ -325,7 +334,7 @@ export async function leaseDrivenNodeUpload(input: {
       if (bytes === null) {
         throw new NodeOpError(503, NodeOpErrorCodes.STORAGE, "Canonical object disappeared during recovery");
       }
-      const validated = await validateLeaseDrivenUpload(input.hash, bytes, input.limits);
+      const validated = await observeLeaseDrivenNodeValidation(input, bytes);
       if (!validated.ok) {
         throw new NodeOpError(503, NodeOpErrorCodes.STORAGE, "Canonical orphan failed integrity validation");
       }
@@ -398,7 +407,7 @@ export async function leaseDrivenNodeUpload(input: {
       ? { kind: "awaiting_upload", upload }
       : { kind: "awaiting_replacement_upload", upload, rejection: upload.rejection };
   }
-  const validated = await validateLeaseDrivenUpload(input.hash, bytes, input.limits);
+  const validated = await observeLeaseDrivenNodeValidation(input, bytes);
   if (!validated.ok) {
     return replaceRejectedLeaseDrivenUpload(input, upload, validated.rejection, now);
   }
@@ -560,6 +569,14 @@ export async function validateLeaseDrivenUpload(
       },
     };
   }
+}
+
+function observeLeaseDrivenNodeValidation(
+  input: Parameters<typeof leaseDrivenNodeUpload>[0],
+  bytes: Uint8Array,
+): Promise<LeaseDrivenNodeValidationResult> {
+  const operation = () => validateLeaseDrivenUpload(input.hash, bytes, input.limits);
+  return input.instrumentation?.validate(operation) ?? operation();
 }
 
 export async function prepareCanonicalNodeUpload(input: {

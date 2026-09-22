@@ -13,6 +13,8 @@
 import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
 import { canonicalizeRootRefsUpdate, executeDomainUpdate, withDomainRetry } from "./root-refs.js";
 import { RootRefsErrorCodes, RootRefsValidationError } from "./root-refs.js";
+import { traceRootRefCommit } from "./observability.js";
+import { runtimeTracing } from "./runtime-tracing.js";
 
 export interface RootRefDomainDoEnv {
   CAS_DB: D1Database;
@@ -50,17 +52,18 @@ export class RootRefDomainDurableObject {
         changes: body.changes,
         refDomain,
       });
-      const result = await withDomainRetry(
-        () => executeDomainUpdate({
-          db: this.#env.CAS_DB,
-          bucket: this.#env.CAS_R2,
-          appId: appId,
-          spaceId: spaceId,
-          refDomain,
-          canonical,
-        }),
-        { maxAttempts: parseMaxAttempts(this.#env.CAS_RETRY_MAX_ATTEMPTS) },
-      );
+      const result = await traceRootRefCommit(runtimeTracing, canonical.entries.length, () =>
+        withDomainRetry(
+          () => executeDomainUpdate({
+            db: this.#env.CAS_DB,
+            bucket: this.#env.CAS_R2,
+            appId: appId,
+            spaceId: spaceId,
+            refDomain,
+            canonical,
+          }),
+          { maxAttempts: parseMaxAttempts(this.#env.CAS_RETRY_MAX_ATTEMPTS) },
+        ));
       return Response.json({ success: true, idempotent: result.idempotent, revision: result.revision });
     } catch (error) {
       if (error instanceof RootRefsValidationError) {

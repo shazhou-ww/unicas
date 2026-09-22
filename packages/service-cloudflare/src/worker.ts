@@ -47,6 +47,11 @@ import {
 } from "./usage-reconciliation.js";
 import { CasDurableObject, type SpaceCasDoEnv } from "./space-do.js";
 import { ServerTiming, type TimingSink } from "./timing.js";
+import {
+  logUnexpectedError,
+  traceCapabilityVerification,
+  traceCleanupRun,
+} from "./observability.js";
 
 export { CasDurableObject, RootRefDomainDurableObject };
 
@@ -133,12 +138,13 @@ export default {
         ),
       authorizeSpaceRequest: async ({ request: spaceRequest, route }) => {
         try {
-          return await timing.time("cas_auth", () => spaceVerifier.verify(
-            dataPlaneAuthorizationRequest(spaceRequest), route,
-          ));
+          return await traceCapabilityVerification(ctx.tracing, route.operation, () =>
+            timing.time("cas_auth", () => spaceVerifier.verify(
+              dataPlaneAuthorizationRequest(spaceRequest), route,
+            )));
         } catch (error) {
           if (!(error instanceof Error) || error.name === "Error") {
-            console.error("Unexpected Space authorization failure", error);
+            logUnexpectedError({ event: "unicas_authorization_failed", plane: "space" }, error);
           }
           throw error;
         }
@@ -155,7 +161,7 @@ export default {
         timing.record("cas_edge", performance.now() - requestStarted);
         return timing.decorate(response);
       } catch (error) {
-        console.error("Unhandled UniCAS service actor failure", error);
+        logUnexpectedError({ event: "unicas_service_actor_failed" }, error);
         throw error;
       }
     }
@@ -184,7 +190,7 @@ export default {
     return new Response("Not Found", { status: 404 });
   },
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil((async () => {
+    ctx.waitUntil(traceCleanupRun(ctx.tracing, async () => {
       await ensureControlSchema(env);
       await ensureSpaceSchema(env);
       await new D1EmailChallengeRepository(env.CAS_CONTROL_DB).pruneExpired(Date.now());
@@ -196,7 +202,8 @@ export default {
       });
       const summaryRepaired = await repairOldestSpaceUsageProjection({ db: env.CAS_DB });
       console.log(JSON.stringify({ event: "cas_usage_reconciliation", ...usage, summaryRepaired }));
-    })());
+      return { examined: usage.examined, failed: usage.failed };
+    }));
   },
 } satisfies ExportedHandler<Env>;
 

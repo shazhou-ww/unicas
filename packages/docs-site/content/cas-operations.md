@@ -40,11 +40,15 @@ a routed probe like the live smoke's lease+read).
 
 ## Metrics and events
 
-Existing structured logs (JSON to the worker's stdout, queryable via the
-Cloudflare dashboard / logpush):
+Cloudflare's aggregate Worker metrics are authoritative for request volume,
+invocation outcomes, and CPU/wall-time quantiles. Persisted custom logs use a
+5% head sample and are diagnostic evidence only. Generated invocation logs,
+production tracing, and external telemetry destinations are disabled by the
+[observability contract](observability.md).
 
-- `cas_app_authorization` — App/Space v2 authorization decisions.
-- `cas_stack_authorization` — retained v1 telemetry identifier. Both events use `kind` ∈
+Existing structured events (JSON to Worker stdout and sampled Workers Logs):
+
+- `cas_app_authorization` — App/Space v1 authorization decisions. Events use `kind` ∈
    `authorized`, `rejected`, `fail_closed`, `registry_stale`. **`fail_closed`
    is an incident signal** (registry unreachable past the hard bound, or a cold
    outage). Rejected requests carry stable capability error codes such as
@@ -53,11 +57,14 @@ Cloudflare dashboard / logpush):
    bounded reason and no token material.
 - `admin_email_challenge_delivery_failed` — generic Email binding failure; the
    event contains no address, code, invitation token, or provider payload.
+- `unicas_*_failed` — bounded incident locations without raw errors, URLs,
+   identifiers, storage keys, or content.
 
-Roll-up per 5-min window (via CF Analytics API or a logpush consumer):
-service request count + 5xx rate, Space 401/403 rate by error code
-(`invalid_token`, `unknown_issuer`, `registry_unavailable`,
-`resource_scope_mismatch`), admin OIDC failures, D1 export success/failure.
+Use Worker/zone metrics or the Cloudflare GraphQL API for five-minute request
+and status rollups. Query sampled event names and bounded reason/error codes in
+Workers Logs to diagnose a metric or probe signal; do not scale the 5% sample
+into an authoritative count. Production D1/R2/Durable Object waterfalls remain
+unavailable until the tracing data-safety gate can be satisfied.
 
 ## Alerting rules
 
@@ -75,7 +82,7 @@ service request count + 5xx rate, Space 401/403 rate by error code
 
 ### Lease-driven upload cleanup
 
-App/Space v2 creates at most 1024 active node-upload generations per Space.
+App/Space v1 creates at most 1024 active node-upload generations per Space.
 Presigned PUT URLs default to five minutes. Uploaded or abandoned temporary
 objects remain eligible for recovery until their 24-hour cleanup deadline;
 the bounded Space GC path removes expired records, reservations, and temporary
@@ -481,7 +488,7 @@ Operational checks:
 1. Confirm service `/health`; confirm `/v1/apps` + `/admin/apps` probes.
 2. `wrangler deployments list` for `unicas` — recent deploy?
    Rollback first, diagnose later.
-3. Grep `cas_app_authorization` (and retained v1 `cas_stack_authorization`) for `fail_closed` / `unknown_issuer` —
+3. Query `cas_app_authorization` for `fail_closed` / `unknown_issuer` —
    registry reachability vs key/issuer config.
 4. Check the service Worker's D1 bindings (`CAS_CONTROL_DB`,
    `unicas-control`) and `wrangler d1 execute ... SELECT` reachability.
