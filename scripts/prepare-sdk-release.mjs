@@ -383,7 +383,20 @@ async function main() {
       console.log(`sdk: wrote ${normalizePath(relative(ROOT, RELEASE_MANIFEST_PATH))}`);
     } else {
       const expected = await readFile(RELEASE_MANIFEST_PATH, "utf8").catch(() => "");
-      assert(expected === candidate, "sdk/release-manifest.json is stale; run pnpm sdk:prepare");
+      if (expected !== candidate) {
+        const expectedPackages = new Map(
+          (JSON.parse(expected || "{}").packages ?? []).map((entry) => [entry.name, entry]),
+        );
+        const differences = packageEvidence.map(({ name, bytes, integrity }) => ({
+          name,
+          expectedBytes: expectedPackages.get(name)?.bytes,
+          actualBytes: bytes,
+          expectedIntegrity: expectedPackages.get(name)?.integrity,
+          actualIntegrity: integrity,
+        })).filter((entry) => entry.expectedBytes !== entry.actualBytes
+          || entry.expectedIntegrity !== entry.actualIntegrity);
+        throw new Error(`sdk/release-manifest.json is stale; run pnpm sdk:prepare\n${JSON.stringify(differences, null, 2)}`);
+      }
     }
     if (options.outputDir) await copyArtifacts(firstRound, resolve(ROOT, options.outputDir));
     console.log("SDK RELEASE CHECK PASS");
