@@ -50,6 +50,9 @@ jobs:
       - name: Run exhaustive test suite
         run: pnpm test:exhaustive
 
+      - name: Check repository task commit
+        run: pnpm check:tasks:commit
+
       - name: Check published repository task ledger
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm check:tasks --remote
