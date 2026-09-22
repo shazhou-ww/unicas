@@ -60,10 +60,10 @@ function assert(condition, message) {
   console.log(`  ok: ${message}`);
 }
 
-function assertInvalidToken(response, message) {
-  const challenge = response.headers.get("WWW-Authenticate") ?? "";
+async function assertInvalidToken(response, message) {
+  const responseBody = await response.json().catch(() => null);
   assert(
-    response.status === 401 && challenge.includes('error="invalid_token"'),
+    response.status === 401 && responseBody?.error === "invalid_token",
     `${message} -> ${response.status} (401 invalid_token)`,
   );
 }
@@ -193,7 +193,7 @@ async function main() {
       response = await fetch(`${BASE}${prefix}/cas/usage`, {
         headers: { Authorization: `Bearer ${prototypeToken}` },
       });
-      assertInvalidToken(response, `prototype Space claim v${version}`);
+      await assertInvalidToken(response, `prototype Space claim v${version}`);
     }
     const broadPermissionToken = await sign({
       ver: SpaceCapabilityVersion,
@@ -203,7 +203,7 @@ async function main() {
     response = await fetch(`${BASE}${prefix}/cas/usage`, {
       headers: { Authorization: `Bearer ${broadPermissionToken}` },
     });
-    assertInvalidToken(response, "broad prototype Space permission");
+    await assertInvalidToken(response, "broad prototype Space permission");
 
     const isolationToken = await issueSpace(ISOLATION_SPACE_ID);
     response = await fetch(`${BASE}${prefix}/cas/nodes/${parent.hash}/content`, {

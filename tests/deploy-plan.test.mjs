@@ -457,6 +457,8 @@ describe("standalone deployment plan", () => {
     expect(job).toContain("UNICAS_RELEASE_ADMIN_SESSION: ${{ secrets.UNICAS_RELEASE_ADMIN_SESSION }}");
     expect(job).toContain("run: node stacks/unicas/deploy/cut-over-app-space-v1-issuers.mjs");
     expect(job).toContain("UNICAS_SMOKE_STACK_ID: ${{ vars.UNICAS_SMOKE_APP_ID }}");
+    expect(job).toContain("UNICAS_SMOKE_AUDIENCE: ${{ vars.UNICAS_SMOKE_AUDIENCE }}");
+    expect(job).not.toContain("format('https://api.unicas.work/stacks/{0}'");
     expect(job).toContain("run: pnpm smoke:v1");
   });
 

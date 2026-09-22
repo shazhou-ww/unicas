@@ -116,12 +116,31 @@ smoke, deployed acceptance, and delivery acceptance remain.
   prototype-capability rejection behavior.
 - `pnpm check:repo`: all 135 repository tests passed; Repoledger reported only
   the expected pending delivery-approval warnings.
+- Protected release run `35673439301` attempt 1 stopped at the idempotent
+  issuer check because the stored release-admin session had expired. The prior
+  successful activation already verified both issuer audiences, so the
+  one-time `APP_SPACE_V1_CUTOVER_ENABLED` variable is now `false`; both
+  production smoke audience variables remain on their exact v1 App resources.
+- Run `35673439301` attempt 2 deployed the API and passed health, node lease,
+  content, metadata, atomic Root Ref update and replay, usage, GC, cleanup, and
+  prototype HTTP v2 rejection. It then stopped because smoke expected an
+  `invalid_token` parameter in `WWW-Authenticate`, while the reviewed service
+  contract returns `{ "error": "invalid_token" }` in the JSON response body.
+- App/Space smoke now asserts the exact `401` status and JSON error code.
+  Frozen Stack/Tenant smoke runs on every production release with the current
+  App authority audience; its route and claim grammar remain frozen and
+  independently verified.
+- `node --check scripts/cas-app-space-smoke.mjs` and
+  `pnpm exec vitest run tests/deploy-plan.test.mjs
+  packages/service/tests/app-space-auth.test.ts`: all 49 tests passed after the
+  response-contract and frozen-smoke corrections.
 
 ## Blockers
 
-- The smoke import fix must be integrated through primary and the protected
-  release path. Its idempotent retry must complete canonical smoke, the Spaces
-  deployment and smoke, origin verification, and deployment tagging; then
+- The response-contract and frozen-smoke fixes must be integrated through
+  primary and the protected release path. The next release must complete both
+  smoke suites, the Spaces deployment and smoke, origin verification, and
+  deployment tagging; then
   follow [UserAcceptance.md](./UserAcceptance.md) for the remaining manual
   probes.
 - Delivery acceptance remains the final human checkpoint after primary
@@ -131,5 +150,5 @@ smoke, deployed acceptance, and delivery acceptance remain.
 
 The repository implementation and all local agent-verifiable acceptance checks
 are complete. Both production issuer audiences now target App/Space v1.
-Pending smoke-fix integration, protected release retry, deployed acceptance,
+Pending final smoke-fix integration, protected release, deployed acceptance,
 and delivery acceptance.

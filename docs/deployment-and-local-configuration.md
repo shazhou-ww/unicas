@@ -382,11 +382,12 @@ For the one-time App/Space v1 cutover, set the Production environment variable
 `https://api.unicas.work/v1/apps/{UNICAS_SMOKE_APP_ID}` before promoting the
 tested revision to `release`. The protected deployment updates both active App
 issuer audiences idempotently, runs the App/Space smoke with prototype route,
-claim-version, and broad-permission rejection probes, then runs the frozen
-Stack/Tenant v1 regression smoke against its derived `/stacks/{appId}`
-audience. After the full deployment, origin checks, and production tag succeed,
-set `APP_SPACE_V1_CUTOVER_ENABLED=false`; later releases must not repeat the
-one-time issuer step.
+claim-version, and broad-permission rejection probes. Every production release
+also runs the frozen Stack/Tenant v1 route and claim grammar against the same
+active App authority audience; the audience identifies the App authority and
+does not select the route family. After both smoke suites, origin checks, and
+the production tag succeed, set `APP_SPACE_V1_CUTOVER_ENABLED=false`; later
+releases must not repeat the one-time issuer step.
 
 For the one-time Account-model production cutover, configure a required
 reviewer on the `Production` Environment before merging the promotion pull
