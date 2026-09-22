@@ -405,6 +405,7 @@ describe("standalone deployment plan", () => {
     const issuerCutoverDeploy = job.indexOf("Deploy API and Console for App/Space v1 issuer cutover");
     const issuerCutover = job.indexOf("Cut over App/Space v1 issuer audiences");
     const service = job.indexOf("run: pnpm deploy:production");
+    const frozenSmoke = job.indexOf("Run frozen Stack/Tenant v1 regression smoke");
     const spaces = job.indexOf("run: pnpm deploy:spaces");
     const site = job.indexOf("run: pnpm deploy:site");
     const docs = job.indexOf("run: pnpm deploy:docs");
@@ -412,7 +413,8 @@ describe("standalone deployment plan", () => {
     expect(issuerCutoverDeploy).toBeGreaterThan(-1);
     expect(issuerCutover).toBeGreaterThan(issuerCutoverDeploy);
     expect(service).toBeGreaterThan(issuerCutover);
-    expect(spaces).toBeGreaterThan(service);
+    expect(frozenSmoke).toBeGreaterThan(service);
+    expect(spaces).toBeGreaterThan(frozenSmoke);
     expect(site).toBeGreaterThan(spaces);
     expect(docs).toBeGreaterThan(site);
 
@@ -454,6 +456,8 @@ describe("standalone deployment plan", () => {
     expect(job).toContain("if: vars.APP_SPACE_V1_CUTOVER_ENABLED == 'true'");
     expect(job).toContain("UNICAS_RELEASE_ADMIN_SESSION: ${{ secrets.UNICAS_RELEASE_ADMIN_SESSION }}");
     expect(job).toContain("run: node stacks/unicas/deploy/cut-over-app-space-v1-issuers.mjs");
+    expect(job).toContain("UNICAS_SMOKE_STACK_ID: ${{ vars.UNICAS_SMOKE_APP_ID }}");
+    expect(job).toContain("run: pnpm smoke:v1");
   });
 
   test("creates missing encryption secrets before a production deployment", () => {
@@ -654,9 +658,13 @@ describe("standalone deployment plan", () => {
     expect(appSpaceSmoke).toContain("GC keeps current leased nodes");
     expect(appSpaceSmoke).not.toContain("gc.deleted === 0");
     expect(appSpaceSmoke).toContain("cross-Space read");
+    expect(appSpaceSmoke).toContain("prototype App/Space v2 route");
+    expect(appSpaceSmoke).toContain("prototype Space claim v");
+    expect(appSpaceSmoke).toContain("broad prototype Space permission");
     expect(appSpaceSmoke).toContain("frozen token on App/Space v1 route");
     expect(appSpaceSmoke).toContain("Space v1 token on frozen route");
     expect(legacySmoke).toContain("CapabilityVersion");
+    expect(legacySmoke).toContain('from "../packages/space-protocol/dist/v1.js"');
     expect(packageJson.scripts["smoke:v1"]).toContain("cas-middleware-smoke.mjs");
   });
 

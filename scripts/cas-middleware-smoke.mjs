@@ -25,7 +25,7 @@ import {
   casManagePermission,
   casReadPermission,
   casWritePermission,
-} from "../packages/space-protocol/dist/index.js";
+} from "../packages/space-protocol/dist/v1.js";
 
 const BASE = normalizeSmokeBaseUrl(
   process.argv[2] ?? "https://api.unicas.work",

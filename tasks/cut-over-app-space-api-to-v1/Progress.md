@@ -18,8 +18,9 @@ and deployment-plan validation pass. The third protected production run
 successfully replaced both active issuer audiences and deployed the v1 API,
 then stopped when canonical smoke imported frozen capability symbols from the
 root protocol entrypoint. The smoke now imports those symbols from the
-explicit frozen-v1 entrypoint. Release smoke, deployed acceptance, and delivery
-acceptance remain.
+explicit frozen-v1 entrypoint, and the one-time release path now runs both
+App/Space rejection probes and frozen Stack/Tenant regression smoke. Release
+smoke, deployed acceptance, and delivery acceptance remain.
 
 ## Decisions
 
@@ -100,11 +101,19 @@ acceptance remain.
   incorrectly targeted the root App/Space protocol entrypoint. The smoke now
   imports them from `dist/v1.js`, while released App/Space symbols remain on
   the root entrypoint.
-- `node scripts/cas-app-space-smoke.mjs` against freshly rebuilt protocol
-  output resolves all runtime imports and reaches the expected local
-  credential guard.
-- `pnpm exec vitest run tests/deploy-plan.test.mjs`: all 36 tests passed,
-  including a regression guard for the explicit frozen-v1 runtime import.
+- The Production `UNICAS_SMOKE_AUDIENCE` variable now matches the activated v1
+  resource. Canonical smoke also verifies prototype HTTP v2 rejection,
+  prototype Space claim versions 2 and 3, and broad-permission rejection; the
+  one-time release path runs frozen Stack/Tenant v1 smoke before deleting its
+  signing key.
+- `node scripts/cas-app-space-smoke.mjs` and
+  `node scripts/cas-middleware-smoke.mjs` against freshly rebuilt protocol
+  output resolve all runtime imports and reach their expected local credential
+  guards.
+- `pnpm exec vitest run tests/deploy-plan.test.mjs
+  packages/service/tests/app-space-auth.test.ts`: all 49 tests passed,
+  including release ordering, explicit frozen-v1 runtime imports, and exact
+  prototype-capability rejection behavior.
 - `pnpm check:repo`: all 135 repository tests passed; Repoledger reported only
   the expected pending delivery-approval warnings.
 
