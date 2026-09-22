@@ -322,6 +322,7 @@ export interface DomainRetryOptions {
   readonly maxDelayMs?: number;
   readonly jitter?: boolean;
   readonly sleep?: (ms: number) => Promise<void>;
+  readonly onRetry?: (attempt: number) => void;
 }
 
 const DEFAULT_RETRY_OPTIONS: Required<
@@ -345,7 +346,7 @@ export async function withDomainRetry<T>(
   const sleep = options.sleep
     ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   let attempt = 0;
-  for (;;) {
+  for (; ;) {
     attempt += 1;
     try {
       return await operation();
@@ -353,6 +354,7 @@ export async function withDomainRetry<T>(
       if (!(error instanceof RootRefsRetryableError) || attempt >= maxAttempts) {
         throw error;
       }
+      options.onRetry?.(attempt);
       const delay = Math.min(maxDelayMs, baseDelayMs * 2 ** (attempt - 1));
       const jittered = jitter ? delay * (0.5 + Math.random() * 0.5) : delay;
       await sleep(Math.floor(jittered));

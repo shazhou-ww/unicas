@@ -30,12 +30,21 @@ import { CloudflareNodeReadRepository } from "./node-read.js";
 import { CloudflareNodeUsageRepository } from "./node-usage.js";
 import { canonicalizeRootRefsUpdate, listRootRefs, parseRootRefsBody } from "./root-refs.js";
 import { RootRefsErrorCodes, RootRefsValidationError } from "./root-refs.js";
-import { ServerTiming } from "./timing.js";
+import { ServerTiming, withStorageTracing } from "./timing.js";
 import { R2UploadPresigner } from "./r2-upload-presigner.js";
 import { logUnexpectedError, traceNodeValidation } from "./observability.js";
-import { runtimeTracing } from "./runtime-tracing.js";
+import { scheduleTraceFlush } from "./runtime-tracing.js";
+import {
+  createConfiguredManualTraceContinuation,
+  createInternalTraceAudience,
+  createInternalTraceContextHeader,
+  InternalTraceContextHeader,
+  type ManualTraceEnvironment,
+  type ManualTraceSession,
+  type ManualTracingPort,
+} from "@unicas/observability";
 
-export interface SpaceCasDoEnv {
+export interface SpaceCasDoEnv extends ManualTraceEnvironment {
   CAS_DB: D1Database;
   CAS_R2: R2Bucket;
   /** Root Ref domain DO namespace (one-way calls only). */
@@ -61,11 +70,23 @@ export class CasDurableObject {
 
   async fetch(request: Request): Promise<Response> {
     const started = performance.now();
-    const timing = new ServerTiming();
+    const serverTiming = new ServerTiming();
     const url = new URL(request.url);
     const scope = physicalScope(request);
-    if (scope instanceof Response) return timing.decorate(scope);
+    if (scope instanceof Response) return serverTiming.decorate(scope);
     const { appId, spaceId } = scope;
+    const traceSession = await createConfiguredManualTraceContinuation({
+      environment: this.#env,
+      internalContext: request.headers.get(InternalTraceContextHeader),
+      internalContextAudience: createInternalTraceAudience(
+        "space_do",
+        canonicalComposite(appId, spaceId),
+        request.method,
+        url.pathname,
+      ),
+      serviceName: "unicas",
+    });
+    const timing = withStorageTracing(serverTiming, traceSession.tracing);
     const store = {
       db: this.#env.CAS_DB,
       bucket: this.#env.CAS_R2,
@@ -78,7 +99,8 @@ export class CasDurableObject {
     try {
       let response: Response;
       if (url.pathname === "/updateRootRefs" && request.method === "POST") {
-        response = await this.#withMutation(() => this.#forwardRootRefs(request, appId, spaceId));
+        response = await this.#withMutation(() =>
+          this.#forwardRootRefs(request, appId, spaceId, traceSession));
       } else if (url.pathname === "/rootRefs" && request.method === "GET") {
         const limit = parseRootRefsLimit(url.searchParams.get("limit"));
         const cursor = parseRootRefsCursor(url.searchParams.get("cursor"));
@@ -91,7 +113,7 @@ export class CasDurableObject {
           cursor,
         }));
       } else if (url.pathname === "/lease" && request.method === "POST") {
-        response = jsonResponse(await this.#handleLease(request, store));
+        response = jsonResponse(await this.#handleLease(request, store, traceSession.tracing));
       } else if (url.pathname === "/read" && request.method === "GET") {
         response = await this.#handleRead(request, store);
       } else if (url.pathname === "/metadata" && request.method === "GET") {
@@ -109,35 +131,40 @@ export class CasDurableObject {
           { status: 501 },
         );
       }
-      timing.record("cas_do_route", performance.now() - started);
-      return timing.decorate(response);
+      serverTiming.record("cas_do_route", performance.now() - started);
+      return finishDoTrace(serverTiming.decorate(response), traceSession);
     } catch (error) {
-      timing.record("cas_do_route", performance.now() - started);
+      serverTiming.record("cas_do_route", performance.now() - started);
       if (error instanceof NodeOpError) {
-        return timing.decorate(Response.json(
+        return finishDoTrace(serverTiming.decorate(Response.json(
           { error: error.code, message: error.message },
           { status: error.status, headers: error.headers },
-        ));
+        )), traceSession);
       }
       logUnexpectedError({ event: "unicas_space_operation_failed" }, error);
-      return timing.decorate(Response.json(
+      return finishDoTrace(serverTiming.decorate(Response.json(
         { error: NodeOpErrorCodes.STORAGE, message: "Space CAS operation failed" },
         { status: 503 },
-      ));
+      )), traceSession);
     }
   }
 
   // ─── Node storage operations ──────────────────────────────
 
-  async #handleLease(request: Request, store: Parameters<typeof leaseReadyNode>[0]): Promise<unknown> {
+  async #handleLease(
+    request: Request,
+    store: Parameters<typeof leaseReadyNode>[0],
+    tracing: ManualTracingPort,
+  ): Promise<unknown> {
     const hash = requireHeader(request, "X-CAS-Hash");
-    return this.#handleSpaceLease(request, store, hash);
+    return this.#handleSpaceLease(request, store, hash, tracing);
   }
 
   async #handleSpaceLease(
     request: Request,
     store: Parameters<typeof leaseReadyNode>[0],
     hash: string,
+    tracing: ManualTracingPort,
   ): Promise<unknown> {
     const body: unknown = await request.json().catch(() => null);
     if (
@@ -163,6 +190,7 @@ export class CasDurableObject {
       leaseDurationMs as number,
       uploadExpirySeconds,
       now,
+      tracing,
     );
     this.#activeLeaseEvaluations.set(uploadKey, evaluation);
     try {
@@ -180,6 +208,7 @@ export class CasDurableObject {
     leaseDurationMs: number,
     uploadExpirySeconds: number,
     now: number,
+    tracing: ManualTracingPort,
   ): Promise<unknown> {
     const result = await this.#withMutation(() => leaseDrivenNodeUpload(store, {
       hash,
@@ -190,7 +219,7 @@ export class CasDurableObject {
         return { generation: id, temporaryObjectKey: `_uploads/v2/${id}` };
       },
       instrumentation: {
-        validate: (operation) => traceNodeValidation(runtimeTracing, operation),
+        validate: (operation) => traceNodeValidation(tracing, operation),
       },
       now: () => now,
     }));
@@ -311,6 +340,7 @@ export class CasDurableObject {
     request: Request,
     appId: string,
     spaceId: string,
+    traceSession: ManualTraceSession,
   ): Promise<Response> {
     let refDomain: string;
     let canonical;
@@ -330,22 +360,52 @@ export class CasDurableObject {
     }
     const domainId = this.#env.CAS_DOMAIN_DO.idFromName(canonicalComposite(appId, refDomain));
     const stub = this.#env.CAS_DOMAIN_DO.get(domainId);
-    const response = await stub.fetch("https://domain.internal/update", {
-      method: "POST",
-      headers: {
+    const response = await traceSession.tracing.enterSpan("unicas.do.dispatch", async (span) => {
+      span.setAttribute("unicas.actor.kind", "root_ref_domain");
+      const headers: Record<string, string> = {
         "X-CAS-App-Id": appId,
         "X-CAS-Space-Id": spaceId,
         "X-CAS-Ref-Domain": refDomain,
-      },
-      body: JSON.stringify({
-        requestId: canonical.requestId,
-        changes: Object.fromEntries(canonical.entries),
-      }),
+      };
+      if (span.context) {
+        const internalContext = await createInternalTraceContextHeader(
+          span.context,
+          this.#env.UNICAS_TRACE_HMAC_KEYS,
+          createInternalTraceAudience(
+            "root_ref_domain_do",
+            canonicalComposite(appId, refDomain),
+            "POST",
+            "/update",
+          ),
+        );
+        if (internalContext) headers[InternalTraceContextHeader] = internalContext;
+      }
+      try {
+        const dispatched = await stub.fetch("https://domain.internal/update", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            requestId: canonical.requestId,
+            changes: Object.fromEntries(canonical.entries),
+          }),
+        });
+        span.setAttribute("unicas.outcome", dispatched.status >= 500 ? "failed" : "ok");
+        return dispatched;
+      } catch (error) {
+        span.setAttribute("unicas.outcome", "failed");
+        throw error;
+      }
     });
     // Pass the domain DO's response through. The workers-types/DOM global
     // Response types disagree structurally; the runtime value is the same.
     return response as unknown as Response;
   }
+}
+
+function finishDoTrace(response: Response, session: ManualTraceSession): Response {
+  session.end();
+  scheduleTraceFlush(session.flush());
+  return response;
 }
 
 function parseRootRefsLimit(value: string | null): number {

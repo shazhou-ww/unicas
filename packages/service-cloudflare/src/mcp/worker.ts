@@ -66,6 +66,7 @@ export function createControlPlaneMcpWorker(
   database: D1Database,
   oauthDiscovery?: OAuthDiscoveryPort,
   oauthResourcePublicOrigin?: string,
+  identityProviderFetch?: typeof fetch,
 ) {
   const mcpApiHandler = {
     async fetch(
@@ -122,6 +123,7 @@ export function createControlPlaneMcpWorker(
     apiRoute: CONTROL_PLANE_MCP_PATH,
     apiHandler: mcpApiHandler,
     defaultHandler: createOAuthAuthorizationHandler({
+      identityProviderFetch,
       accountServiceFactory: env => {
         if (!env.CAS_CONTROL_DB) throw new Error("Account storage is unavailable");
         return new AccountService(new D1AccountRepository(env.CAS_CONTROL_DB));

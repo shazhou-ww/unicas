@@ -12,11 +12,19 @@
 
 import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
 import { canonicalizeRootRefsUpdate, executeDomainUpdate, withDomainRetry } from "./root-refs.js";
+import { canonicalComposite } from "./do-names.js";
 import { RootRefsErrorCodes, RootRefsValidationError } from "./root-refs.js";
 import { traceRootRefCommit } from "./observability.js";
-import { runtimeTracing } from "./runtime-tracing.js";
+import { scheduleTraceFlush } from "./runtime-tracing.js";
+import {
+  createConfiguredManualTraceContinuation,
+  createInternalTraceAudience,
+  InternalTraceContextHeader,
+  type ManualTraceEnvironment,
+  type ManualTraceSession,
+} from "@unicas/observability";
 
-export interface RootRefDomainDoEnv {
+export interface RootRefDomainDoEnv extends ManualTraceEnvironment {
   CAS_DB: D1Database;
   CAS_R2: R2Bucket;
   /** Test/ops override for the retry attempt bound. */
@@ -34,17 +42,35 @@ export class RootRefDomainDurableObject {
     let appId: string;
     let spaceId: string;
     let refDomain: string;
-    let body: { requestId?: unknown; changes?: unknown };
     try {
       appId = requireHeader(request, "X-CAS-App-Id");
       spaceId = requireHeader(request, "X-CAS-Space-Id");
       refDomain = requireHeader(request, "X-CAS-Ref-Domain");
-      body = (await request.json()) as { requestId?: unknown; changes?: unknown };
     } catch (error) {
       if (error instanceof RootRefsValidationError) {
         return errorResponse(error.status, error.code, error.message);
       }
-      return errorResponse(400, RootRefsErrorCodes.INVALID_REQUEST, "domain command body is not valid JSON");
+      return errorResponse(400, RootRefsErrorCodes.INVALID_REQUEST, "domain command headers are invalid");
+    }
+    const traceSession = await createConfiguredManualTraceContinuation({
+      environment: this.#env,
+      internalContext: request.headers.get(InternalTraceContextHeader),
+      internalContextAudience: createInternalTraceAudience(
+        "root_ref_domain_do",
+        canonicalComposite(appId, refDomain),
+        request.method,
+        new URL(request.url).pathname,
+      ),
+      serviceName: "unicas",
+    });
+    let body: { requestId?: unknown; changes?: unknown };
+    try {
+      body = (await request.json()) as { requestId?: unknown; changes?: unknown };
+    } catch {
+      return finishDomainTrace(
+        errorResponse(400, RootRefsErrorCodes.INVALID_REQUEST, "domain command body is not valid JSON"),
+        traceSession,
+      );
     }
     try {
       const canonical = await canonicalizeRootRefsUpdate({
@@ -52,7 +78,8 @@ export class RootRefDomainDurableObject {
         changes: body.changes,
         refDomain,
       });
-      const result = await traceRootRefCommit(runtimeTracing, canonical.entries.length, () =>
+      let retryCount = 0;
+      const result = await traceRootRefCommit(traceSession.tracing, canonical.entries.length, () =>
         withDomainRetry(
           () => executeDomainUpdate({
             db: this.#env.CAS_DB,
@@ -62,16 +89,32 @@ export class RootRefDomainDurableObject {
             refDomain,
             canonical,
           }),
-          { maxAttempts: parseMaxAttempts(this.#env.CAS_RETRY_MAX_ATTEMPTS) },
-        ));
-      return Response.json({ success: true, idempotent: result.idempotent, revision: result.revision });
+          {
+            maxAttempts: parseMaxAttempts(this.#env.CAS_RETRY_MAX_ATTEMPTS),
+            onRetry: () => { retryCount += 1; },
+          },
+        ),
+        () => retryCount);
+      return finishDomainTrace(
+        Response.json({ success: true, idempotent: result.idempotent, revision: result.revision }),
+        traceSession,
+      );
     } catch (error) {
       if (error instanceof RootRefsValidationError) {
-        return errorResponse(error.status, error.code, error.message);
+        return finishDomainTrace(errorResponse(error.status, error.code, error.message), traceSession);
       }
-      return errorResponse(503, RootRefsErrorCodes.BUSY, "root refs update failed");
+      return finishDomainTrace(
+        errorResponse(503, RootRefsErrorCodes.BUSY, "root refs update failed"),
+        traceSession,
+      );
     }
   }
+}
+
+function finishDomainTrace(response: Response, session: ManualTraceSession): Response {
+  session.end();
+  scheduleTraceFlush(session.flush());
+  return response;
 }
 
 function requireHeader(request: Request, name: string): string {

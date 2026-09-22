@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { CloudflareOAuthDiscoveryPort } from "../src/oauth-discovery.js";
+import type { ManualSpanName, ManualTracingPort } from "@unicas/observability";
 
 const ISSUER = "https://auth.example/tenant-a";
 const OAUTH_METADATA = "https://auth.example/.well-known/oauth-authorization-server/tenant-a";
@@ -38,6 +39,50 @@ const jwks = {
 };
 
 describe("Cloudflare Stack OAuth discovery", () => {
+  test("traces metadata and JWKS fetches without recording provider URLs", async () => {
+    const spans: Array<{ name: ManualSpanName; attributes: Record<string, unknown> }> = [];
+    const tracing: ManualTracingPort = {
+      enterSpan(name, callback) {
+        const entry = { name, attributes: {} };
+        spans.push(entry);
+        return callback({
+          isTraced: true,
+          setAttribute(key, value) {
+            entry.attributes[key] = value;
+          },
+        });
+      },
+    };
+    const port = new CloudflareOAuthDiscoveryPort({
+      allowedOrigins: ["https://auth.example", "https://keys.example"],
+      tracing,
+      fetcher: async (input) => String(input) === JWKS ? json(jwks) : json(metadata()),
+    });
+
+    await port.inspectIssuer({ issuer: ISSUER });
+
+    expect(spans).toEqual([
+      {
+        name: "unicas.fetch",
+        attributes: {
+          "unicas.peer": "issuer_metadata",
+          "unicas.http.status_class": "2xx",
+          "unicas.outcome": "ok",
+        },
+      },
+      {
+        name: "unicas.fetch",
+        attributes: {
+          "unicas.peer": "jwks",
+          "unicas.http.status_class": "2xx",
+          "unicas.outcome": "ok",
+        },
+      },
+    ]);
+    expect(JSON.stringify(spans)).not.toContain(ISSUER);
+    expect(JSON.stringify(spans)).not.toContain(JWKS);
+  });
+
   test("discovers metadata and JWKS only from allowlisted origins", async () => {
     const fetcher = vi.fn<typeof fetch>(async (input) => {
       const url = String(input);

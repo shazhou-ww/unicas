@@ -4,45 +4,36 @@ Updated: 2026-09-22
 
 ## Current state
 
-The reviewed bounded observability implementation is complete. The `unicas`
-and `unicas-spaces` Workers explicitly persist 5% sampled custom logs with
-generated invocation logs disabled. Both explicitly disable trace sampling,
-persistence, and destinations, while the assets-only product and documentation
-Workers remain excluded.
+The reviewed manual tracing implementation is complete and dormant in
+production. Both dynamic Workers retain the accepted 5% custom-log policy,
+disable invocation logs and native Cloudflare tracing, and explicitly set
+`UNICAS_MANUAL_TRACE_SAMPLE_RATE=0`. Static Workers remain excluded.
 
-Raw exception, provider-message, caller-correlation, smoke-run, and
-identifier-bearing failure logs were replaced with typed bounded events.
-Canary tests cover credentials, cookies, CSRF values, OAuth values, private
-keys, presigned URLs, object identity, SQL, request content, callback details,
-and caller correlation values.
+The new private `@unicas/observability` package validates optional client ULIDs,
+derives scope-separated trace IDs with a versioned HMAC key ring, samples
+deterministically, and exports only explicit allowlisted spans through the
+official OTLP/HTTP exporter. Export is fail-open, limited to 16 spans, one
+concurrent request, and a one-second timeout. A maximum-shape serializer test
+keeps two-times margin under the 64 KiB batch contract.
 
-The four approved business spans are implemented at their owning boundaries:
-`unicas.capability.verify`, `unicas.node.validate`,
-`unicas.root_refs.commit`, and `unicas.cleanup.run`. Their attributes are
-bounded enums or numeric counts. A small portable node-validation hook keeps
-Cloudflare tracing out of `@unicas/service`; the runtime import remains in the
-Cloudflare adapter. Production sampling is zero, so these spans are currently
-available only during a deliberate synthetic local tracing run.
+Authenticated Space and Spaces requests accept recent client ULIDs; rejected,
+Admin, MCP, OAuth, metadata, and other pre-authentication paths use
+server-generated correlation. `X-Trace-Id` remains separate from Root Ref
+`requestId` and control-plane `Idempotency-Key` replay authority. Signed
+60-second internal parent context joins Spaces, UniCAS, Space DO, and Root Ref
+domain DO work. Its HMAC is bound out of band to the exact destination route or
+actor key, and public boundaries strip the internal header.
 
-Stable observability, operations, and deployment guidance now distinguishes
-aggregate metrics, sampled logs, synthetic traces, `Server-Timing`, and durable
-audit. The repository-local `unicas-observability` skill contains the same
-investigation, instrumentation, validation, and data-safety workflow and is
-intentionally absent from `skills-lock.json`.
+The manual waterfall includes normalized request roots, provider/UniCAS/R2
+fetch, allowlisted D1/R2 timing operations, Durable Object dispatch, capability
+verification, node validation, Root Ref commit/retry, and cleanup spans. Span-
+specific attributes reject URLs, query strings, headers, bodies, identifiers,
+hashes, keys, SQL, provider errors, and content. Native automatic tracing stays
+disabled because its automatic attributes do not satisfy this boundary.
 
-After the implementation was first published, primary revision
-`56cae80a6a63ad5ef21b67b59822e2bba6abd73e` completed the separate
-Stack/Tenant data-plane retirement. That primary revision was merged into this
-source branch. The observability implementation now targets only the current
-App/Space v1 verifier and event; no legacy authorization callback, span plane,
-or current-documentation event was reintroduced.
-
-The task remains ongoing and provider-blocked. Cloudflare automatic tracing
-retains full URLs, storage keys/metadata, Durable Object SQL bindings and IDs,
-KV keys/metadata, and D1 SQL text, but exposes no verified pre-persistence
-redaction or suppression control. Production trace waterfalls and a deployed
-trace canary cannot be accepted without violating the approved telemetry data
-boundary.
+Stable observability, operations, deployment, package, and repository-skill
+guidance now documents the manual pipeline, ULID/replay separation, activation
+gate, destination requirements, queries, rollback, and native-tracing ban.
 
 ## Decisions
 
@@ -52,14 +43,15 @@ boundary.
   counts as diagnostic samples, not authoritative totals.
 - Keep generated invocation logs disabled because they include full request
   URLs, including OAuth callback query values.
-- Keep production traces explicitly disabled with zero sampling, no native
-  persistence, and no export destination until the data-safety gate can be
-  proven.
+- Keep native Cloudflare traces disabled permanently under the current
+  automatic-attribute contract.
+- Keep manual OTLP export at sample zero until one destination's ownership,
+  access, retention, deletion, residency, cost, and incident process are
+  approved and a retained synthetic canary proves the field boundary.
 - Preserve the existing Space `Server-Timing` names and response-construction
   semantics. Do not describe them as retained or final-byte timing.
-- Add only the four reviewed business spans. Rely on Cloudflare's automatic
-  handler, fetch, D1, R2, Durable Object, and RPC spans rather than duplicating
-  platform operations.
+- Use only owned manual instrumentation. Do not enable automatic fetch, D1,
+  R2, Durable Object, handler, or RPC tracing.
 - Keep static Workers excluded and keep the new skill repository-owned rather
   than externally installed or served through the administrator CLI.
 
@@ -67,52 +59,49 @@ boundary.
 
 | Checkpoint | Status | Review artifact and decision evidence |
 | --- | --- | --- |
-| Scope | Approved | The requesting user explicitly approved [Task.md](./Task.md) on 2026-09-22 at primary revision `ff7a00ad13c1a061cb455f5f0bffd88814b72b14`. |
-| Interface | Approved | The requesting user explicitly approved [InterfaceReview.md](./InterfaceReview.md) and its four-span contract on 2026-09-22 at published source revision `eceee4ab3c6afcdbb80e100a86dfd2234ec4963a`. |
-| Architecture | Approved | The requesting user explicitly approved [Architecture.md](./Architecture.md) on 2026-09-22 at published source revision `eceee4ab3c6afcdbb80e100a86dfd2234ec4963a`. |
+| Scope | Approved | The requesting user explicitly approved the amended [Task.md](./Task.md) manual-tracing outcome on 2026-09-22; the reopened review artifacts were published at source revision `ab35b3fceae702d51405ca808de9e7274178605d`. |
+| Interface | Approved | The requesting user explicitly approved [ManualTracingInterfaceReview.md](./ManualTracingInterfaceReview.md) on 2026-09-22, including ULID correlation, replay separation, the manual vocabulary, and zero initial production export. |
+| Architecture | Approved | The requesting user explicitly approved [ManualTracingArchitecture.md](./ManualTracingArchitecture.md) on 2026-09-22, including generic OTLP/HTTP, signed context, bounded fail-open export, and destination review before nonzero sampling. |
 | Business and data model | Not applicable | The implementation changes no domain entity, ownership, persisted business schema, key, migration, retention, or lifecycle. |
-| Delivery acceptance | Pending | Requires an exact integrated primary commit and completion of or an explicitly reviewed change to the provider-blocked production tracing criteria. |
+| Delivery acceptance | Pending | Requires an exact integrated primary commit plus a separately approved destination and deployed sampled synthetic canary before nonzero production export can be accepted. |
 
 ## Validation
 
-- `pnpm exec vitest run tests/deploy-plan.test.mjs`: 37 deployment,
-  observability-policy, static-exclusion, generated-config, and skill-discovery
-  tests passed.
-- `pnpm --filter @unicas/service --filter @unicas/service-cloudflare --filter
-  @unicas/spaces test`: every touched package suite passed; the cloud-neutral
-  service contributed 135 tests and the Cloudflare adapter contributed 258
-  after the legacy surface was removed.
-- Focused custom-span, canary, Worker, Durable Object, audit RPC, Admin OIDC,
-  and Spaces scheduled-worker tests passed, including the Workers-runtime
-  module shim used only by Node-based Vitest.
-- `pnpm check:workspace`: all 133 deployment-plan, workspace-boundary, and
-  Stack/Tenant retirement guard tests passed.
-- `pnpm docs:check`: all 7 content, link, artifact, determinism, and
-  provenance tests passed.
-- `pnpm typecheck`: all 15 workspace package typechecks passed.
-- `pnpm deploy:plan`: the protected service deployment sequence rendered
-  without executing production commands.
-- `pnpm --filter @unicas/service-cloudflare build` followed by direct Wrangler
-  `deploy --dry-run`: the reconciled App/Space-only service bundle and TOML
-  observability schema passed non-publishing validation.
-- `pnpm deploy:spaces:plan`: the Spaces UI/Worker build and Wrangler dry run
-  passed with the checked-in observability policy.
+- `pnpm check:workspace`: all 139 workspace-boundary, deployment-policy, and
+  Stack/Tenant retirement tests passed.
+- `pnpm typecheck`: all 16 workspace package typechecks passed.
+- Full affected package suites passed: `@unicas/service` 135 tests,
+  `@unicas/observability` 20, `@unicas/spaces` 62, and
+  `@unicas/service-cloudflare` 262.
+- Portable tests cover ULID bounds, scoped derivation, deterministic sampling,
+  key rotation, audience/replay rejection, oversized carriers, local sample
+  kill switch, parentage, span/attribute allowlists, 16-span root preservation,
+  actual OTLP serialization, secret canaries, asynchronous rejection, and
+  timeout failure.
+- `pnpm docs:check`: all 7 documentation inventory, link, deterministic build,
+  artifact, and provenance tests passed.
+- `pnpm --filter @unicas/service-cloudflare build` and direct Wrangler
+  `deploy --dry-run` passed; the bundle reported manual sample `0`.
+- `pnpm deploy:spaces:plan` built the UI/Worker and passed Wrangler dry-run;
+  the generated binding report also showed manual sample `0`.
+- `git diff --check` and editor diagnostics reported no errors.
 
 ## Blockers
 
-- Cloudflare Workers Tracing has no verified control that removes unsafe
-  automatic attributes before native persistence or OpenTelemetry export.
-- Therefore representative retained production Space, Admin, MCP, OAuth, and
-  Spaces App waterfalls, production D1/R2/Durable Object contribution queries,
-  and deployed trace secret-absence evidence remain incomplete by design.
-- Opening the gate requires a provider capability or a separately reviewed
-  isolation/export outcome, refreshed interface and architecture approval, a
-  nonzero sample decision, and synthetic retained-field canary evidence.
+- No OTLP production destination has been selected or reviewed for ownership,
+  access, retention, deletion, residency, cost, or incident response.
+- Production sampling intentionally remains zero, so no deployed retained
+  Space/Admin/MCP/OAuth/Spaces/D1/R2/DO canary exists yet.
+- Opening manual export requires that destination review, provisioned secrets,
+  an exact nonzero sample decision, both Worker dry-runs, a synthetic deployed
+  canary, and direct retained-field secret-absence inspection.
+- Native Cloudflare tracing remains unavailable because it still lacks the
+  required pre-persistence automatic-attribute suppression.
 
 ## Outcome
 
-UniCAS now has an explicit, cost-bounded, tested observability baseline that
-improves metrics, event, caller-timing, and synthetic-tracing investigations
-without persisting known credential or private-identifier surfaces. The
-repository records the native tracing gap honestly and fails closed until the
-platform can meet the accepted telemetry boundary.
+UniCAS now has a generic, bounded, tested manual OTLP waterfall that preserves
+the accepted telemetry boundary and can be activated through a reviewed
+destination without enabling unsafe native tracing. Production remains
+fail-closed at sample zero until the destination and deployed canary gate are
+satisfied, so this task remains `ongoing`.

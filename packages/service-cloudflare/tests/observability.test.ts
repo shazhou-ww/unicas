@@ -53,7 +53,7 @@ describe("reviewed custom spans", () => {
       ok: true,
       validation: { storedBytes: 42, refs: ["redacted", "redacted"] },
     }));
-    await traceRootRefCommit(tracing, 3, async () => "committed");
+    await traceRootRefCommit(tracing, 3, async () => "committed", () => 2);
     await traceCleanupRun(tracing, async () => ({ examined: 7, deleted: 2, failed: 1 }));
 
     expect(recorded).toEqual([
@@ -71,7 +71,11 @@ describe("reviewed custom spans", () => {
       },
       {
         name: "unicas.root_refs.commit",
-        attributes: { "unicas.root_refs.mutations": 3, "unicas.outcome": "ok" },
+        attributes: {
+          "unicas.root_refs.mutations": 3,
+          "unicas.root_refs.retries": 2,
+          "unicas.outcome": "ok",
+        },
       },
       {
         name: "unicas.cleanup.run",

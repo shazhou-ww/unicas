@@ -62,6 +62,13 @@ parent span ID, sampling decision, and an HMAC proof. The receiving adapter
 validates the proof before accepting parentage; invalid context starts a new
 server trace and never rejects the business operation.
 
+The HMAC input also includes an out-of-band audience derived from the exact
+destination method/path or Durable Object actor key. The audience is recomputed
+from the authenticated route or trusted internal headers and is not serialized
+into the carrier. A carrier replayed across an App route or actor therefore
+fails verification. Input length is rejected before base64 decoding or JSON
+parsing. This proof authenticates trace parentage, not the business request.
+
 The shared trace HMAC key uses a versioned key ring so deployment can add a new
 key, overlap for the maximum trace window, switch the active version, and later
 remove the old key without breaking in-flight traces.
@@ -83,7 +90,11 @@ Authorization is sent in a header and never appears in source, logs, errors, or
 span attributes. The destination must be selected before production export;
 implementation can use a local mock OTLP receiver for tests.
 
-Each invocation buffers at most 32 spans and 64 KiB of serialized trace data.
+Each invocation buffers at most 16 spans. A maximum-shape test sends the fixed
+span and attribute vocabulary through the official serializer and requires at
+most 32 KiB, retaining two-times margin under the 64 KiB serialized trace
+contract. This is a checked structural bound rather than runtime coupling to
+private SDK encoding.
 One flush is scheduled with `waitUntil`; it has a one-second timeout, no retry
 inside the request, and no response-body logging. Durable Object paths use the
 Workers module-level `waitUntil` facility or hand the bounded batch to the

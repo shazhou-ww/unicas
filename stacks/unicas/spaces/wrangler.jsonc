@@ -70,6 +70,7 @@
     "SPACES_SESSION_TTL_SECONDS": "28800",
     "SPACES_MAX_UPLOAD_BYTES": "41943040",
     "SPACES_COOKIE_SECURE": "true",
+    "UNICAS_MANUAL_TRACE_SAMPLE_RATE": "0",
     "SPACES_SMOKE_ENABLED": "false",
     "SPACES_SMOKE_PRINCIPAL_ID": "replace-at-production-deploy"
   }

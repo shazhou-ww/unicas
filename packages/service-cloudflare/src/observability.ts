@@ -1,4 +1,5 @@
 import { CapabilityError, type AppSpaceRoute } from "@unicas/space-protocol";
+import type { ManualSpanName, ManualTraceSpan, ManualTracingPort } from "@unicas/observability";
 
 export type UnexpectedErrorEvent =
   | { readonly event: "unicas_authorization_failed"; readonly plane: "space" }
@@ -17,14 +18,9 @@ export function logUnexpectedError(
   write(JSON.stringify(event));
 }
 
-export interface TraceSpan {
-  readonly isTraced: boolean;
-  setAttribute(key: string, value?: boolean | number | string): void;
-}
-
-export interface TracingPort {
-  enterSpan<T>(name: string, callback: (span: TraceSpan) => T): T;
-}
+export type TraceSpan = ManualTraceSpan;
+export type TracingPort = ManualTracingPort;
+export type TraceFetchPeer = "issuer_metadata" | "jwks" | "oauth_token" | "unicas_api" | "r2_upload";
 
 export interface NodeValidationResult {
   readonly ok: boolean;
@@ -77,12 +73,16 @@ export function traceRootRefCommit<T>(
   tracing: TracingPort | undefined,
   mutationCount: number,
   commit: () => Promise<T>,
+  retryCount: () => number = () => 0,
 ): Promise<T> {
   return traceOperation(
     tracing,
     "unicas.root_refs.commit",
     commit,
-    () => ({ "unicas.root_refs.mutations": mutationCount }),
+    () => ({
+      "unicas.root_refs.mutations": mutationCount,
+      "unicas.root_refs.retries": retryCount(),
+    }),
     () => "failed",
   );
 }
@@ -109,7 +109,7 @@ type SpanAttributes = Readonly<Record<string, boolean | number | string>>;
 
 async function traceOperation<T>(
   tracing: TracingPort | undefined,
-  name: string,
+  name: ManualSpanName,
   operation: () => Promise<T>,
   attributes: (result: T) => SpanAttributes,
   errorOutcome: (error: unknown) => SpanOutcome,
@@ -136,4 +136,22 @@ function setTracedAttributes(span: TraceSpan, attributes: SpanAttributes): void 
   for (const [key, value] of Object.entries(attributes)) {
     span.setAttribute(key, value);
   }
+}
+
+export function traceFetchOperation(
+  tracing: TracingPort | undefined,
+  peer: TraceFetchPeer,
+  fetchOperation: () => Promise<Response>,
+): Promise<Response> {
+  return traceOperation(
+    tracing,
+    "unicas.fetch",
+    fetchOperation,
+    (response): SpanAttributes => ({
+      "unicas.peer": peer,
+      "unicas.http.status_class": `${Math.floor(response.status / 100)}xx`,
+    }),
+    () => "failed",
+    (response) => response.status >= 500 ? "failed" : response.status >= 400 ? "rejected" : "ok",
+  );
 }
