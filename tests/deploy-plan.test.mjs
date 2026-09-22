@@ -663,6 +663,7 @@ describe("standalone deployment plan", () => {
     expect(appSpaceSmoke).toContain("prototype App/Space v2 route");
     expect(appSpaceSmoke).toContain("prototype Space claim v");
     expect(appSpaceSmoke).toContain("broad prototype Space permission");
+    expect(appSpaceSmoke).toContain("mixed-sign Root Ref replacement succeeds atomically");
     expect(appSpaceSmoke).toContain("frozen token on App/Space v1 route");
     expect(appSpaceSmoke).toContain("Space v1 token on frozen route");
     expect(legacySmoke).toContain("CapabilityVersion");

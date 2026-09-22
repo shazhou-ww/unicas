@@ -140,21 +140,33 @@ smoke, deployed acceptance, and delivery acceptance remain.
 - `node --check scripts/cas-middleware-smoke.mjs` and
   `pnpm exec vitest run tests/deploy-plan.test.mjs`: all 36 tests passed after
   making frozen smoke repeatable in the shared physical Space.
+- Protected release run `35675234743` passed exhaustive validation, canonical
+  App/Space smoke, frozen Stack/Tenant v1 smoke, the maintained Spaces App
+  release smoke, all five public-origin checks, and immutable production tag
+  creation. Tag `production-20260922-444` peels to release revision
+  `7c60e366d61c0787d8a943f841729294938ef350`; the run retained no artifacts.
+- The deployed smoke evidence proves prototype HTTP v2 returns `404`, Space
+  claim versions 2 and 3 and broad permissions return `401 invalid_token`,
+  cross-Space access returns `403`, both route-family tokens reject one
+  another, and cleanup succeeds. The final smoke update additionally performs
+  one true atomic mixed-sign Root Ref replacement and verifies its projection
+  before cleanup.
+- `node --check scripts/cas-app-space-smoke.mjs` and
+  `pnpm exec vitest run tests/deploy-plan.test.mjs
+  packages/service-cloudflare/tests/root-refs.test.ts`: all 50 tests passed for
+  the deployed mixed-sign replacement probe and underlying atomic behavior.
 
 ## Blockers
 
-- The response-contract and frozen-smoke fixes must be integrated through
-  primary and the protected release path. The next release must complete both
-  smoke suites, the Spaces deployment and smoke, origin verification, and
-  deployment tagging; then
-  follow [UserAcceptance.md](./UserAcceptance.md) for the remaining manual
-  probes.
+- The final mixed-sign deployed probe must be integrated through primary and
+  the protected release path. Then record the completed production evidence in
+  [UserAcceptance.md](./UserAcceptance.md).
 - Delivery acceptance remains the final human checkpoint after primary
   integration.
 
 ## Outcome
 
 The repository implementation and all local agent-verifiable acceptance checks
-are complete. Both production issuer audiences now target App/Space v1.
-Pending final smoke-fix integration, protected release, deployed acceptance,
-and delivery acceptance.
+are complete. Both production issuer audiences target App/Space v1, and the
+full production release path passes. Pending the final mixed-sign deployed
+probe, acceptance recording, and delivery acceptance.
