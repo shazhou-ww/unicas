@@ -121,6 +121,18 @@ function sha512(buffer) {
   return createHash("sha512").update(buffer).digest();
 }
 
+async function normalizeGzipOs(archivePath) {
+  const archive = await readFile(archivePath);
+  assert(
+    archive.length >= 10 && archive[0] === 0x1f && archive[1] === 0x8b && archive[2] === 0x08,
+    `${basename(archivePath)}: pnpm pack output is not a gzip archive`,
+  );
+  assert((archive[3] & 0x02) === 0, `${basename(archivePath)}: gzip header CRC prevents OS normalization`);
+  // pnpm's advisory gzip OS byte varies by host and is outside the payload checksum.
+  archive[9] = 0x03;
+  await writeFile(archivePath, archive);
+}
+
 function exportTargets(value) {
   if (typeof value === "string") return [value];
   if (value === null || typeof value !== "object") return [];
@@ -162,7 +174,9 @@ async function packRound(matrix, destination) {
       { cwd: join(ROOT, entry.directory) },
     );
     const info = parsePackJson(output);
-    artifacts.push({ entry, info, archivePath: resolve(info.filename) });
+    const archivePath = resolve(info.filename);
+    await normalizeGzipOs(archivePath);
+    artifacts.push({ entry, info, archivePath });
   }
   return artifacts;
 }

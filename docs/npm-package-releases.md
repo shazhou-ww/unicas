@@ -48,7 +48,9 @@ The artifact check cleans and rebuilds only the public packages, regenerates
 and checks App/Space OpenAPI, packs twice, compares archives, validates each
 packed manifest and file allowlist, installs only those archives outside the
 workspace, compiles against shipped declarations, runs Node blob/file checks,
-and runs a real-Chrome IndexedDB consumer check.
+and runs a real-Chrome IndexedDB consumer check. Before hashing or retaining
+an archive, it normalizes the advisory gzip OS header to the Linux publication
+runner value so Windows and Linux produce byte-identical tarballs.
 
 Tarballs are temporary. Never commit or manually patch them.
 

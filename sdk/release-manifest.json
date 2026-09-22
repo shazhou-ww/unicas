@@ -27,7 +27,7 @@
         "dist/validation.js",
         "package.json"
       ],
-      "integrity": "sha512-+7P07Huku5daHU75AttDWjUYTWpiyT1UVarCr0eKRh/r9crrXpuLgUFV8dZd5D/WFKI3M5ahury7HmyYeZoL9A==",
+      "integrity": "sha512-eyhVxmmu4xVAFHcGvQ8pU7yUJX82ILx9kc2fD5ai3+mH+gat8hV8jYH71QiJZ6qbGiRWjlmYZ+cLGfHyd6OUvg==",
       "name": "@unicas/codec",
       "order": 1,
       "runtime": "node-browser",
@@ -72,7 +72,7 @@
         "openapi/app-space-v1.openapi.json",
         "package.json"
       ],
-      "integrity": "sha512-XO40I0Vc1lxeCSIza4nOzAwOUlnq8MY5FprDMwplwajsiw+ZBImj+xNAFZm+gZGqhqWDPlPcnUS2ZF7Fu9Z1Ew==",
+      "integrity": "sha512-jVD31PFux89Y4sudUSQSIm6zBpOtrEtvfIVkywClVkhCjhFVmlQJ3k4F/V426lgsmo4+Hq+jOEXmQiVs1gpf5A==",
       "name": "@unicas/space-protocol",
       "order": 2,
       "runtime": "node-browser",
@@ -107,7 +107,7 @@
         "dist/types.js",
         "package.json"
       ],
-      "integrity": "sha512-HGoHoly+6tosEN/zHrxBF8N1gdqiXfy8MbnWKAZTgNTVP52yPuCSvGX4qkdf37n1Otg2hOrrjvk8jCYKR4GtIg==",
+      "integrity": "sha512-nhpKWgJfHLGAS4ErdK+Nqg9kzExxHjMsFfkl1AKXzc9xFUHiw6ya1F0qkRgBMgP4kIMm34j+ofrEpcabxDBx/A==",
       "name": "@unicas/space-client",
       "order": 3,
       "runtime": "node-browser",
@@ -142,7 +142,7 @@
         "dist/types.js",
         "package.json"
       ],
-      "integrity": "sha512-8MbFGYdlEaJLj1vNvAFYIeNd5qNHuRxkcoWVxD7tUpLJ6hwwo8zctDrOkKVp4JdJkWQnIcxZWmID2HlpaP6swg==",
+      "integrity": "sha512-FAzA0gqjKbjVbf9Azli1oAp1wb+wIdcdCt35OPKffS2/QmVrddQzfmkJuYarNx2XqiOYEKg1kFzvC0Uq41G13g==",
       "name": "@unicas/space-blob-client",
       "order": 4,
       "runtime": "node-browser",
@@ -170,7 +170,7 @@
         "dist/index.js",
         "package.json"
       ],
-      "integrity": "sha512-m7ltIo71m9sTSF360PXqSz8ZCO4Wa96jOnaJ4a42yl4EQ6sjPPmsDL/qDjqlwSrUz8crT1+jpl3BIyBLz7udkA==",
+      "integrity": "sha512-wkF4B4k0jmS96BgbyQMBW5A711J2I3ljMIv6uKz+TJBassdKCENRZ9bd+d2B+Sme9qWr1gik4JlVCeog3w0Rxw==",
       "name": "@unicas/space-browser-cache",
       "order": 5,
       "runtime": "browser",
@@ -205,7 +205,7 @@
         "dist/types.js",
         "package.json"
       ],
-      "integrity": "sha512-1MZa0JYzIX+r9ZYEKqxoYvcB8Peu/rlrn7D1XigHVRAtnaLD7kvrVtJDBh5PWjT6564oZFi0d8XPEoNQd+ipMA==",
+      "integrity": "sha512-nXJLr7iy5xczzOEEgfuaF+R3ATNPFv6DeXNfysS6PiNO/hRBB8vqNGdyb64V/9XOvKv+r4qnlpkwOXcEDLMD6g==",
       "name": "@unicas/space-file-client",
       "order": 6,
       "runtime": "node-browser",
