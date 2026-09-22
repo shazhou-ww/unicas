@@ -17,7 +17,10 @@ integrity, sizes, exact file inventories, exports, dependencies, and order.
 The preparation command builds and packs twice, validates exact archive
 contents, installs only those archives outside the workspace, typechecks
 shipped declarations, exercises Node codec/protocol/transport/blob/file
-behavior, and runs a real-Chrome IndexedDB cache check.
+behavior, and runs a real-Chrome IndexedDB cache check. It also normalizes
+pnpm's host-specific advisory gzip OS byte before comparing or hashing, so the
+Windows preparation environment and Linux publication runner produce the same
+tarball bytes.
 
 The tag-only `.github/workflows/publish-npm.yml` has an unprivileged validation
 job followed by a protected `npm` environment job with only `contents: read`
@@ -39,8 +42,8 @@ dist-tag, GitHub environment, or external trusted-publisher state was changed.
   `@unicas/space-protocol/openapi.json` as the sole extra subpath. Preserve no
   Stack/Tenant or source compatibility aliases.
 - Ship JavaScript, declarations, README, LICENSE, manifest, and protocol
-  OpenAPI only. Explicit LF and TypeScript newline policy makes archive hashes
-  cross-platform reproducible.
+  OpenAPI only. Explicit LF, TypeScript newline policy, and gzip OS metadata
+  normalization make archive hashes cross-platform reproducible.
 - Keep `@orpc/openapi` development-only. Add `@opentelemetry/api` as a protocol
   runtime dependency because ORPC's shipped declarations import its public
   types even though ORPC marks it optional.
@@ -69,6 +72,11 @@ dist-tag, GitHub environment, or external trusted-publisher state was changed.
   by SHA-512; manifests contain no `workspace:` ranges or source exports;
   tarball allowlists and exact LICENSE/OpenAPI bytes pass; external installation
   and strict declaration typecheck pass; Node and real-Chrome consumers pass.
+- Linux CI initially found that pnpm emitted the same six archive payloads and
+  byte sizes with a different gzip OS header (`10` on Windows, `3` on Linux).
+  Changing only that byte reproduced all six Linux SHA-512 values exactly. The
+  packer now validates and normalizes the header to `3`; the focused regression
+  test and Linux `Verify packed App-user SDK release` step pass.
 - `pnpm check:npm-release`: canonical/mismatched tag, unified/mixed version,
   incomplete evidence, immutable-version conflict, exact primary, absent tag,
   tag target, trigger, permission, token, ordering, preflight, and sole-write
@@ -104,7 +112,8 @@ dist-tag, GitHub environment, or external trusted-publisher state was changed.
 
 ## Outcome
 
-The source tree now contains a complete, inert, reproducible App-user SDK beta
-release path with full local and workspace validation. Publication to the task
-source and primary plus delivery acceptance remain. The separate publication
-task will activate external trust and push the first immutable release tag.
+The source tree contains a complete, inert, cross-platform reproducible
+App-user SDK beta release path with local, external-consumer, workspace, and
+Linux validation. It creates no release tag or registry write. The separate
+publication task will activate external trust and push the first immutable
+release tag after exact-commit delivery acceptance and Repoledger completion.

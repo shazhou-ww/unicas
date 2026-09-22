@@ -1,6 +1,8 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
+import { normalizeGzipOs } from "../scripts/prepare-sdk-release.mjs";
 
 const ROOT = join(import.meta.dirname, "..");
 const matrix = readJson("sdk/package-matrix.json");
@@ -92,5 +94,21 @@ describe("App-user SDK release matrix", () => {
     const protocol = packageManifest(matrix.packages.find(({ name }) => name === "@unicas/space-protocol"));
     expect(protocol.dependencies?.["@orpc/openapi"]).toBeUndefined();
     expect(protocol.devDependencies?.["@orpc/openapi"]).toBe("1.15.0");
+  });
+
+  test("normalizes host-specific gzip metadata without changing the payload", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "unicas-sdk-gzip-"));
+    const archivePath = join(directory, "package.tgz");
+    const archive = Buffer.from([0x1f, 0x8b, 0x08, 0x00, 0, 0, 0, 0, 0, 0x0a, 0xaa, 0xbb]);
+    try {
+      writeFileSync(archivePath, archive);
+      await normalizeGzipOs(archivePath);
+      const normalized = readFileSync(archivePath);
+      expect(normalized[9]).toBe(0x03);
+      expect(normalized.subarray(0, 9)).toEqual(archive.subarray(0, 9));
+      expect(normalized.subarray(10)).toEqual(archive.subarray(10));
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });

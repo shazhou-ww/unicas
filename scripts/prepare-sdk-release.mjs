@@ -121,7 +121,7 @@ function sha512(buffer) {
   return createHash("sha512").update(buffer).digest();
 }
 
-async function normalizeGzipOs(archivePath) {
+export async function normalizeGzipOs(archivePath) {
   const archive = await readFile(archivePath);
   assert(
     archive.length >= 10 && archive[0] === 0x1f && archive[1] === 0x8b && archive[2] === 0x08,
@@ -420,7 +420,9 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}
