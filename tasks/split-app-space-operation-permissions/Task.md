@@ -144,6 +144,6 @@ protocol and lease behavior rather than duplicating or reverting its work.
 - [Space capability verifier](/packages/service/src/app-space-auth.ts)
 - [Current Space contract](/packages/space-protocol/src/space-contract.ts)
 - [Current Space OpenAPI](/packages/space-protocol/openapi/app-space-v1.openapi.json)
-- [App-user authorization guide](/docs/app-user-api/authorization.md)
-- [App-user HTTP operation reference](/docs/app-user-api/http-api.md)
+- [App-user authorization guide](/packages/docs-site/content/app-user-api/authorization.md)
+- [App-user HTTP operation reference](/packages/docs-site/content/app-user-api/http-api.md)
 - [Direct node upload task](/tasks/complete-direct-node-upload/Task.md)

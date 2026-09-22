@@ -135,5 +135,5 @@ reviewed explicitly before the work named in the final column begins.
 - [App/Space v1 cutover](/tasks/cut-over-app-space-api-to-v1/Task.md)
 - [App/Space concept refactor](/tasks/complete-app-space-concept-refactor/Task.md)
 - [Repository glossary](/GLOSSARY.md)
-- [App-user API guide](/docs/app-user-api/README.md)
+- [App-user API guide](/packages/docs-site/content/app-user-api/README.md)
 - [Package boundaries](/packages/README.md)

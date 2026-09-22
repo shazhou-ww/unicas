@@ -159,9 +159,9 @@ reviewed explicitly before the work named in the final column begins.
 
 ## References
 
-- [App-user API guide](/docs/app-user-api/README.md)
-- [Deployment and local configuration](/docs/deployment-and-local-configuration.md)
-- [CAS operations](/docs/cas-operations.md)
+- [App-user API guide](/packages/docs-site/content/app-user-api/README.md)
+- [Deployment and local configuration](/packages/docs-site/content/deployment-and-local-configuration.md)
+- [CAS operations](/packages/docs-site/content/cas-operations.md)
 - [Package boundaries](/packages/README.md)
 - [Completed direct node upload](/tasks/complete-direct-node-upload/Task.md)
 - [Completed Space operation permissions](/tasks/split-app-space-operation-permissions/Task.md)

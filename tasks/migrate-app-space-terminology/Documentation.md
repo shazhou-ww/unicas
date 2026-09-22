@@ -21,28 +21,28 @@ package identity, downstream terminology, or unrelated prose.
 
 ## Normative baseline
 
-- [x] Define App, Space, Principal, Profile, and capacity wording in `docs/terminology.md`.
-- [x] Define the target public origins and frozen legacy topology in `docs/domain-topology.md`.
+- [x] Define App, Space, Principal, Profile, and capacity wording in `packages/docs-site/content/terminology.md`.
+- [x] Define the target public origins and frozen legacy topology in `packages/docs-site/content/domain-topology.md`.
 - [x] Update `GLOSSARY.md` and add an explicit v1 identifier subsection.
 - [x] Update the root `README.md` product description and access-plane vocabulary.
 - [x] Clarify App/Space data and environment wording in `SECURITY.md`.
 
 ## Architecture and protocol guides
 
-- [x] Update `docs/cas-architecture.md` with current v2 routes and an explicit v1 section.
-- [x] Review `docs/cas-binary-format.md`; preserve canonical bytes and classify any identifiers.
-- [x] Update `docs/cas-state-protection-and-gc.md` to App/Space isolation terminology.
-- [x] Update `docs/cas-oauth-discovery-and-issuer-migration.md`; preserve labeled legacy values.
-- [x] Classify `docs/cas-tenant-debug-tools.md` as a frozen, unimplemented v1 design.
+- [x] Update `packages/docs-site/content/cas-architecture.md` with current v2 routes and an explicit v1 section.
+- [x] Review `packages/docs-site/content/cas-binary-format.md`; preserve canonical bytes and classify any identifiers.
+- [x] Update `packages/docs-site/content/cas-state-protection-and-gc.md` to App/Space isolation terminology.
+- [x] Update `packages/docs-site/content/cas-oauth-discovery-and-issuer-migration.md`; preserve labeled legacy values.
+- [x] Classify `packages/docs-site/content/cas-tenant-debug-tools.md` as a frozen, unimplemented v1 design.
 
 Dependencies: implemented v2 protocol and authorization contracts. These items
 can proceed before physical storage renames if the adapter mapping is explicit.
 
 ## Operator and deployment guides
 
-- [x] Update `docs/cas-operations.md` for App/Space probes, smoke, alerts, and reset gates.
-- [x] Update `docs/deployment-and-local-configuration.md` for current origins and routes.
-- [x] Update `docs/observability.md` for App/Space events while labeling retained telemetry keys.
+- [x] Update `packages/docs-site/content/cas-operations.md` for App/Space probes, smoke, alerts, and reset gates.
+- [x] Update `packages/docs-site/content/deployment-and-local-configuration.md` for current origins and routes.
+- [x] Update `packages/docs-site/content/observability.md` for App/Space events while labeling retained telemetry keys.
 - [x] Update `stacks/unicas/README.md` for the current public model and physical compatibility.
 - [x] Update `stacks/unicas/site/public/index.html` product wording.
 
@@ -52,8 +52,8 @@ with the owning implementation slice.
 
 ## CLI, MCP, and client documentation
 
-- [x] Update `docs/cas-control-plane-cli.md` after the App CLI family lands.
-- [x] Update `docs/cas-control-plane-mcp.md` after remote/stdio App catalog parity lands.
+- [x] Update `packages/docs-site/content/cas-control-plane-cli.md` after the App CLI family lands.
+- [x] Update `packages/docs-site/content/cas-control-plane-mcp.md` after remote/stdio App catalog parity lands.
 - [x] Update `packages/admin-cli/README.md` with App commands and explicit legacy commands.
 - [x] Update `.agents/skills/unicas-cli/SKILL.md` with App commands and tool vocabulary.
 - [x] Update WebUI connection examples after the CLI/MCP command cutover.

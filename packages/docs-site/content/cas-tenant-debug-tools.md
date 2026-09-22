@@ -152,7 +152,7 @@ stdout by default: it prints a JSON summary, `--out <file>` writes content,
 - Public stack discovery endpoint on the edge (contract above).
 - **Provider contract documentation**: discovery-document shape,
   authorize/token semantics, scopes, capability claims, error codes,
-  refresh-token policy — see `docs/cas-tenant-oidc-provider-contract.md`.
+  and refresh-token policy as proposed by this historical design.
   Stack applications implement their own OIDC provider; the platform ships the
   contract only (no reference provider in v1).
 

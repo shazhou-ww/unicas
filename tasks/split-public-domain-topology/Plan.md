@@ -4,7 +4,7 @@ Status: planned, not yet executed
 
 Date: 2026-09-14
 
-The finalized [UniCAS terminology](/docs/terminology.md) defines the
+The finalized [UniCAS terminology](/packages/docs-site/content/terminology.md) defines the
 public resource model that should be introduced with the new API and console
 origins. Coordinate with the `migrate-app-space-terminology` task in separate
 reviewable phases, then combine them at the smoke-only environment cutover.

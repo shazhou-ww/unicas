@@ -4,7 +4,7 @@ Created: 2026-09-20
 
 ## Goal
 
-Publish a navigable `docs/app-user-api/` documentation set that enables an App
+Publish a navigable `packages/docs-site/content/app-user-api/` documentation set that enables an App
 team to implement and troubleshoot end-user Space access through the public v2
 HTTP API, with reviewed scenarios, call sequences, endpoint definitions, and
 least-privilege permission rules traceable to the implemented contracts.
@@ -27,7 +27,7 @@ consume.
 
 ## Scope
 
-- Create `docs/app-user-api/` with a clear index and a documented reading path
+- Create `packages/docs-site/content/app-user-api/` with a clear index and a documented reading path
   for App developers integrating user-facing workflows.
 - Define the participating actors and trust boundaries, including the App
   user, App frontend, App backend or issuer, UniCAS Space data plane, and the
@@ -72,7 +72,7 @@ consume.
 
 ## Acceptance criteria
 
-- [ ] `docs/app-user-api/` contains a clear entry page and an organized set of
+- [ ] `packages/docs-site/content/app-user-api/` contains a clear entry page and an organized set of
       pages for scenarios and sequences, HTTP operations, and authorization.
 - [ ] The guide defines its audience, actors, trust boundaries, App-owned
       responsibilities, and the distinction between App users, App
@@ -121,7 +121,7 @@ consume.
 | Checkpoint | Applicability | Reviewer | Planned review artifact | Approval required before |
 | --- | --- | --- | --- | --- |
 | Scope | Required | Requesting user | Goal, audience, included scenarios, API boundary, exclusions, constraints, acceptance criteria, and relationship to the reference App task. | Substantive documentation work. |
-| Interface | Required | Requesting user | Draft `docs/app-user-api/` scenario catalog, sequence diagrams, HTTP operation reference, permission matrix, errors, examples, and compatibility statement. | Publishing the guide as canonical public API guidance. |
+| Interface | Required | Requesting user | Draft `packages/docs-site/content/app-user-api/` scenario catalog, sequence diagrams, HTTP operation reference, permission matrix, errors, examples, and compatibility statement. | Publishing the guide as canonical public API guidance. |
 | Business and data model | Not applicable: the task documents existing App, Space, Principal, capability, and Root Ref concepts without changing business rules, schemas, ownership, lifecycle, or migration. | Not applicable | Not applicable | Not applicable |
 | Architecture | Not applicable: the task explains accepted trust and package boundaries without changing modules, responsibilities, dependencies, or deployment topology. | Not applicable | Not applicable | Not applicable |
 | Delivery acceptance | Required | Requesting user | Published documentation, contract inventory evidence, link and docs validation, and recorded limitations or discrepancies. | Running `task complete` for the exact approved primary commit. |
@@ -132,7 +132,7 @@ consume.
 - [Current Space OpenAPI](/packages/space-protocol/openapi/app-space-v1.openapi.json)
 - [Capability vocabulary](/packages/space-protocol/src/space-capability.ts)
 - [Package and access-plane boundaries](/packages/README.md)
-- [UniCAS architecture](/docs/cas-architecture.md)
-- [State protection and garbage collection](/docs/cas-state-protection-and-gc.md)
-- [Public domain topology](/docs/domain-topology.md)
+- [UniCAS architecture](/packages/docs-site/content/cas-architecture.md)
+- [State protection and garbage collection](/packages/docs-site/content/cas-state-protection-and-gc.md)
+- [Public domain topology](/packages/docs-site/content/domain-topology.md)
 - [Reference file App task](/tasks/replace-playground-with-reference-app/Task.md)

@@ -348,6 +348,6 @@ The current sources have known representational gaps:
    error codes.
 
 Integrators must not infer new routes or fields from these gaps. The
-[generated OpenAPI](../../packages/space-protocol/openapi/app-space-v1.openapi.json)
+[generated OpenAPI](../../../space-protocol/openapi/app-space-v1.openapi.json)
 remains the operation inventory, and runtime-only behavior above is supported
 by service tests.

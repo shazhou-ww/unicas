@@ -50,10 +50,10 @@ and console documentation links continue to target the repository sources.
 - Do not add service credentials or data-plane bindings to the documentation
   deployment.
 - Preserve the independent release and security boundary defined in
-  `docs/domain-topology.md`.
+  `packages/docs-site/content/domain-topology.md`.
 
 ## References
 
-- [Finalized domain topology](/docs/domain-topology.md)
-- [Deployment and local configuration](/docs/deployment-and-local-configuration.md)
+- [Finalized domain topology](/packages/docs-site/content/domain-topology.md)
+- [Deployment and local configuration](/packages/docs-site/content/deployment-and-local-configuration.md)
 - [Domain split task](../split-public-domain-topology/Task.md)

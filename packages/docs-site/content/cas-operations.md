@@ -144,7 +144,7 @@ and Space denials. Cleanup uses a stable Root Ref request ID, removes the
 catalog row only after release, and is safe to repeat. The scheduled handler
 retries at most ten expired or failed runs per invocation. Detailed bootstrap,
 rotation, and recovery steps are in
-[Spaces file App operations](spaces-smoke-app.md).
+[Spaces file App operations](../../spaces/README.md).
 
 #### Failure diagnosis
 
@@ -345,8 +345,8 @@ rewrite resources or runtime secrets, but a future migration can make an older
 service version unsafe to restore.
 
 ```text
-pnpm --filter @unicas/service-cloudflare exec wrangler deployments list --config ../../stacks/unicas/docs-site/wrangler.jsonc
-pnpm --filter @unicas/service-cloudflare exec wrangler rollback <docs-version-id> --config ../../stacks/unicas/docs-site/wrangler.jsonc --yes --message "rollback failed production release"
+pnpm --filter @unicas/docs-site exec wrangler deployments list --config wrangler.jsonc
+pnpm --filter @unicas/docs-site exec wrangler rollback <docs-version-id> --config wrangler.jsonc --yes --message "rollback failed production release"
 
 pnpm --filter @unicas/service-cloudflare exec wrangler deployments list --config ../../stacks/unicas/site/wrangler.jsonc
 pnpm --filter @unicas/service-cloudflare exec wrangler rollback <site-version-id> --config ../../stacks/unicas/site/wrangler.jsonc --yes --message "rollback failed production release"

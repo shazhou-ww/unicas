@@ -5,7 +5,7 @@ Updated: 2026-09-20
 ## Current state
 
 The reviewed App-user API guide is implemented under
-[`docs/app-user-api/`](../../docs/app-user-api/) and integrated into the
+[`packages/docs-site/content/app-user-api/`](../../packages/docs-site/content/app-user-api/) and integrated into the
 documentation site. It covers the App-owned integration boundary, end-to-end
 request sequences, every public v2 Space operation, capability authorization,
 and the implemented retry, concurrency, streaming, range, retention, and
@@ -24,7 +24,7 @@ implementation to primary for delivery acceptance.
 - Document runtime-only validation and stable error behavior as service-tested
   behavior rather than silently treating it as generated OpenAPI.
 - Integrate the nested guide through explicit documentation source paths so the
-  canonical repository layout remains `docs/app-user-api/`.
+  canonical repository layout remains `packages/docs-site/content/app-user-api/`.
 
 ## Human approvals
 

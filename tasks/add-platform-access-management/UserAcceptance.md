@@ -19,7 +19,7 @@ cannot establish, without treating deployment as implicitly authorized.
 ## Preconditions
 
 - Reviewer: the requesting user or an authorized UniCAS production operator.
-- Follow the [Platform Access runbook](/docs/cas-operations.md#platform-access-bootstrap-and-migration).
+- Follow the [Platform Access runbook](/packages/docs-site/content/cas-operations.md#platform-access-bootstrap-and-migration).
   Production deployment/bootstrap requires a separately authorized release window,
    verified backup, exact verified OIDC Principals, and an App/Space-compatible
    rollback version. For this one prelaunch test-data reset only, the user

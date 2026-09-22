@@ -144,5 +144,5 @@ reviewed explicitly before the work named in the final column begins.
 - [Beta promotion capstone](/tasks/promote-app-user-api-to-beta/Task.md)
 - [App-user SDK beta package preparation](/tasks/prepare-app-user-sdk-beta-packages/Task.md)
 - [Package boundaries](/packages/README.md)
-- [Deployment and local configuration](/docs/deployment-and-local-configuration.md)
-- [CAS operations](/docs/cas-operations.md)
+- [Deployment and local configuration](/packages/docs-site/content/deployment-and-local-configuration.md)
+- [CAS operations](/packages/docs-site/content/cas-operations.md)

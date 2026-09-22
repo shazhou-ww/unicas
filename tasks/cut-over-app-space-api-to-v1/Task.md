@@ -139,5 +139,5 @@ reviewed explicitly before the work named in the final column begins.
 - [Abandoned directional Root Ref split](/tasks/split-root-ref-update-api/Task.md)
 - [Completed Space operation permissions](/tasks/split-app-space-operation-permissions/Task.md)
 - [File upload smoke App](/tasks/build-file-upload-smoke-app/Task.md)
-- [App-user API guide](/docs/app-user-api/README.md)
+- [App-user API guide](/packages/docs-site/content/app-user-api/README.md)
 - [Data-plane package boundaries](/packages/README.md)

@@ -15,7 +15,7 @@ release smoke where local fixtures cannot establish production behavior.
 
 - Target revision: pending integration and production deployment.
 - App: `https://spaces.unicas.work`.
-- Runbook: [Spaces file App operations](/docs/spaces-smoke-app.md).
+- Runbook: [Spaces file App operations](/packages/spaces/README.md).
 
 ## Preconditions
 

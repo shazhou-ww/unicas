@@ -88,6 +88,6 @@ name does not repeat the commit hash.
 ## References
 
 - [GitHub Actions workflow](/.github/workflows/ci.yml)
-- [Deployment and local configuration](/docs/deployment-and-local-configuration.md)
-- [Operations guide](/docs/cas-operations.md)
+- [Deployment and local configuration](/packages/docs-site/content/deployment-and-local-configuration.md)
+- [Operations guide](/packages/docs-site/content/cas-operations.md)
 - [Deployment regression tests](/tests/deploy-plan.test.mjs)

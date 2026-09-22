@@ -184,8 +184,8 @@ reviewed explicitly before the work named in the final column begins.
 
 ## References
 
-- [Current observability contract](/docs/observability.md)
-- [CAS operations and SLOs](/docs/cas-operations.md)
+- [Current observability contract](/packages/docs-site/content/observability.md)
+- [CAS operations and SLOs](/packages/docs-site/content/cas-operations.md)
 - [Cloudflare service deployment configuration](/packages/service-cloudflare/wrangler.toml)
 - [Cloudflare timing collector](/packages/service-cloudflare/src/timing.ts)
 - [Spaces deployment configuration](/stacks/unicas/spaces/wrangler.jsonc)

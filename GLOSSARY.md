@@ -81,8 +81,8 @@ contracts.
 | **Root Ref** | 由文档 delta、snapshot 或其他业务根持有的持久 CAS 根引用。 | Contributes to `rootRefCount` and protects a root independently of a lease. Preserve this capitalization in UniCAS documentation. |
 | **GC** | Garbage collection；回收租约已过期且 child/root 引用计数均为零的节点。 | Space-scoped operation. Expiry makes a node eligible; it does not promise immediate deletion. |
 
-See [CAS Architecture](docs/cas-architecture.md),
-[CAS Binary Format](docs/cas-binary-format.md), and
+See [CAS Architecture](packages/docs-site/content/cas-architecture.md),
+[CAS Binary Format](packages/docs-site/content/cas-binary-format.md), and
 [UniCAS package boundaries](packages/README.md) for normative storage
 semantics.
 
@@ -106,5 +106,5 @@ semantics.
 | **v1 Stack/Tenant identifiers** | 冻结兼容合同中的 `stackId`、`tenantId` 与 `tenants:` 权限。 | Retained for `unicas.shazhou.work`, v1 artifacts, tests, and physical adapters. Never reinterpret them as App/Space claims. |
 
 See [Capability Key Operations](docs/capability-key-operations.md) and
-[UniCAS OAuth Discovery and Issuer Migration](docs/cas-oauth-discovery-and-issuer-migration.md)
+[UniCAS OAuth Discovery and Issuer Migration](packages/docs-site/content/cas-oauth-discovery-and-issuer-migration.md)
 for key and issuer operations.
