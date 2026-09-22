@@ -80,6 +80,6 @@ hard to explain and unsafe during incident response.
 
 - [Platform access API discussion](/tasks/add-platform-access-management/ApiDesign.md)
 - [Console UI discussion](/tasks/add-platform-access-management/UiDesign.md)
-- [UniCAS architecture](/docs/cas-architecture.md)
+- [UniCAS architecture](/packages/docs-site/content/cas-architecture.md)
 - [App v2 contract](/packages/admin-protocol/src/app-v2-contract.ts)
 - [Cloudflare authority resolver](/packages/service-cloudflare/src/control-authority.ts)

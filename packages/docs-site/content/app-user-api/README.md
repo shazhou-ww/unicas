@@ -22,10 +22,10 @@ CAS nodes plus atomic Root Refs without exposing administrator credentials.
 
 Machine-readable sources remain authoritative:
 
-- [App/Space v1 contract](../../packages/space-protocol/src/space-contract.ts)
-- [Generated App/Space v1 OpenAPI](../../packages/space-protocol/openapi/app-space-v1.openapi.json)
-- [Capability vocabulary](../../packages/space-protocol/src/space-capability.ts)
-- [`@unicas/space-client` transport](../../packages/space-client/src/client.ts)
+- [App/Space v1 contract](../../../space-protocol/src/space-contract.ts)
+- [Generated App/Space v1 OpenAPI](../../../space-protocol/openapi/app-space-v1.openapi.json)
+- [Capability vocabulary](../../../space-protocol/src/space-capability.ts)
+- [`@unicas/space-client` transport](../../../space-client/src/client.ts)
 
 The guide explains those sources; it does not define a second schema.
 
@@ -133,7 +133,7 @@ Do not:
 
 See [Domain topology](../domain-topology.md),
 [Terminology](../terminology.md), and
-[Package boundaries](../../packages/README.md) for the surrounding accepted
+[Package boundaries](../../../README.md) for the surrounding accepted
 architecture.
 
 ## Minimal integration shape

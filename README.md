@@ -63,17 +63,18 @@ pnpm spaces:smoke -- --base-url https://spaces.unicas.work
 
 `pnpm deploy` intentionally refuses to run without that explicit production
 entry point. Neither command should be used for a named Wrangler environment;
-see `docs/deployment-and-local-configuration.md` for isolated environment
-requirements.
+see `packages/docs-site/content/deployment-and-local-configuration.md` for
+isolated environment requirements.
 
-Architecture and operations documentation lives under `docs/`. Package
-boundaries and dependency rules are documented in
-`packages/README.md`.
+Published architecture, integration, and operations documentation lives under
+`packages/docs-site/content/` and is served at <https://docs.unicas.work>.
+Repository-development documentation remains indexed under `docs/`. Package
+boundaries and dependency rules are documented in `packages/README.md`.
 
 The accepted origin architecture is documented in
-[`docs/domain-topology.md`](docs/domain-topology.md). The accepted App/Space
-resource vocabulary is documented in
-[`docs/terminology.md`](docs/terminology.md).
+[`packages/docs-site/content/domain-topology.md`](packages/docs-site/content/domain-topology.md).
+The accepted App/Space resource vocabulary is documented in
+[`packages/docs-site/content/terminology.md`](packages/docs-site/content/terminology.md).
 
 Repository work is tracked alongside the code under stable [`tasks/`](tasks/)
 paths, with lifecycle state recorded in [`tasks/status.yaml`](tasks/status.yaml).

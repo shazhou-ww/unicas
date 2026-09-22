@@ -50,4 +50,4 @@ needed to become an independent source of truth.
 
 - [Repository README](/README.md)
 - [Package boundaries](/packages/README.md)
-- [Deployment and local configuration](/docs/deployment-and-local-configuration.md)
+- [Deployment and local configuration](/packages/docs-site/content/deployment-and-local-configuration.md)

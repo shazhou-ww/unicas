@@ -100,7 +100,7 @@ migrations that reference already-provisioned bindings. Do not add general
 DNS, account administration, Access, billing, or D1/R2/KV data-management
 permissions.
 
-The committed [Wrangler configuration](../packages/service-cloudflare/wrangler.toml)
+The committed [Wrangler configuration](../../service-cloudflare/wrangler.toml)
 contains production resource IDs, route names, and the Google OAuth client ID.
 Those identifiers are public configuration, not credentials, but changing them
 must be intentional. The previous `unidocs-cas` deployment and its
@@ -203,7 +203,7 @@ https://spaces.unicas.work/auth/google/callback
 The first serves administrator WebUI and CLI login, the second serves remote
 MCP OAuth, and the third belongs to the separately registered Spaces Google
 client. `docs.unicas.work` is served by the independent assets-only
-`unicas-docs` Worker under `stacks/unicas/docs-site`; it has no API service
+`unicas-docs` Worker owned by `packages/docs-site`; it has no API service
 bindings or credentials. Validate and deploy it separately:
 
 ```powershell
@@ -215,7 +215,7 @@ pnpm deploy:docs
 `spaces.unicas.work` is a separately deployed full-stack App, not a route on
 the UniCAS service Worker. Its browser never receives a capability or presigned
 upload URL, so this server-mediated design does not add the Spaces origin to R2
-CORS. See [Spaces file App operations](spaces-smoke-app.md) for its dedicated
+CORS. See [Spaces file App operations](../../spaces/README.md) for its dedicated
 D1, variables, secrets, one-time bootstrap, release smoke, and key rotation.
 
 The accepted origin ownership model is documented in
@@ -278,7 +278,7 @@ flow. Never commit the key files or print their contents.
 
 ## GitHub Actions production deployment
 
-The `deploy-production` job in [the CI workflow](../.github/workflows/ci.yml)
+The `deploy-production` job in [the CI workflow](../../../.github/workflows/ci.yml)
 runs only for a push to `release` or a manual workflow dispatch whose selected
 branch is `release`. It waits for the same workflow's `validate` job, checks
 out `github.sha` again, installs from the lockfile, and rebuilds before

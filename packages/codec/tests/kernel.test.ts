@@ -1,7 +1,7 @@
 /**
  * CAS kernel tests — Phase 1 test vectors (1-8 of 13).
  *
- * Test vectors from docs/cas-binary-format.md §15.
+ * Test vectors from packages/docs-site/content/cas-binary-format.md §15.
  */
 
 import { describe, expect, it } from "vitest";

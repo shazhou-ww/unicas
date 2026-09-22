@@ -165,5 +165,5 @@ be reviewed explicitly before the work named in the final column begins.
 - [Existing App-user documentation task](../document-app-user-api/Task.md)
 - [App-user beta promotion task](../promote-app-user-api-to-beta/Task.md)
 - [Package and deployment boundaries](/packages/README.md)
-- [Current documentation site builder](/stacks/unicas/docs-site/build.mjs)
+- [Documentation site builder](/packages/docs-site/src/build.mjs)
 - [Repository task workflow](/docs/repository-tasks.md)

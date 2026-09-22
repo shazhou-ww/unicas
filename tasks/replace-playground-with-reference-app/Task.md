@@ -153,4 +153,4 @@ garbage collection.
 - [Current Console UI design](/tasks/add-platform-access-management/UiDesign.md)
 - The former Console Playground implementation was retired before this reference App work begins.
 - [Package and access-plane boundaries](/packages/README.md)
-- [UniCAS architecture](/docs/cas-architecture.md)
+- [UniCAS architecture](/packages/docs-site/content/cas-architecture.md)

@@ -44,10 +44,13 @@ import {
 const ROOT = join(import.meta.dirname, "..");
 const CI_WORKFLOW = readFileSync(join(ROOT, ".github/workflows/ci.yml"), "utf8");
 const DEPLOYMENT_GUIDE = readFileSync(
-  join(ROOT, "docs/deployment-and-local-configuration.md"),
+  join(ROOT, "packages/docs-site/content/deployment-and-local-configuration.md"),
   "utf8",
 );
-const OPERATIONS_GUIDE = readFileSync(join(ROOT, "docs/cas-operations.md"), "utf8");
+const OPERATIONS_GUIDE = readFileSync(
+  join(ROOT, "packages/docs-site/content/cas-operations.md"),
+  "utf8",
+);
 const SPACES_WRANGLER_CONFIG = JSON.parse(readFileSync(
   join(ROOT, "stacks/unicas/spaces/wrangler.jsonc"),
   "utf8",
@@ -218,7 +221,12 @@ describe("standalone deployment plan", () => {
     expect(job).toContain("wrangler deploy --dry-run");
     expect(job).toContain("run: pnpm deploy:spaces:plan");
     expect(job).toContain("run: pnpm deploy:site:plan");
-    expect(job).toContain("run: pnpm deploy:docs:plan");
+    expect(job).toContain("run: pnpm --filter @unicas/docs-site deploy:plan");
+    expect(job).toContain("run: pnpm --filter @unicas/docs-site test");
+    expect(job).toContain("run: pnpm --filter @unicas/docs-site test:browser");
+    expect(job).toContain("run: pnpm --filter @unicas/docs-site build");
+    expect(job).toContain("run: pnpm --filter @unicas/docs-site typecheck");
+    expect(job).toContain("DOCS_SOURCE_REVISION: ${{ github.sha }}");
   });
 
   test("gates production deployment behind validation of a release revision", () => {
@@ -970,7 +978,7 @@ describe("standalone deployment plan", () => {
     const serviceConfig = readFileSync(join(ROOT, "packages/service-cloudflare/wrangler.toml"), "utf8");
     const siteConfig = JSON.parse(readFileSync(join(ROOT, "stacks/unicas/site/wrangler.jsonc"), "utf8"));
     const siteHtml = readFileSync(join(ROOT, "stacks/unicas/site/public/index.html"), "utf8");
-    const docsConfig = JSON.parse(readFileSync(join(ROOT, "stacks/unicas/docs-site/wrangler.jsonc"), "utf8"));
+    const docsConfig = JSON.parse(readFileSync(join(ROOT, "packages/docs-site/wrangler.jsonc"), "utf8"));
     expect(serviceConfig).toContain('pattern = "api.unicas.work"');
     expect(serviceConfig).toContain('pattern = "console.unicas.work"');
     expect(serviceConfig).not.toContain('pattern = "unicas.work"');
@@ -982,6 +990,7 @@ describe("standalone deployment plan", () => {
     expect(docsConfig.routes).toEqual([{ pattern: "docs.unicas.work", custom_domain: true }]);
     expect(docsConfig.assets.directory).toBe("./dist");
     expect(docsConfig).not.toHaveProperty("main");
+    expect(JSON.stringify(docsConfig)).not.toMatch(/d1_databases|durable_objects|kv_namespaces|r2_buckets|services|vars|secrets|oauth/i);
   });
 
   test("publishes a public-key-only issuer for deployment smoke", () => {

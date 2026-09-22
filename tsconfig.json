@@ -6,6 +6,9 @@
   "files": [],
   "references": [
     {
+      "path": "packages/docs-site"
+    },
+    {
       "path": "packages/space-browser-cache"
     },
     {

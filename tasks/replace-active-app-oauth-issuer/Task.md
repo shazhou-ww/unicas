@@ -80,7 +80,7 @@ Change issuer workflow alongside the independently managed built-in issuer.
 
 - [Platform access API discussion](/tasks/add-platform-access-management/ApiDesign.md)
 - [Console UI discussion](/tasks/add-platform-access-management/UiDesign.md)
-- [OAuth discovery and issuer migration](/docs/cas-oauth-discovery-and-issuer-migration.md)
+- [OAuth discovery and issuer migration](/packages/docs-site/content/cas-oauth-discovery-and-issuer-migration.md)
 - [App v2 contract](/packages/admin-protocol/src/app-v2-contract.ts)
 - [Current issuer UI](/packages/admin-webui/src/ui/views/issuer.tsx)
 - [Account repository](/packages/service-cloudflare/src/account-repository.ts)

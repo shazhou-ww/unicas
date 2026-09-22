@@ -107,7 +107,7 @@ implementation of an independent file storage service.
 ## References
 
 - [Package and access-plane boundaries](/packages/README.md)
-- [UniCAS architecture](/docs/cas-architecture.md)
-- [OAuth issuer migration](/docs/cas-oauth-discovery-and-issuer-migration.md)
-- [Deployment and local configuration](/docs/deployment-and-local-configuration.md)
-- [Operations](/docs/cas-operations.md)
+- [UniCAS architecture](/packages/docs-site/content/cas-architecture.md)
+- [OAuth issuer migration](/packages/docs-site/content/cas-oauth-discovery-and-issuer-migration.md)
+- [Deployment and local configuration](/packages/docs-site/content/deployment-and-local-configuration.md)
+- [Operations](/packages/docs-site/content/cas-operations.md)

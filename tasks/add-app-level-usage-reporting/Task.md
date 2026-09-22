@@ -158,6 +158,6 @@ reviewed explicitly before the work named in the final column begins.
 - [Cloudflare usage repository](/packages/service-cloudflare/src/node-usage.ts)
 - [Admin protocol](/packages/admin-protocol/src/app-v2-contract.ts)
 - [Admin client](/packages/admin-client/src/client.ts)
-- [App-user HTTP usage reference](/docs/app-user-api/http-api.md)
-- [CAS architecture](/docs/cas-architecture.md)
+- [App-user HTTP usage reference](/packages/docs-site/content/app-user-api/http-api.md)
+- [CAS architecture](/packages/docs-site/content/cas-architecture.md)
 - [Admin package boundaries](/.github/instructions/packages.instructions.md)

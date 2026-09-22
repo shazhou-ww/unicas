@@ -48,7 +48,7 @@ space: [space-cli, space-webui] -> space-client -> space-protocol
 - 上图是固定的角色与依赖模型；某个 CLI/WebUI 产品尚未实现时不创建空包。
   WebUI 的服务端 BFF 属于服务端梳理范围，不改变浏览器侧的依赖方向。
 
-## 包清单（14 包）
+## 包清单（15 包）
 
 ```
 packages/                           @unicas org
@@ -84,6 +84,11 @@ packages/                           @unicas org
 │   └── service-cloudflare/@unicas/service-cloudflare  UniCAS Worker 部署单元
 │         D1/R2/KV/DO bindings、统一公网路由、credential 隔离、admin BFF/OIDC、
 │         MCP/OAuth ingress、control schema 与 D1 repository 适配
+│
+├── ■ 私有文档部署
+│   └── docs-site/         @unicas/docs-site           docs.unicas.work 静态站点
+│         私有且不发布；拥有公开文档内容、渲染器、测试、静态资源、构建产物与
+│         assets-only Wrangler 配置；仅把 space-protocol OpenAPI 导出作为构建输入
 │
 ├── ■ client 层
     ├── admin-webui/       @unicas/admin-webui         admin 组 · 浏览器 UI（纯前端）
@@ -133,6 +138,7 @@ packages/                           @unicas org
                         ← spaces（私有外部集成 App，不发布）
 契约层 ← admin-client（控制面 HTTP 传输，仅组装/CLI 用）
         ← admin-cli（走 admin-client + control-auth 登录）
+space-protocol OpenAPI 导出 ← docs-site（仅构建时读取，不形成运行时依赖）
 ```
 
 - **codec 是最底层**：无 workspace 依赖，仅外部 `cborg`；`space-protocol`

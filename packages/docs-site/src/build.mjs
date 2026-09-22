@@ -1,52 +1,118 @@
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { createRequire } from "node:module";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as buildBundle } from "esbuild";
 import { Marked } from "marked";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
-const SITE_ROOT = dirname(fileURLToPath(import.meta.url));
+const SITE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_OUTPUT = join(SITE_ROOT, "dist");
-const API_REFERENCE = ["app-user-api/reference", "API Reference", "Integrate"];
-const SPACE_OPENAPI_SOURCE = "packages/space-protocol/openapi/app-space-v1.openapi.json";
+/**
+ * @typedef {"generated" | "glossary" | "markdown" | "openapi" | "package-reference"} PageKind
+ * @typedef {"historical-or-legacy-reference" | "integration-guidance" | "operations-guidance" | "published-service-standard"} Lifecycle
+ * @typedef {{
+ *   route: string,
+ *   title: string,
+ *   navigation: string,
+ *   lifecycle: Lifecycle,
+ *   sourcePath: string,
+ *   sourceOwner: string,
+ *   kind: PageKind,
+ * }} PageEntry
+ */
+const require = createRequire(import.meta.url);
+const SPACE_OPENAPI_SOURCE = require.resolve("@unicas/space-protocol/openapi.json");
 
+/** @type {PageEntry} */
+const OVERVIEW = {
+  route: "/",
+  title: "Overview",
+  navigation: "Overview",
+  lifecycle: "published-service-standard",
+  sourcePath: "packages/docs-site/src/build.mjs",
+  sourceOwner: "@unicas/docs-site",
+  kind: "generated",
+};
+
+/** @type {PageEntry} */
+const API_REFERENCE = {
+  route: "/app-user-api/reference/",
+  title: "Space API Reference",
+  navigation: "Integrate",
+  lifecycle: "published-service-standard",
+  sourcePath: "packages/space-protocol/openapi/app-space-v1.openapi.json",
+  sourceOwner: "@unicas/space-protocol",
+  kind: "openapi",
+};
+
+/** @type {PageEntry} */
+const GLOSSARY = {
+  route: "/glossary/",
+  title: "UniCAS Glossary",
+  navigation: "Reference",
+  lifecycle: "published-service-standard",
+  sourcePath: "GLOSSARY.md",
+  sourceOwner: "repository",
+  kind: "glossary",
+};
+
+/** @type {readonly PageEntry[]} */
 export const DOCUMENTS = [
-  ["app-user-api", "App-user API", "Integrate", "docs/app-user-api/README.md"],
-  ["app-user-api/scenarios", "App-user scenarios", "Integrate", "docs/app-user-api/scenarios.md"],
-  ["app-user-api/http-api", "App-user HTTP API", "Integrate", "docs/app-user-api/http-api.md"],
-  ["app-user-api/authorization", "App-user authorization", "Integrate", "docs/app-user-api/authorization.md"],
-  ["app-user-api/migration-v2-to-v1", "Prototype v2 migration", "Integrate", "docs/app-user-api/migration-v2-to-v1.md"],
-  ["cas-architecture", "CAS Architecture", "Architecture"],
-  ["cas-binary-format", "CAS Binary Format", "Architecture"],
-  ["cas-state-protection-and-gc", "State Protection and GC", "Architecture"],
-  ["domain-topology", "Domain Topology", "Architecture"],
-  ["terminology", "Terminology", "Architecture"],
-  ["cas-control-plane-cli", "Control-Plane CLI", "Control plane"],
-  ["cas-control-plane-mcp", "Control-Plane MCP", "Control plane"],
-  ["cas-oauth-discovery-and-issuer-migration", "OAuth Discovery and Issuer Migration", "Control plane"],
-  ["cas-operations", "Operations", "Operate"],
-  ["deployment-and-local-configuration", "Deployment and Local Configuration", "Operate"],
-  ["observability", "Observability", "Operate"],
-  ["cas-tenant-debug-tools", "Legacy Tenant Debug Tools", "Operate"],
+  { route: "/app-user-api/", title: "App-user API", navigation: "Integrate", lifecycle: "integration-guidance", sourcePath: "packages/docs-site/content/app-user-api/README.md", sourceOwner: "@unicas/docs-site", kind: "markdown" },
+  { route: "/app-user-api/scenarios/", title: "App-user scenarios", navigation: "Integrate", lifecycle: "integration-guidance", sourcePath: "packages/docs-site/content/app-user-api/scenarios.md", sourceOwner: "@unicas/docs-site", kind: "markdown" },
+  { route: "/app-user-api/http-api/", title: "App-user HTTP API", navigation: "Integrate", lifecycle: "integration-guidance", sourcePath: "packages/docs-site/content/app-user-api/http-api.md", sourceOwner: "@unicas/docs-site", kind: "markdown" },
+  { route: "/app-user-api/authorization/", title: "App-user authorization", navigation: "Integrate", lifecycle: "integration-guidance", sourcePath: "packages/docs-site/content/app-user-api/authorization.md", sourceOwner: "@unicas/docs-site", kind: "markdown" },
+  { route: "/app-user-api/migration-v2-to-v1/", title: "Prototype v2 migration", navigation: "Integrate", lifecycle: "historical-or-legacy-reference", sourcePath: "packages/docs-site/content/app-user-api/migration-v2-to-v1.md", sourceOwner: "@unicas/docs-site", kind: "markdown" },
+  { route: "/cas-architecture/", title: "CAS Architecture", navigation: "Architecture", lifecycle: "published-service-standard", sourcePath: "packages/docs-site/content/cas-architecture.md", sourceOwner: "@unicas/docs-site", kind: "markdown" },
+  { route: "/cas-binary-format/", title: "CAS Binary Format", navigation: "Architecture", lifecycle: "published-service-standard", sourcePath: "packages/docs-site/content/cas-binary-format.md", sourceOwner: "@unicas/docs-site", kind: "markdown" },
+  { route: "/cas-state-protection-and-gc/", title: "State Protection and GC", navigation: "Architecture", lifecycle: "published-service-standard", sourcePath: "packages/docs-site/content/cas-state-protection-and-gc.md", sourceOwner: "@unicas/docs-site", kind: "markdown" },
+  { route: "/domain-topology/", title: "Domain Topology", navigation: "Architecture", lifecycle: "published-service-standard", sourcePath: "packages/docs-site/content/domain-topology.md", sourceOwner: "@unicas/docs-site", kind: "markdown" },
+  { route: "/terminology/", title: "Terminology", navigation: "Architecture", lifecycle: "published-service-standard", sourcePath: "packages/docs-site/content/terminology.md", sourceOwner: "@unicas/docs-site", kind: "markdown" },
+  { route: "/cas-control-plane-cli/", title: "Control-Plane CLI", navigation: "Control plane", lifecycle: "integration-guidance", sourcePath: "packages/docs-site/content/cas-control-plane-cli.md", sourceOwner: "@unicas/docs-site", kind: "markdown" },
+  { route: "/cas-control-plane-mcp/", title: "Control-Plane MCP", navigation: "Control plane", lifecycle: "integration-guidance", sourcePath: "packages/docs-site/content/cas-control-plane-mcp.md", sourceOwner: "@unicas/docs-site", kind: "markdown" },
+  { route: "/cas-oauth-discovery-and-issuer-migration/", title: "OAuth Discovery and Issuer Migration", navigation: "Control plane", lifecycle: "operations-guidance", sourcePath: "packages/docs-site/content/cas-oauth-discovery-and-issuer-migration.md", sourceOwner: "@unicas/docs-site", kind: "markdown" },
+  { route: "/cas-operations/", title: "Operations", navigation: "Operate", lifecycle: "operations-guidance", sourcePath: "packages/docs-site/content/cas-operations.md", sourceOwner: "@unicas/docs-site", kind: "markdown" },
+  { route: "/deployment-and-local-configuration/", title: "Deployment and Local Configuration", navigation: "Operate", lifecycle: "operations-guidance", sourcePath: "packages/docs-site/content/deployment-and-local-configuration.md", sourceOwner: "@unicas/docs-site", kind: "markdown" },
+  { route: "/observability/", title: "Observability", navigation: "Operate", lifecycle: "operations-guidance", sourcePath: "packages/docs-site/content/observability.md", sourceOwner: "@unicas/docs-site", kind: "markdown" },
+  { route: "/cas-tenant-debug-tools/", title: "Legacy Tenant Debug Tools", navigation: "Operate", lifecycle: "historical-or-legacy-reference", sourcePath: "packages/docs-site/content/cas-tenant-debug-tools.md", sourceOwner: "@unicas/docs-site", kind: "markdown" },
 ];
 
+/** @type {readonly PageEntry[]} */
 const PACKAGE_REFERENCES = [
-  ["packages", "Package Boundaries", "packages/README.md"],
-  ["admin-protocol", "Admin Protocol", "packages/admin-protocol/README.md"],
-  ["space-protocol", "Space Protocol", "packages/space-protocol/README.md"],
-  ["admin-cli", "Administrator CLI", "packages/admin-cli/README.md"],
+  { route: "/reference/packages/", title: "Package Boundaries", navigation: "Reference", lifecycle: "published-service-standard", sourcePath: "packages/README.md", sourceOwner: "repository", kind: "package-reference" },
+  { route: "/reference/admin-protocol/", title: "Admin Protocol", navigation: "Reference", lifecycle: "published-service-standard", sourcePath: "packages/admin-protocol/README.md", sourceOwner: "@unicas/admin-protocol", kind: "package-reference" },
+  { route: "/reference/space-protocol/", title: "Space Protocol", navigation: "Reference", lifecycle: "published-service-standard", sourcePath: "packages/space-protocol/README.md", sourceOwner: "@unicas/space-protocol", kind: "package-reference" },
+  { route: "/reference/admin-cli/", title: "Administrator CLI", navigation: "Reference", lifecycle: "published-service-standard", sourcePath: "packages/admin-cli/README.md", sourceOwner: "@unicas/admin-cli", kind: "package-reference" },
 ];
 
+/** @type {readonly PageEntry[]} */
+export const PAGE_INVENTORY = [
+  OVERVIEW,
+  ...DOCUMENTS,
+  API_REFERENCE,
+  GLOSSARY,
+  ...PACKAGE_REFERENCES,
+];
+
+/** @type {Map<string, string>} */
 const knownSources = new Map([
-  ...DOCUMENTS.map(([slug, , , sourcePath]) => [sourcePath ?? `docs/${slug}.md`, `/${slug}/`]),
-  ...PACKAGE_REFERENCES.map(([slug, , source]) => [source, `/reference/${slug}/`]),
-  ["GLOSSARY.md", "/glossary/"],
+  ...DOCUMENTS.map(({ sourcePath, route }) => /** @type {[string, string]} */(
+    [sourcePath, route]
+  )),
+  ...PACKAGE_REFERENCES.map(({ sourcePath, route }) => /** @type {[string, string]} */(
+    [sourcePath, route]
+  )),
+  /** @type {[string, string]} */ (["GLOSSARY.md", "/glossary/"]),
 ]);
 
 class Slugger {
+  /** @type {Map<string, number>} */
   #seen = new Map();
 
+  /** @param {string} value */
   slug(value) {
     const base = value
       .toLowerCase()
@@ -59,6 +125,7 @@ class Slugger {
   }
 }
 
+/** @param {string} value */
 function escapeHtml(value) {
   return value
     .replaceAll("&", "&amp;")
@@ -67,6 +134,10 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
+/**
+ * @param {any[]} tokens
+ * @returns {string}
+ */
 function plainText(tokens) {
   return tokens.map((token) => {
     if (typeof token.text === "string") return token.text;
@@ -74,6 +145,10 @@ function plainText(tokens) {
   }).join("");
 }
 
+/**
+ * @param {string} sourcePath
+ * @param {string} href
+ */
 function resolveMarkdownHref(sourcePath, href) {
   if (/^(?:https?:|mailto:)/.test(href) || href.startsWith("#") || href.startsWith("/")) return href;
   const [pathPart, fragment = ""] = href.split("#", 2);
@@ -86,6 +161,10 @@ function resolveMarkdownHref(sourcePath, href) {
   return `https://github.com/shazhou-ww/unicas/blob/main/${normalized}${fragment ? `#${fragment}` : ""}`;
 }
 
+/**
+ * @param {string} markdown
+ * @param {string} sourcePath
+ */
 function renderMarkdown(markdown, sourcePath) {
   const slugger = new Slugger();
   const marked = new Marked({ gfm: true });
@@ -105,22 +184,24 @@ function renderMarkdown(markdown, sourcePath) {
       },
     },
   });
-  return marked.parse(markdown);
+  return /** @type {string} */ (marked.parse(markdown));
 }
 
 function navigation() {
+  /** @type {Map<string, Array<readonly [string, string]>>} */
   const groups = new Map();
-  for (const [slug, title, group] of [...DOCUMENTS, API_REFERENCE]) {
-    if (!groups.has(group)) groups.set(group, []);
-    groups.get(group).push([slug, title]);
+  for (const { route, title, navigation: group } of [...DOCUMENTS, API_REFERENCE]) {
+    const entries = groups.get(group);
+    if (entries) entries.push([route, title]);
+    else groups.set(group, [[route, title]]);
   }
   const documentGroups = [...groups.entries()].map(([group, entries]) => `
     <section class="nav-group">
       <h2>${group}</h2>
-      ${entries.map(([slug, title]) => `<a href="/${slug}/">${title}</a>`).join("\n")}
+      ${entries.map(([route, title]) => `<a href="${route}">${title}</a>`).join("\n")}
     </section>`).join("\n");
-  const references = PACKAGE_REFERENCES.map(([slug, title]) => (
-    `<a href="/reference/${slug}/">${title}</a>`
+  const references = PACKAGE_REFERENCES.map(({ route, title }) => (
+    `<a href="${route}">${title}</a>`
   )).join("\n");
   return `${documentGroups}
     <section class="nav-group reference-links">
@@ -130,6 +211,9 @@ function navigation() {
     </section>`;
 }
 
+/**
+ * @param {{ title: string, description: string, content: string, currentPath?: string }} options
+ */
 function shell({ title, description, content, currentPath = "" }) {
   const nav = navigation().replace(`href="${currentPath}"`, `href="${currentPath}" aria-current="page"`);
   return `<!doctype html>
@@ -169,8 +253,8 @@ function shell({ title, description, content, currentPath = "" }) {
 }
 
 function overviewPage() {
-  const cards = [...DOCUMENTS, API_REFERENCE].map(([slug, title, group]) => `
-    <a class="doc-card" href="/${slug}/">
+  const cards = [...DOCUMENTS, API_REFERENCE].map(({ route, title, navigation: group }) => `
+    <a class="doc-card" href="${route}">
       <span>${group}</span><strong>${title}</strong><small>Read document -&gt;</small>
     </a>`).join("\n");
   return shell({
@@ -217,6 +301,13 @@ function apiReferencePage() {
 </html>`;
 }
 
+/**
+ * @param {string} title
+ * @param {string} description
+ * @param {string} html
+ * @param {string} sourcePath
+ * @param {string} currentPath
+ */
 function articlePage(title, description, html, sourcePath, currentPath) {
   const tableOfContents = [...html.matchAll(/<h([23]) id="([^"]+)">.*?<\/h\1>/g)].map((match) => {
     const label = match[0].replace(/<[^>]+>/g, "").replace(/^#/, "");
@@ -236,6 +327,7 @@ function articlePage(title, description, html, sourcePath, currentPath) {
   });
 }
 
+/** @param {string} source */
 function glossaryMarkdown(source) {
   const sections = ["## Data model and storage", "## Identity and access"];
   const extracted = sections.map((heading) => {
@@ -251,16 +343,26 @@ function glossaryMarkdown(source) {
   return `# UniCAS Glossary\n\nCanonical storage, identity, and access terms extracted from the repository-wide glossary.\n\n${curated}`;
 }
 
+/**
+ * @param {string} outputDir
+ * @param {string} route
+ * @param {string} html
+ */
 async function writePage(outputDir, route, html) {
   const directory = route === "/" ? outputDir : join(outputDir, route.slice(1));
   await mkdir(directory, { recursive: true });
   await writeFile(join(directory, "index.html"), html);
 }
 
+/** @param {string} html */
 function anchors(html) {
   return new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]));
 }
 
+/**
+ * @param {string} outputDir
+ * @param {Map<string, string>} pages
+ */
 async function validateGeneratedLinks(outputDir, pages) {
   const failures = [];
   for (const [route, html] of pages) {
@@ -282,17 +384,29 @@ async function validateGeneratedLinks(outputDir, pages) {
   await writeFile(join(outputDir, "link-check.json"), JSON.stringify({ pages: pages.size, failures: [] }, null, 2));
 }
 
-export async function buildDocsSite(outputDir = DEFAULT_OUTPUT) {
+/** @param {string | undefined} configuredRevision */
+function configuredSourceRevision(configuredRevision) {
+  const revision = configuredRevision?.trim();
+  if (!revision) return null;
+  if (!/^[0-9a-f]{40}$/i.test(revision)) {
+    throw new Error("DOCS_SOURCE_REVISION must be a full 40-character Git commit");
+  }
+  return revision.toLowerCase();
+}
+
+/**
+ * @param {string} [outputDir]
+ * @param {{ sourceRevision?: string }} [options]
+ */
+export async function buildDocsSite(outputDir = DEFAULT_OUTPUT, options = {}) {
   await rm(outputDir, { recursive: true, force: true });
   await mkdir(join(outputDir, "assets"), { recursive: true });
   const pages = new Map();
   pages.set("/", overviewPage());
   pages.set("/app-user-api/reference/", apiReferencePage());
 
-  for (const [slug, title, , configuredSourcePath] of DOCUMENTS) {
-    const sourcePath = configuredSourcePath ?? `docs/${slug}.md`;
+  for (const { route, title, sourcePath } of DOCUMENTS) {
     const markdown = await readFile(join(ROOT, sourcePath), "utf8");
-    const route = `/${slug}/`;
     pages.set(route, articlePage(title, title, renderMarkdown(markdown, sourcePath), sourcePath, route));
   }
 
@@ -305,9 +419,8 @@ export async function buildDocsSite(outputDir = DEFAULT_OUTPUT) {
     "/glossary/",
   ));
 
-  for (const [slug, title, sourcePath] of PACKAGE_REFERENCES) {
+  for (const { route, title, sourcePath } of PACKAGE_REFERENCES) {
     const markdown = await readFile(join(ROOT, sourcePath), "utf8");
-    const route = `/reference/${slug}/`;
     pages.set(route, articlePage(title, title, renderMarkdown(markdown, sourcePath), sourcePath, route));
   }
 
@@ -316,7 +429,8 @@ export async function buildDocsSite(outputDir = DEFAULT_OUTPUT) {
     await copyFile(join(SITE_ROOT, "static", file), join(outputDir, "assets", file));
   }
   await mkdir(join(outputDir, "openapi"), { recursive: true });
-  await copyFile(join(ROOT, SPACE_OPENAPI_SOURCE), join(outputDir, "openapi", "app-space-v1.openapi.json"));
+  const openApi = await readFile(SPACE_OPENAPI_SOURCE);
+  await writeFile(join(outputDir, "openapi", "app-space-v1.openapi.json"), openApi);
   await buildBundle({
     entryPoints: [join(SITE_ROOT, "static", "api-reference.js")],
     bundle: true,
@@ -333,6 +447,32 @@ export async function buildDocsSite(outputDir = DEFAULT_OUTPUT) {
     content: '<section class="not-found"><p class="kicker">404 / NOT FOUND</p><h1>No document at this address.</h1><a href="/">Return to the documentation index</a></section>',
   }));
   await validateGeneratedLinks(outputDir, pages);
+  const packageJson = JSON.parse(await readFile(join(SITE_ROOT, "package.json"), "utf8"));
+  const artifactManifest = {
+    schemaVersion: 1,
+    package: {
+      name: packageJson.name,
+      version: packageJson.version,
+    },
+    sourceRevision: configuredSourceRevision(options.sourceRevision ?? process.env.DOCS_SOURCE_REVISION),
+    pages: PAGE_INVENTORY.map(({ route, title, navigation, sourcePath, sourceOwner, lifecycle }) => ({
+      route,
+      title,
+      navigation,
+      sourcePath,
+      sourceOwner,
+      lifecycle,
+    })),
+    openapi: {
+      path: "openapi/app-space-v1.openapi.json",
+      sha256: createHash("sha256").update(openApi).digest("hex"),
+    },
+    linkCheck: "link-check.json",
+  };
+  await writeFile(
+    join(outputDir, "artifact-manifest.json"),
+    `${JSON.stringify(artifactManifest, null, 2)}\n`,
+  );
   return { outputDir, pageCount: pages.size };
 }
 

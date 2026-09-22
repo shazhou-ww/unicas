@@ -30,17 +30,17 @@ The independently deployed `@unicas/spaces` file App owns
 `spaces.unicas.work`, its own D1 catalog, user sessions, issuer keys, and
 release smoke credential. Its deployment composition and migrations live under
 `spaces/`; application source remains under `packages/spaces`. See
-[`docs/spaces-smoke-app.md`](../../docs/spaces-smoke-app.md) for bootstrap,
+[`packages/spaces/README.md`](../../packages/spaces/README.md) for bootstrap,
 rotation, cleanup, and recovery.
 
 The product apex is a separate assets-only Worker under `site/`. Its deployment
 has no service bindings or secrets and must never claim the API, console, or
 documentation origins.
 
-The generated documentation site is a second assets-only Worker under
-`docs-site/`. `pnpm docs:build` renders the accepted repository Markdown into
-gitignored static output and fails on unresolved local links. Its deployment
-owns only `docs.unicas.work` and has no service bindings or secrets.
+The generated documentation site is the private `@unicas/docs-site` workspace
+package under `packages/docs-site/`. `pnpm docs:build` delegates to that package
+and fails on unresolved local links. Its assets-only deployment owns only
+`docs.unicas.work` and has no service bindings or secrets.
 
 ## OAuth issuers
 

@@ -142,7 +142,7 @@ must use `shell: true`, invoke `%LOCALAPPDATA%\pnpm\bin\unicas.CMD`, or run
 
 ## Sources of truth
 
-- `docs/cas-control-plane-cli.md`: CLI overview and integration guidance.
+- `packages/docs-site/content/cas-control-plane-cli.md`: CLI overview and integration guidance.
 - `packages/admin-cli/README.md`: complete command reference and guardrails.
 - `packages/admin-protocol/src/app-mcp-catalog.ts`: shared App MCP catalog.
 - `packages/admin-cli/src/mcp/catalog.ts`: combined App and v1 stdio catalog.

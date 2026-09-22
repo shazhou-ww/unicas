@@ -303,7 +303,7 @@ and explicitly approved before the protected work begins.
 
 ## References
 
-- [UniCAS terminology](/docs/terminology.md)
+- [UniCAS terminology](/packages/docs-site/content/terminology.md)
 - [Current control authentication client](/packages/control-auth/src/index.ts)
 - [Current administrator BFF](/packages/service-cloudflare/src/admin-bff/bff.ts)
 - [Current authenticated Account service](/packages/service/src/account.ts)

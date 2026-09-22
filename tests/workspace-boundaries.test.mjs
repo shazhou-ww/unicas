@@ -41,7 +41,13 @@ function moduleSpecifiers(filePath) {
       && node.arguments.length === 1
       && ts.isStringLiteralLike(node.arguments[0])
       && (node.expression.kind === ts.SyntaxKind.ImportKeyword
-        || (ts.isIdentifier(node.expression) && node.expression.text === "require"))) {
+        || (ts.isIdentifier(node.expression) && node.expression.text === "require")
+        || (ts.isPropertyAccessExpression(node.expression)
+          && node.expression.name.text === "resolve"
+          && ((ts.isMetaProperty(node.expression.expression)
+            && node.expression.expression.keywordToken === ts.SyntaxKind.ImportKeyword)
+            || (ts.isIdentifier(node.expression.expression)
+              && node.expression.expression.text === "require"))))) {
       specifiers.push(node.arguments[0].text);
     }
     ts.forEachChild(node, visit);

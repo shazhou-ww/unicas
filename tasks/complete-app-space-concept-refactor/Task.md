@@ -156,7 +156,7 @@ reviewed explicitly before the work named in the final column begins.
 - [Completed public App/Space terminology migration](/tasks/migrate-app-space-terminology/Task.md)
 - [Repository glossary](/GLOSSARY.md)
 - [Package boundaries](/packages/README.md)
-- [UniCAS architecture](/docs/cas-architecture.md)
+- [UniCAS architecture](/packages/docs-site/content/cas-architecture.md)
 - [Data-plane protocol boundary](/packages/space-protocol/README.md)
 - [Cloud-neutral service routing](/packages/service/src/actor.ts)
 - [Direct node upload task](/tasks/complete-direct-node-upload/Task.md)

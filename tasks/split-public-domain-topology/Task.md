@@ -59,6 +59,6 @@ API and console need distinct security and ownership boundaries.
 
 - [Task execution plan](Plan.md)
 - [Current deployment state](CurrentState.md)
-- [Finalized domain topology](/docs/domain-topology.md)
-- [Finalized terminology](/docs/terminology.md)
-- [Deployment and local configuration](/docs/deployment-and-local-configuration.md)
+- [Finalized domain topology](/packages/docs-site/content/domain-topology.md)
+- [Finalized terminology](/packages/docs-site/content/terminology.md)
+- [Deployment and local configuration](/packages/docs-site/content/deployment-and-local-configuration.md)
