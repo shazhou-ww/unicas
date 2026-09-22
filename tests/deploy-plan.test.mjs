@@ -667,6 +667,8 @@ describe("standalone deployment plan", () => {
     expect(appSpaceSmoke).toContain("Space v1 token on frozen route");
     expect(legacySmoke).toContain("CapabilityVersion");
     expect(legacySmoke).toContain('from "../packages/space-protocol/dist/v1.js"');
+    expect(legacySmoke).toContain("GC keeps current leased nodes");
+    expect(legacySmoke).not.toContain("gcBody.deleted === 0");
     expect(packageJson.scripts["smoke:v1"]).toContain("cas-middleware-smoke.mjs");
   });
 

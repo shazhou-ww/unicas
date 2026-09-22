@@ -129,11 +129,17 @@ smoke, deployed acceptance, and delivery acceptance remain.
 - App/Space smoke now asserts the exact `401` status and JSON error code.
   Frozen Stack/Tenant smoke runs on every production release with the current
   App authority audience; its route and claim grammar remain frozen and
-  independently verified.
+  independently verified. Because both route families share the same physical
+  Space, frozen smoke accepts pre-existing node totals and confirms its own
+  leased nodes survive GC instead of requiring an empty Space or zero stale
+  deletions.
 - `node --check scripts/cas-app-space-smoke.mjs` and
   `pnpm exec vitest run tests/deploy-plan.test.mjs
   packages/service/tests/app-space-auth.test.ts`: all 49 tests passed after the
   response-contract and frozen-smoke corrections.
+- `node --check scripts/cas-middleware-smoke.mjs` and
+  `pnpm exec vitest run tests/deploy-plan.test.mjs`: all 36 tests passed after
+  making frozen smoke repeatable in the shared physical Space.
 
 ## Blockers
 
