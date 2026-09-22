@@ -131,6 +131,18 @@ base64url keys, for example `{"2026-09":"<base64url-32-byte-key>"}`. Keep old
 entries during rotation until sessions and pending platform-invitation replay
 receipts sealed with them have expired.
 
+Manual OTLP tracing is independently gated by
+`UNICAS_MANUAL_TRACE_SAMPLE_RATE`, which is checked in as `0` for both dynamic
+Workers. At zero, no trace destination or tracing secret is required. A
+reviewed nonzero deployment must provide `UNICAS_OTLP_TRACES_ENDPOINT` as a
+credential-free HTTPS URL ending in `/v1/traces`, plus the Worker secrets
+`UNICAS_OTLP_AUTHORIZATION` and `UNICAS_TRACE_HMAC_KEYS`. The key ring has the
+form `{"active":"2026-09","keys":{"2026-09":"<base64url-32-byte-key>"}}`,
+accepts one to three versions, and uses the active version for new trace IDs
+and internal context. Retain an old version only for the bounded rotation
+overlap. Never place endpoint credentials in the endpoint URL or a Wrangler
+variable.
+
 Administrator admission is owned by Account platform authorities and App
 memberships. There is no email-allowlist fallback.
 
@@ -143,6 +155,8 @@ Additional features require these secrets:
 | `CAS_AUDIT_READER_KEY` | Protected physical audit-reader RPC |
 | `OAUTH_MICROSOFT_CLIENT_SECRET` | Microsoft personal-account administrator login |
 | `OAUTH_GITHUB_CLIENT_SECRET` | GitHub administrator login and verified Emails API lookup |
+| `UNICAS_OTLP_AUTHORIZATION` | Reviewed nonzero manual OTLP trace export |
+| `UNICAS_TRACE_HMAC_KEYS` | Scoped trace identity and signed internal context when manual tracing is sampled |
 
 `CAS_UPLOAD_URL_EXPIRY_SECONDS` defaults to `300` and must be an integer from
 1 through 604800. Browser upload origins must be allowed by the R2 bucket CORS
@@ -238,19 +252,22 @@ pnpm deploy:spaces:plan
 
 Both dynamic Worker configs explicitly persist 5% sampled custom logs with
 generated invocation logs disabled. They explicitly disable trace sampling,
-persistence, and destinations. The assets-only product and docs Workers have
-no observability block. The deployment-plan test locks this policy and verifies
-that generated Spaces production configuration preserves it:
+persistence, and destinations in Cloudflare's native tracing. They also set
+the independent manual OTLP sample to zero. The assets-only product and docs
+Workers have no observability block. The deployment-plan test locks both gates
+and verifies that generated Spaces production configuration preserves them:
 
 ```powershell
 pnpm exec vitest run tests/deploy-plan.test.mjs
 ```
 
-Do not enable production tracing or invocation logs through a dashboard
-override. Wrangler configuration is the source of truth, and the next deploy
-would replace that override. See [Observability](observability.md) for the
-automatic-attribute safety gate, sample/retention contract, and post-deploy
-synthetic verification.
+Do not enable native tracing, manual trace sampling, or invocation logs through
+a dashboard override. Wrangler configuration is the source of truth, and the
+next deploy would replace that override. A nonzero manual sample additionally
+requires an approved OTLP destination, access/retention/cost review, synthetic
+secret-absence evidence, and explicit approval of the exact rate. Native
+automatic tracing remains disabled even after such approval. See
+[Observability](observability.md) for the full contract and rollback.
 
 Do not run `pnpm deploy --dry-run`: pnpm can consume that argument instead of
 forwarding it, which invokes the real root deploy script. Use only

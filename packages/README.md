@@ -47,7 +47,7 @@ space: [space-cli, space-webui] -> space-client -> space-protocol
 - 上图是固定的角色与依赖模型；某个 CLI/WebUI 产品尚未实现时不创建空包。
   WebUI 的服务端 BFF 属于服务端梳理范围，不改变浏览器侧的依赖方向。
 
-## 包清单（15 包）
+## 包清单（16 包）
 
 ```
 packages/                           @unicas org
@@ -65,6 +65,9 @@ packages/                           @unicas org
 │         控制面契约：类型、路由、错误码、并发/ETag、authz、威胁模型
 │
 ├── ■ 内核/库层（cloud-neutral）
+│   ├── observability/     @unicas/observability      手工 tracing 核心
+│   │     ULID correlation、作用域 HMAC trace identity、确定性采样、
+│   │     span 白名单与 OTLP/HTTP exporter；不启用自动 instrumentation
 │   ├── service/           @unicas/service            data + admin HTTP actor
 │   │     精确匹配 App/Space v1 protocol；定义 control/data SQL、blob、按 key
 │   │     串行 actor 等平台端口；内置 App/Space capability 校验、权限矩阵与
@@ -129,6 +132,7 @@ packages/                           @unicas org
 编码层(codec) + 契约层(space-protocol, admin-protocol)
   ← service（cloud-neutral actor + platform ports）
     ← service-cloudflare（UniCAS 中间件唯一 Worker）
+observability ← [service-cloudflare, spaces]
 契约层 + 编码层 ← space-client（纯函数传输层，仅组装）
                     ← space-blob-client（业务方唯一入口）
                       ← space-file-client

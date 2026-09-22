@@ -43,8 +43,10 @@ a routed probe like the live smoke's lease+read).
 Cloudflare's aggregate Worker metrics are authoritative for request volume,
 invocation outcomes, and CPU/wall-time quantiles. Persisted custom logs use a
 5% head sample and are diagnostic evidence only. Generated invocation logs,
-production tracing, and external telemetry destinations are disabled by the
-[observability contract](observability.md).
+native Cloudflare tracing, and production manual trace export are disabled by
+the [observability contract](observability.md). The manual OTLP code path is
+checked in with a zero production sample and no destination or exporter
+secrets.
 
 Existing structured events (JSON to Worker stdout and sampled Workers Logs):
 
@@ -63,8 +65,10 @@ Existing structured events (JSON to Worker stdout and sampled Workers Logs):
 Use Worker/zone metrics or the Cloudflare GraphQL API for five-minute request
 and status rollups. Query sampled event names and bounded reason/error codes in
 Workers Logs to diagnose a metric or probe signal; do not scale the 5% sample
-into an authoritative count. Production D1/R2/Durable Object waterfalls remain
-unavailable until the tracing data-safety gate can be satisfied.
+into an authoritative count. Manual D1/R2/Durable Object waterfalls are
+available for synthetic validation, but production export remains dormant
+until destination access and retention, canary evidence, and the exact
+nonzero sample receive review.
 
 ## Alerting rules
 

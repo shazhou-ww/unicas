@@ -156,6 +156,7 @@ describe("standalone deployment plan", () => {
       "/api", "/api/*", "/auth", "/auth/*", "/.well-known", "/.well-known/*", "/oauth", "/oauth/*",
     ]);
     expect(SPACES_WRANGLER_CONFIG.observability).toEqual(OBSERVABILITY_POLICY);
+    expect(SPACES_WRANGLER_CONFIG.vars.UNICAS_MANUAL_TRACE_SAMPLE_RATE).toBe("0");
     expect(JSON.stringify(SPACES_WRANGLER_CONFIG)).not.toMatch(/CAS_CONTROL_DB|CAS_DB|CAS_R2|durable_objects|kv_namespaces/);
   });
 
@@ -181,6 +182,7 @@ describe("standalone deployment plan", () => {
       SPACES_SMOKE_ENABLED: "true",
       SPACES_SMOKE_PRINCIPAL_ID: "smoke-principal",
       UNICAS_AUDIENCE: "https://api.unicas.work",
+      UNICAS_MANUAL_TRACE_SAMPLE_RATE: "0",
     });
     expect(config.observability).toEqual(OBSERVABILITY_POLICY);
     expect(JSON.stringify(config)).not.toContain("google-secret");
@@ -1035,6 +1037,7 @@ describe("standalone deployment plan", () => {
       "persist = false",
       "destinations = []",
     ].join("\n"));
+    expect(serviceConfig).toContain('UNICAS_MANUAL_TRACE_SAMPLE_RATE = "0"');
     expect(serviceConfig).not.toContain('pattern = "unicas.work"');
     expect(serviceConfig).not.toContain("docs.unicas.work");
     expect(siteConfig.routes).toEqual([{ pattern: "unicas.work", custom_domain: true }]);

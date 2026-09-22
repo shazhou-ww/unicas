@@ -5,10 +5,12 @@ Created: 2026-09-21
 ## Goal
 
 Give maintainers and agents a safe, standard, and repeatable way to diagnose
-server-side latency across the UniCAS service and Spaces Workers by adopting
-Cloudflare Workers Observability traces and metrics, adding only the custom
-spans needed for UniCAS business phases, and providing a repository-local
-skill for future performance investigations and instrumentation changes.
+server-side latency across the UniCAS service and Spaces Workers by using
+Cloudflare aggregate metrics and bounded logs, exporting only reviewed manual
+spans through an operator-controlled OTLP destination, and providing a
+repository-local skill for future performance investigations and
+instrumentation changes. Native Cloudflare automatic tracing remains disabled
+because its retained attributes cannot satisfy the accepted data boundary.
 
 ## Context
 
@@ -48,14 +50,22 @@ also require an explicit operational contract.
   deployment units, with reviewed production and local/staging sampling,
   persistence, and cost controls. Keep static-only site and documentation
   Workers disabled unless the inventory demonstrates a concrete need.
-- Use Cloudflare's automatic handler and binding spans for platform operations.
-  Add a small set of stable custom spans only for material UniCAS phases that
-  automatic instrumentation cannot identify, such as capability verification,
-  canonical-node validation, Root Ref commit orchestration, or bounded cleanup.
+- Keep Cloudflare automatic tracing explicitly disabled. Produce a bounded
+  manual waterfall from normalized request, fetch, D1, R2, Durable Object, and
+  reviewed business-phase spans without recording provider automatic
+  attributes.
+- Export sampled manual traces through one operator-controlled OTLP/HTTP
+  destination. Bound queueing, payload size, span count, timeout, retention,
+  access, failure behavior, and cost before production enablement.
 - Keep Cloudflare tracing imports and runtime details in platform adapters or
   App deployment code. Preserve the cloud-neutral `@unicas/service` boundary
   by passing portable instrumentation hooks only if business-layer spans need
   to cross that boundary.
+- Accept an optional client-generated ULID correlation value, validate and
+  normalize it at ingress, and derive the internal trace identity within the
+  authenticated App or Account scope. Keep correlation separate from replay
+  authority; existing `requestId` and `Idempotency-Key` fields retain their
+  current payload-bound idempotency semantics.
 - Establish repeatable queries and validation for request latency, CPU and wall
   time, errors, slow traces, D1/R2/DO contribution, deployment comparison, and
   the existing operational SLOs. Use normalized operation dimensions rather
@@ -74,9 +84,9 @@ also require an explicit operational contract.
 
 ## Out of scope
 
-- Replacing Cloudflare Workers Observability with a self-hosted tracing or log
-  platform, or provisioning a third-party OpenTelemetry destination, unless a
-  reviewed native-platform gap makes a separate outcome necessary.
+- Building a general-purpose self-hosted observability platform. This task may
+  configure one reviewed OTLP/HTTP trace destination because the documented
+  native-platform data-safety gap prevents production automatic tracing.
 - Building a customer-facing performance dashboard, exposing traces through a
   public API, or granting App administrators access to platform telemetry.
 - Adding raw per-request timing `console.log` events for operations already
@@ -87,6 +97,9 @@ also require an explicit operational contract.
 - Changing App/Space HTTP routes, capability claims, operation permissions,
   storage semantics, persisted business schemas, or the ongoing App-user v1
   contract cutover.
+- Treating a correlation ULID as generic replay protection. Cryptographic
+  request replay prevention, signed request proofs, and a new global consumed-
+  nonce ledger require a separate security and data-model outcome.
 - Broad performance optimization unrelated to bottlenecks demonstrated by the
   accepted telemetry. Follow-up optimizations may use this capability but are
   not implicitly included in this task.
@@ -105,13 +118,15 @@ also require an explicit operational contract.
       codes, private keys, presigned upload URLs, request bodies, node content,
       or other prohibited secrets.
 - [ ] The `unicas` and `unicas-spaces` deployment configurations explicitly
-      enable the accepted Workers Logs and Workers Tracing settings with
-      documented sampling, retention, persistence, environment, and cost
-      behavior; no configuration relies on an implicit future default.
+  enable the accepted Workers Logs settings, keep Cloudflare automatic
+  tracing disabled, and configure the reviewed manual exporter with
+  documented sampling, retention, persistence, environment, and cost
+  behavior; no configuration relies on an implicit future default.
 - [ ] Representative authenticated Space, Admin, MCP, and Spaces App requests
-      produce useful sampled trace waterfalls for their applicable handler,
-      fetch, D1, R2, Durable Object, and RPC work without crossing credential
-      boundaries; OAuth and error paths satisfy the same data-safety contract.
+  produce useful sampled manual trace waterfalls for their applicable
+  request, fetch, D1, R2, Durable Object, and business-phase work without
+  crossing credential boundaries; OAuth and error paths satisfy the same
+  data-safety contract.
 - [ ] Stable custom spans exist only for reviewed business phases not made
       clear by automatic instrumentation, use bounded low-cardinality names and
       attributes, preserve package boundaries, and are covered by focused tests.
@@ -121,6 +136,10 @@ also require an explicit operational contract.
       bottlenecks.
 - [ ] Existing structured security and incident events remain queryable and
       bounded, while redundant per-request performance logs are not introduced.
+- [ ] Client ULIDs are optional, canonicalized, time-bounded, and scoped before
+  trace export; invalid correlation input never rejects a business request.
+  Existing mutation idempotency continues to bind its own key to the
+  authenticated scope and canonical payload.
 - [ ] Existing Space `Server-Timing` behavior remains compatible or any change
       receives explicit interface approval and updated tests and documentation;
       its single-request diagnostic role is distinguished from metrics and
@@ -143,9 +162,8 @@ also require an explicit operational contract.
   credentials or secret-bearing URLs as span names, attributes, log fields,
   exception messages, fixtures, screenshots, or query examples.
 - Treat Cloudflare's documented automatic attributes as data disclosure until
-  verified otherwise. If native tracing cannot satisfy the accepted data-safety
-  contract, do not enable unsafe production persistence; implement and review a
-  bounded mitigation rather than assuming provider-side redaction.
+  verified otherwise. Keep native tracing disabled and never route its
+  automatic attributes to the manual destination.
 - Keep metric, span, and event names stable, bounded, and based on normalized
   operation identity. Do not use raw paths, App IDs, Space IDs, Principal IDs,
   hashes, object keys, SQL bindings, email addresses, or OAuth values as metric
@@ -153,9 +171,14 @@ also require an explicit operational contract.
 - Preserve `@unicas/service` as cloud-neutral. Cloudflare SDK imports and
   Wrangler configuration belong in `@unicas/service-cloudflare`, the Spaces
   App adapter, or deployment configuration.
-- Prefer automatic platform spans over duplicate wrappers. Custom spans must
-  represent a useful business boundary and must not materially change request
-  latency when a request is not sampled.
+- Manual platform and business spans must be allowlisted, low-cardinality, and
+  cheap when unsampled. Export must be bounded, asynchronous, fail-open for the
+  business request, and incapable of adding credentials or raw identifiers.
+- A client ULID is correlation input, not proof of freshness or authorization.
+  Its embedded time is never the event timestamp. Reusing the same ULID as a
+  Root Ref `requestId` or control-plane `Idempotency-Key` is permitted only as
+  a separate field governed by that operation's existing atomic payload-bound
+  semantics.
 - Account for streaming responses and Workers clock behavior honestly; a span
   or `Server-Timing` value must not be documented as end-to-end transfer time
   when it ends at response construction or before the stream is consumed.
@@ -177,9 +200,9 @@ reviewed explicitly before the work named in the final column begins.
 | Checkpoint | Applicability | Reviewer | Planned review artifact | Approval required before |
 | --- | --- | --- | --- | --- |
 | Scope | Required | Requesting user | This task's native Cloudflare tracing outcome, included Workers and skill, exclusions, constraints, acceptance criteria, and coordination with the App-user v1 cutover. | Substantive implementation. |
-| Interface | Required | User or delegated operations owner | Task-local observability contract covering the operator/agent telemetry interface, stable metric/span/event names, query workflow, `Server-Timing` compatibility, sampling semantics, and the `unicas-observability` skill behavior; no public App API change is planned. | Changing telemetry names or configuration, adding custom spans, changing `Server-Timing`, or publishing the skill. |
+| Interface | Required | User or delegated operations owner | Reopened [manual tracing interface review](./ManualTracingInterfaceReview.md) covering ULID correlation, replay separation, stable span/event names, query workflow, `Server-Timing` compatibility, sampling, and exporter behavior. | Adding the optional correlation header, enabling manual production export, or changing span identity. |
 | Business and data model | Not applicable: the task does not change domain entities, ownership, business lifecycle, persisted business schemas, or migrations. | Not applicable | Not applicable | Not applicable |
-| Architecture | Required | User or delegated architecture and security owner | Task-local design covering native Cloudflare telemetry flow, automatic and custom instrumentation boundaries, sensitive-data review, package ownership, sampling, retention, cost, validation, and rollback. | Enabling production persistence/export or adding cross-layer instrumentation hooks. |
+| Architecture | Required | User or delegated architecture and security owner | Reopened [manual tracing architecture review](./ManualTracingArchitecture.md) covering the OTLP flow, explicit context propagation, allowlisted instrumentation, sensitive-data review, package ownership, sampling, retention, cost, validation, and rollback. | Implementing or enabling the manual exporter or adding cross-layer trace-context hooks. |
 | Delivery acceptance | Required | Requesting user | Published implementation and skill, focused automated evidence, deployment dry runs, representative deployed trace screenshots or query results using synthetic data, and explicit secret-absence verification. | Running `task complete` for the exact approved primary commit. |
 
 ## References

@@ -6,8 +6,10 @@ description: "Use when investigating UniCAS latency, errors, CPU or wall time, C
 # UniCAS observability
 
 Use the least sensitive surface that answers the question. Production tracing
-is deliberately disabled because Cloudflare automatic spans expose values that
-UniCAS cannot redact before persistence.
+through Cloudflare automatic spans is deliberately disabled because UniCAS
+cannot redact their attributes before persistence. The explicit manual OTLP
+pipeline is available for synthetic validation but has a zero production
+sample and no destination.
 
 ## Route the question
 
@@ -18,7 +20,7 @@ UniCAS cannot redact before persistence.
 | One Space request | `Server-Timing`, then bounded logs and durable audit |
 | Authorization or incident reason | Sampled structured event by exact `event`/`kind`/`reason` |
 | Exact administrator or Root Ref action | Authenticated durable audit |
-| D1/R2/DO/fetch waterfall | Synthetic local tracing only; production is blocked |
+| D1/R2/DO/fetch waterfall | Reviewed manual spans; production export remains dormant |
 
 Read [the observability contract](../../../packages/docs-site/content/observability.md)
 before querying or changing telemetry. Use
@@ -40,27 +42,47 @@ alerts, deployment, and incident response.
 5. Use authenticated audit for exact actors and business actions. Never paste
    IDs or telemetry payloads into task artifacts when a bounded summary works.
 6. State what the evidence proves, its sample/retention window, and what remains
-   unknown. Production storage waterfalls remain unknown while tracing is off.
+   unknown. With production manual sampling at zero, production storage
+   waterfalls remain unavailable.
 
-## Use local traces
+## Use manual traces
 
 Use only synthetic identifiers, capabilities, OAuth values, upload URLs, and
-content. Keep local tracing on local bindings and inspect it in Local Explorer.
-Never enable remote persistence or point the traced run at production.
+content. Point OTLP only at an approved local mock receiver or reviewed
+isolated destination. Never point a synthetic traced run at production
+bindings or real customer data.
 
-Expected business spans are:
+Expected span names are:
 
 ```text
+unicas.request
+spaces.request
 unicas.capability.verify
 unicas.node.validate
 unicas.root_refs.commit
 unicas.cleanup.run
+unicas.fetch
+unicas.d1
+unicas.r2
+unicas.do.dispatch
 ```
 
-Cloudflare already creates handler, fetch, D1, R2, Durable Object, and RPC
-spans. Do not duplicate them. Remember that automatic span attributes include
-full URLs, storage keys/metadata, Durable Object identity/SQL bindings, KV
-keys/metadata, and D1 SQL text.
+Only allowlisted operation, peer, actor-kind, outcome, status-class, and
+numeric count attributes are permitted. The correlation ULID is the sole
+approved high-cardinality field. Cloudflare automatic tracing must stay off;
+its attributes include full URLs, storage keys/metadata, Durable Object
+identity, KV keys/metadata, and D1 SQL text.
+
+`X-Trace-Id` accepts a recent ULID on authenticated Space requests. Invalid,
+stale, future, or missing values are replaced without rejecting the request.
+Admin, MCP, OAuth, metadata, and other pre-auth routes ignore caller values.
+Never treat this header as replay protection. Root Ref `requestId` and
+control-plane `Idempotency-Key` remain separately payload-bound.
+
+Internal parent context is HMAC-authenticated, expires after 60 seconds, and
+is bound to the exact destination method/path or actor key without serializing
+that audience. Strip it at every public boundary. It establishes parentage
+only; never use it to authorize or deduplicate work.
 
 ## Add or review telemetry
 
@@ -69,14 +91,15 @@ keys/metadata, and D1 SQL text.
 2. Put Cloudflare runtime code only in `@unicas/service-cloudflare` or the
    Spaces App. Use a small portable hook if a cloud-neutral business phase must
    cross into `@unicas/service`.
-3. Prefer automatic platform spans. A custom span must be one approved bounded
-   business phase and use only the documented enum/numeric attributes.
+3. Instrument an owned call site with an approved manual span. Never proxy a
+   raw binding and never enable automatic instrumentation. Unknown span or
+   attribute names require interface and architecture review first.
 4. Never serialize a caught error, URL, header, body, provider payload, path,
    App/Space/Principal ID, hash, object key, SQL value, or content. Use typed
    static events and bounded codes.
-5. Treat a sampling change, invocation logs, a destination, trace persistence,
-   or a nonzero production trace rate as interface and architecture changes.
-   Reopen review before editing them.
+5. Treat a sampling change, invocation logs, an OTLP destination, retention,
+   HMAC key handling, native trace persistence, or a nonzero production rate
+   as interface and architecture changes. Reopen review before editing them.
 6. Recheck Cloudflare's current Workers Logs, tracing, spans/attributes,
    pricing, retention, and known-limitations pages. Provider beta names and
    behavior can change.
@@ -87,9 +110,10 @@ Run the narrow checks first:
 
 ```powershell
 pnpm exec vitest run tests/deploy-plan.test.mjs
-pnpm --filter @unicas/service-cloudflare exec vitest run tests/observability.test.ts tests/worker.test.ts --testTimeout=15000
+pnpm --filter @unicas/observability test
+pnpm --filter @unicas/service-cloudflare exec vitest run tests/observability.test.ts tests/oauth-discovery.test.ts tests/timing.test.ts tests/worker.test.ts --testTimeout=15000
 pnpm --filter @unicas/spaces exec vitest run --root . tests/worker.test.ts
-pnpm --filter @unicas/service --filter @unicas/service-cloudflare --filter @unicas/spaces typecheck
+pnpm --filter @unicas/observability --filter @unicas/service --filter @unicas/service-cloudflare --filter @unicas/spaces typecheck
 pnpm docs:check
 pnpm deploy:plan
 pnpm deploy:spaces:plan
@@ -102,11 +126,13 @@ request proves nothing.
 
 ## Production tracing gate
 
-Do not enable production tracing until Cloudflare supplies and the deployed
-account verifies pre-persistence filtering or suppression for every prohibited
-automatic attribute. Then reopen both reviews, test every retained/exported
-field with unique synthetic canaries, document access/retention/cost and
-rollback, and obtain explicit approval for the nonzero sample.
+Keep native Cloudflare tracing disabled. Do not set the manual sample above
+zero until one OTLP destination has reviewed ownership, access, retention,
+deletion, residency, cost, and incident handling. Run unique synthetic
+canaries through Space, Admin, MCP, OAuth, Spaces, fetch, D1, R2, and Durable
+Object paths; inspect both serialized and retained fields; dry-run both Worker
+bundles; and obtain explicit approval for the exact destination and rate.
+Rollback by restoring `UNICAS_MANUAL_TRACE_SAMPLE_RATE=0` and redeploying.
 
 Sources of truth:
 
@@ -115,4 +141,5 @@ Sources of truth:
 - [Spaces configuration](../../../stacks/unicas/spaces/wrangler.jsonc)
 - [Service instrumentation](../../../packages/service-cloudflare/src/observability.ts)
 - [Spaces instrumentation](../../../packages/spaces/src/observability.ts)
+- [Portable manual tracing](../../../packages/observability/src/manual-tracing.ts)
 - [Package boundaries](../../../.github/instructions/packages.instructions.md)

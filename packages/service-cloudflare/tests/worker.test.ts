@@ -3,6 +3,7 @@ import {
   CapabilityAuthenticationError,
   CapabilityAuthorizationError,
 } from "@unicas/space-protocol";
+import { createTraceUlid } from "@unicas/observability";
 
 const handlers = vi.hoisted(() => ({
   spaceActor: vi.fn(async () => new Response("tenant")),
@@ -51,12 +52,6 @@ vi.mock("../src/usage-reconciliation.js", () => ({
   DEFAULT_USAGE_RECONCILE_MAX_NODES: 100,
   reconcileAppUsageObservations: handlers.reconcileUsage,
   repairOldestSpaceUsageProjection: handlers.repairUsage,
-}));
-vi.mock("../src/runtime-tracing.js", () => ({
-  runtimeTracing: {
-    enterSpan: (_name: string, callback: (span: { isTraced: boolean; setAttribute(): void }) => unknown) =>
-      callback({ isTraced: false, setAttribute() {} }),
-  },
 }));
 vi.mock("../src/app-usage.js", () => ({
   CloudflareAppUsageRepository: class { readAppUsage = handlers.readAppUsage; },
@@ -108,7 +103,7 @@ const env = {
   PUBLIC_ORIGIN: "https://cas.example",
 } as unknown as Env;
 
-const ctx = {} as ExecutionContext;
+const ctx = { waitUntil: vi.fn() } as unknown as ExecutionContext;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -116,6 +111,27 @@ beforeEach(() => {
 });
 
 describe("service-cloudflare public routing", () => {
+  test("accepts client ULID correlation only for Space routes", async () => {
+    const requestedTraceId = createTraceUlid();
+    const space = await worker.fetch(new Request(
+      "https://cas.example/v1/apps/app-1/spaces/space-1/cas/usage",
+      {
+        headers: {
+          Authorization: "Bearer v1-capability",
+          "X-Trace-Id": requestedTraceId.toLowerCase(),
+        },
+      },
+    ), env, ctx);
+    const admin = await worker.fetch(new Request(
+      "https://cas.example/admin/apps/app-1",
+      { headers: { "X-Trace-Id": requestedTraceId } },
+    ), env, ctx);
+
+    expect(space.headers.get("X-Trace-Id")).toBe(requestedTraceId);
+    expect(admin.headers.get("X-Trace-Id")).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(admin.headers.get("X-Trace-Id")).not.toBe(requestedTraceId);
+  });
+
   test("runs bounded usage reconciliation during scheduled maintenance", async () => {
     const scheduledEnv = { ...env, CAS_CONTROL_DB: {}, CAS_DB: {}, CAS_R2: {} } as Env;
     const pending: Promise<unknown>[] = [];
@@ -198,6 +214,17 @@ describe("service-cloudflare public routing", () => {
     }
   });
 
+  test("keeps business responses available when sampled tracing is misconfigured", async () => {
+    const response = await worker.fetch(
+      new Request("https://cas.example/health"),
+      { ...env, UNICAS_MANUAL_TRACE_SAMPLE_RATE: "1" },
+      ctx,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ ok: true, service: "unicas" });
+  });
+
   test("rejects retired administrator Stack routes before service composition", async () => {
     for (const path of ["/admin/stacks", "/admin/stacks/cas_legacy", "/admin/stacks/cas_legacy/members"]) {
       expect((await worker.fetch(new Request(`https://cas.example${path}`), env, ctx)).status).toBe(404);
@@ -267,14 +294,17 @@ describe("service-cloudflare public routing", () => {
   });
 
   test("returns Space verifier failures without Durable Object dispatch", async () => {
+    const untrustedTraceId = createTraceUlid();
     handlers.verifySpace.mockRejectedValueOnce(new CapabilityAuthenticationError(
       "missing_token",
       "CAS capability token is required",
     ));
     const unauthenticated = await worker.fetch(new Request(
       "https://cas.example/v1/apps/app-1/spaces/space-1/cas/usage",
+      { headers: { "X-Trace-Id": untrustedTraceId } },
     ), env, ctx);
     expect(unauthenticated.status).toBe(401);
+    expect(unauthenticated.headers.get("X-Trace-Id")).not.toBe(untrustedTraceId);
 
     handlers.verifySpace.mockRejectedValueOnce(new CapabilityAuthorizationError(
       "resource_scope_mismatch",
@@ -298,6 +328,7 @@ describe("service-cloudflare public routing", () => {
           Authorization: "Bearer tenant-capability",
           Cookie: "cas_admin_session=secret",
           "X-Cas-Audit-Reader-Key": "reader",
+          "X-UniCAS-Trace-Context": "forged",
         },
       }), adminEnv, ctx);
     }
@@ -307,6 +338,7 @@ describe("service-cloudflare public routing", () => {
       expect(request.headers.get("Authorization")).toBeNull();
       expect(request.headers.get("Cookie")).toBe("cas_admin_session=secret");
       expect(request.headers.get("X-Cas-Audit-Reader-Key")).toBeNull();
+      expect(request.headers.get("X-UniCAS-Trace-Context")).toBeNull();
     }
     expect(handlers.migrateControl).toHaveBeenCalledTimes(1);
     expect(handlers.migrateControl.mock.invocationCallOrder[0])
@@ -353,6 +385,7 @@ describe("service-cloudflare public routing", () => {
         Origin: "https://cas.example",
         Authorization: "Bearer mcp-token",
         Cookie: "cas_admin_session=secret",
+        "X-UniCAS-Trace-Context": "forged",
       },
     }), mcpEnv, ctx);
     await worker.fetch(
@@ -363,6 +396,7 @@ describe("service-cloudflare public routing", () => {
     const request = handlers.mcp.mock.calls[0]![0] as Request;
     expect(request.headers.get("Authorization")).toBe("Bearer mcp-token");
     expect(request.headers.get("Cookie")).toBeNull();
+    expect(request.headers.get("X-UniCAS-Trace-Context")).toBeNull();
     expect(handlers.migrateControl).toHaveBeenCalledTimes(1);
     expect(handlers.migrateControl.mock.invocationCallOrder[0])
       .toBeLessThan(handlers.mcp.mock.invocationCallOrder[0]!);

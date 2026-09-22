@@ -68,6 +68,7 @@ type PendingAuthorization = PendingProviderAuthorization | PendingConsent;
 export interface OAuthAuthorizationHandlerOptions {
   readonly oidcFactory?: (env: OAuthAuthorizationEnv) => OidcClient;
   readonly providerRegistryFactory?: (env: OAuthAuthorizationEnv) => ProviderRegistry;
+  readonly identityProviderFetch?: typeof fetch;
   readonly accountServiceFactory: (env: OAuthAuthorizationEnv) => Pick<AccountService, "resolveExternalIdentity" | "authorizeCredential">;
 }
 
@@ -295,7 +296,7 @@ function oidcClient(env: OAuthAuthorizationEnv, options: OAuthAuthorizationHandl
     clientId,
     clientSecret,
     redirectUri: `${publicOrigin}/oauth/callback/google`,
-  });
+  }, { fetchImpl: options.identityProviderFetch });
 }
 
 function providerRegistry(env: OAuthAuthorizationEnv, options: OAuthAuthorizationHandlerOptions): ProviderRegistry {
@@ -309,6 +310,7 @@ function providerRegistry(env: OAuthAuthorizationEnv, options: OAuthAuthorizatio
     adapters.push(createMicrosoftPersonalProvider({
       clientId: env.OAUTH_MICROSOFT_CLIENT_ID, clientSecret: env.OAUTH_MICROSOFT_CLIENT_SECRET,
       discoveryUrl: env.MICROSOFT_OIDC_DISCOVERY_URL, redirectUri: `${origin}/oauth/callback/microsoft`,
+      fetchImpl: options.identityProviderFetch,
     }));
   }
   if (env.OAUTH_GITHUB_CLIENT_ID && env.OAUTH_GITHUB_CLIENT_SECRET) {

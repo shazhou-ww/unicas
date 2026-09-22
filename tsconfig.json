@@ -6,6 +6,9 @@
   "files": [],
   "references": [
     {
+      "path": "packages/observability"
+    },
+    {
       "path": "packages/docs-site"
     },
     {

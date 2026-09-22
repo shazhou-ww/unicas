@@ -1,3 +1,5 @@
+import type { ManualTraceSpan, ManualTracingPort } from "@unicas/observability";
+
 export type SpacesEvent =
   | {
     readonly event: "spaces_request_failed";
@@ -21,14 +23,8 @@ export function logSpacesEvent(
   write(JSON.stringify(event));
 }
 
-export interface TraceSpan {
-  readonly isTraced: boolean;
-  setAttribute(key: string, value?: boolean | number | string): void;
-}
-
-export interface TracingPort {
-  enterSpan<T>(name: string, callback: (span: TraceSpan) => T): T;
-}
+export type TraceSpan = ManualTraceSpan;
+export type TracingPort = ManualTracingPort;
 
 export function traceCleanupRun<T extends { readonly examined: number; readonly failed: number }>(
   tracing: TracingPort | undefined,

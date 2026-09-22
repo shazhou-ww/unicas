@@ -29,7 +29,16 @@ import {
 } from "./http.js";
 import { SpacesRepository, type AuthenticatedSession, type PrincipalContext } from "./repository.js";
 import { verifySmokeIsolation, type IsolationEvidence } from "./smoke-probe.js";
-import { logSpacesEvent, traceCleanupRun, type TracingPort } from "./observability.js";
+import { logSpacesEvent, traceCleanupRun } from "./observability.js";
+import {
+  createConfiguredManualTraceSession,
+  createInternalTraceAudience,
+  createInternalTraceContextHeader,
+  InternalTraceContextHeader,
+  TraceIdHeader,
+  type ManualTraceSpan,
+  type ManualTraceSession,
+} from "@unicas/observability";
 
 type FileServicePort = Pick<SpacesFileService,
   "list" | "createFolder" | "uploadFile" | "renameFile" | "deleteFile" | "download"
@@ -47,6 +56,7 @@ interface GoogleClientPort {
 
 export interface SpacesWorkerDependencies {
   readonly fetchImpl?: typeof fetch;
+  readonly createTraceSession?: typeof createConfiguredManualTraceSession;
   readonly createFileService?: (input: Parameters<typeof createSpacesFileService>[0]) => Promise<FileServicePort>;
   readonly createGoogleClient?: (config: SpacesConfig["google"], fetchImpl: typeof fetch) => GoogleClientPort;
   readonly verifyIsolation?: (input: {
@@ -57,11 +67,15 @@ export interface SpacesWorkerDependencies {
 }
 
 export interface SpacesWorker {
-  fetch(request: Request, env: SpacesEnv): Promise<Response>;
+  fetch(
+    request: Request,
+    env: SpacesEnv,
+    context?: { waitUntil(promise: Promise<unknown>): void },
+  ): Promise<Response>;
   scheduled(
     controller: unknown,
     env: SpacesEnv,
-    context: { waitUntil(promise: Promise<unknown>): void; readonly tracing?: TracingPort },
+    context: { waitUntil(promise: Promise<unknown>): void },
   ): Promise<void>;
 }
 
@@ -79,55 +93,105 @@ export function createSpacesWorker(dependencies: SpacesWorkerDependencies = {}):
     ? ((input, init) => dependencyFetch(input, init))
     : globalThis.fetch.bind(globalThis);
   const fileServiceFactory = dependencies.createFileService ?? createSpacesFileService;
+  const traceSessionFactory = dependencies.createTraceSession ?? createConfiguredManualTraceSession;
   const googleClientFactory = dependencies.createGoogleClient
     ?? ((config, providerFetch) => new GoogleOidcClient(config, providerFetch));
   const isolationProbe = dependencies.verifyIsolation ?? verifySmokeIsolation;
 
   return {
-    async fetch(request, env): Promise<Response> {
+    async fetch(request, env, context): Promise<Response> {
       const url = new URL(request.url);
       if (!isReservedPath(url.pathname)) return env.ASSETS.fetch(request);
       const correlationId = request.headers.get("X-Request-Id") || crypto.randomUUID();
+      let traceSession: ManualTraceSession | undefined;
       try {
         const config = readSpacesConfig(env);
         const repository = new SpacesRepository(env.SPACES_DB);
 
-        if (request.method === "GET" && url.pathname === "/.well-known/openid-configuration") {
-          return json(issuerMetadata(config), 200);
-        }
-        if (request.method === "GET" && url.pathname === "/.well-known/jwks.json") {
-          return json(issuerJwks(config), 200, { "Cache-Control": "public, max-age=300" });
-        }
-        if (request.method === "GET" && url.pathname === "/auth/google/start") {
-          const authorization = await googleClientFactory(config.google, fetchImpl).begin(repository);
-          return appendSetCookies(Response.redirect(authorization.redirectUrl, 302), [
-            oauthStateCookie(authorization.state, 600, config.secureCookies),
-          ]);
-        }
-        if (request.method === "GET" && url.pathname === "/auth/google/callback") {
-          return await completeGoogleLogin(request, config, repository, googleClientFactory(config.google, fetchImpl));
-        }
-        if (request.method === "POST" && url.pathname === "/api/smoke/session") {
-          return await createSmokeSession(request, env, config, repository, fileServiceFactory, fetchImpl);
+        if (isUnauthenticatedSpacesRoute(request.method, url.pathname)) {
+          traceSession = await traceSessionFactory({
+            environment: env,
+            scope: { kind: "service", id: "unicas-spaces" },
+            serviceName: "unicas-spaces",
+            rootSpanName: "spaces.request",
+            rootAttributes: { "unicas.operation": spacesOperation(request.method, url.pathname) },
+          });
+          const finish = (response: Response) => finishSpacesTrace(response, traceSession!, context);
+          const providerFetch = traceAwareProviderFetch(
+            fetchImpl,
+            config.google.discoveryUrl,
+            traceSession,
+          );
+          if (url.pathname === "/.well-known/openid-configuration") {
+            return finish(json(issuerMetadata(config), 200));
+          }
+          if (url.pathname === "/.well-known/jwks.json") {
+            return finish(json(issuerJwks(config), 200, { "Cache-Control": "public, max-age=300" }));
+          }
+          if (url.pathname === "/auth/google/start") {
+            const authorization = await googleClientFactory(config.google, providerFetch).begin(repository);
+            return finish(appendSetCookies(Response.redirect(authorization.redirectUrl, 302), [
+              oauthStateCookie(authorization.state, 600, config.secureCookies),
+            ]));
+          }
+          if (url.pathname === "/auth/google/callback") {
+            return finish(await completeGoogleLogin(
+              request,
+              config,
+              repository,
+              googleClientFactory(config.google, providerFetch),
+            ));
+          }
+          return finish(await createSmokeSession(
+            request,
+            env,
+            config,
+            repository,
+            fileServiceFactory,
+            traceAwareUniCasFetch(
+              fetchImpl,
+              config.capability.unicasBaseUrl,
+              traceSession,
+              env.UNICAS_TRACE_HMAC_KEYS,
+            ),
+          ));
         }
 
         const session = await requireSession(request, repository);
+        traceSession = await traceSessionFactory({
+          environment: env,
+          requestedTraceId: request.headers.get(TraceIdHeader),
+          scope: { kind: "app", id: session.context.appId },
+          serviceName: "unicas-spaces",
+          rootSpanName: "spaces.request",
+          rootAttributes: { "unicas.operation": spacesOperation(request.method, url.pathname) },
+        });
+        const finish = (response: Response) => finishSpacesTrace(response, traceSession!, context);
+        const tracedFetch = traceAwareUniCasFetch(
+          fetchImpl,
+          config.capability.unicasBaseUrl,
+          traceSession,
+          env.UNICAS_TRACE_HMAC_KEYS,
+        );
         if (request.method === "POST" && url.pathname === "/auth/logout") {
           if (!await passesMutationProtection(request, config.publicOrigin, session, repository)) {
             throw new HttpError("csrf_origin_failed", 403, "Origin or CSRF check failed");
           }
           const sessionId = parseCookies(request)[SessionCookieName];
           if (sessionId) await repository.deleteSession(sessionId);
-          return appendSetCookies(new Response(null, { status: 204 }), clearSessionCookies(config.secureCookies));
+          return finish(appendSetCookies(
+            new Response(null, { status: 204 }),
+            clearSessionCookies(config.secureCookies),
+          ));
         }
         if (request.method === "GET" && url.pathname === "/api/session") {
-          return json({
+          return finish(json({
             principal: {
               id: session.context.principalId,
               displayName: session.context.displayName,
               provider: session.context.provider,
             },
-          }, 200);
+          }, 200));
         }
 
         if (isMutating(request.method)
@@ -141,14 +205,14 @@ export function createSpacesWorker(dependencies: SpacesWorkerDependencies = {}):
           capability: config.capability,
           access: request.method === "GET" ? ["read"] : ["read", "write"],
           maximumUploadBytes: config.maximumUploadBytes,
-          fetcher: { fetch: fetchImpl },
+          fetcher: { fetch: tracedFetch },
         });
         if (request.method === "GET" && url.pathname === "/api/entries") {
-          return json(await fileService.list(url.searchParams.get("path") ?? "/"), 200);
+          return finish(json(await fileService.list(url.searchParams.get("path") ?? "/"), 200));
         }
         if (request.method === "GET" && url.pathname === "/api/files/content") {
           const file = await fileService.download(requiredQuery(url, "path"), request.signal);
-          return new Response(file.body, {
+          return finish(new Response(file.body, {
             headers: {
               "Cache-Control": "private, no-store",
               "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file.stat.name)}`,
@@ -156,22 +220,22 @@ export function createSpacesWorker(dependencies: SpacesWorkerDependencies = {}):
               "Content-Type": file.stat.mediaType ?? "application/octet-stream",
               "X-Content-Type-Options": "nosniff",
             },
-          });
+          }));
         }
         if (request.method === "POST" && url.pathname === "/api/smoke/cleanup") {
           const body = await readJsonBody(request);
           const runId = requireBodyString(body, "runId");
           const state = await executeSmokeCleanup(repository, fileService, runId, session.context.principalId);
           if (state === null) throw new HttpError("smoke_run_not_found", 404, "Smoke run not found");
-          return json({ runId, cleanupState: "complete" }, 200);
+          return finish(json({ runId, cleanupState: "complete" }, 200));
         }
         if (request.method === "POST" && url.pathname === "/api/smoke/isolation") {
           await requireActiveSmokeRun(request, repository, session.context.principalId);
-          return json(await isolationProbe({
+          return finish(json(await isolationProbe({
             capability: config.capability,
             principal: session.context,
-            fetchImpl,
-          }), 200);
+            fetchImpl: tracedFetch,
+          }), 200));
         }
         if (request.method === "POST" && url.pathname === "/api/folders") {
           const body = await readJsonBody(request);
@@ -183,7 +247,7 @@ export function createSpacesWorker(dependencies: SpacesWorkerDependencies = {}):
             name,
             revision: requireBodyRevision(body),
           });
-          return json(publicMutation(result), 201);
+          return finish(json(publicMutation(result), 201));
         }
         if (request.method === "POST" && url.pathname === "/api/files") {
           const contentType = request.headers.get("Content-Type") ?? "";
@@ -218,24 +282,27 @@ export function createSpacesWorker(dependencies: SpacesWorkerDependencies = {}):
             revision: parseRevision(requireFormString(body, "revision")),
             signal: request.signal,
           });
-          return json(publicMutation(result, request.headers.has("X-Spaces-Smoke-Run")), 201);
+          return finish(json(
+            publicMutation(result, request.headers.has("X-Spaces-Smoke-Run")),
+            201,
+          ));
         }
         if (request.method === "PATCH" && url.pathname === "/api/files") {
           const body = await readJsonBody(request);
-          return json(publicMutation(await fileService.renameFile({
+          return finish(json(publicMutation(await fileService.renameFile({
             path: requireBodyString(body, "path"),
             name: requireBodyString(body, "name"),
             revision: requireBodyRevision(body),
-          })), 200);
+          })), 200));
         }
         if (request.method === "DELETE" && url.pathname === "/api/files") {
           await fileService.deleteFile({
             path: requiredQuery(url, "path"),
             revision: parseRevision(requiredQuery(url, "revision")),
           });
-          return new Response(null, { status: 204 });
+          return finish(new Response(null, { status: 204 }));
         }
-        return errorResponse("not_found", 404, "Route not found", correlationId);
+        return finish(errorResponse("not_found", 404, "Route not found", correlationId));
       } catch (error) {
         const response = mapError(error, correlationId);
         logSpacesEvent({
@@ -243,12 +310,22 @@ export function createSpacesWorker(dependencies: SpacesWorkerDependencies = {}):
           code: response.code,
           status: response.status,
         });
-        return errorResponse(response.code, response.status, response.message, correlationId);
+        const errorResult = errorResponse(response.code, response.status, response.message, correlationId);
+        return traceSession
+          ? finishSpacesTrace(errorResult, traceSession, context)
+          : errorResult;
       }
     },
 
     async scheduled(_controller, env, context): Promise<void> {
-      context.waitUntil(traceCleanupRun(context.tracing, async () => {
+      const traceSession = await traceSessionFactory({
+        environment: env,
+        scope: { kind: "service", id: "unicas-spaces" },
+        serviceName: "unicas-spaces",
+        rootSpanName: "spaces.request",
+        rootAttributes: { "unicas.operation": "scheduled_cleanup" },
+      });
+      context.waitUntil(traceCleanupRun(traceSession.tracing, async () => {
         const config = readSpacesConfig(env);
         const repository = new SpacesRepository(env.SPACES_DB);
         await repository.pruneExpired();
@@ -264,7 +341,14 @@ export function createSpacesWorker(dependencies: SpacesWorkerDependencies = {}):
               capability: config.capability,
               access: ["read", "write"],
               maximumUploadBytes: config.maximumUploadBytes,
-              fetcher: { fetch: fetchImpl },
+              fetcher: {
+                fetch: traceAwareUniCasFetch(
+                  fetchImpl,
+                  config.capability.unicasBaseUrl,
+                  traceSession,
+                  env.UNICAS_TRACE_HMAC_KEYS,
+                ),
+              },
             });
             await fileService.reconcilePendingReleases(20);
           } catch {
@@ -287,7 +371,14 @@ export function createSpacesWorker(dependencies: SpacesWorkerDependencies = {}):
               capability: config.capability,
               access: ["read", "write"],
               maximumUploadBytes: config.maximumUploadBytes,
-              fetcher: { fetch: fetchImpl },
+              fetcher: {
+                fetch: traceAwareUniCasFetch(
+                  fetchImpl,
+                  config.capability.unicasBaseUrl,
+                  traceSession,
+                  env.UNICAS_TRACE_HMAC_KEYS,
+                ),
+              },
             });
             await executeSmokeCleanup(repository, fileService, run.runId, run.principalId);
           } catch {
@@ -301,9 +392,149 @@ export function createSpacesWorker(dependencies: SpacesWorkerDependencies = {}):
           }
         }
         return { examined, failed };
-      }));
+      }).then(
+        () => traceSession.end({ "unicas.outcome": "ok" }),
+        (error) => {
+          traceSession.end({ "unicas.outcome": "failed" });
+          throw error;
+        },
+      ).finally(() => traceSession.flush()));
     },
   };
+}
+
+function finishSpacesTrace(
+  response: Response,
+  session: ManualTraceSession,
+  context: { waitUntil(promise: Promise<unknown>): void } | undefined,
+): Response {
+  session.end({
+    "unicas.outcome": response.status >= 500 ? "failed" : response.status >= 400 ? "rejected" : "ok",
+    "unicas.http.status_class": `${Math.floor(response.status / 100)}xx`,
+  });
+  const flushing = session.flush();
+  if (context) context.waitUntil(flushing);
+  else void flushing;
+  const headers = new Headers(response.headers);
+  headers.set(TraceIdHeader, session.correlationUlid);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function traceAwareUniCasFetch(
+  fetchImpl: typeof fetch,
+  unicasBaseUrl: string,
+  traceSession: ManualTraceSession,
+  traceHmacKeys: string | undefined,
+): typeof fetch {
+  const unicasOrigin = new URL(unicasBaseUrl).origin;
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? new Request(input, init) : new Request(input, init);
+    const targetsUniCas = new URL(request.url).origin === unicasOrigin;
+    const headers = withoutTraceHeaders(request.headers);
+    if (!targetsUniCas) {
+      return traceFetch(traceSession, "r2_upload", new Request(request, { headers }), fetchImpl);
+    }
+    return traceSession.tracing.enterSpan("unicas.fetch", async (span) => {
+      span.setAttribute("unicas.peer", "unicas_api");
+      headers.set(TraceIdHeader, traceSession.correlationUlid);
+      const internalContext = span.context
+        ? await createInternalTraceContextHeader(
+          span.context,
+          traceHmacKeys,
+          createInternalTraceAudience(
+            "unicas_request",
+            request.method,
+            new URL(request.url).pathname,
+          ),
+        ).catch(() => null)
+        : null;
+      if (internalContext) headers.set(InternalTraceContextHeader, internalContext);
+      return finishTracedFetch(span, new Request(request, { headers }), fetchImpl);
+    });
+  }) as typeof fetch;
+}
+
+function traceAwareProviderFetch(
+  fetchImpl: typeof fetch,
+  discoveryUrl: string,
+  traceSession: ManualTraceSession,
+): typeof fetch {
+  return ((input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? new Request(input, init) : new Request(input, init);
+    const peer = request.url === discoveryUrl
+      ? "issuer_metadata"
+      : request.method === "POST" ? "oauth_token" : "jwks";
+    return traceFetch(traceSession, peer, request, fetchImpl);
+  }) as typeof fetch;
+}
+
+function traceFetch(
+  traceSession: ManualTraceSession,
+  peer: "issuer_metadata" | "jwks" | "oauth_token" | "unicas_api" | "r2_upload",
+  request: Request,
+  fetchImpl: typeof fetch,
+): Promise<Response> {
+  return traceSession.tracing.enterSpan("unicas.fetch", async (span) => {
+    span.setAttribute("unicas.peer", peer);
+    return finishTracedFetch(span, request, fetchImpl);
+  });
+}
+
+async function finishTracedFetch(
+  span: ManualTraceSpan,
+  request: Request,
+  fetchImpl: typeof fetch,
+): Promise<Response> {
+  try {
+    const response = await fetchImpl(request);
+    span.setAttribute("unicas.http.status_class", `${Math.floor(response.status / 100)}xx`);
+    span.setAttribute(
+      "unicas.outcome",
+      response.status >= 500 ? "failed" : response.status >= 400 ? "rejected" : "ok",
+    );
+    return response;
+  } catch (error) {
+    span.setAttribute("unicas.outcome", "failed");
+    throw error;
+  }
+}
+
+function withoutTraceHeaders(headers: HeadersInit): Headers {
+  const sanitized = new Headers(headers);
+  sanitized.delete(TraceIdHeader);
+  sanitized.delete(InternalTraceContextHeader);
+  return sanitized;
+}
+
+function spacesOperation(method: string, pathname: string): string {
+  if (pathname === "/.well-known/openid-configuration") return "issuer_metadata";
+  if (pathname === "/.well-known/jwks.json") return "issuer_jwks";
+  if (pathname === "/auth/google/start") return "oauth_start";
+  if (pathname === "/auth/google/callback") return "oauth_callback";
+  if (pathname === "/api/smoke/session") return "smoke_session";
+  if (pathname === "/api/session") return "session_read";
+  if (pathname === "/auth/logout") return "session_logout";
+  if (pathname.startsWith("/api/smoke/")) return "smoke";
+  if (pathname === "/api/entries") return "entries_list";
+  if (pathname === "/api/files/content") return "file_download";
+  if (pathname === "/api/files" && method === "POST") return "file_upload";
+  if (pathname === "/api/files" && method === "PATCH") return "file_rename";
+  if (pathname === "/api/files" && method === "DELETE") return "file_delete";
+  if (pathname === "/api/folders") return "folder_create";
+  return "unknown";
+}
+
+function isUnauthenticatedSpacesRoute(method: string, pathname: string): boolean {
+  return (method === "GET" && (
+    pathname === "/.well-known/openid-configuration"
+    || pathname === "/.well-known/jwks.json"
+    || pathname === "/auth/google/start"
+    || pathname === "/auth/google/callback"
+  )) || (method === "POST" && pathname === "/api/smoke/session");
 }
 
 async function completeGoogleLogin(
