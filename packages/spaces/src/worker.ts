@@ -29,6 +29,7 @@ import {
 } from "./http.js";
 import { SpacesRepository, type AuthenticatedSession, type PrincipalContext } from "./repository.js";
 import { verifySmokeIsolation, type IsolationEvidence } from "./smoke-probe.js";
+import { logSpacesEvent, traceCleanupRun, type TracingPort } from "./observability.js";
 
 type FileServicePort = Pick<SpacesFileService,
   "list" | "createFolder" | "uploadFile" | "renameFile" | "deleteFile" | "download"
@@ -60,7 +61,7 @@ export interface SpacesWorker {
   scheduled(
     controller: unknown,
     env: SpacesEnv,
-    context: { waitUntil(promise: Promise<unknown>): void },
+    context: { waitUntil(promise: Promise<unknown>): void; readonly tracing?: TracingPort },
   ): Promise<void>;
 }
 
@@ -237,22 +238,25 @@ export function createSpacesWorker(dependencies: SpacesWorkerDependencies = {}):
         return errorResponse("not_found", 404, "Route not found", correlationId);
       } catch (error) {
         const response = mapError(error, correlationId);
-        console.error(JSON.stringify({
+        logSpacesEvent({
           event: "spaces_request_failed",
-          correlationId,
           code: response.code,
           status: response.status,
-        }));
+        });
         return errorResponse(response.code, response.status, response.message, correlationId);
       }
     },
 
     async scheduled(_controller, env, context): Promise<void> {
-      context.waitUntil((async () => {
+      context.waitUntil(traceCleanupRun(context.tracing, async () => {
         const config = readSpacesConfig(env);
         const repository = new SpacesRepository(env.SPACES_DB);
         await repository.pruneExpired();
-        for (const principal of await repository.listPendingReleasePrincipals(10)) {
+        let examined = 0;
+        let failed = 0;
+        const pendingPrincipals = await repository.listPendingReleasePrincipals(10);
+        examined += pendingPrincipals.length;
+        for (const principal of pendingPrincipals) {
           try {
             const fileService = await fileServiceFactory({
               db: env.SPACES_DB,
@@ -264,13 +268,16 @@ export function createSpacesWorker(dependencies: SpacesWorkerDependencies = {}):
             });
             await fileService.reconcilePendingReleases(20);
           } catch {
-            console.error(JSON.stringify({
+            failed += 1;
+            logSpacesEvent({
               event: "spaces_root_release_reconciliation_failed",
               code: "root_release_pending",
-            }));
+            });
           }
         }
-        for (const run of await repository.listExpiredSmokeRuns(10)) {
+        const expiredRuns = await repository.listExpiredSmokeRuns(10);
+        examined += expiredRuns.length;
+        for (const run of expiredRuns) {
           try {
             const principal = await repository.readPrincipal(run.principalId);
             if (!principal) throw new Error("Smoke Principal not found");
@@ -284,16 +291,17 @@ export function createSpacesWorker(dependencies: SpacesWorkerDependencies = {}):
             });
             await executeSmokeCleanup(repository, fileService, run.runId, run.principalId);
           } catch {
+            failed += 1;
             await repository.failSmokeCleanup(run.runId, run.principalId);
-            console.error(JSON.stringify({
+            logSpacesEvent({
               event: "spaces_smoke_cleanup_failed",
-              runId: run.runId,
               stage: "cleanup",
               code: "cleanup_failed",
-            }));
+            });
           }
         }
-      })());
+        return { examined, failed };
+      }));
     },
   };
 }

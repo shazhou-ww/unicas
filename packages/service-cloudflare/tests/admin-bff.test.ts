@@ -1907,6 +1907,8 @@ describe("cas-admin-webui BFF", () => {
   test("id_token with a wrong nonce is rejected", async () => {
     const provider = await createMockProvider();
     const bff = await createBff(provider);
+    const messages: string[] = [];
+    vi.spyOn(console, "error").mockImplementation((message) => messages.push(String(message)));
     const login = await bff(new Request(`${PUBLIC_ORIGIN}/admin/auth/start/google`));
     const cookie = cookieFrom(login)!;
     const location = new URL(login.headers.get("Location")!);
@@ -1925,6 +1927,12 @@ describe("cas-admin-webui BFF", () => {
     ));
     expect(callback.status).toBe(302);
     expect(callback.headers.get("Location")).toBe("/admin/auth/login?error=oidc-failed");
+    const callbackEvent = messages
+      .map((message) => JSON.parse(message) as Record<string, unknown>)
+      .find((event) => event["event"] === "admin_oidc_callback_failed");
+    expect(callbackEvent).toMatchObject({ event: "admin_oidc_callback_failed" });
+    expect(callbackEvent).not.toHaveProperty("message");
+    expect(messages.join("\n")).not.toContain("wrong-nonce");
   });
 
   test("API routes require a session", async () => {

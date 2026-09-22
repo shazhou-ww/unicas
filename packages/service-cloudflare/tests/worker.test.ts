@@ -60,6 +60,12 @@ vi.mock("../src/usage-reconciliation.js", () => ({
   reconcileAppUsageObservations: handlers.reconcileUsage,
   repairOldestSpaceUsageProjection: handlers.repairUsage,
 }));
+vi.mock("../src/runtime-tracing.js", () => ({
+  runtimeTracing: {
+    enterSpan: (_name: string, callback: (span: { isTraced: boolean; setAttribute(): void }) => unknown) =>
+      callback({ isTraced: false, setAttribute() {} }),
+  },
+}));
 vi.mock("../src/app-usage.js", () => ({
   CloudflareAppUsageRepository: class { readAppUsage = handlers.readAppUsage; },
 }));

@@ -209,6 +209,8 @@ export type {
   CanonicalUploadReservation,
   LeaseDrivenNodeUploadRepository,
   LeaseDrivenNodeUploadResult,
+  LeaseDrivenNodeInstrumentation,
+  LeaseDrivenNodeValidationResult,
   LeaseDrivenUploadObject,
   LeaseDrivenUploadRecord,
   LeaseDrivenUploadValidation,

@@ -25,6 +25,7 @@ import type {
   CanonicalNodeLeaseBeginResult,
   CanonicalNodeUploadPlan,
   LeaseDrivenNodeUploadResult,
+  LeaseDrivenNodeInstrumentation,
 } from "@unicas/service";
 import { CloudflareNodeLeaseRepository } from "./node-lease.js";
 import type { NodeReadyCache } from "./node-lease.js";
@@ -181,6 +182,7 @@ export function leaseDrivenNodeUpload(
       readonly generation: string;
       readonly temporaryObjectKey: string;
     };
+    readonly instrumentation?: LeaseDrivenNodeInstrumentation;
     readonly now: () => number;
   },
 ): Promise<LeaseDrivenNodeUploadResult> {

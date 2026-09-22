@@ -236,6 +236,22 @@ pnpm --filter @unicas/service-cloudflare exec wrangler deploy --dry-run
 pnpm deploy:spaces:plan
 ```
 
+Both dynamic Worker configs explicitly persist 5% sampled custom logs with
+generated invocation logs disabled. They explicitly disable trace sampling,
+persistence, and destinations. The assets-only product and docs Workers have
+no observability block. The deployment-plan test locks this policy and verifies
+that generated Spaces production configuration preserves it:
+
+```powershell
+pnpm exec vitest run tests/deploy-plan.test.mjs
+```
+
+Do not enable production tracing or invocation logs through a dashboard
+override. Wrangler configuration is the source of truth, and the next deploy
+would replace that override. See [Observability](observability.md) for the
+automatic-attribute safety gate, sample/retention contract, and post-deploy
+synthetic verification.
+
 Do not run `pnpm deploy --dry-run`: pnpm can consume that argument instead of
 forwarding it, which invokes the real root deploy script. Use only
 `pnpm deploy:plan` or the direct Wrangler command above for dry runs.
