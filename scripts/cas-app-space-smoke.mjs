@@ -142,15 +142,13 @@ async function main() {
   const metadata = await client.readMetadata(parent.hash);
   assert(metadata.hash === parent.hash && metadata.refs[0] === child.hash, "metadata preserves child reference");
 
-  let rootRetained = false;
   let smokeFailure;
   try {
     const firstRootUpdate = await client.updateRootRefs({
       requestId: `${RUN}:roots:1`,
       changes: { [parent.hash]: 1 },
     });
-    rootRetained = firstRootUpdate.success === true;
-    assert(rootRetained && typeof firstRootUpdate.revision === "number", "Root Ref update succeeds");
+    assert(firstRootUpdate.success === true && typeof firstRootUpdate.revision === "number", "Root Ref update succeeds");
     const retry = await client.updateRootRefs({
       requestId: `${RUN}:roots:1`,
       changes: { [parent.hash]: 1 },
@@ -158,6 +156,21 @@ async function main() {
     assert(retry.idempotent === true && retry.revision === firstRootUpdate.revision, "Root Ref retry is idempotent");
     const roots = await client.listRootRefs({ limit: 100 });
     assert(roots.items.some((item) => item.hash === parent.hash && item.refCount > 0), "Root Ref list contains parent");
+
+    const replacement = await client.updateRootRefs({
+      requestId: `${RUN}:roots:replace`,
+      changes: { [parent.hash]: -1, [child.hash]: 1 },
+    });
+    assert(
+      replacement.success === true && replacement.revision > firstRootUpdate.revision,
+      "mixed-sign Root Ref replacement succeeds atomically",
+    );
+    const replacedRoots = await client.listRootRefs({ limit: 100 });
+    assert(
+      replacedRoots.items.some((item) => item.hash === child.hash && item.refCount > 0)
+        && !replacedRoots.items.some((item) => item.hash === parent.hash && item.refCount > 0),
+      "mixed-sign Root Ref replacement updates the projection",
+    );
 
     const usage = await client.usage();
     assert(usage.nodeCount >= 2, `Space usage nodeCount -> ${usage.nodeCount}`);
@@ -235,17 +248,21 @@ async function main() {
     smokeFailure = error;
     throw error;
   } finally {
-    if (rootRetained) {
-      try {
+    try {
+      const roots = await client.listRootRefs({ limit: 100 });
+      const changes = Object.fromEntries(roots.items
+        .filter((item) => (item.hash === parent.hash || item.hash === child.hash) && item.refCount > 0)
+        .map((item) => [item.hash, -item.refCount]));
+      if (Object.keys(changes).length > 0) {
         const cleanup = await client.updateRootRefs({
           requestId: `${RUN}:roots:cleanup`,
-          changes: { [parent.hash]: -1 },
+          changes,
         });
-        assert(cleanup.success === true, "Root Ref cleanup releases parent");
-      } catch (cleanupError) {
-        if (smokeFailure) console.error("Root Ref cleanup also failed", cleanupError);
-        else throw cleanupError;
+        assert(cleanup.success === true, "Root Ref cleanup releases smoke roots");
       }
+    } catch (cleanupError) {
+      if (smokeFailure) console.error("Root Ref cleanup also failed", cleanupError);
+      else throw cleanupError;
     }
   }
   console.log("\nAPP/SPACE SMOKE PASS");
