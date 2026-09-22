@@ -76,6 +76,7 @@ describe("documentation static site", () => {
     expect(await artifactFiles(join(ROOT, "docs"))).toEqual([
       "README.md",
       "managed-issuer-retirement.md",
+      "npm-package-releases.md",
       "repository-tasks.md",
     ]);
   });

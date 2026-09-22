@@ -46,6 +46,8 @@ export function createSpaceFileSystem(options: SpaceFileSystemOptions): SpaceFil
       encodeFileManifest(createFileManifest(manifestEntries)),
       FileManifestContentType,
       refs,
+      undefined,
+      options.blobOptions?.uploadFetcher,
     );
   }
 

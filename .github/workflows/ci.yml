@@ -60,6 +60,9 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Verify packed App-user SDK release
+        run: pnpm check:sdk-release
+
       - name: Test documentation package
         run: pnpm --filter @unicas/docs-site test
 

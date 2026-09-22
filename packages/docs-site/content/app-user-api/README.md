@@ -152,6 +152,32 @@ seven operations described in this guide. Higher-level blob and file clients
 may be used when their business abstraction matches the App, but their package
 behavior does not add Space API authority.
 
+## App-user SDK beta packages
+
+The public SDK is an ESM-only, unified-version beta set:
+
+```text
+@unicas/codec
+@unicas/space-protocol
+@unicas/space-client
+@unicas/space-blob-client
+@unicas/space-browser-cache
+@unicas/space-file-client
+```
+
+Install only the layers an App needs, using the `beta` dist-tag during beta:
+
+```sh
+npm install @unicas/space-client@beta
+```
+
+The browser cache is browser-only. The other packages support Node.js 24+ and
+modern browsers with the documented Web APIs. Package semver, HTTP path `v1`,
+capability claim version `1`, and beta product maturity are independent. Every
+package in one SDK release uses the same exact version; package-root imports
+are public, and `@unicas/space-protocol/openapi.json` is the only public
+subpath.
+
 ## Compatibility and source-of-truth rules
 
 This guide documents only released App/Space v1 routes under

@@ -1,0 +1,122 @@
+name: Publish npm package
+
+on:
+  push:
+    tags:
+      - "npm/app-user-sdk/v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out tagged revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Require trusted-publishing npm CLI
+        run: |
+          npm_version="$(npm --version)"
+          node --input-type=module -e "import semver from 'semver'; if (!semver.gte(process.argv[1], '11.5.1')) throw new Error('npm 11.5.1 or newer is required')" "$npm_version"
+
+      - name: Fetch authoritative primary
+        run: git fetch --no-tags origin main:refs/remotes/origin/main
+
+      - name: Build and verify release artifacts
+        run: pnpm sdk:artifacts
+
+      - name: Validate immutable package set and registry preflight
+        run: >-
+          node scripts/prepare-npm-release.mjs
+          --tag "$GITHUB_REF_NAME"
+          --commit "$GITHUB_SHA"
+          --output "$RUNNER_TEMP/sdk-release-plan.json"
+
+  publish:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out validated tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Require trusted-publishing npm CLI
+        run: |
+          npm_version="$(npm --version)"
+          node --input-type=module -e "import semver from 'semver'; if (!semver.gte(process.argv[1], '11.5.1')) throw new Error('npm 11.5.1 or newer is required')" "$npm_version"
+
+      - name: Fetch authoritative primary
+        run: git fetch --no-tags origin main:refs/remotes/origin/main
+
+      - name: Rebuild and verify release artifacts
+        run: pnpm sdk:artifacts
+
+      - name: Repeat immutable registry preflight
+        run: >-
+          node scripts/prepare-npm-release.mjs
+          --tag "$GITHUB_REF_NAME"
+          --commit "$GITHUB_SHA"
+          --output "$RUNNER_TEMP/sdk-release-plan.json"
+
+      - name: Publish package set in dependency order
+        env:
+          RELEASE_PLAN: ${{ runner.temp }}/sdk-release-plan.json
+        run: |
+          node --input-type=module <<'NODE' > "$RUNNER_TEMP/sdk-packages.tsv"
+          import { readFile } from "node:fs/promises";
+          const plan = JSON.parse(await readFile(process.env.RELEASE_PLAN, "utf8"));
+          for (const entry of plan.packages) console.log(`${entry.name}\t${entry.tarball}`);
+          NODE
+          dist_tag="$(node --input-type=module -e 'import { readFile } from "node:fs/promises"; const plan = JSON.parse(await readFile(process.env.RELEASE_PLAN, "utf8")); process.stdout.write(plan.distTag)')"
+          while IFS=$'\t' read -r package_name tarball; do
+            echo "Publishing ${package_name} from ${tarball}"
+            npm publish ".sdk-release/${tarball}" --access public --tag "$dist_tag" --provenance
+          done < "$RUNNER_TEMP/sdk-packages.tsv"

@@ -11,6 +11,9 @@ importers:
 
   .:
     devDependencies:
+      '@playwright/test':
+        specifier: 1.55.1
+        version: 1.55.1
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
@@ -29,12 +32,18 @@ importers:
       rimraf:
         specifier: ^6.1.3
         version: 6.1.3
+      semver:
+        specifier: 7.8.5
+        version: 7.8.5
       typescript:
         specifier: ^5.9.0
         version: 5.9.3
       vitest:
         specifier: ^3.2.0
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(jsdom@25.0.0(supports-color@10.2.2))(lightningcss@1.32.0)(supports-color@10.2.2)(tsx@4.23.13)(yaml@2.9.0)
+      yaml:
+        specifier: 2.9.0
+        version: 2.9.0
 
   packages/admin-cli:
     dependencies:
@@ -420,12 +429,12 @@ importers:
 
   packages/space-protocol:
     dependencies:
+      '@opentelemetry/api':
+        specifier: ^1.9.0
+        version: 1.9.1
       '@orpc/contract':
         specifier: 1.15.0
         version: 1.15.0(@opentelemetry/api@1.9.1)
-      '@orpc/openapi':
-        specifier: 1.15.0
-        version: 1.15.0(@opentelemetry/api@1.9.1)(ws@8.21.0)
       '@orpc/zod':
         specifier: 1.15.0
         version: 1.15.0(@opentelemetry/api@1.9.1)(@orpc/contract@1.15.0(@opentelemetry/api@1.9.1))(@orpc/server@1.15.0(@opentelemetry/api@1.9.1)(ws@8.21.0))(ws@8.21.0)(zod@4.4.3)
@@ -436,6 +445,9 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@orpc/openapi':
+        specifier: 1.15.0
+        version: 1.15.0(@opentelemetry/api@1.9.1)(ws@8.21.0)
       '@types/node':
         specifier: ^24.13.3
         version: 24.13.3
@@ -5400,8 +5412,7 @@ snapshots:
 
   '@opentelemetry/api@1.9.0': {}
 
-  '@opentelemetry/api@1.9.1':
-    optional: true
+  '@opentelemetry/api@1.9.1': {}
 
   '@orpc/client@1.15.0(@opentelemetry/api@1.9.1)':
     dependencies:

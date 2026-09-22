@@ -1,2 +1,14 @@
 repoledger.yaml text eol=lf
 tasks/status.yaml text eol=lf
+LICENSE text eol=lf
+packages/codec/** text eol=lf
+packages/space-protocol/** text eol=lf
+packages/space-client/** text eol=lf
+packages/space-blob-client/** text eol=lf
+packages/space-file-client/** text eol=lf
+packages/space-browser-cache/** text eol=lf
+sdk/** text eol=lf
+tests/fixtures/sdk-consumer/** text eol=lf
+scripts/prepare-sdk-release.mjs text eol=lf
+scripts/prepare-npm-release.mjs text eol=lf
+.github/workflows/publish-npm.yml text eol=lf

@@ -196,8 +196,9 @@ refs 一致性若需兜底，由应用栈侧在写入前自检（`refsFromSValue
 ## 能力（capability）词汇归属
 
 Current Space capability 归属 `space-protocol/src/space-capability.ts`，共享算法、
-错误与 refDomain 规则归属 `shared-capability.ts`，冻结 v1 claim/permission 归属
-`src/v1/capability.ts`。capability 是 JWT claim 词汇而非编码，故不进 `codec` 包。
+错误与 refDomain 规则归属 `shared-capability.ts`。已退役的 Stack/Tenant claim
+parser 不再属于任何公共 package。capability 是 JWT claim 词汇而非编码，故不进
+`codec` 包。
 
 ## 本轮重组记录（2026-08-29）
 

@@ -24,11 +24,15 @@
     "test:exhaustive": "pnpm check:repo && pnpm test:packages",
     "test:packages": "pnpm -r test",
     "test:quick": "pnpm check:repo && pnpm --filter \"!@unicas/service-cloudflare\" -r test",
-    "check:repo": "pnpm check:tasks && vitest run tests/deploy-plan.test.mjs tests/workspace-boundaries.test.mjs tests/openapi-drift.test.ts tests/app-space-v1-cutover.test.mjs tests/app-space-v1-issuer-cutover.test.mjs tests/stack-tenant-retirement.test.mjs",
+    "check:repo": "pnpm check:tasks && vitest run tests/deploy-plan.test.mjs tests/workspace-boundaries.test.mjs tests/openapi-drift.test.ts tests/app-space-v1-cutover.test.mjs tests/app-space-v1-issuer-cutover.test.mjs tests/stack-tenant-retirement.test.mjs tests/sdk-release.test.mjs tests/npm-release.test.mjs",
     "check:workspace": "vitest run tests/workspace-boundaries.test.mjs tests/deploy-plan.test.mjs tests/stack-tenant-retirement.test.mjs",
     "check:openapi": "vitest run tests/openapi-drift.test.ts",
     "check:api-version": "vitest run tests/app-space-v1-cutover.test.mjs",
     "check:retirement": "vitest run tests/stack-tenant-retirement.test.mjs",
+    "sdk:prepare": "node scripts/prepare-sdk-release.mjs --write",
+    "sdk:artifacts": "node scripts/prepare-sdk-release.mjs --check --output-dir .sdk-release",
+    "check:sdk-release": "vitest run tests/sdk-release.test.mjs && node scripts/prepare-sdk-release.mjs --check",
+    "check:npm-release": "vitest run tests/npm-release.test.mjs",
     "check:tasks": "repoledger check",
     "check:tasks:commit": "repoledger check --commit HEAD",
     "typecheck": "pnpm -r typecheck",
@@ -36,14 +40,17 @@
     "keys:local": "node scripts/generate-local-capability-keys.mjs"
   },
   "devDependencies": {
+    "@playwright/test": "1.55.1",
     "@types/node": "^24.0.0",
     "esbuild": "^0.28.2",
     "jose": "^6.2.10",
     "miniflare": "5.20260811.1-alpha",
     "repoledger": "github:shazhou-ww/repoledger#25fbe948f6f7d08ad2b6b8175c4fe71e61132a48",
     "rimraf": "^6.1.3",
+    "semver": "7.8.5",
     "typescript": "^5.9.0",
-    "vitest": "^3.2.0"
+    "vitest": "^3.2.0",
+    "yaml": "2.9.0"
   },
   "engines": {
     "node": ">=24",

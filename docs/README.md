@@ -8,6 +8,9 @@ the public site at `https://docs.unicas.work`.
   publication rules.
 - [Managed issuer retirement](managed-issuer-retirement.md) preserves the
   historical two-stage production retirement and rollback procedure.
+- [App-user SDK npm releases](npm-package-releases.md) defines the unified
+  package set, deterministic artifacts, immutable tag instruction, trusted
+  publishing boundary, and partial-release recovery.
 
 Published service standards, integration guidance, operations guidance, and
 legacy public references are owned by
