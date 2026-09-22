@@ -114,10 +114,9 @@ tasks:
     createdAt: "2026-09-20T02:30:21Z"
     updatedAt: "2026-09-20T03:21:40Z"
   retire-stack-tenant-data-plane:
-    state: ongoing
-    sourceBranch: task/retire-stack-tenant-data-plane
+    state: completed
     createdAt: "2026-09-21T03:41:05Z"
-    updatedAt: "2026-09-22T05:14:29Z"
+    updatedAt: "2026-09-22T06:50:49Z"
   simplify-console-administration-navigation:
     state: completed
     createdAt: "2026-09-17T04:16:49Z"
