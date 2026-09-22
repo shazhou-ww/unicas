@@ -68,10 +68,28 @@ Each command must use:
 - interactive npm owner authentication and security-key/2FA handling outside
   chat.
 
-No npm token, GitHub secret, placeholder package, `latest` tag, `beta` tag, or
-release Git tag is permitted. Before each write, query the package/version and
-stop on any unexpected existing state. After each write, verify registry
-integrity, manifest, exports, and dependencies before continuing.
+No npm token, GitHub secret, placeholder package, intentional `latest` tag,
+`beta` tag, or release Git tag is permitted. Before each write, query the
+package/version and stop on any unexpected existing state. After each write,
+verify registry integrity, manifest, exports, and dependencies before
+continuing. The registry-forced first-version `latest` behavior is handled
+below.
+
+## npm-forced latest tag
+
+The first `@unicas/codec` publication proved that npm creates `latest` for a
+brand-new package even when the publish command explicitly uses
+`--tag bootstrap`. Both npm 11.6.2 and 11.19.1 authenticated successfully but
+received registry `E400` when removing that initial `latest` tag. The artifact,
+`bootstrap` tag, package access, and trusted publisher remained correct.
+
+On 2026-09-22, the requesting user approved continuing with this unavoidable
+registry behavior. During package-record bootstrap, each new package may
+temporarily have both `bootstrap` and `latest` pointing to
+`0.0.0-bootstrap.0`. After the protected OIDC workflow publishes the complete
+`0.1.0-beta.1` set, move both `beta` and `latest` to that supported version and
+verify all six packages. Do not leave any package's `latest` tag on the
+bootstrap version.
 
 ## Restore and activate the reviewed beta
 
@@ -89,8 +107,10 @@ After all six bootstrap versions are verified:
    `npm/app-user-sdk/v0.1.0-beta.1`.
 6. Let only the protected workflow publish `0.1.0-beta.1` with OIDC and
    provenance under the `beta` dist-tag.
-7. Deliberately deprecate `0.0.0-bootstrap.0` after the beta release is verified;
-   do not unpublish it.
+7. Move each npm-forced `latest` tag from `0.0.0-bootstrap.0` to the verified
+  `0.1.0-beta.1` version.
+8. Deliberately deprecate `0.0.0-bootstrap.0` after the beta release is verified;
+  do not unpublish it.
 
 ## Why not publish beta.1 manually
 
