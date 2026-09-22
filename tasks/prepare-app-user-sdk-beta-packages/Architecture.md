@@ -1,6 +1,6 @@
 # App-user SDK beta artifact architecture
 
-Status: Pending review.
+Status: Approved by the requesting user on 2026-09-22.
 
 ## Decision requested
 
@@ -69,6 +69,11 @@ Each package is packed with `pnpm pack --json` into two independent temporary
 directories. The structured pnpm result supplies the archive filename and
 file inventory. The pipeline compares corresponding SHA-512 values and fails
 when archives from the same source are not byte-identical.
+
+pnpm's gzip payload is deterministic, but its advisory OS header byte follows
+the host platform. The pipeline normalizes that byte to the Linux publication
+runner value before comparing, hashing, installing, or retaining an archive,
+without changing the compressed tar payload.
 
 The packed `package/package.json` is extracted as JSON for structured
 validation. No ad hoc manifest rewriting is allowed. The pipeline proves that

@@ -1,7 +1,21 @@
 {
   "name": "@unicas/space-client",
-  "version": "0.1.0",
+  "version": "0.1.0-beta.1",
   "description": "Cloud-neutral HTTP client for the UniCAS App/Space v1 data plane",
+  "license": "MIT",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shazhou-ww/unicas.git",
+    "directory": "packages/space-client"
+  },
+  "bugs": {
+    "url": "https://github.com/shazhou-ww/unicas/issues"
+  },
+  "homepage": "https://docs.unicas.work/app-user-api/",
+  "engines": {
+    "node": ">=24"
+  },
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -30,6 +44,7 @@
     "vitest": "^3.2.0"
   },
   "publishConfig": {
+    "access": "public",
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
     "exports": {

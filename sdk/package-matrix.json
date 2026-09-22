@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "releaseKey": "app-user-sdk",
+  "version": "0.1.0-beta.1",
+  "distTag": "beta",
+  "tagPrefix": "npm/app-user-sdk/v",
+  "packages": [
+    {
+      "name": "@unicas/codec",
+      "directory": "packages/codec",
+      "runtime": "node-browser",
+      "order": 1,
+      "exports": [
+        "."
+      ],
+      "dependencies": []
+    },
+    {
+      "name": "@unicas/space-protocol",
+      "directory": "packages/space-protocol",
+      "runtime": "node-browser",
+      "order": 2,
+      "exports": [
+        ".",
+        "./openapi.json"
+      ],
+      "dependencies": []
+    },
+    {
+      "name": "@unicas/space-client",
+      "directory": "packages/space-client",
+      "runtime": "node-browser",
+      "order": 3,
+      "exports": [
+        "."
+      ],
+      "dependencies": [
+        "@unicas/space-protocol"
+      ]
+    },
+    {
+      "name": "@unicas/space-blob-client",
+      "directory": "packages/space-blob-client",
+      "runtime": "node-browser",
+      "order": 4,
+      "exports": [
+        "."
+      ],
+      "dependencies": [
+        "@unicas/codec",
+        "@unicas/space-client"
+      ]
+    },
+    {
+      "name": "@unicas/space-browser-cache",
+      "directory": "packages/space-browser-cache",
+      "runtime": "browser",
+      "order": 5,
+      "exports": [
+        "."
+      ],
+      "dependencies": [
+        "@unicas/space-client"
+      ]
+    },
+    {
+      "name": "@unicas/space-file-client",
+      "directory": "packages/space-file-client",
+      "runtime": "node-browser",
+      "order": 6,
+      "exports": [
+        "."
+      ],
+      "dependencies": [
+        "@unicas/space-blob-client",
+        "@unicas/space-client"
+      ]
+    }
+  ]
+}
