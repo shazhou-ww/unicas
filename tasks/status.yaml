@@ -41,10 +41,9 @@ tasks:
     createdAt: "2026-09-20T07:36:32Z"
     updatedAt: "2026-09-20T15:01:44Z"
   cut-over-app-space-api-to-v1:
-    state: ongoing
-    sourceBranch: task/cut-over-app-space-api-to-v1
+    state: completed
     createdAt: "2026-09-21T03:40:24Z"
-    updatedAt: "2026-09-21T07:38:34Z"
+    updatedAt: "2026-09-22T02:40:00Z"
   deploy-documentation-site:
     state: completed
     createdAt: "2026-09-14T11:50:56Z"
