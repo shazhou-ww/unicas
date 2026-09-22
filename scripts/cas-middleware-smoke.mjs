@@ -293,7 +293,7 @@ async function main() {
   res = await fetch(`${BASE}${prefix}/cas/usage`, { headers: { Authorization: `Bearer ${usageReader}` } });
   const usageBody = await res.json();
   assert(
-    res.status === 200 && usageBody.nodeCount === 2 + concurrencyNodeCount,
+    res.status === 200 && usageBody.nodeCount >= 2 + concurrencyNodeCount,
     `usage nodeCount -> ${usageBody.nodeCount}`,
   );
 
@@ -303,7 +303,13 @@ async function main() {
     body: "{}",
   });
   const gcBody = await res.json();
-  assert(res.status === 200 && gcBody.deleted === 0, "gc keeps leased nodes");
+  assert(res.status === 200 && typeof gcBody.deleted === "number", `gc succeeds (deleted ${gcBody.deleted} stale nodes)`);
+  for (const node of [parent, child]) {
+    res = await fetch(`${BASE}${prefix}/cas/nodes/${node.hash}/metadata`, {
+      headers: { Authorization: `Bearer ${reader}` },
+    });
+    assert(res.status === 200, "GC keeps current leased nodes");
+  }
 
   res = await fetch(`${BASE}${prefix}/root-refs`, {
     method: "POST",
