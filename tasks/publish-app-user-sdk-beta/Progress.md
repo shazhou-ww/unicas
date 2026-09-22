@@ -10,16 +10,18 @@ activation architecture are approved. GitHub environment `npm` exists with
 or variables.
 
 npm identity `shazhou.ww` is authenticated against the official registry and is
-an owner of organization `unicas`. All six package names remain absent. npm's
-organization UI rejected both empty-package name forms with `forbidden`, and
-npm 11.19.1 `npm trust` returned `E404` after human authentication because the
-package record does not exist.
+an owner of organization `unicas`. The approved owner bootstrap created all six
+public package records at `0.0.0-bootstrap.0` in dependency order. Registry
+tarball integrity, exports, exact dependencies, visibility, collaborators, and
+tags match the reviewed evidence for every package.
 
-The requesting user approved the separately reviewed first-package bootstrap.
-The maintained candidate now uses unified version `0.0.0-bootstrap.0` and
-non-user-facing dist-tag `bootstrap`. The generated release manifest records
-its deterministic tarballs and exact internal dependency pins. No npm package,
-version, dist-tag, trusted publisher, or release tag has been created yet.
+All six packages now trust GitHub repository `shazhou-ww/unicas`, workflow
+`publish-npm.yml`, and environment `npm` for direct and staged publication.
+npm forced `latest` onto each first package version despite the explicit
+`bootstrap` tag and rejected removal with registry `E400`; the requesting user
+approved moving `latest` to beta.1 after protected publication. The maintained
+candidate is restored to unified version `0.1.0-beta.1` and dist-tag `beta`.
+No beta version or release tag has been created yet.
 
 ## Decisions
 
@@ -27,7 +29,8 @@ version, dist-tag, trusted publisher, or release tag has been created yet.
   protected GitHub OIDC workflow with provenance.
 - Bootstrap package records with the same reviewed implementation and package
   surfaces at unified version `0.0.0-bootstrap.0`; do not publish placeholders.
-- Publish bootstrap tarballs only under `bootstrap`, never `latest` or `beta`.
+- Request only `bootstrap` during owner bootstrap. Accept npm's unavoidable
+  first-version `latest` temporarily, then move it to the verified beta.1 set.
 - Keep all six versions unified and publish in matrix dependency order.
 - Use interactive organization-owner authentication outside chat. Add no npm
   token to source, GitHub, task artifacts, logs, or environment state.
@@ -63,21 +66,36 @@ version, dist-tag, trusted publisher, or release tag has been created yet.
   generated bootstrap evidence.
 - `pnpm check:npm-release` passes all 10 tag, version, primary, workflow,
   permission, token, ordering, and sole-write policy tests.
+- Bootstrap source commit `308b4af53081b74432a35f78dafd79a4f96bfabe`
+  passed task-source CI run `35714888082` and integrated main CI run
+  `35715365057` before any registry write.
+- Six npm publish dry-runs matched the generated tarball names, versions, file
+  inventories, and SHA-512 integrity values before the requesting user executed
+  each security-key-protected owner publication.
+- All six registry versions match `sdk/release-manifest.json`; scope inventory
+  contains exactly the reviewed packages with read-write organization access.
+  Every package is public and has `bootstrap` plus npm-forced `latest` pointing
+  to `0.0.0-bootstrap.0`.
+- All six npm trusted-publisher records were created and immediately read back
+  with exact repository, workflow, environment, and direct-publish permission.
+- The restored beta.1 candidate passes `pnpm sdk:prepare`, all 11 focused SDK
+  release checks, all 10 npm workflow/planner tests, external declaration
+  typecheck, Node consumer, and real-Chrome consumer.
 
 ## Blockers
 
-- The bootstrap source candidate must pass task-source and integrated primary
-  CI before any registry write.
-- The repository's installed `/publish` skill normally prohibits developer
-  machine publication. The approved bootstrap is an exceptional human-owner
-  operation; the agent must not execute it unless the repository policy is
-  explicitly reconciled for this one-time procedure.
-- Each interactive npm publish may require security-key or 2FA handling by the
-  organization owner outside chat.
+- The restored beta.1 candidate must be committed, pass task-source and main
+  CI, and receive exact-commit authorization before tag creation.
+- The protected GitHub Actions publication will pause for the configured `npm`
+  environment reviewer before registry writes.
+- After beta.1 succeeds, each npm-forced `latest` tag must be moved from the
+  bootstrap version to beta.1 and the bootstrap version deliberately
+  deprecated; both operations require authenticated owner changes.
 
 ## Outcome
 
-The one-time bootstrap artifacts are prepared and locally validated but remain
-unpublished. Next publish the candidate through the normal source/primary path,
-obtain exact-commit bootstrap authorization after CI, perform the six guarded
-owner writes, configure all six trusted publishers, and restore beta.1.
+The one-time bootstrap and trusted-publisher activation are complete and
+verified. The beta.1 source and deterministic release evidence are restored
+locally without publishing. Next publish that candidate through the normal
+source/primary path, obtain exact-commit tag authorization after CI, observe the
+protected OIDC workflow, and verify the complete registry consumer result.

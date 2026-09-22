@@ -25,12 +25,12 @@ function registryState(version = null) {
 
 describe("App-user SDK npm release planner", () => {
   test("accepts only the canonical unified-version tag", () => {
-    expect(releaseVersionFromTag("npm/app-user-sdk/v0.0.0-bootstrap.0", matrix)).toBe("0.0.0-bootstrap.0");
+    expect(releaseVersionFromTag("npm/app-user-sdk/v0.1.0-beta.1", matrix)).toBe("0.1.0-beta.1");
     for (const tag of [
-      "npm/app-user-sdk/0.0.0-bootstrap.0",
-      "npm/codec/v0.0.0-bootstrap.0",
+      "npm/app-user-sdk/0.1.0-beta.1",
+      "npm/codec/v0.1.0-beta.1",
       "npm/app-user-sdk/v0.1.0",
-      "npm/app-user-sdk/vv0.0.0-bootstrap.0",
+      "npm/app-user-sdk/vv0.1.0-beta.1",
       "npm/app-user-sdk/v01.0.0-beta.1",
     ]) {
       expect(() => releaseVersionFromTag(tag, matrix), tag).toThrow();
@@ -48,8 +48,8 @@ describe("App-user SDK npm release planner", () => {
     });
     expect(plan).toMatchObject({
       releaseKey: "app-user-sdk",
-      version: "0.0.0-bootstrap.0",
-      distTag: "bootstrap",
+      version: "0.1.0-beta.1",
+      distTag: "beta",
       commit: "a".repeat(40),
     });
     expect(plan.packages.map(({ name }) => name)).toEqual(matrix.packages.map(({ name }) => name));

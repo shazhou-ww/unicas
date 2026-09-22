@@ -1,6 +1,6 @@
 {
   "name": "@unicas/space-browser-cache",
-  "version": "0.0.0-bootstrap.0",
+  "version": "0.1.0-beta.1",
   "description": "Browser persistence strategy for immutable UniCAS node reads",
   "license": "MIT",
   "sideEffects": false,

@@ -1,6 +1,6 @@
 {
   "name": "@unicas/space-protocol",
-  "version": "0.0.0-bootstrap.0",
+  "version": "0.1.0-beta.1",
   "description": "UniCAS App/Space v1 data-plane contracts and capability vocabulary",
   "license": "MIT",
   "sideEffects": false,

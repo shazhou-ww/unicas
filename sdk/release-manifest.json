@@ -1,8 +1,8 @@
 {
-  "distTag": "bootstrap",
+  "distTag": "beta",
   "packages": [
     {
-      "bytes": 7144,
+      "bytes": 7140,
       "dependencies": {
         "cborg": "^6.1.1"
       },
@@ -27,15 +27,15 @@
         "dist/validation.js",
         "package.json"
       ],
-      "integrity": "sha512-+zSeH0/x0Y9W9wnxpN6J2BCM4ebkpOwxOkjqLbqspZT9HlXHgrjInOegL9NP0wB4t8NmMwNboB4hQAVkcc1+WA==",
+      "integrity": "sha512-eyhVxmmu4xVAFHcGvQ8pU7yUJX82ILx9kc2fD5ai3+mH+gat8hV8jYH71QiJZ6qbGiRWjlmYZ+cLGfHyd6OUvg==",
       "name": "@unicas/codec",
       "order": 1,
       "runtime": "node-browser",
-      "tarball": "unicas-codec-0.0.0-bootstrap.0.tgz",
-      "version": "0.0.0-bootstrap.0"
+      "tarball": "unicas-codec-0.1.0-beta.1.tgz",
+      "version": "0.1.0-beta.1"
     },
     {
-      "bytes": 17042,
+      "bytes": 17037,
       "dependencies": {
         "@opentelemetry/api": "^1.9.0",
         "@orpc/contract": "1.15.0",
@@ -72,17 +72,17 @@
         "openapi/app-space-v1.openapi.json",
         "package.json"
       ],
-      "integrity": "sha512-XVQZ8bkrCbsdWSR2aZlunfAqo1G+h2/vGvz6dGrVQgdpPtrBy1CpcCSBqAxucayJs/WV+EDmCJVUNx9dJnJz1w==",
+      "integrity": "sha512-jVD31PFux89Y4sudUSQSIm6zBpOtrEtvfIVkywClVkhCjhFVmlQJ3k4F/V426lgsmo4+Hq+jOEXmQiVs1gpf5A==",
       "name": "@unicas/space-protocol",
       "order": 2,
       "runtime": "node-browser",
-      "tarball": "unicas-space-protocol-0.0.0-bootstrap.0.tgz",
-      "version": "0.0.0-bootstrap.0"
+      "tarball": "unicas-space-protocol-0.1.0-beta.1.tgz",
+      "version": "0.1.0-beta.1"
     },
     {
-      "bytes": 4827,
+      "bytes": 4823,
       "dependencies": {
-        "@unicas/space-protocol": "0.0.0-bootstrap.0"
+        "@unicas/space-protocol": "0.1.0-beta.1"
       },
       "exports": {
         ".": {
@@ -107,18 +107,18 @@
         "dist/types.js",
         "package.json"
       ],
-      "integrity": "sha512-7OpB86Dsl4O/yGrS4v5Z1Yl9BJXQyviuuTr8AhuBJrdiCNq78DvJvkcCsieXrgQEovSQFLMYRm37IujUfgYk/Q==",
+      "integrity": "sha512-nhpKWgJfHLGAS4ErdK+Nqg9kzExxHjMsFfkl1AKXzc9xFUHiw6ya1F0qkRgBMgP4kIMm34j+ofrEpcabxDBx/A==",
       "name": "@unicas/space-client",
       "order": 3,
       "runtime": "node-browser",
-      "tarball": "unicas-space-client-0.0.0-bootstrap.0.tgz",
-      "version": "0.0.0-bootstrap.0"
+      "tarball": "unicas-space-client-0.1.0-beta.1.tgz",
+      "version": "0.1.0-beta.1"
     },
     {
-      "bytes": 8285,
+      "bytes": 8278,
       "dependencies": {
-        "@unicas/codec": "0.0.0-bootstrap.0",
-        "@unicas/space-client": "0.0.0-bootstrap.0",
+        "@unicas/codec": "0.1.0-beta.1",
+        "@unicas/space-client": "0.1.0-beta.1",
         "cborg": "^6.1.1"
       },
       "exports": {
@@ -142,17 +142,17 @@
         "dist/types.js",
         "package.json"
       ],
-      "integrity": "sha512-DGuIORCZWat+SE0cftWGgqh5hNEgNKXUSEAOpcVW0vq3EOmHduj+Kb4qFQxze0y0NQUEe82UcYN2iRnWwwB3Jg==",
+      "integrity": "sha512-FAzA0gqjKbjVbf9Azli1oAp1wb+wIdcdCt35OPKffS2/QmVrddQzfmkJuYarNx2XqiOYEKg1kFzvC0Uq41G13g==",
       "name": "@unicas/space-blob-client",
       "order": 4,
       "runtime": "node-browser",
-      "tarball": "unicas-space-blob-client-0.0.0-bootstrap.0.tgz",
-      "version": "0.0.0-bootstrap.0"
+      "tarball": "unicas-space-blob-client-0.1.0-beta.1.tgz",
+      "version": "0.1.0-beta.1"
     },
     {
-      "bytes": 6899,
+      "bytes": 6896,
       "dependencies": {
-        "@unicas/space-client": "0.0.0-bootstrap.0",
+        "@unicas/space-client": "0.1.0-beta.1",
         "idb": "^8.0.3"
       },
       "exports": {
@@ -170,18 +170,18 @@
         "dist/index.js",
         "package.json"
       ],
-      "integrity": "sha512-MDTtdBsWGF5KkTAeYzcniIblSOj2/MUm3jC0vk1QYLqpqjkwFvjFy62B93FfFaXxUx0ZcCf7LPv2QYMTOpvMWA==",
+      "integrity": "sha512-wkF4B4k0jmS96BgbyQMBW5A711J2I3ljMIv6uKz+TJBassdKCENRZ9bd+d2B+Sme9qWr1gik4JlVCeog3w0Rxw==",
       "name": "@unicas/space-browser-cache",
       "order": 5,
       "runtime": "browser",
-      "tarball": "unicas-space-browser-cache-0.0.0-bootstrap.0.tgz",
-      "version": "0.0.0-bootstrap.0"
+      "tarball": "unicas-space-browser-cache-0.1.0-beta.1.tgz",
+      "version": "0.1.0-beta.1"
     },
     {
-      "bytes": 7167,
+      "bytes": 7162,
       "dependencies": {
-        "@unicas/space-blob-client": "0.0.0-bootstrap.0",
-        "@unicas/space-client": "0.0.0-bootstrap.0",
+        "@unicas/space-blob-client": "0.1.0-beta.1",
+        "@unicas/space-client": "0.1.0-beta.1",
         "cborg": "^6.1.1"
       },
       "exports": {
@@ -205,16 +205,16 @@
         "dist/types.js",
         "package.json"
       ],
-      "integrity": "sha512-U4ECiiXPEi3a/kyKreJ1c3uko13+oaCOIbl2rdE9hWURWuOf79d8Y3ZQC3m7XFr4SfVqpMX00w6D3/2YyPcIVQ==",
+      "integrity": "sha512-nXJLr7iy5xczzOEEgfuaF+R3ATNPFv6DeXNfysS6PiNO/hRBB8vqNGdyb64V/9XOvKv+r4qnlpkwOXcEDLMD6g==",
       "name": "@unicas/space-file-client",
       "order": 6,
       "runtime": "node-browser",
-      "tarball": "unicas-space-file-client-0.0.0-bootstrap.0.tgz",
-      "version": "0.0.0-bootstrap.0"
+      "tarball": "unicas-space-file-client-0.1.0-beta.1.tgz",
+      "version": "0.1.0-beta.1"
     }
   ],
   "releaseKey": "app-user-sdk",
   "schemaVersion": 1,
-  "tag": "npm/app-user-sdk/v0.0.0-bootstrap.0",
-  "version": "0.0.0-bootstrap.0"
+  "tag": "npm/app-user-sdk/v0.1.0-beta.1",
+  "version": "0.1.0-beta.1"
 }

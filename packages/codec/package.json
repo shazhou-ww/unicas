@@ -1,6 +1,6 @@
 {
   "name": "@unicas/codec",
-  "version": "0.0.0-bootstrap.0",
+  "version": "0.1.0-beta.1",
   "description": "Wire-format encodings for the UniCAS data plane: canonical node binary format, digest, streaming parse, and validation limits",
   "license": "MIT",
   "sideEffects": false,

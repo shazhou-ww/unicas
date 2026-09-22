@@ -25,8 +25,8 @@ describe("App-user SDK release matrix", () => {
     expect(matrix).toMatchObject({
       schemaVersion: 1,
       releaseKey: "app-user-sdk",
-      version: "0.0.0-bootstrap.0",
-      distTag: "bootstrap",
+      version: "0.1.0-beta.1",
+      distTag: "beta",
       tagPrefix: "npm/app-user-sdk/v",
     });
     expect(matrix.packages).toHaveLength(6);
