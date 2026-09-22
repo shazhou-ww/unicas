@@ -94,9 +94,10 @@ tasks:
     createdAt: "2026-09-21T03:18:47Z"
     updatedAt: "2026-09-21T03:18:47Z"
   publish-app-user-sdk-beta:
-    state: backlog
+    state: ongoing
+    sourceBranch: task/publish-app-user-sdk-beta
     createdAt: "2026-09-21T03:42:32Z"
-    updatedAt: "2026-09-21T03:42:32Z"
+    updatedAt: "2026-09-22T09:32:21Z"
   replace-active-app-oauth-issuer:
     state: completed
     createdAt: "2026-09-15T14:26:52Z"
