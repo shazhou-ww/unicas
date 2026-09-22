@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "releaseKey": "app-user-sdk",
-  "version": "0.1.0-beta.1",
-  "distTag": "beta",
+  "version": "0.0.0-bootstrap.0",
+  "distTag": "bootstrap",
   "tagPrefix": "npm/app-user-sdk/v",
   "packages": [
     {
