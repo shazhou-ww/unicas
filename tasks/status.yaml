@@ -122,9 +122,10 @@ tasks:
     createdAt: "2026-09-17T04:16:49Z"
     updatedAt: "2026-09-19T05:12:49Z"
   simplify-validation-and-release-workflows:
-    state: backlog
+    state: ongoing
+    sourceBranch: task/simplify-validation-and-release-workflows
     createdAt: "2026-09-23T06:08:02Z"
-    updatedAt: "2026-09-23T06:08:02Z"
+    updatedAt: "2026-09-23T06:27:07Z"
   split-app-space-operation-permissions:
     state: completed
     createdAt: "2026-09-20T14:23:39Z"
