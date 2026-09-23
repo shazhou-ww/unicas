@@ -39,6 +39,9 @@ Updated: 2026-09-23
   确定性六包 artifact、文档浏览器测试、四个 deployment dry-run 和 release planner。
 - `pnpm check:tasks` 与 `git diff --check`：通过；仅有仓库既有及当前 Delivery
   acceptance Pending 警告。
+- 首次 source Actions run 发现 workflow 将 `DOCS_SOURCE_REVISION` 注入整个验证
+  命令，导致本地默认环境与 CI 不一致；该变量已收窄到生产文档部署 step，并增加
+  回归断言，等待修复 revision 的 Actions 复验。
 - 结构对比：普通 `main` 从 19 个 functional steps 收敛到 checkout、secret scan、
   两项 setup、install、单一 `validate` 和独立 remote ledger check；npm 从两个 job、
   两次 install/build/full preflight 收敛到一个 10-step protected job、一次

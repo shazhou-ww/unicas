@@ -278,7 +278,7 @@ describe("standalone deployment plan", () => {
     expect(job).toContain("git merge-base --is-ancestor \"$GITHUB_SHA\" origin/main");
     expect(job).not.toContain("pnpm test:exhaustive");
     expect(job).not.toContain("wrangler deploy --dry-run");
-    expect(job).toContain("DOCS_SOURCE_REVISION: ${{ github.sha }}");
+    expect(job).not.toContain("DOCS_SOURCE_REVISION");
     expect(ROOT_PACKAGE.scripts.validate).toContain("pnpm test:quick");
     expect(ROOT_PACKAGE.scripts.validate).toContain("pnpm build");
     expect(ROOT_PACKAGE.scripts.validate).toContain("pnpm typecheck");
@@ -294,6 +294,7 @@ describe("standalone deployment plan", () => {
       "if: github.event_name == 'push' && github.ref == 'refs/heads/main'",
     );
     expect(CI_WORKFLOW).toContain("run: pnpm check:tasks --remote");
+    expect(CI_WORKFLOW).toContain("DOCS_SOURCE_REVISION: ${{ github.sha }}");
   });
 
   test("gates production deployment behind validation of a release revision", () => {

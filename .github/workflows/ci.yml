@@ -53,14 +53,10 @@ jobs:
 
       - name: Run standard validation
         if: github.ref != 'refs/heads/release' && github.event_name != 'workflow_dispatch'
-        env:
-          DOCS_SOURCE_REVISION: ${{ github.sha }}
         run: pnpm validate
 
       - name: Run release validation
         if: github.ref == 'refs/heads/release' || github.event_name == 'workflow_dispatch'
-        env:
-          DOCS_SOURCE_REVISION: ${{ github.sha }}
         run: pnpm validate:release
 
       - name: Check published repository task ledger
