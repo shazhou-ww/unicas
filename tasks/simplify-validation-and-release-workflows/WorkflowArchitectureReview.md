@@ -28,12 +28,14 @@ Status: Proposed
 
 ```mermaid
 flowchart TD
-  BP[branch push] --> Q[quick read-only validation]
-  PR[pull request] --> F[canonical full validation]
-  MAIN[main push] --> F
-  MANUAL[manual full validation] --> F
-  REL[release push] --> F
-  F -->|release SHA + main ancestor| PE[Production environment]
+  LOCAL[local delivery check] --> V[canonical pnpm validate]
+  BP[branch push] --> V
+  PR[pull request] --> V
+  MAIN[main push] --> V
+  MANUAL[manual release validation] --> R[comprehensive pnpm validate:release]
+  REL[release push] --> R
+  V --> R
+  R -->|release SHA + main ancestor| PE[Production environment]
   PE --> PD[rebuild exact SHA and deploy serially]
   PD --> PS[service, Spaces, public-origin and cleanup smoke]
   PS --> PT[immutable production tag]
@@ -52,8 +54,10 @@ flowchart TD
 1. **脚本拥有检查，workflow 只编排。** Root/package scripts 定义可在 Windows 和
    Linux 执行的检查集合；workflow 负责 trigger、权限、environment、concurrency
    和精确 SHA。workflow 不复制脚本内部命令序列。
-2. **快速与完整门禁职责不同。** 快速门禁优化 source branch 反馈，不声称可替代
-   merge/delivery 门禁；完整门禁是 PR、`main`、`release` 和手动验证的唯一穷尽入口。
+2. **普通 CI 只有一个可本地复现的测试集合。** 本地交付检查、branch、PR 和
+   `main` 都调用 `pnpm validate`，不根据 GitHub event 维护不同 test cases。
+   `release` 调用严格包含它的 `pnpm validate:release`，增加低频、慢速和外部发布
+   边界验证，而不是改变普通 CI 已检查断言的语义。
 3. **同一信任域内只生成一次。** 完整只读门禁中的 build、typecheck、docs 和 SDK
    artifact check 各调用一次。npm protected job 中六包只重建一次。
 4. **不跨信任边界复用可执行产物。** Production job 从批准的 release SHA 重建；
@@ -93,7 +97,8 @@ flowchart TD
 
 将增加结构化 workflow/script 测试，至少证明：
 
-- 普通 branch、PR、`main`、`release`、manual full validation 的 job 选择；
+- 普通 branch、PR、`main` 均调用同一 `pnpm validate`，`release` 和 manual
+  release validation 调用其严格超集；
 - normal workflow 无 bootstrap/cutover 写入口，恢复 workflow 只有
   `workflow_dispatch` 且使用 `Production` environment；
 - 规范和非规范 npm tag 的接受/拒绝、唯一六包集合、依赖顺序、OIDC 权限和无 token；
@@ -109,13 +114,12 @@ GitHub 时长有 runner 波动，交付结论同时看操作次数和三次中�
 
 | 路径 | 结构目标 | 时间目标 |
 | --- | --- | --- |
-| branch push | 只运行 quick job；不 pack SDK、不 build 四个 deployment bundle | runner 中位数低于当前 full baseline 的 50% |
-| PR / `main` | 一个规范 full job；build/typecheck/docs/SDK 各一次 | runner 中位数至少降低 20%，且仍覆盖完整门禁 |
-| `release` | 删除 cutover steps 和可达 bootstrap job；保留 protected rebuild、deploy、smoke 和 tag | validation 部分至少降低 20%；deploy 成本不以削弱 smoke 为代价 |
+| branch / PR / `main` | 全部调用同一 `pnpm validate`；精简重复或只在发布前有价值的 test cases；build/typecheck 各一次 | runner 中位数至少降低 20%，本地与 CI 的标准命令结果一致 |
+| `release` | `pnpm validate:release` 覆盖普通门禁的严格超集；删除 cutover steps 和可达 bootstrap job；保留 protected rebuild、deploy、smoke 和 tag | 全面 validation 成本单独记录；deploy 成本不以削弱 smoke 为代价 |
 | npm tag | 一个 protected job；一次 install、artifact build 和全量 preflight | functional steps 至少降低 30%；environment 等待之外的 runner 中位数至少降低 25% |
 
 ## 请求决定
 
-批准本架构表示接受上述职责拆分、同信任域复用、跨信任域重建、权限、concurrency、
-失败关闭、恢复隔离、测量方法和优化阈值。批准不授权生产部署、npm 发布或非零
-production tracing sampling。
+批准本架构表示接受普通 CI 使用统一可本地复现门禁、release 使用严格超集，以及
+上述同信任域复用、跨信任域重建、权限、concurrency、失败关闭、恢复隔离、测量
+方法和优化阈值。批准不授权生产部署、npm 发布或非零 production tracing sampling。
