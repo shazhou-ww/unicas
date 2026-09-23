@@ -46,6 +46,9 @@ registry signatures, and attestations.
   publishers, then restore and revalidate the maintained beta.1 candidate.
 - Treat any partial bootstrap publication as immutable registry state. Stop and
   inspect before continuing; never overwrite or unpublish a version.
+- Re-plan immediately before every automated package write. Skip only an exact
+  registry match for integrity, exports, dependencies, and dist-tag; publish
+  only an absent version; fail closed on every mismatch.
 
 ## Human approvals
 
@@ -53,7 +56,7 @@ registry signatures, and attestations.
 | --- | --- | --- |
 | Scope | Approved | On 2026-09-22, the requesting user explicitly invoked `/publish app-user-sdk 0.1.0-beta.1`, authorizing execution of the registered publication outcome subject to its protected gates. |
 | Interface | Approved | On 2026-09-22, the requesting user selected “批准接口” for [InterfaceReview.md](./InterfaceReview.md), approving the exact six-package beta.1 contract, `beta` dist-tag, immutable tag, and order. |
-| Architecture | Approved | On 2026-09-22, the requesting user selected “批准激活架构” for [Architecture.md](./Architecture.md), approving the protected GitHub environment and token-free OIDC path. After npm package creation proved blocked, the user selected “批准 bootstrap.0 方案” for [BootstrapReview.md](./BootstrapReview.md). |
+| Architecture | Approved | On 2026-09-22, the requesting user selected “批准激活架构” for [Architecture.md](./Architecture.md), approving the protected GitHub environment and token-free OIDC path. After npm package creation proved blocked, the user selected “批准 bootstrap.0 方案” for [BootstrapReview.md](./BootstrapReview.md). On 2026-09-23, the user selected “补齐幂等重试并测试”, approving exact-match skip and missing-package resume for interrupted future runs. |
 | Business and data model | Not applicable | Package publication and registry metadata change no UniCAS domain entity, customer data, ownership model, schema, retention, or service lifecycle state. |
 | Delivery acceptance | Pending | Requires verified bootstrap and trust configuration, beta workflow success, registry provenance and dist-tags, clean registry-consumer evidence, exact integrated primary commit, and explicit requesting-user acceptance. |
 
@@ -72,8 +75,9 @@ registry signatures, and attestations.
   and real-Chrome IndexedDB consumer all pass.
 - `pnpm check:sdk-release` passes all 11 matrix and artifact checks for the
   generated bootstrap evidence.
-- `pnpm check:npm-release` passes all 10 tag, version, primary, workflow,
-  permission, token, ordering, and sole-write policy tests.
+- `pnpm check:npm-release` passes all 12 tag, version, primary, exact registry
+  fetch, partial resume, mismatch, workflow, permission, token, ordering, and
+  sole-write policy tests.
 - Bootstrap source commit `308b4af53081b74432a35f78dafd79a4f96bfabe`
   passed task-source CI run `35714888082` and integrated main CI run
   `35715365057` before any registry write.
@@ -87,7 +91,7 @@ registry signatures, and attestations.
 - All six npm trusted-publisher records were created and immediately read back
   with exact repository, workflow, environment, and direct-publish permission.
 - The restored beta.1 candidate passes `pnpm sdk:prepare`, all 11 focused SDK
-  release checks, all 10 npm workflow/planner tests, external declaration
+  release checks, all 12 npm workflow/planner tests, external declaration
   typecheck, Node consumer, and real-Chrome consumer.
 - Reconciled source commit `45c1681e2cfb071ffcc2be694bae48ad2e267514`
   passed task-source CI run `35718757533` and integrated main CI run
@@ -107,17 +111,26 @@ registry signatures, and attestations.
 - `pnpm verify:npm-release -- --expect-latest` reproduces the complete live
   metadata, provenance, tarball, tag, bootstrap-cleanup, and consumer checks
   without npm credentials.
+- The hardened planner classifies the current six live versions as `verified`.
+  Unit tests cover all-absent publication, a three-package interrupted subset,
+  a complete rerun, exact registry fetches, and integrity, export, dependency,
+  and dist-tag mismatches. The parsed publish-job shell passes Git Bash syntax
+  checking and contains one registry write command behind per-package re-plan.
+- Final local validation passes 168 repository checks, 7 documentation tests,
+  deterministic double-pack plus local Node/Chrome consumers, and the strict
+  live registry verifier with 41 signatures and 29 attestations.
 
 ## Blockers
 
 - No implementation or registry blocker remains.
-- Delivery acceptance remains pending for the final integrated primary commit
-  that adds the maintained live-registry verifier and records this evidence.
+- The idempotent workflow hardening must pass source and main CI and integrate
+  through primary before delivery acceptance.
 
 ## Outcome
 
 The first App-user SDK beta release, one-time package bootstrap, trusted
 publisher activation, protected workflow, provenance, dist-tags, registry
-consumer, and bootstrap cleanup are complete and verified. Publish the final
-verification tooling and evidence through primary, then request delivery
-acceptance for that exact commit and complete the Repoledger task.
+consumer, bootstrap cleanup, and idempotent exact-match retry behavior are
+complete and locally verified. Publish the hardening through primary, then
+request delivery acceptance for that exact commit and complete the Repoledger
+task.

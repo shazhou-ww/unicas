@@ -32,6 +32,10 @@ function canonicalJson(value) {
   return `${JSON.stringify(canonicalize(value), null, 2)}\n`;
 }
 
+function sameStructuredValue(left, right) {
+  return JSON.stringify(canonicalize(left)) === JSON.stringify(canonicalize(right));
+}
+
 export function releaseVersionFromTag(tag, matrix) {
   assert(tag.startsWith(matrix.tagPrefix), `tag must start with ${matrix.tagPrefix}`);
   const version = tag.slice(matrix.tagPrefix.length);
@@ -72,14 +76,10 @@ export function validatePackageSet(matrix, releaseManifest, manifests) {
   }
 }
 
-export function buildReleasePlan({ tag, commit, matrix, releaseManifest, manifests, registryVersions }) {
+export function buildReleasePlan({ tag, commit, matrix, releaseManifest, manifests, registryPackages }) {
   const version = releaseVersionFromTag(tag, matrix);
   validatePackageSet(matrix, releaseManifest, manifests);
   assert(/^[0-9a-f]{40}$/u.test(commit), "release commit must be a full lowercase SHA-1 commit ID");
-  const conflicts = matrix.packages
-    .filter(({ name }) => (registryVersions[name] ?? []).includes(version))
-    .map(({ name }) => `${name}@${version}`);
-  assert(conflicts.length === 0, `immutable npm versions already exist: ${conflicts.join(", ")}`);
 
   const evidenceByName = new Map(releaseManifest.packages.map((entry) => [entry.name, entry]));
   return {
@@ -91,30 +91,61 @@ export function buildReleasePlan({ tag, commit, matrix, releaseManifest, manifes
     distTag: matrix.distTag,
     packages: [...matrix.packages]
       .sort((left, right) => left.order - right.order)
-      .map((entry) => ({
-        name: entry.name,
-        version,
-        order: entry.order,
-        tarball: evidenceByName.get(entry.name).tarball,
-        integrity: evidenceByName.get(entry.name).integrity,
-      })),
+      .map((entry) => {
+        const evidence = evidenceByName.get(entry.name);
+        const published = registryPackages[entry.name];
+        if (published !== null) {
+          assert(published.metadata.name === entry.name, `${entry.name}: registry name differs from release evidence`);
+          assert(published.metadata.version === version, `${entry.name}: registry version differs from release evidence`);
+          assert(
+            published.metadata.dist?.integrity === evidence.integrity,
+            `${entry.name}@${version}: registry integrity differs from release evidence`,
+          );
+          assert(
+            sameStructuredValue(published.metadata.exports, evidence.exports),
+            `${entry.name}@${version}: registry exports differ from release evidence`,
+          );
+          assert(
+            sameStructuredValue(published.metadata.dependencies ?? {}, evidence.dependencies ?? {}),
+            `${entry.name}@${version}: registry dependencies differ from release evidence`,
+          );
+          assert(
+            published.distTags[matrix.distTag] === version,
+            `${entry.name}: registry ${matrix.distTag} tag differs from ${version}`,
+          );
+        }
+        return {
+          name: entry.name,
+          version,
+          order: entry.order,
+          action: published === null ? "publish" : "verified",
+          tarball: evidence.tarball,
+          integrity: evidence.integrity,
+        };
+      }),
   };
 }
 
-async function fetchRegistryVersions(matrix, registry = DEFAULT_REGISTRY, fetchImpl = fetch) {
+export async function fetchRegistryPackages(matrix, registry = DEFAULT_REGISTRY, fetchImpl = fetch) {
   const state = {};
   for (const { name } of matrix.packages) {
-    const encoded = encodeURIComponent(name).replace(/^%40/u, "@");
-    const response = await fetchImpl(`${registry.replace(/\/$/u, "")}/${encoded}`, {
-      headers: { Accept: "application/vnd.npm.install-v1+json" },
+    const encoded = encodeURIComponent(name);
+    const cacheBust = `${Date.now()}-${encodeURIComponent(name)}`;
+    const base = registry.replace(/\/$/u, "");
+    const response = await fetchImpl(`${base}/${encoded}/${matrix.version}?cachebust=${cacheBust}`, {
+      headers: { Accept: "application/json", "Cache-Control": "no-cache" },
     });
     if (response.status === 404) {
-      state[name] = [];
+      state[name] = null;
       continue;
     }
     if (!response.ok) throw new Error(`npm preflight for ${name} failed: HTTP ${response.status}`);
     const metadata = await response.json();
-    state[name] = Object.keys(metadata.versions ?? {});
+    const tagsResponse = await fetchImpl(`${base}/-/package/${encoded}/dist-tags?cachebust=${cacheBust}`, {
+      headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+    });
+    if (!tagsResponse.ok) throw new Error(`npm dist-tag preflight for ${name} failed: HTTP ${tagsResponse.status}`);
+    state[name] = { metadata, distTags: await tagsResponse.json() };
   }
   return state;
 }
@@ -174,8 +205,8 @@ async function main() {
   validatePackageSet(matrix, releaseManifest, manifests);
   if (options.candidate || !localTagExists(tag)) verifyReleaseCandidate(tag, commit);
   else verifyGitRelease(tag, commit);
-  const registryVersions = await fetchRegistryVersions(matrix);
-  const plan = buildReleasePlan({ tag, commit, matrix, releaseManifest, manifests, registryVersions });
+  const registryPackages = await fetchRegistryPackages(matrix);
+  const plan = buildReleasePlan({ tag, commit, matrix, releaseManifest, manifests, registryPackages });
   if (options.output) {
     const output = resolve(ROOT, options.output);
     await writeFile(output, canonicalJson(plan), "utf8");

@@ -95,6 +95,9 @@ gate.
 
 A failure before registry writes may rerun the same workflow after external
 configuration is corrected. If any package version becomes public, first read
-and verify the exact registry state. A partial set is not retried or overwritten:
-prepare a new reviewed unified beta version, publish the complete new set, and
-deliberately deprecate the partial version as the release owner directs.
+and verify the exact registry state. On an authorized rerun, the workflow
+re-plans before every package: an absent version is published, an exact match
+for integrity, exports, dependencies, and dist-tag is skipped, and any mismatch
+fails closed. If exact-match resume cannot complete the set, prepare a new
+reviewed unified beta version and deliberately deprecate the partial version as
+the release owner directs.

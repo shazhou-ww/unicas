@@ -139,14 +139,18 @@ Versions and pushed release tags are immutable.
 - A validation or authentication failure before any registry write may be
   retried by rerunning the same GitHub Actions run after correcting external
   environment or trusted-publisher configuration.
-- If any package version exists unexpectedly, stop. Do not overwrite,
-  unpublish, or move the tag.
+- A run interrupted after registry writes may be rerun with the same immutable
+  tag. Before every package write, the planner queries the exact version. It
+  skips only a version whose integrity, exports, dependencies, and reviewed
+  dist-tag match release evidence; it publishes only an absent version.
+- If an existing version or dist-tag differs from release evidence, stop. Do
+  not overwrite, unpublish, move the release tag, or skip that mismatch.
 - npm trusted publishing authorizes `npm publish` but not independent
-  `npm dist-tag` repair. Because six registry writes cannot be atomic, a
-  mid-set failure requires inspection of the exact published subset followed
-  by a new reviewed unified version. Publish that complete new version to move
-  every `beta` tag coherently, and deliberately deprecate any partial version
-  as directed by the release owner.
+  `npm dist-tag` repair. Six registry writes are not atomic, so inspect a
+  failed run's exact subset before rerunning it. If the exact-match retry cannot
+  safely complete the set, prepare a new reviewed unified version, publish it
+  to restore coherent tags, and deliberately deprecate the partial version as
+  directed by the release owner.
 - Never repair source, generated output, tarballs, or manifests inside the
   workflow. Fix source on `main`, choose a new version, regenerate evidence,
   and create a new immutable tag.

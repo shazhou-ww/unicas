@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 import { parse as parseYaml } from "yaml";
 import {
   buildReleasePlan,
+  fetchRegistryPackages,
   releaseVersionFromTag,
   validatePackageSet,
   verifyGitRelease,
@@ -19,8 +20,27 @@ function readJson(path) {
   return JSON.parse(readFileSync(join(ROOT, path), "utf8"));
 }
 
-function registryState(version = null) {
-  return Object.fromEntries(matrix.packages.map(({ name }) => [name, version === null ? [] : [version]]));
+function emptyRegistryState() {
+  return Object.fromEntries(matrix.packages.map(({ name }) => [name, null]));
+}
+
+function matchingRegistryState(names = matrix.packages.map(({ name }) => name)) {
+  const included = new Set(names);
+  const evidenceByName = new Map(releaseManifest.packages.map((entry) => [entry.name, entry]));
+  return Object.fromEntries(matrix.packages.map(({ name }) => {
+    if (!included.has(name)) return [name, null];
+    const evidence = evidenceByName.get(name);
+    return [name, {
+      metadata: {
+        name,
+        version: matrix.version,
+        dist: { integrity: evidence.integrity },
+        exports: evidence.exports,
+        dependencies: evidence.dependencies,
+      },
+      distTags: { [matrix.distTag]: matrix.version },
+    }];
+  }));
 }
 
 describe("App-user SDK npm release planner", () => {
@@ -44,7 +64,7 @@ describe("App-user SDK npm release planner", () => {
       matrix,
       releaseManifest,
       manifests,
-      registryVersions: registryState(),
+      registryPackages: emptyRegistryState(),
     });
     expect(plan).toMatchObject({
       releaseKey: "app-user-sdk",
@@ -54,17 +74,110 @@ describe("App-user SDK npm release planner", () => {
     });
     expect(plan.packages.map(({ name }) => name)).toEqual(matrix.packages.map(({ name }) => name));
     expect(plan.packages.map(({ order }) => order)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(plan.packages.map(({ action }) => action)).toEqual(Array(6).fill("publish"));
   });
 
-  test("fails closed on an existing version or mixed source version", () => {
-    expect(() => buildReleasePlan({
+  test("verifies matching existing packages and resumes a partial publication", () => {
+    const complete = buildReleasePlan({
       tag: releaseManifest.tag,
       commit: "a".repeat(40),
       matrix,
       releaseManifest,
       manifests,
-      registryVersions: registryState(matrix.version),
-    })).toThrow("immutable npm versions already exist");
+      registryPackages: matchingRegistryState(),
+    });
+    expect(complete.packages.map(({ action }) => action)).toEqual(Array(6).fill("verified"));
+
+    const partial = buildReleasePlan({
+      tag: releaseManifest.tag,
+      commit: "a".repeat(40),
+      matrix,
+      releaseManifest,
+      manifests,
+      registryPackages: matchingRegistryState(matrix.packages.slice(0, 3).map(({ name }) => name)),
+    });
+    expect(partial.packages.map(({ action }) => action)).toEqual([
+      "verified", "verified", "verified", "publish", "publish", "publish",
+    ]);
+  });
+
+  test("queries exact registry evidence and dist-tags without treating absence as a conflict", async () => {
+    const codec = matchingRegistryState(["@unicas/codec"])["@unicas/codec"];
+    const requests = [];
+    const fetchImpl = async (url) => {
+      requests.push(url);
+      if (url.includes("/-/package/")) return Response.json(codec.distTags);
+      if (url.includes(encodeURIComponent("@unicas/codec"))) return Response.json(codec.metadata);
+      return new Response(null, { status: 404 });
+    };
+    const state = await fetchRegistryPackages(matrix, "https://registry.example", fetchImpl);
+    expect(state["@unicas/codec"]).toEqual(codec);
+    expect(state["@unicas/space-protocol"]).toBeNull();
+    expect(requests).toContainEqual(expect.stringContaining(
+      `${encodeURIComponent("@unicas/codec")}/${matrix.version}?cachebust=`,
+    ));
+    expect(requests).toContainEqual(expect.stringContaining(
+      `/-/package/${encodeURIComponent("@unicas/codec")}/dist-tags?cachebust=`,
+    ));
+  });
+
+  test("fails closed on mismatched immutable registry state or source versions", () => {
+    const matching = matchingRegistryState();
+    const mismatches = [
+      {
+        message: "registry integrity differs",
+        state: {
+          ...matching,
+          "@unicas/codec": {
+            ...matching["@unicas/codec"],
+            metadata: {
+              ...matching["@unicas/codec"].metadata,
+              dist: { integrity: `sha512-${"A".repeat(88)}` },
+            },
+          },
+        },
+      },
+      {
+        message: "registry exports differ",
+        state: {
+          ...matching,
+          "@unicas/codec": {
+            ...matching["@unicas/codec"],
+            metadata: { ...matching["@unicas/codec"].metadata, exports: { ".": "./wrong.js" } },
+          },
+        },
+      },
+      {
+        message: "registry dependencies differ",
+        state: {
+          ...matching,
+          "@unicas/space-client": {
+            ...matching["@unicas/space-client"],
+            metadata: { ...matching["@unicas/space-client"].metadata, dependencies: {} },
+          },
+        },
+      },
+      {
+        message: "registry beta tag differs",
+        state: {
+          ...matching,
+          "@unicas/codec": {
+            ...matching["@unicas/codec"],
+            distTags: { beta: "0.0.0-bootstrap.0" },
+          },
+        },
+      },
+    ];
+    for (const { message, state } of mismatches) {
+      expect(() => buildReleasePlan({
+        tag: releaseManifest.tag,
+        commit: "a".repeat(40),
+        matrix,
+        releaseManifest,
+        manifests,
+        registryPackages: state,
+      }), message).toThrow(message);
+    }
 
     const mixed = manifests.map((manifest, index) => index === 5
       ? { ...manifest, version: "0.1.0-beta.2" }
@@ -155,11 +268,12 @@ describe("tag-triggered npm publication workflow", () => {
     expect(serialized).not.toContain("contents\":\"write");
   });
 
-  test("validates exact primary artifacts before the sole publish command", () => {
+  test("validates exact primary artifacts and resumes safely before the sole publish command", () => {
     const runs = [validationJob, job]
       .flatMap((currentJob) => currentJob.steps)
       .flatMap((step) => typeof step.run === "string" ? [step.run] : []);
     const combined = runs.join("\n");
+    const publishRun = job.steps.find(({ name }) => name === "Publish package set in dependency order").run;
     expect(combined).toContain("git fetch --no-tags origin main:refs/remotes/origin/main");
     expect(combined).toContain("pnpm sdk:artifacts");
     expect(combined).toContain("scripts/prepare-npm-release.mjs");
@@ -167,11 +281,20 @@ describe("tag-triggered npm publication workflow", () => {
     expect(combined).toContain("--commit \"$GITHUB_SHA\"");
     expect(combined).not.toContain("--candidate");
     expect(combined.match(/pnpm sdk:artifacts/gu)).toHaveLength(2);
-    expect(combined.match(/prepare-npm-release\.mjs/gu)).toHaveLength(2);
+    expect(combined.match(/prepare-npm-release\.mjs/gu)).toHaveLength(3);
     expect(combined.match(/npm publish/gu)).toHaveLength(1);
     expect(combined).toContain("--access public");
     expect(combined).toContain("--tag \"$dist_tag\"");
     expect(combined).toContain("--provenance");
+    expect(publishRun).toContain("while IFS= read -r package_name");
+    expect(publishRun).toContain("entry.action");
+    expect(publishRun).toContain("verified)");
+    expect(publishRun).toContain("Verified existing ${package_name}");
+    expect(publishRun).toContain("Unknown release action");
+    expect(publishRun.indexOf("while IFS= read -r package_name"))
+      .toBeLessThan(publishRun.indexOf("scripts/prepare-npm-release.mjs"));
+    expect(publishRun.indexOf("scripts/prepare-npm-release.mjs"))
+      .toBeLessThan(publishRun.indexOf("npm publish"));
     expect(source.indexOf("pnpm sdk:artifacts")).toBeLessThan(source.indexOf("npm publish"));
     expect(source.indexOf("prepare-npm-release.mjs")).toBeLessThan(source.indexOf("npm publish"));
   });

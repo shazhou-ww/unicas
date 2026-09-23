@@ -99,7 +99,7 @@ jobs:
       - name: Rebuild and verify release artifacts
         run: pnpm sdk:artifacts
 
-      - name: Repeat immutable registry preflight
+      - name: Repeat resumable registry preflight
         run: >-
           node scripts/prepare-npm-release.mjs
           --tag "$GITHUB_REF_NAME"
@@ -110,13 +110,37 @@ jobs:
         env:
           RELEASE_PLAN: ${{ runner.temp }}/sdk-release-plan.json
         run: |
-          node --input-type=module <<'NODE' > "$RUNNER_TEMP/sdk-packages.tsv"
+          node --input-type=module <<'NODE' > "$RUNNER_TEMP/sdk-package-names.txt"
           import { readFile } from "node:fs/promises";
           const plan = JSON.parse(await readFile(process.env.RELEASE_PLAN, "utf8"));
-          for (const entry of plan.packages) console.log(`${entry.name}\t${entry.tarball}`);
+          for (const entry of plan.packages) console.log(entry.name);
           NODE
           dist_tag="$(node --input-type=module -e 'import { readFile } from "node:fs/promises"; const plan = JSON.parse(await readFile(process.env.RELEASE_PLAN, "utf8")); process.stdout.write(plan.distTag)')"
-          while IFS=$'\t' read -r package_name tarball; do
-            echo "Publishing ${package_name} from ${tarball}"
-            npm publish ".sdk-release/${tarball}" --access public --tag "$dist_tag" --provenance
-          done < "$RUNNER_TEMP/sdk-packages.tsv"
+          while IFS= read -r package_name; do
+            node scripts/prepare-npm-release.mjs \
+              --tag "$GITHUB_REF_NAME" \
+              --commit "$GITHUB_SHA" \
+              --output "$RELEASE_PLAN"
+            IFS=$'\t' read -r action tarball < <(
+              PACKAGE_NAME="$package_name" node --input-type=module <<'NODE'
+          import { readFile } from "node:fs/promises";
+          const plan = JSON.parse(await readFile(process.env.RELEASE_PLAN, "utf8"));
+          const entry = plan.packages.find(({ name }) => name === process.env.PACKAGE_NAME);
+          if (!entry) throw new Error(`Release plan is missing ${process.env.PACKAGE_NAME}`);
+          console.log(`${entry.action}\t${entry.tarball}`);
+          NODE
+            )
+            case "$action" in
+              verified)
+                echo "Verified existing ${package_name}; skipping immutable version"
+                ;;
+              publish)
+                echo "Publishing ${package_name} from ${tarball}"
+                npm publish ".sdk-release/${tarball}" --access public --tag "$dist_tag" --provenance
+                ;;
+              *)
+                echo "::error::Unknown release action for ${package_name}: ${action}"
+                exit 1
+                ;;
+            esac
+          done < "$RUNNER_TEMP/sdk-package-names.txt"

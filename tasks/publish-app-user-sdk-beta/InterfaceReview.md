@@ -24,7 +24,9 @@ by itself authorize creation of the immutable tag or a registry write.
 
 The tag and all six npm versions are immutable. A partial publication cannot be
 repaired by moving the tag, overwriting a version, or publishing one package at
-a different version. Recovery uses a newly reviewed unified beta version.
+a different version. The same tag may resume only by verifying and skipping
+exact registry matches before publishing missing packages. Any mismatch uses a
+newly reviewed unified beta version.
 
 ## Package order
 
