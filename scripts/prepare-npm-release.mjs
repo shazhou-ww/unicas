@@ -76,6 +76,37 @@ export function validatePackageSet(matrix, releaseManifest, manifests) {
   }
 }
 
+function buildPackagePlanEntry({ entry, version, distTag, evidence, published }) {
+  if (published !== null) {
+    assert(published.metadata.name === entry.name, `${entry.name}: registry name differs from release evidence`);
+    assert(published.metadata.version === version, `${entry.name}: registry version differs from release evidence`);
+    assert(
+      published.metadata.dist?.integrity === evidence.integrity,
+      `${entry.name}@${version}: registry integrity differs from release evidence`,
+    );
+    assert(
+      sameStructuredValue(published.metadata.exports, evidence.exports),
+      `${entry.name}@${version}: registry exports differ from release evidence`,
+    );
+    assert(
+      sameStructuredValue(published.metadata.dependencies ?? {}, evidence.dependencies ?? {}),
+      `${entry.name}@${version}: registry dependencies differ from release evidence`,
+    );
+    assert(
+      published.distTags[distTag] === version,
+      `${entry.name}: registry ${distTag} tag differs from ${version}`,
+    );
+  }
+  return {
+    name: entry.name,
+    version,
+    order: entry.order,
+    action: published === null ? "publish" : "verified",
+    tarball: evidence.tarball,
+    integrity: evidence.integrity,
+  };
+}
+
 export function buildReleasePlan({ tag, commit, matrix, releaseManifest, manifests, registryPackages }) {
   const version = releaseVersionFromTag(tag, matrix);
   validatePackageSet(matrix, releaseManifest, manifests);
@@ -94,41 +125,26 @@ export function buildReleasePlan({ tag, commit, matrix, releaseManifest, manifes
       .map((entry) => {
         const evidence = evidenceByName.get(entry.name);
         const published = registryPackages[entry.name];
-        if (published !== null) {
-          assert(published.metadata.name === entry.name, `${entry.name}: registry name differs from release evidence`);
-          assert(published.metadata.version === version, `${entry.name}: registry version differs from release evidence`);
-          assert(
-            published.metadata.dist?.integrity === evidence.integrity,
-            `${entry.name}@${version}: registry integrity differs from release evidence`,
-          );
-          assert(
-            sameStructuredValue(published.metadata.exports, evidence.exports),
-            `${entry.name}@${version}: registry exports differ from release evidence`,
-          );
-          assert(
-            sameStructuredValue(published.metadata.dependencies ?? {}, evidence.dependencies ?? {}),
-            `${entry.name}@${version}: registry dependencies differ from release evidence`,
-          );
-          assert(
-            published.distTags[matrix.distTag] === version,
-            `${entry.name}: registry ${matrix.distTag} tag differs from ${version}`,
-          );
-        }
-        return {
-          name: entry.name,
+        return buildPackagePlanEntry({
+          entry,
           version,
-          order: entry.order,
-          action: published === null ? "publish" : "verified",
-          tarball: evidence.tarball,
-          integrity: evidence.integrity,
-        };
+          distTag: matrix.distTag,
+          evidence,
+          published,
+        });
       }),
   };
 }
 
-export async function fetchRegistryPackages(matrix, registry = DEFAULT_REGISTRY, fetchImpl = fetch) {
+export async function fetchRegistryPackages(
+  matrix,
+  registry = DEFAULT_REGISTRY,
+  fetchImpl = fetch,
+  packageNames = matrix.packages.map(({ name }) => name),
+) {
   const state = {};
-  for (const { name } of matrix.packages) {
+  const selected = new Set(packageNames);
+  for (const { name } of matrix.packages.filter((entry) => selected.has(entry.name))) {
     const encoded = encodeURIComponent(name);
     const cacheBust = `${Date.now()}-${encodeURIComponent(name)}`;
     const base = registry.replace(/\/$/u, "");
@@ -178,12 +194,13 @@ export function verifyReleaseCandidate(tag, commit, git = runGit) {
 }
 
 function parseArgs(argv) {
-  const options = { tag: null, commit: null, output: null, candidate: false };
+  const options = { tag: null, commit: null, output: null, candidate: false, package: null };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--tag") options.tag = argv[++index];
     else if (arg === "--commit") options.commit = argv[++index];
     else if (arg === "--output") options.output = argv[++index];
+    else if (arg === "--package") options.package = argv[++index];
     else if (arg === "--candidate") options.candidate = true;
     else throw new Error(`unknown argument: ${arg}`);
   }
@@ -205,8 +222,36 @@ async function main() {
   validatePackageSet(matrix, releaseManifest, manifests);
   if (options.candidate || !localTagExists(tag)) verifyReleaseCandidate(tag, commit);
   else verifyGitRelease(tag, commit);
-  const registryPackages = await fetchRegistryPackages(matrix);
-  const plan = buildReleasePlan({ tag, commit, matrix, releaseManifest, manifests, registryPackages });
+  let plan;
+  if (options.package) {
+    const entry = matrix.packages.find(({ name }) => name === options.package);
+    assert(entry, `package is not in the release matrix: ${options.package}`);
+    const registryPackages = await fetchRegistryPackages(
+      matrix,
+      DEFAULT_REGISTRY,
+      fetch,
+      [options.package],
+    );
+    const evidence = releaseManifest.packages.find(({ name }) => name === options.package);
+    plan = {
+      schemaVersion: 1,
+      releaseKey: matrix.releaseKey,
+      tag,
+      commit,
+      version: matrix.version,
+      distTag: matrix.distTag,
+      packages: [buildPackagePlanEntry({
+        entry,
+        version: matrix.version,
+        distTag: matrix.distTag,
+        evidence,
+        published: registryPackages[options.package],
+      })],
+    };
+  } else {
+    const registryPackages = await fetchRegistryPackages(matrix);
+    plan = buildReleasePlan({ tag, commit, matrix, releaseManifest, manifests, registryPackages });
+  }
   if (options.output) {
     const output = resolve(ROOT, options.output);
     await writeFile(output, canonicalJson(plan), "utf8");

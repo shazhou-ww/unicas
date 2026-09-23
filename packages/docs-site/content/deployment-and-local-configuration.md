@@ -406,19 +406,14 @@ Initial provisioning is an explicit bootstrap operation:
    `UNICAS_SMOKE_SPACE_ID=deploy-smoke`, and stream the PKCS#8 PEM directly
    into the `UNICAS_SMOKE_PRIVATE_KEY_PKCS8` GitHub environment secret without
    printing it.
-5. Dispatch **CI** from `release` and retain the bootstrap key file only in the
-   approved operator credential store until rotation or recovery no longer
-   requires it.
+5. If recovery is required, dispatch **Recover Spaces production** with the
+   exact reviewed `main` commit and selected operation. Retain the bootstrap key
+   only in the approved operator credential store until rotation or recovery
+   no longer requires it.
 
-For the one-time App/Space v1 cutover, set the Production environment variable
-`APP_SPACE_V1_CUTOVER_ENABLED=true` and set `UNICAS_SMOKE_AUDIENCE` to
-`https://api.unicas.work/v1/apps/{UNICAS_SMOKE_APP_ID}` before promoting the
-tested revision to `release`. The protected deployment updates both active App
-issuer audiences idempotently, runs the App/Space smoke with prototype route,
-claim-version, broad-permission, retired-route, and retired-claim rejection
-probes. After the smoke, origin checks, and production tag succeed, set
-`APP_SPACE_V1_CUTOVER_ENABLED=false`; later releases must not repeat the
-one-time issuer step.
+The App/Space v1 issuer cutover is complete. Normal production contains no
+cutover switch or executable cutover step. Preserve its historical run and
+cutover documentation as audit evidence; do not repeat it as recovery.
 
 For the one-time Account-model production cutover, configure a required
 reviewer on the `Production` Environment before merging the promotion pull
@@ -467,9 +462,10 @@ dispatch order; every job still deploys its own validated `github.sha`. The
 job deploys in this order:
 
 1. `pnpm deploy:production` for the API/console service and canonical smoke.
-2. `pnpm deploy:site` for `unicas.work`.
-3. `pnpm deploy:docs` for `docs.unicas.work`.
-4. HTTPS checks requiring the API health JSON, the console's same-origin
+2. `pnpm deploy:spaces` for the Spaces App and file smoke.
+3. `pnpm deploy:site` for `unicas.work`.
+4. `pnpm deploy:docs` for `docs.unicas.work`.
+5. HTTPS checks requiring the API health JSON, the console's same-origin
    `/admin/` redirect, and identifying HTML from the product and documentation
    origins. Redirects to another host or protocol do not pass.
 
@@ -490,9 +486,11 @@ target is an audit-integrity incident: stop, preserve the failed run and
 ruleset history, and involve a repository owner. Never force-update, silently
 delete, or substitute a differently named tag for that workflow run.
 
-For a manual recovery run, open the **CI** workflow in GitHub Actions, choose
-**Run workflow**, and select `release`. The dispatch repeats validation and
-the same protected deployment path; selecting `main` or another branch runs
-validation but skips production, and `workflow_dispatch` is not a bypass
-around a failed check. See [CAS Middleware Operations](cas-operations.md) for
-failure diagnosis, credential rotation, and version-specific rollback.
+For a read-only comprehensive check, dispatch **CI**; it runs
+`pnpm validate:release` and has no production write path. For Spaces recovery,
+open **Recover Spaces production**, enter a full reviewed commit SHA reachable
+from `main`, choose `provision-deploy` or `principals`, and pass `Production`
+approval. The recovery workflow shares production concurrency, cannot deploy
+the service or sites, and cannot create a production tag. See
+[CAS Middleware Operations](cas-operations.md) for failure diagnosis,
+credential rotation, and version-specific rollback.

@@ -72,12 +72,13 @@ Only [`.github/workflows/publish-npm.yml`](../.github/workflows/publish-npm.yml)
 handles that tag family. It has no branch, pull-request, or manual publication
 trigger.
 
-The workflow first runs an unprivileged validation job. Only after that job
-proves primary reachability, deterministic artifacts, exact unified versions,
-and an empty immutable-version registry preflight does the protected `npm`
-environment become eligible for approval. The publication job repeats all
-checks, then publishes in dependency order with public access, the reviewed
-`beta` tag, npm trusted publishing, and provenance.
+The workflow has one `npm` environment-protected job. After approval it performs
+one checkout, install, deterministic six-package build, exact unified-version
+and primary-reachability check, and full registry preflight before any write.
+It then rechecks only the next package's immediate registry state and publishes
+in dependency order with public access, the reviewed `beta` tag, npm trusted
+publishing, and provenance. Finally it verifies the complete release through
+the external registry consumer and provenance path.
 
 ## Preparing a tag
 
@@ -88,7 +89,7 @@ invocation. Before creating a tag:
    to `origin/main`.
 2. Update all six package versions, the package matrix, exact examples, and
    generated release manifest together.
-3. Run the full artifact, workflow, repository, build, and typecheck checks.
+3. Run `pnpm validate:release`.
 4. Run the read-only pre-tag planner:
 
    ```text

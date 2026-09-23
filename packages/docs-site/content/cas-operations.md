@@ -118,10 +118,13 @@ origins. A separate job then records a successful push deployment as an
 immutable `production-YYYYMMDD-<workflow-run-number>` annotated tag pointing
 to that exact revision; manual recovery runs do not create production tags.
 
-For a manual recovery attempt, dispatch the **CI** workflow from `release`. A
-dispatch from `main` or any other branch cannot enter the `Production`
-environment or run a production command. The manual path repeats validation;
-it does not bypass it.
+For read-only manual release validation, dispatch **CI**; it runs
+`pnpm validate:release` and cannot enter `Production`. Spaces bootstrap or
+principal recovery uses the separate **Recover Spaces production** workflow.
+Supply a full commit SHA reachable from `main`, select exactly one recovery
+operation, and pass `Production` review. Recovery shares the
+`unicas-production` concurrency group with promotion and never creates a
+production tag.
 
 Local emergency deployment remains explicit. **Always rebuild first** because
 Wrangler uploads `dist/` and stale output silently deploys old code:
