@@ -33,6 +33,7 @@
     "sdk:artifacts": "node scripts/prepare-sdk-release.mjs --check --output-dir .sdk-release",
     "check:sdk-release": "vitest run tests/sdk-release.test.mjs && node scripts/prepare-sdk-release.mjs --check",
     "check:npm-release": "vitest run tests/npm-release.test.mjs",
+    "verify:npm-release": "node scripts/verify-npm-release.mjs",
     "check:tasks": "repoledger check",
     "check:tasks:commit": "repoledger check --commit HEAD",
     "typecheck": "pnpm -r typecheck",

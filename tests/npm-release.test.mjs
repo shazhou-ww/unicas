@@ -180,6 +180,7 @@ describe("tag-triggered npm publication workflow", () => {
     const localScripts = [
       readFileSync(join(ROOT, "scripts", "prepare-sdk-release.mjs"), "utf8"),
       readFileSync(join(ROOT, "scripts", "prepare-npm-release.mjs"), "utf8"),
+      readFileSync(join(ROOT, "scripts", "verify-npm-release.mjs"), "utf8"),
     ].join("\n");
     expect(localScripts).not.toMatch(/\bnpm\s+publish\b/u);
     expect(localScripts).not.toMatch(/\bpnpm\s+publish\b/u);

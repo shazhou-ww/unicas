@@ -111,6 +111,21 @@ explicitly allowed rather than the default stage-only permission. Configure
 the environment with required reviewers. Do not add `NPM_TOKEN` or
 `NODE_AUTH_TOKEN` secrets.
 
+After a successful workflow run and registry propagation, verify the complete
+live release with:
+
+```text
+pnpm verify:npm-release
+```
+
+The command anonymously verifies exact versions, tarball SHA-512 integrity,
+exports, dependencies, the reviewed dist-tag, SLSA repository/workflow/tag/
+commit/run provenance, and bootstrap deprecation. For the first beta promotion,
+also require `latest` to match with `pnpm verify:npm-release -- --expect-latest`.
+It then installs only the registry packages into a temporary no-token consumer,
+typechecks shipped declarations, runs the Node and real-Chrome smoke checks, and
+audits npm registry signatures and attestations.
+
 The activation task must verify npm permits those trusted-publisher records
 before the first package version exists. If package settings are unavailable
 until an owner creates the package record, stop and review a one-time owner

@@ -77,36 +77,36 @@ package contents or the workflow while releasing them.
 
 ## Acceptance criteria
 
-- [ ] The prepared release contract identifies the exact public packages, one
+- [x] The prepared release contract identifies the exact public packages, one
   unified version, dist-tag, dependency order, visibility, trusted
   identity, provenance, approval gates, tag grammar, rerun semantics, and
   recovery procedure, and remains unchanged during execution.
-- [ ] The prepared protected workflow and planner pass their complete dry-run
+- [x] The prepared protected workflow and planner pass their complete dry-run
   and negative test suite for the exact accepted primary revision before
   any release tag is created.
-- [ ] Publication uses repository-approved trusted publishing with provenance
+- [x] Publication uses repository-approved trusted publishing with provenance
       and least privilege; no long-lived npm token is required where the
       registry supports trusted identity.
-- [ ] The workflow validates the accepted release manifest and actual tarballs
+- [x] The workflow validates the accepted release manifest and actual tarballs
       and fails closed on version, dependency, generated-artifact, integrity,
       export, or package-set drift.
-- [ ] Registry preflight prevents overwriting an existing version and accepts
+- [x] Registry preflight prevents overwriting an existing version and accepts
       an already-published package during a retry only after verifying it
       matches the expected immutable release evidence.
-- [ ] Packages publish in dependency order, and the reviewed beta dist-tag is
+- [x] Packages publish in dependency order, and the reviewed beta dist-tag is
       not left pointing to an incomplete or inconsistent package set after a
       failed run.
-- [ ] A documented partial-publication recovery uses a new reviewed version
+- [x] A documented partial-publication recovery uses a new reviewed version
       plus deliberate deprecation or dist-tag repair and never overwrites or
       silently unpublishes an accepted artifact.
-- [ ] Workflow dry-run and negative tests cover non-primary revisions, dirty or
+- [x] Workflow dry-run and negative tests cover non-primary revisions, dirty or
       drifting artifacts, existing-version conflicts, missing dependencies,
       interrupted publication, mismatched registry state, and unauthorized
       execution.
-- [ ] Registry verification confirms expected public names, versions,
+- [x] Registry verification confirms expected public names, versions,
       dist-tags, provenance, integrity, exports, and dependency ranges and a
       clean consumer can install and use the packages from npm.
-- [ ] Logs, artifacts, workflow metadata, and task evidence contain no npm
+- [x] Logs, artifacts, workflow metadata, and task evidence contain no npm
       token, OIDC assertion, credential, private key, presigned URL, local
       secret, or customer data.
 - [ ] The user explicitly accepts the published packages and registry evidence

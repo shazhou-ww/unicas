@@ -1,13 +1,15 @@
 # Progress
 
-Updated: 2026-09-22
+Updated: 2026-09-23
 
 ## Current state
 
-The publication task is active. The prepared beta package interface and OIDC
-activation architecture are approved. GitHub environment `npm` exists with
-`shazhou-ww` as required reviewer, no deployment branch policy, and no secrets
-or variables.
+The reviewed App-user SDK beta is published. Immutable tag
+`npm/app-user-sdk/v0.1.0-beta.1` targets exact source commit
+`45c1681e2cfb071ffcc2be694bae48ad2e267514`. GitHub Actions run
+`35800458882` completed both validation and protected publication jobs and
+published all six packages in dependency order through npm OIDC with SLSA
+provenance.
 
 npm identity `shazhou.ww` is authenticated against the official registry and is
 an owner of organization `unicas`. The approved owner bootstrap created all six
@@ -15,13 +17,19 @@ public package records at `0.0.0-bootstrap.0` in dependency order. Registry
 tarball integrity, exports, exact dependencies, visibility, collaborators, and
 tags match the reviewed evidence for every package.
 
-All six packages now trust GitHub repository `shazhou-ww/unicas`, workflow
+All six packages trust GitHub repository `shazhou-ww/unicas`, workflow
 `publish-npm.yml`, and environment `npm` for direct and staged publication.
-npm forced `latest` onto each first package version despite the explicit
-`bootstrap` tag and rejected removal with registry `E400`; the requesting user
-approved moving `latest` to beta.1 after protected publication. The maintained
-candidate is restored to unified version `0.1.0-beta.1` and dist-tag `beta`.
-No beta version or release tag has been created yet.
+npm `beta` and `latest` now both point to `0.1.0-beta.1` for every package.
+The retained `bootstrap` tag points to `0.0.0-bootstrap.0`, and every bootstrap
+version is deprecated with guidance to use beta.1 or later. GitHub environment
+`npm` requires reviewer `shazhou-ww` and contains no secret or variable.
+
+`pnpm verify:npm-release -- --expect-latest` is the maintained anonymous
+registry check. It binds all six SLSA attestations to the exact repository,
+workflow, tag, source commit, and one Actions run; downloads and hashes every
+tarball; validates exports, dependencies, tags, and bootstrap deprecation; and
+runs a fresh no-token npm consumer through declarations, Node, real Chrome,
+registry signatures, and attestations.
 
 ## Decisions
 
@@ -81,21 +89,35 @@ No beta version or release tag has been created yet.
 - The restored beta.1 candidate passes `pnpm sdk:prepare`, all 11 focused SDK
   release checks, all 10 npm workflow/planner tests, external declaration
   typecheck, Node consumer, and real-Chrome consumer.
+- Reconciled source commit `45c1681e2cfb071ffcc2be694bae48ad2e267514`
+  passed task-source CI run `35718757533` and integrated main CI run
+  `35719150063`, including the concurrent observability implementation.
+- Release workflow run `35800458882` validated the tagged commit, rebuilt and
+  verified deterministic artifacts, repeated immutable registry preflight,
+  passed the protected `npm` environment gate, and published all six beta.1
+  versions in matrix order without a long-lived token.
+- Every live beta.1 manifest matches the tracked SHA-512 integrity, exports,
+  and exact internal dependency evidence. All six provenance endpoints and
+  root package documents are public and identify the reviewed GitHub workflow.
+- A fresh official-registry consumer installed all six exact beta versions,
+  typechecked shipped declarations, passed Node and real-Chrome smoke checks,
+  and verified 41 registry signatures plus 29 attestations.
+- Every package has `beta` and `latest` at `0.1.0-beta.1`; retained bootstrap
+  versions are deprecated and remain isolated under `bootstrap`.
+- `pnpm verify:npm-release -- --expect-latest` reproduces the complete live
+  metadata, provenance, tarball, tag, bootstrap-cleanup, and consumer checks
+  without npm credentials.
 
 ## Blockers
 
-- The restored beta.1 candidate must be committed, pass task-source and main
-  CI, and receive exact-commit authorization before tag creation.
-- The protected GitHub Actions publication will pause for the configured `npm`
-  environment reviewer before registry writes.
-- After beta.1 succeeds, each npm-forced `latest` tag must be moved from the
-  bootstrap version to beta.1 and the bootstrap version deliberately
-  deprecated; both operations require authenticated owner changes.
+- No implementation or registry blocker remains.
+- Delivery acceptance remains pending for the final integrated primary commit
+  that adds the maintained live-registry verifier and records this evidence.
 
 ## Outcome
 
-The one-time bootstrap and trusted-publisher activation are complete and
-verified. The beta.1 source and deterministic release evidence are restored
-locally without publishing. Next publish that candidate through the normal
-source/primary path, obtain exact-commit tag authorization after CI, observe the
-protected OIDC workflow, and verify the complete registry consumer result.
+The first App-user SDK beta release, one-time package bootstrap, trusted
+publisher activation, protected workflow, provenance, dist-tags, registry
+consumer, and bootstrap cleanup are complete and verified. Publish the final
+verification tooling and evidence through primary, then request delivery
+acceptance for that exact commit and complete the Repoledger task.
