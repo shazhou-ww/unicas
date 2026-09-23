@@ -299,6 +299,12 @@ async function verifyRegistryConsumer(matrix) {
   }
 }
 
+export function workflowRunFromInvocationId(invocationId) {
+  const workflowRun = invocationId.replace(/\/attempts\/[0-9]+$/u, "");
+  assert(workflowRun !== invocationId, `invalid provenance invocation ID: ${invocationId}`);
+  return workflowRun;
+}
+
 async function main() {
   const expectLatest = process.argv.slice(2).includes("--expect-latest");
   const matrix = await readJson(join(ROOT, "sdk", "package-matrix.json"));
@@ -308,16 +314,30 @@ async function main() {
   assert(manifest.packages.length === matrix.packages.length, "release manifest package count differs");
   const expectedCommit = gitTagCommit(manifest.tag);
   const invocationIds = new Set();
+  const workflowRuns = new Set();
   for (const evidence of [...manifest.packages].sort((left, right) => left.order - right.order)) {
-    invocationIds.add(await verifyRegistryPackage(matrix, manifest, evidence, expectedCommit, expectLatest));
+    const invocationId = await verifyRegistryPackage(
+      matrix,
+      manifest,
+      evidence,
+      expectedCommit,
+      expectLatest,
+    );
+    invocationIds.add(invocationId);
+    workflowRuns.add(workflowRunFromInvocationId(invocationId));
   }
-  assert(invocationIds.size === 1, "packages were not published by one workflow run");
-  console.log(`registry: provenance commit ${expectedCommit} run ${[...invocationIds][0]}`);
+  assert(workflowRuns.size === 1, "packages were not published by one workflow run");
+  console.log(
+    `registry: provenance commit ${expectedCommit} run ${[...workflowRuns][0]} `
+    + `across ${invocationIds.size} attempt(s)`,
+  );
   await verifyRegistryConsumer(matrix);
   console.log(`NPM RELEASE VERIFIED ${matrix.releaseKey}@${matrix.version}`);
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}

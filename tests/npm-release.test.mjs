@@ -10,6 +10,7 @@ import {
   verifyGitRelease,
   verifyReleaseCandidate,
 } from "../scripts/prepare-npm-release.mjs";
+import { workflowRunFromInvocationId } from "../scripts/verify-npm-release.mjs";
 
 const ROOT = join(import.meta.dirname, "..");
 const matrix = readJson("sdk/package-matrix.json");
@@ -44,6 +45,13 @@ function matchingRegistryState(names = matrix.packages.map(({ name }) => name)) 
 }
 
 describe("App-user SDK npm release planner", () => {
+  test("treats safe retries as attempts of the same protected workflow run", () => {
+    const run = "https://github.com/shazhou-ww/unicas/actions/runs/123";
+    expect(workflowRunFromInvocationId(`${run}/attempts/1`)).toBe(run);
+    expect(workflowRunFromInvocationId(`${run}/attempts/2`)).toBe(run);
+    expect(() => workflowRunFromInvocationId(run)).toThrow("invalid provenance invocation ID");
+  });
+
   test("accepts only the canonical unified-version tag", () => {
     expect(releaseVersionFromTag("npm/app-user-sdk/v0.1.0-beta.1", matrix)).toBe("0.1.0-beta.1");
     for (const tag of [
@@ -119,6 +127,22 @@ describe("App-user SDK npm release planner", () => {
     expect(requests).toContainEqual(expect.stringContaining(
       `/-/package/${encodeURIComponent("@unicas/codec")}/dist-tags?cachebust=`,
     ));
+  });
+
+  test("can limit an immediate registry check to one package", async () => {
+    const requests = [];
+    const state = await fetchRegistryPackages(
+      matrix,
+      "https://registry.example",
+      async (url) => {
+        requests.push(url);
+        return new Response(null, { status: 404 });
+      },
+      ["@unicas/space-client"],
+    );
+    expect(state).toEqual({ "@unicas/space-client": null });
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toContain(encodeURIComponent("@unicas/space-client"));
   });
 
   test("fails closed on mismatched immutable registry state or source versions", () => {
@@ -243,7 +267,6 @@ describe("App-user SDK npm release planner", () => {
 describe("tag-triggered npm publication workflow", () => {
   const source = readFileSync(join(ROOT, ".github", "workflows", "publish-npm.yml"), "utf8");
   const workflow = parseYaml(source);
-  const validationJob = workflow.jobs.validate;
   const job = workflow.jobs.publish;
   const serialized = JSON.stringify(workflow);
 
@@ -257,10 +280,7 @@ describe("tag-triggered npm publication workflow", () => {
   test("uses the protected least-privilege trusted-publishing boundary", () => {
     expect(workflow.permissions).toEqual({ contents: "read" });
     expect(workflow.concurrency).toEqual({ group: "npm-${{ github.ref }}", "cancel-in-progress": false });
-    expect(validationJob.environment).toBeUndefined();
-    expect(validationJob.permissions).toEqual({ contents: "read" });
-    expect(validationJob.permissions).not.toHaveProperty("id-token");
-    expect(job.needs).toBe("validate");
+    expect(Object.keys(workflow.jobs)).toEqual(["publish"]);
     expect(job.environment).toBe("npm");
     expect(job.permissions).toEqual({ contents: "read", "id-token": "write" });
     expect(serialized).not.toContain("NPM_TOKEN");
@@ -269,7 +289,7 @@ describe("tag-triggered npm publication workflow", () => {
   });
 
   test("validates exact primary artifacts and resumes safely before the sole publish command", () => {
-    const runs = [validationJob, job]
+    const runs = [job]
       .flatMap((currentJob) => currentJob.steps)
       .flatMap((step) => typeof step.run === "string" ? [step.run] : []);
     const combined = runs.join("\n");
@@ -280,13 +300,14 @@ describe("tag-triggered npm publication workflow", () => {
     expect(combined).toContain("--tag \"$GITHUB_REF_NAME\"");
     expect(combined).toContain("--commit \"$GITHUB_SHA\"");
     expect(combined).not.toContain("--candidate");
-    expect(combined.match(/pnpm sdk:artifacts/gu)).toHaveLength(2);
-    expect(combined.match(/prepare-npm-release\.mjs/gu)).toHaveLength(3);
+    expect(combined.match(/pnpm sdk:artifacts/gu)).toHaveLength(1);
+    expect(combined.match(/prepare-npm-release\.mjs/gu)).toHaveLength(2);
     expect(combined.match(/npm publish/gu)).toHaveLength(1);
     expect(combined).toContain("--access public");
     expect(combined).toContain("--tag \"$dist_tag\"");
     expect(combined).toContain("--provenance");
     expect(publishRun).toContain("while IFS= read -r package_name");
+    expect(publishRun).toContain("--package \"$package_name\"");
     expect(publishRun).toContain("entry.action");
     expect(publishRun).toContain("verified)");
     expect(publishRun).toContain("Verified existing ${package_name}");
@@ -297,6 +318,7 @@ describe("tag-triggered npm publication workflow", () => {
       .toBeLessThan(publishRun.indexOf("npm publish"));
     expect(source.indexOf("pnpm sdk:artifacts")).toBeLessThan(source.indexOf("npm publish"));
     expect(source.indexOf("prepare-npm-release.mjs")).toBeLessThan(source.indexOf("npm publish"));
+    expect(combined).toContain("pnpm verify:npm-release");
   });
 
   test("does not place a registry-write command in local release scripts", () => {

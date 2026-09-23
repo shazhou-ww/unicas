@@ -43,6 +43,11 @@ import {
 
 const ROOT = join(import.meta.dirname, "..");
 const CI_WORKFLOW = readFileSync(join(ROOT, ".github/workflows/ci.yml"), "utf8");
+const ROOT_PACKAGE = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+const RECOVERY_WORKFLOW = readFileSync(
+  join(ROOT, ".github/workflows/recover-spaces.yml"),
+  "utf8",
+);
 const DEPLOYMENT_GUIDE = readFileSync(
   join(ROOT, "packages/docs-site/content/deployment-and-local-configuration.md"),
   "utf8",
@@ -95,11 +100,11 @@ function productionJob() {
 }
 
 function spacesBootstrapJob() {
-  const start = CI_WORKFLOW.indexOf("  bootstrap-spaces:");
-  const end = CI_WORKFLOW.indexOf("  deploy-production:");
+  const start = RECOVERY_WORKFLOW.indexOf("  recover:");
+  const end = RECOVERY_WORKFLOW.length;
   expect(start).toBeGreaterThan(-1);
   expect(end).toBeGreaterThan(start);
-  return CI_WORKFLOW.slice(start, end);
+  return RECOVERY_WORKFLOW.slice(start, end);
 }
 
 function productionTagJob() {
@@ -111,7 +116,7 @@ function productionTagJob() {
 
 function validationJob() {
   const start = CI_WORKFLOW.indexOf("  validate:");
-  const end = CI_WORKFLOW.indexOf("  bootstrap-spaces:");
+  const end = CI_WORKFLOW.indexOf("  deploy-production:");
   expect(start).toBeGreaterThan(-1);
   expect(end).toBeGreaterThan(start);
   return CI_WORKFLOW.slice(start, end);
@@ -263,17 +268,32 @@ describe("standalone deployment plan", () => {
     expect(job).not.toMatch(/^\s+run: pnpm deploy:docs\r?$/m);
   });
 
-  test("builds every Worker upload bundle during unprivileged validation", () => {
+  test("uses the canonical standard and strict-superset release validations", () => {
     const job = validationJob();
-    expect(job).toContain("wrangler deploy --dry-run");
-    expect(job).toContain("run: pnpm deploy:spaces:plan");
-    expect(job).toContain("run: pnpm deploy:site:plan");
-    expect(job).toContain("run: pnpm --filter @unicas/docs-site deploy:plan");
-    expect(job).toContain("run: pnpm --filter @unicas/docs-site test");
-    expect(job).toContain("run: pnpm --filter @unicas/docs-site test:browser");
-    expect(job).toContain("run: pnpm --filter @unicas/docs-site build");
-    expect(job).toContain("run: pnpm --filter @unicas/docs-site typecheck");
+    expect(job).toContain("run: pnpm validate");
+    expect(job).toContain("run: pnpm validate:release");
+    expect(job).toContain("github.ref != 'refs/heads/release'");
+    expect(job).toContain("github.ref == 'refs/heads/release'");
+    expect(job).toContain("github.event_name == 'workflow_dispatch'");
+    expect(job).toContain("git merge-base --is-ancestor \"$GITHUB_SHA\" origin/main");
+    expect(job).not.toContain("pnpm test:exhaustive");
+    expect(job).not.toContain("wrangler deploy --dry-run");
     expect(job).toContain("DOCS_SOURCE_REVISION: ${{ github.sha }}");
+    expect(ROOT_PACKAGE.scripts.validate).toContain("pnpm test:quick");
+    expect(ROOT_PACKAGE.scripts.validate).toContain("pnpm build");
+    expect(ROOT_PACKAGE.scripts.validate).toContain("pnpm typecheck");
+    expect(ROOT_PACKAGE.scripts["validate:release"]).toMatch(/^pnpm validate && /);
+    expect(ROOT_PACKAGE.scripts["validate:release"]).toContain("pnpm check:release");
+    expect(ROOT_PACKAGE.scripts["validate:release"]).toContain(
+      "pnpm --filter @unicas/service-cloudflare test",
+    );
+    expect(ROOT_PACKAGE.scripts["validate:release"]).toContain("pnpm sdk:artifacts");
+    expect(ROOT_PACKAGE.scripts["validate:release"]).toContain("test:browser");
+    expect(ROOT_PACKAGE.scripts["validate:release"]).toContain("wrangler deploy --dry-run");
+    expect(CI_WORKFLOW).toContain(
+      "if: github.event_name == 'push' && github.ref == 'refs/heads/main'",
+    );
+    expect(CI_WORKFLOW).toContain("run: pnpm check:tasks --remote");
   });
 
   test("gates production deployment behind validation of a release revision", () => {
@@ -281,34 +301,39 @@ describe("standalone deployment plan", () => {
     expect(job).toContain("needs: validate");
     expect(job).toContain("github.ref == 'refs/heads/release'");
     expect(job).toContain("vars.SPACES_RELEASE_ENABLED == 'true'");
-    expect(job).toContain("inputs.spaces_action == 'none'");
     expect(job).not.toContain("github.ref == 'refs/heads/main'");
     expect(job).toContain("github.event_name == 'push'");
-    expect(job).toContain("github.event_name == 'workflow_dispatch'");
+    expect(job).not.toContain("github.event_name == 'workflow_dispatch'");
     expect(job).toContain("environment: Production");
     expect(job).toContain("contents: read");
     expect(job).toContain("group: unicas-production");
     expect(job).toContain("queue: max");
     expect(job).toContain("cancel-in-progress: false");
     expect(job).toContain("ref: ${{ github.sha }}");
+    expect(job).toContain("git merge-base --is-ancestor \"$GITHUB_SHA\" origin/main");
     expect(job).not.toContain("contents: write");
   });
 
-  test("protects one-time Spaces bootstrap behind release, validation, and Production review", () => {
+  test("isolates Spaces recovery behind manual dispatch and Production review", () => {
     const job = spacesBootstrapJob();
-    expect(workflowTriggers()).toContain("spaces_action:");
-    expect(job).toContain("github.ref == 'refs/heads/release'");
-    expect(job).toContain("github.event_name == 'workflow_dispatch'");
-    expect(job).toContain("needs: validate");
+    expect(RECOVERY_WORKFLOW).toMatch(/on:\r?\n\s+workflow_dispatch:/);
+    expect(RECOVERY_WORKFLOW).not.toMatch(/\n\s+push:/);
+    expect(RECOVERY_WORKFLOW).not.toMatch(/\n\s+pull_request:/);
+    expect(workflowTriggers()).not.toContain("spaces_action:");
+    expect(CI_WORKFLOW).not.toContain("bootstrap-spaces");
     expect(job).toContain("environment: Production");
     expect(job).toContain("group: unicas-production");
-    expect(job).toContain("inputs.spaces_action == 'provision-deploy'");
+    expect(job).toContain("queue: max");
+    expect(job).toContain("cancel-in-progress: false");
+    expect(job).toContain("inputs.action == 'provision-deploy'");
+    expect(job).toContain("inputs.revision");
+    expect(job).toContain("git merge-base --is-ancestor \"$REVISION\" origin/main");
     expect(job).toContain("wrangler d1 create unicas-spaces --location enam");
     expect(job).toContain("run: pnpm deploy:spaces:bootstrap");
-    expect(job).toContain("inputs.spaces_action == 'principals'");
+    expect(job).toContain("inputs.action == 'principals'");
     expect(job).toContain("pnpm spaces:bootstrap -- --mode google");
     expect(job).toContain("pnpm spaces:bootstrap -- --mode smoke");
-    expect(job).toContain("if: ${{ always() && inputs.spaces_action == 'principals' }}");
+    expect(job).toContain("if: ${{ always() && inputs.action == 'principals' }}");
   });
 
   test("does not run validation for tag pushes", () => {
@@ -457,16 +482,11 @@ describe("standalone deployment plan", () => {
 
   test("deploys each production Worker in order with environment-scoped credentials", () => {
     const job = productionJob();
-    const issuerCutoverDeploy = job.indexOf("Deploy API and Console for App/Space v1 issuer cutover");
-    const issuerCutover = job.indexOf("Cut over App/Space v1 issuer audiences");
     const service = job.indexOf("run: pnpm deploy:production");
     const spaces = job.indexOf("run: pnpm deploy:spaces");
     const site = job.indexOf("run: pnpm deploy:site");
     const docs = job.indexOf("run: pnpm deploy:docs");
     expect(service).toBeGreaterThan(-1);
-    expect(issuerCutoverDeploy).toBeGreaterThan(-1);
-    expect(issuerCutover).toBeGreaterThan(issuerCutoverDeploy);
-    expect(service).toBeGreaterThan(issuerCutover);
     expect(spaces).toBeGreaterThan(service);
     expect(site).toBeGreaterThan(spaces);
     expect(docs).toBeGreaterThan(site);
@@ -506,9 +526,9 @@ describe("standalone deployment plan", () => {
     expect(job).not.toContain("secrets.SESSION_ENCRYPTION_KEYS");
     expect(job).not.toContain("secrets.OAUTH_STATE_ENCRYPTION_KEY");
     expect(job).toContain('wrangler secret put "$name"');
-    expect(job).toContain("if: vars.APP_SPACE_V1_CUTOVER_ENABLED == 'true'");
-    expect(job).toContain("UNICAS_RELEASE_ADMIN_SESSION: ${{ secrets.UNICAS_RELEASE_ADMIN_SESSION }}");
-    expect(job).toContain("run: node stacks/unicas/deploy/cut-over-app-space-v1-issuers.mjs");
+    expect(job).not.toContain("APP_SPACE_V1_CUTOVER_ENABLED");
+    expect(job).not.toContain("UNICAS_RELEASE_ADMIN_SESSION");
+    expect(job).not.toContain("cut-over-app-space-v1-issuers.mjs");
     expect(job).toContain("UNICAS_SMOKE_AUDIENCE: ${{ vars.UNICAS_SMOKE_AUDIENCE }}");
     expect(job).not.toContain("format('https://api.unicas.work/stacks/{0}'");
     expect(job).not.toContain("UNICAS_SMOKE_STACK_ID");

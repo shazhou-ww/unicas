@@ -1,7 +1,9 @@
 # 验证与发布接口评审
 
 Updated: 2026-09-23
-Status: Proposed
+Status: Approved
+
+Approved: 2026-09-23（用户明确批准 Interface）
 
 ## 评审目标
 
