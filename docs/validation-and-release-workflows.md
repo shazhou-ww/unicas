@@ -42,3 +42,22 @@ The retained protected rebuild is intentional: it adds exact-revision and
 environment-approval guarantees. npm performs one complete registry preflight
 before writes and rechecks only the next package immediately before its write,
 so a partial successful run can be resumed without overwriting immutable state.
+
+## 2026-09-23 optimization evidence
+
+GitHub runner time is measured from each `validate` job's `startedAt` to
+`completedAt`. Functional steps exclude GitHub setup, completion, generated
+post steps, and skipped steps.
+
+| Sample | Runner time | Functional steps |
+| --- | ---: | ---: |
+| Pre-change runs [35826820817](https://github.com/shazhou-ww/unicas/actions/runs/35826820817), [35825378786](https://github.com/shazhou-ww/unicas/actions/runs/35825378786), and [35805431702](https://github.com/shazhou-ww/unicas/actions/runs/35805431702) | 4m20s median (4m20s, 4m31s, 3m08s) | 19 in the latest baseline |
+| Post-change run [35838240396](https://github.com/shazhou-ww/unicas/actions/runs/35838240396), attempts 1-3 | 2m16s median (2m24s, 2m12s, 2m16s) | 6 |
+
+The standard gate therefore reduced median runner time by 48% and latest
+functional-step count by 68%. A manual, non-writing release-superset run
+[35838538367](https://github.com/shazhou-ww/unicas/actions/runs/35838538367)
+passed in 4m03s with production deployment and tagging unreachable on the task
+branch. npm and production write workflows were not executed as measurement
+probes; their reductions are structural, while their protected write behavior
+is covered by workflow and script regression tests.

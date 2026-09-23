@@ -6,7 +6,7 @@ Updated: 2026-09-23
 
 已完成批准设计的实现与本地验证：普通交付统一到 `pnpm validate`，发布前门禁
 使用严格超集 `pnpm validate:release`；生产、npm 发布和 Spaces 恢复的信任边界已分别
-收敛。下一步是在 source publication 后取得 GitHub Actions 时间证据并集成主分支。
+收敛。source Actions 已提供普通与全面门禁证据，下一步是集成主分支。
 
 ## Decisions
 
@@ -40,13 +40,15 @@ Updated: 2026-09-23
 - `pnpm check:tasks` 与 `git diff --check`：通过；仅有仓库既有及当前 Delivery
   acceptance Pending 警告。
 - 首次 source Actions run 发现 workflow 将 `DOCS_SOURCE_REVISION` 注入整个验证
-  命令，导致本地默认环境与 CI 不一致；该变量已收窄到生产文档部署 step，并增加
-  回归断言，等待修复 revision 的 Actions 复验。
-- 结构对比：普通 `main` 从 19 个 functional steps 收敛到 checkout、secret scan、
-  两项 setup、install、单一 `validate` 和独立 remote ledger check；npm 从两个 job、
-  两次 install/build/full preflight 收敛到一个 10-step protected job、一次
-  install/build/full preflight。实际 Actions runner 中位数需在候选提交后采集，不能
-  由未提交本地实现伪造。
+  命令，导致本地默认环境与 CI 不一致；该变量已收窄到生产文档部署 step，并由
+  修复后的三次 Actions attempt 验证通过。
+- 普通 CI 三次 runner 时间为 2m24s、2m12s、2m16s，中位数 2m16s；可比的三个
+  优化前 run 中位数为 4m20s，降低 48%。最新 functional steps 从 19 降至 6。
+- 手动、无写入的 release-superset Actions run 通过，runner 时间 4m03s；
+  task branch 上 production deploy 与 tag job 均不可达。
+- npm 从两个 job、两次 install/build/full preflight 收敛到一个 protected job、
+  一次 install/build/full preflight。任务不以测量为由触发 npm 或生产写入；其
+  写入语义由 workflow/script 回归测试证明。
 
 ## Blockers
 
