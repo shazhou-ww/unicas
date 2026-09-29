@@ -84,6 +84,29 @@ Reviewed on 2026-09-29.
   triggers sample-zero rollback, credential revocation or rotation as
   applicable, and UniCAS maintainer incident handling.
 
+## Synthetic connectivity evidence
+
+On 2026-09-29, one local synthetic canary used the reviewed UniCAS OTLP
+exporter and the approved Grafana destination. The Basic authorization value
+was constructed in memory from the two approved `cfg` entries; neither source
+value nor the resulting header was printed or written to disk.
+
+- The OTLP exporter callback reported success.
+- A read-only Tempo lookup returned one `unicas.request` root and one
+  `unicas.fetch` child with the expected parent relationship.
+- Retained resource fields were limited to synthetic `service.name` and
+  `service.version` values.
+- Retained span fields were limited to the synthetic correlation ULID,
+  operation, peer, outcome, and HTTP status class values allowed by the
+  repository contract.
+- The canary used no Worker, Cloudflare binding, customer identifier,
+  credential, request content, storage key, URL, SQL, or provider error.
+
+This proves destination authentication, OTLP compatibility, and retention for
+one synthetic shape only. It does not prove the representative Worker
+waterfalls or comprehensive retained-field review required by D-AC02 and
+D-AC03.
+
 ## Evidence sources
 
 - Grafana Cloud regional availability:
@@ -101,10 +124,10 @@ Reviewed on 2026-09-29.
 
 At the time of this review:
 
-- The production activation path was not yet safely represented in the
-  repository deployment plumbing. Closing that gap requires a return to the
-  Inner World and acceptance of its new exact revision.
+- The accepted Implementation now provides a protected, shared production
+  activation path for both Workers, but no nonzero profile has been
+  provisioned through it.
 - No exact nonzero production sample has been proposed or approved.
 - No destination credential has been provisioned to either Cloudflare Worker.
-- No Worker has been deployed and no retained synthetic canary, field
-  inspection, limit check, or rollback exercise has been performed.
+- No Worker has been deployed, and no representative cross-path canary,
+  effective-limit check, or rollback exercise has been performed.

@@ -86,17 +86,23 @@ Reviewed on 2026-09-29. The non-sensitive operational record is
   Support request while UniCAS maintainers track closure.
 - Destination failures remain bounded to the accepted one-concurrent-request,
   one-second-timeout, fail-open exporter behavior.
+- A local synthetic exporter canary authenticated successfully and was
+  retained as one `unicas.request` root with one `unicas.fetch` child. A
+  read-only Tempo lookup found only synthetic `service.name/version` and the
+  expected correlation, operation, peer, outcome, and status-class fields.
+  This proves destination compatibility for one shape, not representative
+  Worker coverage or comprehensive field safety.
 
 ### Still outstanding
 
 - No nonzero production sample rate has been proposed or approved.
-- The previously accepted Implementation did not provide a safe, repeatable
-  activation path for destination configuration and secrets. The current
-  implementation candidate closes that gap but remains unaccepted until its
-  evidence is published and its new exact revision is explicitly accepted.
+- The accepted Implementation now provides a safe, repeatable activation path
+  for destination configuration and secrets, but no nonzero profile has been
+  provisioned through it.
 - No Cloudflare Worker secret or production configuration has changed.
-- No production deployment, retained synthetic canary, retained-field
-  inspection, effective-limit check, or rollback exercise has been performed.
+- No production deployment, representative cross-path retained canary,
+  comprehensive field inspection, effective-limit check, or rollback exercise
+  has been performed.
 - D-S02 through D-S04 and D-AC02 through D-AC04 therefore remain unchecked.
 
 ## Implementation
