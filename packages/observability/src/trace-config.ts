@@ -61,6 +61,24 @@ export function requiredTraceConfig(value: string | undefined, name: string): st
   return value.trim();
 }
 
+export function validateOtlpTraceEndpoint(value: string, allowInsecureLoopback = false): string {
+  const endpoint = new URL(value);
+  const loopbackHttp = allowInsecureLoopback
+    && endpoint.protocol === "http:"
+    && (endpoint.hostname === "127.0.0.1" || endpoint.hostname === "localhost" || endpoint.hostname === "[::1]");
+  if (
+    (endpoint.protocol !== "https:" && !loopbackHttp)
+    || endpoint.username
+    || endpoint.password
+    || endpoint.search
+    || endpoint.hash
+    || !endpoint.pathname.endsWith("/v1/traces")
+  ) {
+    throw new TypeError("OTLP trace endpoint must be credential-free HTTPS ending in /v1/traces");
+  }
+  return endpoint.toString();
+}
+
 function decodeBase64Url(value: string): Uint8Array {
   if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new TypeError("trace HMAC key is not base64url");
   const padded = value.replace(/-/g, "+").replace(/_/g, "/")

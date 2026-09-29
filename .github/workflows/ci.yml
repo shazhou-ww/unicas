@@ -158,6 +158,10 @@ jobs:
           UNICAS_SMOKE_KID: ${{ vars.UNICAS_SMOKE_KID }}
           UNICAS_SMOKE_SPACE_ID: ${{ vars.UNICAS_SMOKE_SPACE_ID }}
           UNICAS_SMOKE_KEY_FILE: github-actions-smoke-key.pem
+          UNICAS_MANUAL_TRACE_SAMPLE_RATE: ${{ vars.UNICAS_MANUAL_TRACE_SAMPLE_RATE }}
+          UNICAS_OTLP_TRACES_ENDPOINT: ${{ vars.UNICAS_OTLP_TRACES_ENDPOINT }}
+          UNICAS_OTLP_AUTHORIZATION: ${{ secrets.UNICAS_OTLP_AUTHORIZATION }}
+          UNICAS_TRACE_HMAC_KEYS: ${{ secrets.UNICAS_TRACE_HMAC_KEYS }}
         run: pnpm deploy:production
 
       - name: Remove production smoke signing key
@@ -177,6 +181,10 @@ jobs:
           SPACES_SMOKE_CREDENTIAL: ${{ secrets.SPACES_SMOKE_CREDENTIAL }}
           SPACES_SMOKE_PRINCIPAL_ID: ${{ vars.SPACES_SMOKE_PRINCIPAL_ID }}
           SPACES_UNICAS_AUDIENCE: ${{ vars.SPACES_UNICAS_AUDIENCE }}
+          UNICAS_MANUAL_TRACE_SAMPLE_RATE: ${{ vars.UNICAS_MANUAL_TRACE_SAMPLE_RATE }}
+          UNICAS_OTLP_TRACES_ENDPOINT: ${{ vars.UNICAS_OTLP_TRACES_ENDPOINT }}
+          UNICAS_OTLP_AUTHORIZATION: ${{ secrets.UNICAS_OTLP_AUTHORIZATION }}
+          UNICAS_TRACE_HMAC_KEYS: ${{ secrets.UNICAS_TRACE_HMAC_KEYS }}
         run: pnpm deploy:spaces
 
       - name: Deploy product site

@@ -62,6 +62,7 @@ export function spacesBootstrapEnvironment(environment = process.env) {
     SPACES_GOOGLE_CLIENT_ID: environment.SPACES_GOOGLE_CLIENT_ID || "bootstrap-disabled",
     SPACES_GOOGLE_CLIENT_SECRET: environment.SPACES_GOOGLE_CLIENT_SECRET || "bootstrap-disabled",
     SPACES_SMOKE_ENABLED: "false",
+    UNICAS_MANUAL_TRACE_SAMPLE_RATE: "0",
   };
 }
 
@@ -88,15 +89,16 @@ function relativeFromServicePackage(path) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     const options = parseSpacesDeployArgs(process.argv.slice(2));
-    if (options.production || options.bootstrap) {
-      const environment = options.bootstrap ? spacesBootstrapEnvironment() : process.env;
-      writeProductionSpacesConfig(environment);
-      writeProductionSpacesSecrets(environment);
-    }
+    const materializesSecrets = options.production || options.bootstrap;
     try {
+      if (materializesSecrets) {
+        const environment = options.bootstrap ? spacesBootstrapEnvironment() : process.env;
+        writeProductionSpacesConfig(environment);
+        writeProductionSpacesSecrets(environment);
+      }
       for (const command of spacesDeploymentPlan(options)) runSpacesCommand(command);
     } finally {
-      if (options.production || options.bootstrap) rmSync(SpacesProductionSecretsPath, { force: true });
+      if (materializesSecrets) rmSync(SpacesProductionSecretsPath, { force: true });
     }
   } catch (error) {
     console.error(error.message);

@@ -16,7 +16,10 @@ import {
   type SpanExporter,
   type SpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
+import { validateOtlpTraceEndpoint } from "./trace-config.js";
 import { createSpanId, type TraceUlid } from "./trace-identity.js";
+
+export { validateOtlpTraceEndpoint } from "./trace-config.js";
 
 export const ManualSpanNames = [
   "unicas.request",
@@ -207,24 +210,6 @@ export function createOtlpHttpTraceExporter(input: {
     concurrencyLimit: 1,
     headers: input.authorization ? { Authorization: input.authorization } : {},
   });
-}
-
-export function validateOtlpTraceEndpoint(value: string, allowInsecureLoopback = false): string {
-  const endpoint = new URL(value);
-  const loopbackHttp = allowInsecureLoopback
-    && endpoint.protocol === "http:"
-    && (endpoint.hostname === "127.0.0.1" || endpoint.hostname === "localhost" || endpoint.hostname === "[::1]");
-  if (
-    (endpoint.protocol !== "https:" && !loopbackHttp)
-    || endpoint.username
-    || endpoint.password
-    || endpoint.search
-    || endpoint.hash
-    || !endpoint.pathname.endsWith("/v1/traces")
-  ) {
-    throw new TypeError("OTLP trace endpoint must be credential-free HTTPS ending in /v1/traces");
-  }
-  return endpoint.toString();
 }
 
 class RecordingTraceSession implements ManualTraceSession {

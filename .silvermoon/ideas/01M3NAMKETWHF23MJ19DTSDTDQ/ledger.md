@@ -17,11 +17,12 @@ Reviewed on 2026-09-29 against primary baseline
   (`ab35b3fceae702d51405ca808de9e7274178605d`), and Silvermoon migration
   (`3ddcfd080c5eadba78b55a4da6ba9da8890ff1c0`) are all reachable from the
   reviewed primary.
-- The tracing implementation, production Worker configurations, and primary
-  observability contract have not changed since the manual tracing
-  implementation. Both dynamic Workers still disable native tracing and set
-  `UNICAS_MANUAL_TRACE_SAMPLE_RATE=0`; repository search finds no checked-in
-  OTLP destination, authorization secret, or trace HMAC key.
+- At the initial revalidation, the tracing implementation, production Worker
+  configurations, and primary observability contract had not changed since
+  the manual tracing implementation. Both dynamic Workers disabled native
+  tracing and set `UNICAS_MANUAL_TRACE_SAMPLE_RATE=0`; repository search found
+  no checked-in OTLP destination, authorization secret, or trace HMAC key.
+  Later destination review and activation-plumbing evidence is recorded below.
 - Current Cloudflare [tracing](https://developers.cloudflare.com/workers/observability/traces/),
   [span and attribute](https://developers.cloudflare.com/workers/observability/traces/spans-and-attributes/),
   [known limitation](https://developers.cloudflare.com/workers/observability/traces/known-limitations/),
@@ -91,8 +92,8 @@ Reviewed on 2026-09-29. The non-sensitive operational record is
 - No nonzero production sample rate has been proposed or approved.
 - The previously accepted Implementation did not provide a safe, repeatable
   activation path for destination configuration and secrets. The current
-  candidate returns to implementing to close that gap and requires acceptance
-  of its new exact Implementation revision.
+  implementation candidate closes that gap but remains unaccepted until its
+  evidence is published and its new exact revision is explicitly accepted.
 - No Cloudflare Worker secret or production configuration has changed.
 - No production deployment, retained synthetic canary, retained-field
   inspection, effective-limit check, or rollback exercise has been performed.
@@ -106,7 +107,7 @@ Reviewed on 2026-09-29. The non-sensitive operational record is
 - [x] **I-S02:** Implement the bounded portable tracing pipeline
 - [x] **I-S03:** Instrument the service and Spaces boundaries
 - [x] **I-S04:** Document and test the operational contract
-- [ ] **I-S05:** Make manual tracing activation repeatable
+- [x] **I-S05:** Make manual tracing activation repeatable
 
 ### Implementation acceptance criteria
 
@@ -114,7 +115,39 @@ Reviewed on 2026-09-29. The non-sensitive operational record is
 - [x] **I-AC02:** Manual tracing is bounded and fail-open
 - [x] **I-AC03:** Cross-boundary traces preserve isolation
 - [x] **I-AC04:** Current builds keep production export dormant
-- [ ] **I-AC05:** Activation is atomic, shared, and secret-safe
+- [x] **I-AC05:** Activation is atomic, shared, and secret-safe
+
+### Activation plumbing evidence
+
+Validated on 2026-09-29 without using the Grafana credential, changing a
+Cloudflare secret, or deploying a Worker.
+
+- One shared deployment resolver uses the runtime sample-rate, endpoint, and
+  HMAC validators. A nonzero rate requires the complete endpoint,
+  authorization, and HMAC profile; zero ignores inactive destination values
+  and preserves the checked-in dormant configuration.
+- The service deployment passes only rate and endpoint as Wrangler variables.
+  A separate `wrangler secret put` command sends authorization and HMAC values
+  over standard input, never command arguments.
+- The Spaces production generator applies the same public variables and puts
+  the same two values only in its existing mode-0600 ephemeral secrets file.
+  Bootstrap explicitly forces sample zero, and secret cleanup now also runs
+  when preparation fails.
+- The protected Production workflow supplies the same generic profile to both
+  dynamic Workers. It contains no Grafana-specific credential construction,
+  and validation jobs receive no production variables or secrets.
+- Deployment-policy tests pass 42/42, `@unicas/observability` passes 20/20,
+  service tracing tests pass 53/53, Spaces Worker tests pass 14/14, and all
+  four affected package typechecks pass.
+- Documentation tests pass 7/7. The first cold run again reached the existing
+  30-second setup timeout before running a test; the immediate unchanged rerun
+  passed.
+- Current zero-rate service and Spaces Wrangler dry runs pass and report
+  `UNICAS_MANUAL_TRACE_SAMPLE_RATE=0`.
+- Synthetic nonzero service and generated Spaces Wrangler dry runs pass with
+  rate `0.01` and a credential-free example endpoint. Dummy authorization and
+  HMAC values were used only for local validation, were excluded from command
+  arguments and public config, and no external request or deployment ran.
 
 ## Deployment
 

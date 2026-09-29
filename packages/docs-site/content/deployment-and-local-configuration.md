@@ -143,6 +143,34 @@ and internal context. Retain an old version only for the bounded rotation
 overlap. Never place endpoint credentials in the endpoint URL or a Wrangler
 variable.
 
+The protected Production environment supplies the same four tracing values to
+the service and Spaces deployment steps:
+
+| GitHub environment entry | Kind | Purpose |
+| --- | --- | --- |
+| `UNICAS_MANUAL_TRACE_SAMPLE_RATE` | Variable | Exact reviewed rate; missing or `0` keeps tracing dormant |
+| `UNICAS_OTLP_TRACES_ENDPOINT` | Variable | Credential-free OTLP/HTTP traces endpoint |
+| `UNICAS_OTLP_AUTHORIZATION` | Secret | Complete destination-neutral `Authorization` header value |
+| `UNICAS_TRACE_HMAC_KEYS` | Secret | Shared versioned key ring for trace identity and internal parent context |
+
+Any nonzero rate is accepted only with the complete validated profile. The
+deployment fails before running Wrangler if the endpoint is unsafe, a secret
+is missing, or the HMAC key ring is invalid. The service path sends secret
+values to `wrangler secret put` over standard input. The Spaces path includes
+them only in its mode-0600 ephemeral secrets file, which is removed after
+deployment. Secret values never appear in command arguments or generated
+public Wrangler configuration.
+
+For Grafana Cloud, construct the full Basic authorization value outside the
+repository from the stack instance ID and access-policy token, then store only
+that complete value in `UNICAS_OTLP_AUTHORIZATION`. The deployment code remains
+provider-neutral and never reads Grafana-specific credential parts.
+
+Rollback sets the Production `UNICAS_MANUAL_TRACE_SAMPLE_RATE` variable to `0`
+and deploys an accepted revision. The zero-rate profile uses the committed
+dormant configuration and does not synchronize tracing secrets; already
+provisioned inactive secrets may then be rotated or revoked separately.
+
 Administrator admission is owned by Account platform authorities and App
 memberships. There is no email-allowlist fallback.
 

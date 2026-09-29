@@ -213,6 +213,12 @@ no userinfo, query, or fragment. Authorization and HMAC keys are Worker
 secrets. Retain one or two previous HMAC versions only for an intentional
 rotation overlap; at most three versions are accepted.
 
+The protected deployment paths treat these four values as one profile and
+apply the same profile to both dynamic Workers. Any nonzero rate with a
+missing or invalid endpoint, authorization value, or HMAC key ring fails
+before deployment commands run. At zero, the checked-in dormant configuration
+is used and tracing secrets are not synchronized.
+
 In the reviewed destination, query `service.name` (`unicas` or
 `unicas-spaces`) and root span name first. Filter or group only by
 `unicas.operation`, `unicas.outcome`, `unicas.http.status_class`,
