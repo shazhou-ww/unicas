@@ -4,8 +4,8 @@ This directory contains contributor, task-workflow, release-engineering, and
 other repository-development documentation. It is not a source directory for
 the public site at `https://docs.unicas.work`.
 
-- [Repository tasks](repository-tasks.md) defines the shared task lifecycle and
-  publication rules.
+- [Repository ideas](repository-ideas.md) defines the shared Silvermoon
+  lifecycle and publication rules.
 - [Managed issuer retirement](managed-issuer-retirement.md) preserves the
   historical two-stage production retirement and rollback procedure.
 - [App-user SDK npm releases](npm-package-releases.md) defines the unified

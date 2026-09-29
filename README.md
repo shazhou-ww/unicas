@@ -76,10 +76,10 @@ The accepted origin architecture is documented in
 The accepted App/Space resource vocabulary is documented in
 [`packages/docs-site/content/terminology.md`](packages/docs-site/content/terminology.md).
 
-Repository work is tracked alongside the code under stable [`tasks/`](tasks/)
-paths, with lifecycle state recorded in [`tasks/status.yaml`](tasks/status.yaml).
-The workflow is documented in
-[`docs/repository-tasks.md`](docs/repository-tasks.md).
+Long-running repository work is captured as layered Silvermoon ideas under
+stable [`.silvermoon/ideas/`](.silvermoon/ideas/) paths. The workflow is
+documented in
+[`docs/repository-ideas.md`](docs/repository-ideas.md).
 
 Report suspected vulnerabilities privately as described in
 [`SECURITY.md`](SECURITY.md).

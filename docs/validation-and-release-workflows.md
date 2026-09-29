@@ -10,7 +10,7 @@ and exact revision checks; it does not maintain a second test command list.
 | --- | --- | --- | --- |
 | Focused local work | package `test`, `build`, or `typecheck`; `pnpm test:quick`; `pnpm test:packages` | Fast affected-scope feedback | None |
 | Local delivery, branch, PR, `main` | `pnpm validate` | Repository policy, package tests except the slow Cloudflare adapter suite, one workspace build, and one workspace typecheck | None |
-| `main` push | `pnpm validate`, then separate `repoledger check --remote` | Canonical shared task coordination | None |
+| `main` push | `pnpm validate`, then separate `pnpm check:ideas:remote` | Canonical shared idea state and primary-history validation | None |
 | Release preflight | `pnpm validate:release` or manual **CI** dispatch | Strict superset: Cloudflare adapter and release-policy suites, deterministic SDK artifacts, docs browser test, all deployment dry-runs | None |
 | Production promotion | Push of a reviewed `main` revision to protected `release` | Exact SHA and `main` ancestry, protected rebuild, serial deploy/smoke/origin checks, immutable production tag | Cloudflare and Git tag, after `Production` approval |
 | npm release | `npm/app-user-sdk/v<version>` tag | Exact tag SHA and `main` ancestry, deterministic six-package rebuild, full registry preflight, ordered OIDC publication, provenance and external verification | npm, after `npm` approval |

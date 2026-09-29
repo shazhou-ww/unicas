@@ -293,7 +293,7 @@ describe("standalone deployment plan", () => {
     expect(CI_WORKFLOW).toContain(
       "if: github.event_name == 'push' && github.ref == 'refs/heads/main'",
     );
-    expect(CI_WORKFLOW).toContain("run: pnpm check:tasks --remote");
+    expect(CI_WORKFLOW).toContain("run: pnpm check:ideas:remote");
     expect(CI_WORKFLOW).toContain("DOCS_SOURCE_REVISION: ${{ github.sha }}");
   });
 

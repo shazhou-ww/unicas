@@ -77,7 +77,7 @@ describe("documentation static site", () => {
       "README.md",
       "managed-issuer-retirement.md",
       "npm-package-releases.md",
-      "repository-tasks.md",
+      "repository-ideas.md",
       "validation-and-release-workflows.md",
     ]);
   });

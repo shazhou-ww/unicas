@@ -1,5 +1,6 @@
-repoledger.yaml text eol=lf
-tasks/status.yaml text eol=lf
+.silvermoon/config.yaml text eol=lf
+.silvermoon/ideas/** text eol=lf
+.agents/skills/silvermoon/** text eol=lf
 LICENSE text eol=lf
 packages/codec/** text eol=lf
 packages/space-protocol/** text eol=lf

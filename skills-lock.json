@@ -7,17 +7,10 @@
       "skillPath": "skills/business-data-model-review/SKILL.md",
       "computedHash": "67edcc194ca828a0bafb93937a53e456b86be25b4ca7aedaa153658842847b01"
     },
-    "publish": {
-      "source": "shazhou-ww/skills",
-      "sourceType": "github",
-      "skillPath": ".github/skills/publish/SKILL.md",
-      "computedHash": "6f8a76bfdfed46d502b3119b3557be2eb7221d84e46f18bdd309519db3c239a1"
-    },
-    "repoledger": {
-      "source": "shazhou-ww/repoledger",
-      "sourceType": "github",
-      "skillPath": "skills/repoledger/SKILL.md",
-      "computedHash": "48887365f0f9d0a96cd7ca4cbcf2220c09b6e0ee27c80d609b35041cb88fefab"
+    "silvermoon": {
+      "source": "./node_modules/silvermoon/skills",
+      "sourceType": "local",
+      "computedHash": "e4622b5dab187559475d80de98b5a92b59d3db103f2efff72a7b997fee66afaa"
     },
     "ui-change-review": {
       "source": "shazhou-ww/skills",
