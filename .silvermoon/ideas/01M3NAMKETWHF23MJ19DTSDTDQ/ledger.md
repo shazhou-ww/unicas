@@ -89,10 +89,10 @@ Reviewed on 2026-09-29. The non-sensitive operational record is
 ### Still outstanding
 
 - No nonzero production sample rate has been proposed or approved.
-- The repository does not yet provide a safe, repeatable activation path for
-  destination configuration and secrets. That change must return to
-  implementing and receive acceptance for its new exact Implementation
-  revision.
+- The previously accepted Implementation did not provide a safe, repeatable
+  activation path for destination configuration and secrets. The current
+  candidate returns to implementing to close that gap and requires acceptance
+  of its new exact Implementation revision.
 - No Cloudflare Worker secret or production configuration has changed.
 - No production deployment, retained synthetic canary, retained-field
   inspection, effective-limit check, or rollback exercise has been performed.
@@ -106,6 +106,7 @@ Reviewed on 2026-09-29. The non-sensitive operational record is
 - [x] **I-S02:** Implement the bounded portable tracing pipeline
 - [x] **I-S03:** Instrument the service and Spaces boundaries
 - [x] **I-S04:** Document and test the operational contract
+- [ ] **I-S05:** Make manual tracing activation repeatable
 
 ### Implementation acceptance criteria
 
@@ -113,6 +114,7 @@ Reviewed on 2026-09-29. The non-sensitive operational record is
 - [x] **I-AC02:** Manual tracing is bounded and fail-open
 - [x] **I-AC03:** Cross-boundary traces preserve isolation
 - [x] **I-AC04:** Current builds keep production export dormant
+- [ ] **I-AC05:** Activation is atomic, shared, and secret-safe
 
 ## Deployment
 

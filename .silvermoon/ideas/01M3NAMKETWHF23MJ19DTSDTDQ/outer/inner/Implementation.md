@@ -28,6 +28,14 @@ boundaries.
 Maintain deployment guidance, queries, rollback, sampling gates, serializer
 bounds, data-safety tests, and the repository-owned observability skill.
 
+### I-S05: Make manual tracing activation repeatable
+
+Thread one destination-neutral manual tracing profile through the protected
+service and Spaces deployment paths. Keep committed Worker templates at sample
+zero, require the complete validated endpoint and secret set for any nonzero
+rate, and keep secret values out of command arguments, generated public
+configuration, logs, and repository state.
+
 ## Acceptance criteria
 
 ### I-AC01: Telemetry excludes prohibited data
@@ -53,3 +61,12 @@ Prove scope, replay, destination, parentage, and ingress tests.
 Both dynamic Worker build and deployment plans report manual sample zero while
 native tracing remains disabled and static Workers remain excluded. Prove it
 with the Worker build and both relevant Wrangler dry runs.
+
+### I-AC05: Activation is atomic, shared, and secret-safe
+
+Both dynamic Workers consume the same explicitly configured rate, endpoint,
+authorization, and HMAC key ring. Zero-rate plans preserve the dormant checked-in
+defaults, while incomplete or invalid nonzero profiles fail before deployment
+commands run. Prove variable and secret separation, rollback behavior, protected
+CI wiring, and both generated deployment candidates with executable tests and
+dry runs.

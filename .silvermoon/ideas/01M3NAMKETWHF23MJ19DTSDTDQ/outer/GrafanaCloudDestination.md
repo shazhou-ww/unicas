@@ -99,9 +99,11 @@ Reviewed on 2026-09-29.
 
 ## Remaining gates
 
-- The production activation path is not yet safely represented in the
-  repository deployment plumbing. That implementation work requires a return
-  to the Inner World and acceptance of its new exact revision.
+At the time of this review:
+
+- The production activation path was not yet safely represented in the
+  repository deployment plumbing. Closing that gap requires a return to the
+  Inner World and acceptance of its new exact revision.
 - No exact nonzero production sample has been proposed or approved.
 - No destination credential has been provisioned to either Cloudflare Worker.
 - No Worker has been deployed and no retained synthetic canary, field
