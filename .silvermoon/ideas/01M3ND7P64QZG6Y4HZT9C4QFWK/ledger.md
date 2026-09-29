@@ -37,13 +37,28 @@
 
 ### Deployment steps
 
-- [ ] **D-S01:** 发布仓库规范
-- [ ] **D-S02:** 验证远端规范和发现结果
-- [ ] **D-S03:** 验证持续集成结果
+- [x] **D-S01:** 发布仓库规范
+- [x] **D-S02:** 验证远端规范和发现结果
+- [x] **D-S03:** 验证持续集成结果
 
 ### Deployment acceptance criteria
 
-- [ ] **D-AC01:** 主分支提供唯一规范资产
-- [ ] **D-AC02:** 主分支技能发现符合契约
-- [ ] **D-AC03:** 远端自动化验证通过
-- [ ] **D-AC04:** 没有运行时发布副作用
+- [x] **D-AC01:** 主分支提供唯一规范资产
+- [x] **D-AC02:** 主分支技能发现符合契约
+- [x] **D-AC03:** 远端自动化验证通过
+- [x] **D-AC04:** 没有运行时发布副作用
+
+### Deployment evidence
+
+- 2026-09-29：部署契约提交
+  `d3264d5deae28c3a3a7c9f4c0405dc967d461856` 已发布并可从
+  `origin/main` 到达；`pnpm check:ideas:remote` 对该提交通过。
+- 2026-09-29：`npx --yes skills list --json` 从 `.agents/skills` 精确发现
+  六个契约内技能；`unicas-package-boundaries` 的 source 为 repository-owned，
+  可发现 Agent 不包含 Claude。
+- 2026-09-29：[GitHub Actions CI run 36513400439](https://github.com/shazhou-ww/unicas/actions/runs/36513400439)
+  成功；standard validation 与 published Silvermoon idea state 检查通过，
+  `Deploy production` 和 production tag job 均跳过。
+- 2026-09-29：实现提交
+  `0d39e5ccd5362234c956d06e620d7a346ecde4ed` 的路径清单仅包含 Agent 指导、
+  文档、守卫测试、根级检查接线和 Idea 内层文件；本次没有运行生产部署命令。
