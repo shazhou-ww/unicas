@@ -142,4 +142,4 @@ Sources of truth:
 - [Service instrumentation](../../../packages/service-cloudflare/src/observability.ts)
 - [Spaces instrumentation](../../../packages/spaces/src/observability.ts)
 - [Portable manual tracing](../../../packages/observability/src/manual-tracing.ts)
-- [Package boundaries](../../../.github/instructions/packages.instructions.md)
+- [Package boundaries](../unicas-package-boundaries/SKILL.md)

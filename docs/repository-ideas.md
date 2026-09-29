@@ -17,8 +17,9 @@ npx skills add ./node_modules/silvermoon/skills --skill silvermoon --agent unive
 ```
 
 Review updates to the dependency, lockfile, installed skill, and skill lock
-together. The repository configuration names the credential-free canonical
-HTTPS repository and `main` as the shared primary.
+together. See [Agent guidance](../.agents/README.md) for the repository-wide
+skill ownership and update policy. The repository configuration names the
+credential-free canonical HTTPS repository and `main` as the shared primary.
 
 ## Layout
 

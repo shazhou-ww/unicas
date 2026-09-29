@@ -1,5 +1,14 @@
 # UniCAS agent instructions
 
+## Guidance routing
+
+- Treat [`.agents/`](.agents/README.md) as the only supported canonical root
+  for Agent skills and reusable instructions. Do not add or require
+  provider-specific projections.
+- Before changing any file under `packages/**` or `stacks/unicas/**`, load and
+  follow the
+  [`unicas-package-boundaries` skill](.agents/skills/unicas-package-boundaries/SKILL.md).
+
 ## Idea workflow
 
 Load and follow the
@@ -34,10 +43,6 @@ requests remain idea-free unless the user opts into this lifecycle.
 
 ## Repository boundaries
 
-- Read [`packages/README.md`](packages/README.md) before changing package
-  ownership or dependencies.
-- Preserve the separation between administrator and data access planes and do
-  not introduce runtime dependencies on `@unidocs/*`.
 - Treat `unicas.shazhou.work` and its Cloudflare resources as a frozen legacy
   environment unless a task explicitly says otherwise.
 - Use `pnpm deploy:plan` or direct Wrangler `--dry-run` for deployment review.
