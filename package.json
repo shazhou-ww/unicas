@@ -38,9 +38,9 @@
     "check:sdk-release": "vitest run tests/sdk-release.test.mjs && node scripts/prepare-sdk-release.mjs --check",
     "check:npm-release": "vitest run tests/npm-release.test.mjs",
     "verify:npm-release": "node scripts/verify-npm-release.mjs",
-    "check:ideas": "silvermoon check --worktree",
-    "check:ideas:commit": "silvermoon check --commit HEAD",
-    "check:ideas:remote": "silvermoon check --remote",
+    "check:ideas": "silvermoon check --worktree --audience agent",
+    "check:ideas:commit": "silvermoon check --commit HEAD --audience agent",
+    "check:ideas:remote": "silvermoon check --remote --audience agent",
     "typecheck": "pnpm -r typecheck",
     "clean": "pnpm -r run clean",
     "keys:local": "node scripts/generate-local-capability-keys.mjs"
@@ -53,7 +53,7 @@
     "miniflare": "5.20260811.1-alpha",
     "rimraf": "^6.1.3",
     "semver": "7.8.5",
-    "silvermoon": "^0.1.0",
+    "silvermoon": "^0.3.0",
     "typescript": "^5.9.0",
     "vitest": "^3.2.0",
     "yaml": "2.9.0"

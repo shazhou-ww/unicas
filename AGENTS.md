@@ -18,8 +18,10 @@ to continue an existing Silvermoon idea. Apply the UniCAS-specific profile in
 [`docs/repository-ideas.md`](docs/repository-ideas.md). Ordinary implementation
 requests remain idea-free unless the user opts into this lifecycle.
 
-- Use `pnpm exec silvermoon create-idea` only for explicit creation requests.
-  Use `pnpm exec silvermoon whats-next [idea]` for navigation and continuation.
+- Use `pnpm exec silvermoon create-idea --audience agent` only for explicit
+  creation requests. Use
+  `pnpm exec silvermoon whats-next [idea] --audience agent` for navigation and
+  continuation.
 - Treat the configured primary repository and branch as authoritative. Preserve
   unknown work and follow the command's ordered synchronization instructions.
 - Keep every idea in the fixed `.silvermoon/ideas/<ULID>/` layout. Use a unique
@@ -52,8 +54,9 @@ requests remain idea-free unless the user opts into this lifecycle.
 
 - `pnpm check:ideas` validates the worktree. `pnpm check:ideas:commit` validates
   checked-out history, and main-branch CI runs `pnpm check:ideas:remote`.
-- Use `pnpm exec silvermoon whats-next [idea]` for readiness and
-  `pnpm exec silvermoon check --staged` for an index candidate.
+- Use `pnpm exec silvermoon whats-next [idea] --audience agent` for readiness
+  and `pnpm exec silvermoon check --staged --audience agent` for an index
+  candidate.
 - Run the narrowest relevant executable test after implementation edits.
 - Before requesting acceptance, run the validation required by the current
   world contract and update the matching ledger entries.

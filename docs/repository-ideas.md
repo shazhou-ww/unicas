@@ -47,10 +47,13 @@ stable step and acceptance-criterion IDs as Agent-owned checkboxes.
 
 ## Workflow
 
-- Use `pnpm exec silvermoon create-idea` only after an explicit creation
-  request. It creates an untracked scaffold and never records approval.
-- Use `pnpm exec silvermoon whats-next [ULID-or-alias]` to observe readiness and
-  obtain the next ordered action. Bare navigation never selects an idea.
+- Use `pnpm exec silvermoon create-idea --audience agent` only after an explicit
+  creation request. It creates an untracked scaffold and never records
+  approval.
+- Use
+  `pnpm exec silvermoon whats-next [ULID-or-alias] --audience agent`
+  to observe readiness and obtain the next ordered action. Bare navigation
+  never selects an idea.
 - Publish normal non-force commits through the repository's standard path.
   Reobserve after repository or external state changes.
 - Record `approvedRevision`, `implementationAcceptedRevision`, or
@@ -67,7 +70,7 @@ Use the snapshot matching the candidate being reviewed:
 
 ```sh
 pnpm check:ideas
-pnpm exec silvermoon check --staged
+pnpm exec silvermoon check --staged --audience agent
 pnpm check:ideas:commit
 pnpm check:ideas:remote
 ```

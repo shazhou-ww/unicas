@@ -8,18 +8,28 @@ Start with a complete diagnosis, even in an unfamiliar repository:
 npx silvermoon@<version> whats-next
 ```
 
-The dialogue uses lightweight Markdown headings for intention, observation,
-and ordered instructions. It includes actions and outcomes only if side
-effects were attempted. Add `--json` only when a programmatic consumer needs
-the `intention / observation / outcomes / instructions` envelope (including
-`outcomes: []` when none were attempted).
+Default output renders only the self-contained response. Add `--json` only
+when a programmatic consumer needs the complete
+`intention / observation / actions / response` report (including
+`actions: []` when no side effect was attempted).
 The command may fetch after local readiness passes, but it does not move the
 worktree, index, branches, or named refs.
 
-The target repository may use any language or build ecosystem. It does not
-need `package.json`, a package manager, a Silvermoon dependency, or
-`node_modules`. Use any compatible Silvermoon installation, and register the
-canonical skill bundled with that running installation:
+The target repository may use any language or build ecosystem. If it has no
+root `package.json`, it does not need a package manager, a Silvermoon
+dependency, or `node_modules`. If a root manifest exists, Silvermoon requires
+valid JSON and `devDependencies.silvermoon` exactly equal to
+`^<running-version>`. Follow every command in the setup report, in order; a
+manager-specific remediation may have separate manifest and install steps.
+After the dependencies are installed, register the canonical skill from the
+project-local package:
+
+```sh
+npx skills add ./node_modules/silvermoon/skills --skill silvermoon --agent universal --yes --copy
+```
+
+Non-npm repositories register the skill bundled with their running Silvermoon
+installation:
 
 ```sh
 npx skills add <path-to-running-silvermoon>/skills --skill silvermoon --agent universal --yes --copy
@@ -53,10 +63,10 @@ silvermoon whats-next <ULID>
 `check` validates the selected project snapshot only; it does not navigate
 ideas or check worktree hygiene and upstream. Default `check` validates
 committed `HEAD`, whereas `check --staged` validates the index for pre-commit
-hooks. Its JSON contains only `intention` and `observation`; it does not
-include dialogue `outcomes` or `instructions`. Exit code `0` means valid,
-`1` means invalid or unavailable, and `2` means invalid CLI usage. A failed
-or unavailable check must not allow a commit.
+hooks. Its JSON uses all four report projections; `actions` is empty except
+when `check --remote` attempts its fetch. Exit code `0` means valid, `1` means
+invalid or unavailable, and `2` means invalid CLI usage. A failed or
+unavailable check must not allow a commit.
 
 Create or repair configuration through ordinary reviewed file editing.
 Silvermoon reports every configuration finding but has no init or setup command.

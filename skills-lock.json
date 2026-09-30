@@ -10,7 +10,7 @@
     "silvermoon": {
       "source": "./node_modules/silvermoon/skills",
       "sourceType": "local",
-      "computedHash": "e4622b5dab187559475d80de98b5a92b59d3db103f2efff72a7b997fee66afaa"
+      "computedHash": "c3bbc40bb61b31e04b43dd7cfef4a5b1125bc01f5ab3c8c101133971d2406b5b"
     },
     "ui-change-review": {
       "source": "shazhou-ww/skills",

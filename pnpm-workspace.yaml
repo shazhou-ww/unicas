@@ -26,7 +26,7 @@ minimumReleaseAgeExclude:
   - '@codemirror/state'
   - '@tanstack/virtual-core'
   - '@tanstack/vue-virtual'
-  - silvermoon@0.1.0
+  - silvermoon@0.3.0
 overrides:
   '@jridgewell/sourcemap-codec': 1.5.5
 allowBuilds:
@@ -34,3 +34,5 @@ allowBuilds:
   workerd: true
   vue-demi: true
   core-js-pure: false
+  koffi: true
+  unsafe-pointer: true
