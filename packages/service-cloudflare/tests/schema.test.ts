@@ -72,6 +72,18 @@ describe("App-scoped Space schema", () => {
     ).first()).toEqual({ count: 1 });
   });
 
+  test("keeps deployment triggers compatible with the remote D1 statement splitter", async () => {
+    const migration = await readFile(
+      new URL("../../../stacks/unicas/deploy/migrations/tenant/0001_baseline.sql", import.meta.url),
+      "utf8",
+    );
+    const triggerSql = migration.slice(migration.indexOf("CREATE TRIGGER"));
+
+    expect(triggerSql).not.toContain("\r");
+    expect(triggerSql).not.toMatch(/(^|[^(])CASE WHEN/);
+    expect([...triggerSql.matchAll(/\bBEGIN\b/gi)].every(([keyword]) => keyword === "BEGIN")).toBe(true);
+  });
+
   test("creates App-aware authoritative and audit tables, idempotently", async () => {
     const database = await createDb();
     await migrateAppSpaceSchema(database); // rerun must be a no-op

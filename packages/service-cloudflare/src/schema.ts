@@ -69,30 +69,30 @@ const TRIGGER_MIGRATIONS = [
   `CREATE TRIGGER IF NOT EXISTS cas_nodes_usage_insert AFTER INSERT ON cas_nodes BEGIN
     INSERT INTO cas_space_usage (app_id, space_id, node_count, ready_content_bytes, ready_stored_bytes, reserved_bytes, not_ready_node_count, leased_node_count, unobserved_node_count)
     VALUES (NEW.app_id, NEW.space_id, 1, NEW.content_size, COALESCE(NEW.canonical_stored_bytes, 0), 0,
-      CASE WHEN NEW.canonical_observed_at IS NOT NULL AND NEW.canonical_stored_bytes IS NULL THEN 1 ELSE 0 END,
-      CASE WHEN NEW.lease_expires_at > 0 THEN 1 ELSE 0 END,
-      CASE WHEN NEW.canonical_observed_at IS NULL THEN 1 ELSE 0 END)
+      (CASE WHEN NEW.canonical_observed_at IS NOT NULL AND NEW.canonical_stored_bytes IS NULL THEN 1 ELSE 0 END),
+      (CASE WHEN NEW.lease_expires_at > 0 THEN 1 ELSE 0 END),
+      (CASE WHEN NEW.canonical_observed_at IS NULL THEN 1 ELSE 0 END))
     ON CONFLICT(app_id, space_id) DO UPDATE SET
       node_count = node_count + 1,
       ready_content_bytes = ready_content_bytes + NEW.content_size,
       ready_stored_bytes = ready_stored_bytes + COALESCE(NEW.canonical_stored_bytes, 0),
-      not_ready_node_count = not_ready_node_count + CASE WHEN NEW.canonical_observed_at IS NOT NULL AND NEW.canonical_stored_bytes IS NULL THEN 1 ELSE 0 END,
-      leased_node_count = leased_node_count + CASE WHEN NEW.lease_expires_at > 0 THEN 1 ELSE 0 END,
-      unobserved_node_count = unobserved_node_count + CASE WHEN NEW.canonical_observed_at IS NULL THEN 1 ELSE 0 END;
+      not_ready_node_count = not_ready_node_count + (CASE WHEN NEW.canonical_observed_at IS NOT NULL AND NEW.canonical_stored_bytes IS NULL THEN 1 ELSE 0 END),
+      leased_node_count = leased_node_count + (CASE WHEN NEW.lease_expires_at > 0 THEN 1 ELSE 0 END),
+      unobserved_node_count = unobserved_node_count + (CASE WHEN NEW.canonical_observed_at IS NULL THEN 1 ELSE 0 END);
   END`,
   `CREATE TRIGGER IF NOT EXISTS cas_nodes_usage_update AFTER UPDATE OF content_size, lease_expires_at, canonical_stored_bytes, canonical_observed_at ON cas_nodes BEGIN
     UPDATE cas_space_usage SET
       ready_content_bytes = ready_content_bytes + NEW.content_size - OLD.content_size,
       ready_stored_bytes = ready_stored_bytes + COALESCE(NEW.canonical_stored_bytes, 0) - COALESCE(OLD.canonical_stored_bytes, 0),
       not_ready_node_count = not_ready_node_count
-        + CASE WHEN NEW.canonical_observed_at IS NOT NULL AND NEW.canonical_stored_bytes IS NULL THEN 1 ELSE 0 END
-        - CASE WHEN OLD.canonical_observed_at IS NOT NULL AND OLD.canonical_stored_bytes IS NULL THEN 1 ELSE 0 END,
+        + (CASE WHEN NEW.canonical_observed_at IS NOT NULL AND NEW.canonical_stored_bytes IS NULL THEN 1 ELSE 0 END)
+        - (CASE WHEN OLD.canonical_observed_at IS NOT NULL AND OLD.canonical_stored_bytes IS NULL THEN 1 ELSE 0 END),
       leased_node_count = leased_node_count
-        + CASE WHEN NEW.lease_expires_at > 0 THEN 1 ELSE 0 END
-        - CASE WHEN OLD.lease_expires_at > 0 THEN 1 ELSE 0 END,
+        + (CASE WHEN NEW.lease_expires_at > 0 THEN 1 ELSE 0 END)
+        - (CASE WHEN OLD.lease_expires_at > 0 THEN 1 ELSE 0 END),
       unobserved_node_count = unobserved_node_count
-        + CASE WHEN NEW.canonical_observed_at IS NULL THEN 1 ELSE 0 END
-        - CASE WHEN OLD.canonical_observed_at IS NULL THEN 1 ELSE 0 END
+        + (CASE WHEN NEW.canonical_observed_at IS NULL THEN 1 ELSE 0 END)
+        - (CASE WHEN OLD.canonical_observed_at IS NULL THEN 1 ELSE 0 END)
     WHERE app_id = NEW.app_id AND space_id = NEW.space_id;
   END`,
   `CREATE TRIGGER IF NOT EXISTS cas_nodes_usage_delete AFTER DELETE ON cas_nodes BEGIN
@@ -100,9 +100,9 @@ const TRIGGER_MIGRATIONS = [
       node_count = node_count - 1,
       ready_content_bytes = ready_content_bytes - OLD.content_size,
       ready_stored_bytes = ready_stored_bytes - COALESCE(OLD.canonical_stored_bytes, 0),
-      not_ready_node_count = not_ready_node_count - CASE WHEN OLD.canonical_observed_at IS NOT NULL AND OLD.canonical_stored_bytes IS NULL THEN 1 ELSE 0 END,
-      leased_node_count = leased_node_count - CASE WHEN OLD.lease_expires_at > 0 THEN 1 ELSE 0 END,
-      unobserved_node_count = unobserved_node_count - CASE WHEN OLD.canonical_observed_at IS NULL THEN 1 ELSE 0 END
+      not_ready_node_count = not_ready_node_count - (CASE WHEN OLD.canonical_observed_at IS NOT NULL AND OLD.canonical_stored_bytes IS NULL THEN 1 ELSE 0 END),
+      leased_node_count = leased_node_count - (CASE WHEN OLD.lease_expires_at > 0 THEN 1 ELSE 0 END),
+      unobserved_node_count = unobserved_node_count - (CASE WHEN OLD.canonical_observed_at IS NULL THEN 1 ELSE 0 END)
     WHERE app_id = OLD.app_id AND space_id = OLD.space_id;
     DELETE FROM cas_space_usage WHERE app_id = OLD.app_id AND space_id = OLD.space_id
       AND node_count = 0 AND reserved_bytes = 0;
