@@ -48,6 +48,14 @@
 
 - D-S02 已完成：精确 rate 已批准，同一完整 profile 已配置给两个动态
   Worker 的受保护部署路径，且两个 bundle 的候选 dry run 已通过。
+- Draft promotion PR
+  [#28](https://github.com/shazhou-ww/unicas/pull/28) 将 `main` 提升到
+  `release`。其初始候选 head
+  `b03f870cdefb305dc77c3578f53c43a781658f10` 可合并，CI `validate`
+  已通过；`Deploy production` 与 `Tag verified production deployment`
+  均按预期跳过。
+- PR #28 保持 draft 且未合并，因此没有生产发布。它包含上次 production
+  promotion 之后的 53 个 non-merge commits，不只包含 tracing 变更。
 - D-S03 仍需发布精确 revision，并只用 synthetic non-sensitive data
   覆盖 service、Spaces、fetch、D1、R2、Durable Object、Admin、MCP 与
   OAuth 路径。

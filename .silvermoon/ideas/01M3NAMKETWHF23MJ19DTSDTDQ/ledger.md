@@ -103,6 +103,10 @@ Reviewed on 2026-09-29. The non-sensitive operational record is
   `Production` environment；回读确认两项 variable 与两个 secret 名称
   均已配置。没有读取或记录 GitHub secret 值。
 - D-S02 已完成；尚未同步 Cloudflare Worker secret 或发布生产配置。
+- Draft promotion PR
+  [#28](https://github.com/shazhou-ww/unicas/pull/28) 的初始 head
+  `b03f870cdefb305dc77c3578f53c43a781658f10` 可合并且 CI `validate`
+  已通过。Production 与 tag jobs 均跳过，PR 保持 draft 且未合并。
 - No production deployment, representative cross-path retained canary,
   comprehensive field inspection, effective-limit check, or rollback exercise
   has been performed.
