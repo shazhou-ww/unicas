@@ -77,6 +77,13 @@ class MemoryCas implements SpaceCasClient, HttpFetcher {
     return { hash, size: node.content.length, contentType: node.contentType, refs: node.refs };
   }
 
+  async readNode(hash: string) {
+    return {
+      metadata: await this.readMetadata(hash),
+      content: await this.readContent(hash),
+    };
+  }
+
   async readContent(hash: string, range?: CasNodeRange): Promise<ReadableStream<Uint8Array>> {
     const node = this.nodes.get(hash);
     if (node === undefined) throw new Error(`missing node ${hash}`);
