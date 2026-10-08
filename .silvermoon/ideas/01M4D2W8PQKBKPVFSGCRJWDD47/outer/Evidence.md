@@ -106,12 +106,15 @@ migration 从首个请求移到启动阶段的预期取舍。两侧热请求约 
 ## Stability and rollback
 
 - 观察窗口：production workflow 在 `2026-10-08T08:28:34Z` 成功结束；workflow
-  内的五个 public origin probe 均通过。尚未取得后续至少 15 分钟的同窗口
-  Workers metrics。
+  内的五个 public origin probe 均通过。在 `2026-10-08T08:44:03Z` 进行无正文
+  APAC follow-up probe：API `200` / 520 ms / HKG，console `302` / 655 ms / HKG，
+  Spaces `200` / 640 ms / NRT，product `200` / 512 ms / HKG，docs `200` /
+  927 ms / HKG。该结果证明 public origins 在 T+15 仍可用，不是 authenticated
+  directory SLO 或 Worker response-construction wall 证据。
 - Worker outcome、CPU/wall 与 5xx：Cloudflare dashboard 未登录，待执行。
 - Rollback threshold：待判断
 - Rollback disposition：release workflow、canonical smoke 与 origin probe
-  没有触发回滚；性能门禁尚未观测，因此仍保留上述四个已知良好 version 作为
-  rollback targets。
+  以及 T+15 public probe 没有触发回滚；性能门禁尚未观测，因此仍保留上述四个
+  已知良好 version 作为 rollback targets。
 - 最终结论：production 发布成功且可由 immutable tag 复核；性能验收仍被 APAC
   authenticated canary、Workers metrics 和 15 分钟稳定性证据阻塞。

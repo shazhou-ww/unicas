@@ -75,6 +75,9 @@
 - `CAS_DB` migration、service/Spaces publication、canonical smoke、Spaces file
   smoke 和五个 public origin probe 已成功，但 D-AC02 还要求一个 bounded
   production Space response header 证明普通请求不含 `cas_schema`，因此保持未勾选。
+- T+15 APAC 无正文 probe 再次确认五个 public origin 返回预期状态，HKG/NRT
+  colo 可用；缺少同窗口 Worker outcome、CPU/wall 和 5xx，因此 D-S05 与
+  D-AC06 保持未勾选。
 - 共享浏览器没有安全登录态且自动化连接超时；APAC canary、Workers metrics、
   controlled cold observation 和 15 分钟稳定性仍未完成。不得以 workflow
   smoke 或本地 benchmark 替代 D-S04、D-S05 或 D-AC03–D-AC07。
