@@ -6,6 +6,8 @@ import {
   AccountSelfSchema,
   AccountIdSchema,
   AppControlAuditEventSchema,
+  AppGcRequestSchema,
+  AppGcResultSchema,
   AppMemberInvitationSchema,
   AppMembershipSchema,
   AppOAuthIssuerInspectionSchema,
@@ -214,6 +216,22 @@ export const getAppUsageContract = appProcedure
   })
   .input(z.object({ params: appParams }).readonly())
   .output(AppUsageSchema);
+
+export const runAppGcContract = appProcedure
+  .route({
+    method: "POST",
+    path: `${AppAdminApiBasePath}/{appId}/gc`,
+    operationId: "runAppGc",
+    summary: "Run bounded App garbage collection",
+    description: "Runs race-safe garbage collection across a bounded batch of usage-bearing Spaces in the App. Requires current App membership and deletes only expired nodes with no root or child references.",
+    inputStructure: "detailed",
+    tags: ["Apps"],
+  })
+  .input(z.object({
+    params: appParams,
+    body: AppGcRequestSchema,
+  }).readonly())
+  .output(AppGcResultSchema);
 
 export const patchAppContract = appProcedure
   .route({
@@ -486,6 +504,7 @@ export const appAdminApiContract = {
     create: createAppContract,
     get: getAppContract,
     getUsage: getAppUsageContract,
+    runGc: runAppGcContract,
     patch: patchAppContract,
   },
   members: {

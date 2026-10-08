@@ -242,6 +242,16 @@ class MockAdminService {
         leasedNodeCount: 2,
       });
     }
+    if (path === appAdminRoutes.gc({ appId: APP }) && request.method === "POST") {
+      return Response.json({
+        spacesExamined: 2,
+        spacesWithDeletions: 1,
+        nodesExamined: 12,
+        nodesDeleted: 10,
+        reclaimedContentBytes: 1024,
+        nextCursor: "next-gc",
+      });
+    }
     if (path === appAdminRoutes.app({ appId: APP }) && request.method === "PATCH") {
       this.app.revision += 1;
       return new Response(null, { status: 204, headers: { ETag: `"${this.app.revision}"` } });
@@ -447,6 +457,14 @@ describe("functional admin client", () => {
       notReadyNodeCount: 1,
       leasedNodeCount: 2,
     });
+    expect(await client.runAppGc({ appId: APP })).toEqual({
+      spacesExamined: 2,
+      spacesWithDeletions: 1,
+      nodesExamined: 12,
+      nodesDeleted: 10,
+      reclaimedContentBytes: 1024,
+      nextCursor: "next-gc",
+    });
     expect(await client.patchApp({ appId: APP }, { description: "Production", status: "suspended" }, '"3"'))
       .toEqual({ etag: '"4"' });
     expect(await client.listAppMembers({ appId: APP }, { limit: 10 })).toMatchObject({
@@ -468,6 +486,12 @@ describe("functional admin client", () => {
       expect.objectContaining({ path: "/admin/apps", search: "?limit=5&cursor=next" }),
       expect.objectContaining({ path: "/admin/apps", method: "POST", origin: "https://admin.test", csrf: "csrf-1", idempotencyKey: "create-app-1" }),
       expect.objectContaining({ path: `/admin/apps/${APP}/usage`, method: "GET", csrf: null }),
+      expect.objectContaining({
+        path: `/admin/apps/${APP}/gc`,
+        method: "POST",
+        csrf: "csrf-1",
+        body: "{}",
+      }),
       expect.objectContaining({
         path: `/admin/apps/${APP}`,
         method: "PATCH",

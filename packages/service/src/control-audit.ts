@@ -10,6 +10,7 @@ export const ControlAuditActions = {
   legacyStackPatched: "stack.patched",
   appSuspended: "app.suspended",
   appRestored: "app.restored",
+  appGcRequested: "app.gc.requested",
   memberInvited: "member.invited",
   memberInvitationAccepted: "member.invitation.accepted",
   memberInvitationRevoked: "member.invitation.revoked",

@@ -11,6 +11,8 @@ import type {
   AccountSummary,
   App,
   AppControlAuditEvent,
+  AppGcRequest,
+  AppGcResult,
   AppUsage,
   AppMemberInvitation,
   AppMembership,
@@ -173,6 +175,26 @@ export const AppUsageSchema: z.ZodType<AppUsage> = z.object({
   leasedNodeCount: z.number().int().nonnegative()
     .describe("Nodes carrying a nonzero lease expiry marker."),
 }).strict().readonly().meta({ id: "AppUsage" });
+
+export const AppGcRequestSchema: z.ZodType<AppGcRequest> = z.object({
+  cursor: z.string().min(1).max(2_048).optional()
+    .describe("Opaque cursor returned by the preceding App garbage-collection batch."),
+}).strict().readonly().meta({ id: "AppGcRequest" });
+
+export const AppGcResultSchema: z.ZodType<AppGcResult> = z.object({
+  spacesExamined: z.number().int().nonnegative()
+    .describe("Usage-bearing Spaces examined by this bounded batch."),
+  spacesWithDeletions: z.number().int().nonnegative()
+    .describe("Examined Spaces from which at least one node was deleted."),
+  nodesExamined: z.number().int().nonnegative()
+    .describe("Locally eligible node candidates rechecked by Space actors."),
+  nodesDeleted: z.number().int().nonnegative()
+    .describe("Expired and unreferenced nodes deleted by this batch."),
+  reclaimedContentBytes: z.number().int().nonnegative()
+    .describe("Logical content bytes attributed to deleted nodes."),
+  nextCursor: z.string().min(1).max(2_048).nullable()
+    .describe("Cursor for the next Space batch, or null after the App sweep reaches its end."),
+}).strict().readonly().meta({ id: "AppGcResult" });
 
 export const AppMembershipSchema: z.ZodType<AppMembership> = z.object({
   appId: AppIdSchema.describe("App whose equal administrator authority this membership grants."),

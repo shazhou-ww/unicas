@@ -3,6 +3,7 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
 import { AppUsageUnavailableError, readAppUsage } from "@unicas/service";
 import { APP_USAGE_QUERY, CloudflareAppUsageRepository } from "../src/app-usage.js";
+import { CloudflareAppGcRepository } from "../src/app-gc.js";
 import { appCanonicalNodeKey } from "../src/do-names.js";
 import { migrateAppSpaceSchema } from "../src/schema.js";
 import {
@@ -60,6 +61,25 @@ async function insertNode(input: {
 }
 
 describe("Cloudflare App usage projection", () => {
+  test("lists usage-bearing Spaces for bounded App GC pages", async () => {
+    await insertNode({ appId: "app-a", spaceId: "space-c", hash: "c".repeat(64), contentSize: 1 });
+    await insertNode({ appId: "app-a", spaceId: "space-a", hash: "a".repeat(64), contentSize: 1 });
+    await insertNode({ appId: "app-a", spaceId: "space-b", hash: "b".repeat(64), contentSize: 1 });
+    await insertNode({ appId: "app-b", spaceId: "space-z", hash: "d".repeat(64), contentSize: 1 });
+    const repository = new CloudflareAppGcRepository(db);
+
+    await expect(repository.listUsageBearingSpaceIds({
+      appId: "app-a",
+      afterSpaceId: "",
+      limit: 2,
+    })).resolves.toEqual(["space-a", "space-b"]);
+    await expect(repository.listUsageBearingSpaceIds({
+      appId: "app-a",
+      afterSpaceId: "space-b",
+      limit: 2,
+    })).resolves.toEqual(["space-c"]);
+  });
+
   test("aggregates Space summaries while isolating Apps and counting duplicate hashes", async () => {
     const duplicateHash = "a".repeat(64);
     await insertNode({ appId: "app-a", spaceId: "space-1", hash: duplicateHash, contentSize: 10, storedBytes: 8, observedAt: 1, leaseExpiresAt: 20 });

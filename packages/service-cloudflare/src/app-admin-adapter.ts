@@ -32,6 +32,7 @@ export function transformAppAdminResponse(route: AppAdminRoute, body: unknown): 
     case "getApp":
       return mapApp(body);
     case "getUsage":
+    case "runGc":
       return body;
     case "patchApp":
     case "listMemberInvitations":
