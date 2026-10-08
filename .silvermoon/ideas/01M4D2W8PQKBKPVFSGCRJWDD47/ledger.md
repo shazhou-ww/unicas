@@ -14,7 +14,7 @@
 ### Implementation acceptance criteria
 
 - [x] **I-AC01:** 普通 Space 请求不执行 schema migration
-- [x] **I-AC02:** 目录读取只有一个 root lookup 和一个 manifest 边界
+- [x] **I-AC02:** 目录读取只有一个 session/root lookup 和一个 manifest 边界
 - [x] **I-AC03:** 授权、隔离和 API 兼容性保持不变
 - [x] **I-AC04:** Server-Timing 有界且不泄露数据
 - [x] **I-AC05:** 固定 IAD placement 已被可回滚候选替代
@@ -39,6 +39,16 @@
 - 实现证据只证明候选行为、兼容性和可发布性。Smart Placement 尚未部署，APAC
   TTFB、Worker wall time 和 cold-request SLO 仍由 Deployment 世界的 canary
   验证；本阶段不声称生产延迟目标已经达成。
+- 首次 production canary 的 31 次目录请求为 31/31 HTTP 200，TTFB p95
+  741.8 ms、cold 1.620 s，但 Cloudflare Workers directory-only wall p95 为
+  647.975 ms，超过 500 ms 门槛；CPU p95 仅 5.881 ms。该结果将候选重新带回
+  Implementation，不能以 TTFB 或 `Server-Timing` 替代失败的 wall 证据。
+- 补充候选让 `readSession()` 在同一条 `SPACES_DB` 查询中返回 0/1 root
+  snapshot，并让 file service 直接打开该 snapshot；repository snapshot 测试和
+  file-service call-count 测试证明常见目录路径不再调用 `listRoots()`。完整
+  `@unicas/spaces` suite 67/67、package typecheck、docs 7/7 和
+  `pnpm deploy:spaces:plan` 均通过。移除一个生产中约 220 ms 的 D1 网络边界是
+  可验证的实现结果；新的 production wall SLO 仍留给后续 Deployment canary。
 
 ## Deployment
 

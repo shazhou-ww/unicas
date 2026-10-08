@@ -155,7 +155,7 @@ that as a candidate topology, not proof of locality. Before accepting a
 deployment, run at least 30 authenticated synthetic directory reads from the
 agreed APAC probes, report p50/p95/p99/max for TTFB and Worker wall time, record
 the observed colo/placement, and verify a controlled cold request. Compare
-`spaces_session`, `spaces_root`, `spaces_manifest`, `spaces_unicas`,
+`spaces_session`, `spaces_manifest`, `spaces_unicas`, `spaces_root` when present,
 `cas_auth`, `cas_do`, applicable `cas_d1_*`/`cas_r2_*`, and `cas_edge`.
 Do not report response-construction timing as full stream completion.
 

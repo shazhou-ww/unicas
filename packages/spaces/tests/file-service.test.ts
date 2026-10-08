@@ -18,6 +18,7 @@ function fixture(options: {
   readonly revision?: number;
   readonly entries?: readonly SpaceFileStat[];
   readonly rootCount?: number;
+  readonly rootSnapshot?: boolean;
   readonly retained?: boolean;
 } = {}) {
   let info: SpaceFileRootInfo = {
@@ -89,7 +90,21 @@ function fixture(options: {
       nextCursor: null,
     })),
   } as unknown as SpaceCasClient;
-  return { service: new SpacesFileService(cas, fileSystem, 10), root, cas, fileSystem, roots };
+  return {
+    service: new SpacesFileService(
+      cas,
+      fileSystem,
+      10,
+      undefined,
+      undefined,
+      undefined,
+      options.rootSnapshot ? roots : undefined,
+    ),
+    root,
+    cas,
+    fileSystem,
+    roots,
+  };
 }
 
 describe("SpacesFileService", () => {
@@ -106,6 +121,15 @@ describe("SpacesFileService", () => {
       .toEqual(["alpha", "beta", "a.txt", "z.txt"]);
     expect(fileSystem.listRoots).toHaveBeenCalledOnce();
     expect(fileSystem.openRoot).toHaveBeenCalledOnce();
+    expect(fileSystem.openRoot).toHaveBeenCalledWith(roots[0]);
+  });
+
+  test("opens the authenticated root snapshot without another catalog lookup", async () => {
+    const { service, fileSystem, roots } = fixture({ rootSnapshot: true });
+
+    await expect(service.list("/")).resolves.toMatchObject({ revision: 3 });
+
+    expect(fileSystem.listRoots).not.toHaveBeenCalled();
     expect(fileSystem.openRoot).toHaveBeenCalledWith(roots[0]);
   });
 

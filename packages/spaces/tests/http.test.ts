@@ -23,6 +23,7 @@ const session: AuthenticatedSession = {
   },
   csrfTokenHash: "digest",
   expiresAt: 10_000,
+  fileRoots: [],
 };
 
 describe("Spaces HTTP security", () => {

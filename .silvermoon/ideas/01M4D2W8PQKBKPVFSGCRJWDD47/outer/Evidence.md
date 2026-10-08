@@ -87,21 +87,70 @@ migration 从首个请求移到启动阶段的预期取舍。两侧热请求约 
 - immutable tag：`production-20261008-571`，由成功 workflow 在
   `2026-10-08T08:28:30Z` 创建并指向最终 release revision。
 
+## Synthetic credential rotation
+
+为避免依赖真实账户或浏览器 cookie，Production environment 的
+`SPACES_SMOKE_CREDENTIAL` 被轮换为一次性 256-bit synthetic credential，并对同一
+release workflow 执行 rerun attempt 2。validation、migration、service/Spaces
+publication、canonical smoke、五个 origin 和 tag job 全部成功；tag 保持
+`production-20261008-571`。该次 publication 的 version 为：
+
+- service：`ac553f5a-ebb5-4de1-9e4e-1cec562444f1`
+- Spaces：`fc3d0a04-0890-40fb-a84e-8fa4bf18ea32`
+- site：`97b800f5-9ac6-4090-917f-9ea1c2e8050f`
+- docs：`582de9d7-55a9-4f69-baaf-3a12bc53b0b3`
+
+完成首轮 APAC probe 后，Production secret 再次轮换为新的随机值并执行 rerun
+attempt 3，从而使首个临时 credential 失效。attempt 3 的完整 release workflow
+成功，最终 production version 为：
+
+- service：`f7a4bad3-ce15-4793-842e-189f437be3f6`
+- Spaces：`3de0e383-025e-4821-8cb0-a4b9f3765189`
+- site：`d9da9cc8-e606-4815-a778-3e672517f6fd`
+- docs：`75ef7ef2-8a09-4cd4-94fc-26953a70ab32`
+
+每次 environment gate 前均确认精确 run attempt、release SHA、唯一 waiting run 与
+原 protection policy；只临时关闭 self-review，批准后立即恢复唯一 reviewer、
+release branch policy 和 `prevent_self_review=true`。最终 credential 只保留在
+受保护 GitHub environment；本地 DPAPI 副本已删除。workflow、探针输出和仓库均
+未记录 credential、cookie 或 session 内容。
+
 ## APAC authenticated canary
 
-- Probe 与时间窗口：未执行；共享 APAC 浏览器仍在 OAuth 登录边界，浏览器自动化
-  连接也连续超时。没有读取或保存 cookie、身份字段或响应内容。
-- Cold observation：未捕获。不能把后续热请求追认为部署后的首个 observation；
-  D-AC05 保持未完成。
-- 请求数与成功率：`0`，不构成 canary。
-- TTFB p50/p95/p99/max：待执行
-- Worker wall p50/p95/p99/max：待执行
-- Colo 与 placement：待执行
-- 安全 Server-Timing 汇总：待执行
+- attempt 2 首个 observation 在 HKG 为 2011.8 ms，超过 2 秒门槛 11.8 ms；
+  随后的 30 次 warm read 为 30/30 HTTP 200，TTFB p95 840.7 ms。该 probe 只通过
+  结构与安全校验，不能声称 cold criterion 通过。
+- attempt 3 成功结束后的首个 APAC authenticated directory observation 于
+  `2026-10-08T09:11:21.213Z` 开始，在 SIN 为 1620.0 ms，满足 2 秒门槛。
+  之后 30 次顺序、`cache: no-store` 的 warm read 全部 HTTP 200；目录正文被流式
+  丢弃，没有检查或持久化目录项、路径、身份字段或 cookie。
+- 最终 warm TTFB：p50 718.8 ms、p95 741.8 ms、p99/max 743.0 ms；31/31
+  directory request 成功，满足 D-AC03。所有 `CF-Ray` colo 均为 SIN。
+- `Server-Timing` parser 只接受固定名称和数值 duration；未发现未知名称、
+  description 或 `cas_schema`。最终 31 次请求的有界汇总如下，单位为 ms：
 
-因此当前证据不声称 APAC TTFB、Worker wall、Smart Placement 或
-`cas_schema` header 条件已经达标。需在安全登录态可用后重新安排受控 canary；
-若要满足 D-AC05，还需为可观测的部署后首个请求重新建立 cold canary 窗口。
+| Phase | p50 | p95 | p99 | max |
+| --- | ---: | ---: | ---: | ---: |
+| `spaces_session` | 219 | 233 | 233 | 233 |
+| `spaces_root` | 219 | 226 | 228 | 228 |
+| `spaces_manifest` / `spaces_unicas` | 181 | 193 | 760 | 760 |
+| `cas_auth` | 0 | 0 | 178 | 178 |
+| `cas_do` | 173 | 183 | 186 | 186 |
+| `cas_do_route` | 157 | 168 | 169 | 169 |
+| `cas_d1_node` | 6 | 7 | 9 | 9 |
+| `cas_d1_refs` | 5 | 10 | 12 | 12 |
+| `cas_r2_get` | 147 | 158 | 158 | 158 |
+| `cas_edge` | 174 | 186 | 339 | 339 |
+
+- Cloudflare `workersInvocationsAdaptive` 的秒级聚合将 session 创建、
+  directory、cleanup 与 logout 分离；`09:11:25Z`–`09:11:46Z` 恰好包含上述
+  31 次 directory invocation。该精确窗口为 31 requests、0 errors、全部
+  `success`；CPU p50/p95/p99/max 为 3.706/5.881/14.702/14.702 ms，Worker
+  wall p50/p95/p99/max 为 626.675/647.975/1222.982/1222.982 ms。
+- 因此 TTFB、cold、outcome 和 timing safety 达标，但 Worker wall p95 超过
+  500 ms，D-AC04 明确失败。`spaces_session`、`spaces_root` 与
+  `spaces_manifest` 的串行等待解释了低 CPU、高 wall；不能用 TTFB 或
+  `Server-Timing` 取代 Cloudflare wall 证据。
 
 ## Stability and rollback
 
@@ -111,10 +160,17 @@ migration 从首个请求移到启动阶段的预期取舍。两侧热请求约 
   Spaces `200` / 640 ms / NRT，product `200` / 512 ms / HKG，docs `200` /
   927 ms / HKG。该结果证明 public origins 在 T+15 仍可用，不是 authenticated
   directory SLO 或 Worker response-construction wall 证据。
-- Worker outcome、CPU/wall 与 5xx：Cloudflare dashboard 未登录，待执行。
-- Rollback threshold：待判断
-- Rollback disposition：release workflow、canonical smoke 与 origin probe
-  以及 T+15 public probe 没有触发回滚；性能门禁尚未观测，因此仍保留上述四个
-  已知良好 version 作为 rollback targets。
-- 最终结论：production 发布成功且可由 immutable tag 复核；性能验收仍被 APAC
-  authenticated canary、Workers metrics 和 15 分钟稳定性证据阻塞。
+- Worker outcome、CPU/wall 与 5xx：最终 directory 窗口为 31 success、
+  0 errors，探针为 31/31 HTTP 200；CPU 正常但 wall p95 超标。该窗口证明本次
+  synthetic run 没有 Worker error 或 HTTP 5xx，不替代最终候选的 15 分钟趋势。
+- Rollback threshold：Worker wall 阈值已命中。没有请求 Deployment 验收，也没有
+  把该版本标记为满足性能合同。
+- Rollback disposition：固定 IAD 基线的已知 APAC wall/TTFB 更差，而 attempt
+  2/3 的旧 Worker version 还包含已撤销的 synthetic credential；直接 version
+  rollback 会恢复更差拓扑或失效 credential。当前 production 保持 0 error 且
+  TTFB/cold 达标，因此保留可用版本并把 idea 重新带回 Implementation，新增
+  session/root 单次 D1 query 修复；该补充候选必须重新验收、promotion 和 canary，
+  不能在失败版本上继续观察来满足 D-AC04。
+- 当前结论：production 发布、credential 撤销、authenticated TTFB、cold 与安全
+  timing 已有可复核证据；Worker wall 失败已持久化并触发补充实现。D-S04–D-S06
+  和 D-AC02–D-AC07 保持未完成，直到新候选通过完整发布与稳定性门禁。
