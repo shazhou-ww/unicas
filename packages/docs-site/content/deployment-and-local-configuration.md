@@ -343,9 +343,12 @@ The `deploy-production` job in [the CI workflow](../../../.github/workflows/ci.y
 runs only for a push to `release` or a manual workflow dispatch whose selected
 branch is `release`. It waits for the same workflow's `validate` job, checks
 out `github.sha` again, installs from the lockfile, and rebuilds before
-publishing. Pull requests, fork workflows, `main` and other non-`release`
-pushes, and manual runs from another branch skip the deployment job before the
-protected environment is entered.
+publishing. A release revision must be a two-parent promotion merge whose
+second parent is reachable from `main` and whose resulting tree is identical
+to that `main` parent. This accepts the normal GitHub merge commit while
+rejecting release-only content. Pull requests, fork workflows, `main` and
+other non-`release` pushes, and manual runs from another branch skip the
+deployment job before the protected environment is entered.
 
 After every successful `release` push, the separate `tag-production` job
 creates one annotated tag named
