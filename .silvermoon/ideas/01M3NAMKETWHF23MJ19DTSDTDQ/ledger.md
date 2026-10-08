@@ -95,10 +95,13 @@ Reviewed on 2026-09-29. The non-sensitive operational record is
 
 ### Still outstanding
 
-- No nonzero production sample rate has been proposed or approved.
-- The accepted Implementation now provides a safe, repeatable activation path
-  for destination configuration and secrets, but no nonzero profile has been
-  provisioned through it.
+- 2026-10-08 已明确批准初始 manual OTLP 生产采样率 `0.01`，并从候选提交
+  `7ae12f3f8e0c596beaa1afbc75246f2832eb10ca` 完成两个 Worker 的 build
+  与 Wrangler dry run。非敏感验证记录见
+  [`outer/ProductionSamplingCandidate.md`](./outer/ProductionSamplingCandidate.md)。
+- 完整 profile 已安全保存在 `cfg`，但当前 GitHub CLI 身份管理
+  repository `Production` environment 时返回 HTTP 403；受保护环境尚未
+  同步该 profile，因此 D-S02 仍未完成。
 - No Cloudflare Worker secret or production configuration has changed.
 - No production deployment, representative cross-path retained canary,
   comprehensive field inspection, effective-limit check, or rollback exercise
