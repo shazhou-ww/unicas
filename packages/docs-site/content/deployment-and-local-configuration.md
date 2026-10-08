@@ -131,6 +131,46 @@ base64url keys, for example `{"2026-09":"<base64url-32-byte-key>"}`. Keep old
 entries during rotation until sessions and pending platform-invitation replay
 receipts sealed with them have expired.
 
+Manual OTLP tracing is independently gated by
+`UNICAS_MANUAL_TRACE_SAMPLE_RATE`, which is checked in as `0` for both dynamic
+Workers. At zero, no trace destination or tracing secret is required. A
+reviewed nonzero deployment must provide `UNICAS_OTLP_TRACES_ENDPOINT` as a
+credential-free HTTPS URL ending in `/v1/traces`, plus the Worker secrets
+`UNICAS_OTLP_AUTHORIZATION` and `UNICAS_TRACE_HMAC_KEYS`. The key ring has the
+form `{"active":"2026-09","keys":{"2026-09":"<base64url-32-byte-key>"}}`,
+accepts one to three versions, and uses the active version for new trace IDs
+and internal context. Retain an old version only for the bounded rotation
+overlap. Never place endpoint credentials in the endpoint URL or a Wrangler
+variable.
+
+The protected Production environment supplies the same four tracing values to
+the service and Spaces deployment steps:
+
+| GitHub environment entry | Kind | Purpose |
+| --- | --- | --- |
+| `UNICAS_MANUAL_TRACE_SAMPLE_RATE` | Variable | Exact reviewed rate; missing or `0` keeps tracing dormant |
+| `UNICAS_OTLP_TRACES_ENDPOINT` | Variable | Credential-free OTLP/HTTP traces endpoint |
+| `UNICAS_OTLP_AUTHORIZATION` | Secret | Complete destination-neutral `Authorization` header value |
+| `UNICAS_TRACE_HMAC_KEYS` | Secret | Shared versioned key ring for trace identity and internal parent context |
+
+Any nonzero rate is accepted only with the complete validated profile. The
+deployment fails before running Wrangler if the endpoint is unsafe, a secret
+is missing, or the HMAC key ring is invalid. The service path sends secret
+values to `wrangler secret put` over standard input. The Spaces path includes
+them only in its mode-0600 ephemeral secrets file, which is removed after
+deployment. Secret values never appear in command arguments or generated
+public Wrangler configuration.
+
+For Grafana Cloud, construct the full Basic authorization value outside the
+repository from the stack instance ID and access-policy token, then store only
+that complete value in `UNICAS_OTLP_AUTHORIZATION`. The deployment code remains
+provider-neutral and never reads Grafana-specific credential parts.
+
+Rollback sets the Production `UNICAS_MANUAL_TRACE_SAMPLE_RATE` variable to `0`
+and deploys an accepted revision. The zero-rate profile uses the committed
+dormant configuration and does not synchronize tracing secrets; already
+provisioned inactive secrets may then be rotated or revoked separately.
+
 Administrator admission is owned by Account platform authorities and App
 memberships. There is no email-allowlist fallback.
 
@@ -143,6 +183,8 @@ Additional features require these secrets:
 | `CAS_AUDIT_READER_KEY` | Protected physical audit-reader RPC |
 | `OAUTH_MICROSOFT_CLIENT_SECRET` | Microsoft personal-account administrator login |
 | `OAUTH_GITHUB_CLIENT_SECRET` | GitHub administrator login and verified Emails API lookup |
+| `UNICAS_OTLP_AUTHORIZATION` | Reviewed nonzero manual OTLP trace export |
+| `UNICAS_TRACE_HMAC_KEYS` | Scoped trace identity and signed internal context when manual tracing is sampled |
 
 `CAS_UPLOAD_URL_EXPIRY_SECONDS` defaults to `300` and must be an integer from
 1 through 604800. Browser upload origins must be allowed by the R2 bucket CORS
@@ -238,19 +280,22 @@ pnpm deploy:spaces:plan
 
 Both dynamic Worker configs explicitly persist 5% sampled custom logs with
 generated invocation logs disabled. They explicitly disable trace sampling,
-persistence, and destinations. The assets-only product and docs Workers have
-no observability block. The deployment-plan test locks this policy and verifies
-that generated Spaces production configuration preserves it:
+persistence, and destinations in Cloudflare's native tracing. They also set
+the independent manual OTLP sample to zero. The assets-only product and docs
+Workers have no observability block. The deployment-plan test locks both gates
+and verifies that generated Spaces production configuration preserves them:
 
 ```powershell
 pnpm exec vitest run tests/deploy-plan.test.mjs
 ```
 
-Do not enable production tracing or invocation logs through a dashboard
-override. Wrangler configuration is the source of truth, and the next deploy
-would replace that override. See [Observability](observability.md) for the
-automatic-attribute safety gate, sample/retention contract, and post-deploy
-synthetic verification.
+Do not enable native tracing, manual trace sampling, or invocation logs through
+a dashboard override. Wrangler configuration is the source of truth, and the
+next deploy would replace that override. A nonzero manual sample additionally
+requires an approved OTLP destination, access/retention/cost review, synthetic
+secret-absence evidence, and explicit approval of the exact rate. Native
+automatic tracing remains disabled even after such approval. See
+[Observability](observability.md) for the full contract and rollback.
 
 Do not run `pnpm deploy --dry-run`: pnpm can consume that argument instead of
 forwarding it, which invokes the real root deploy script. Use only
@@ -389,19 +434,14 @@ Initial provisioning is an explicit bootstrap operation:
    `UNICAS_SMOKE_SPACE_ID=deploy-smoke`, and stream the PKCS#8 PEM directly
    into the `UNICAS_SMOKE_PRIVATE_KEY_PKCS8` GitHub environment secret without
    printing it.
-5. Dispatch **CI** from `release` and retain the bootstrap key file only in the
-   approved operator credential store until rotation or recovery no longer
-   requires it.
+5. If recovery is required, dispatch **Recover Spaces production** with the
+   exact reviewed `main` commit and selected operation. Retain the bootstrap key
+   only in the approved operator credential store until rotation or recovery
+   no longer requires it.
 
-For the one-time App/Space v1 cutover, set the Production environment variable
-`APP_SPACE_V1_CUTOVER_ENABLED=true` and set `UNICAS_SMOKE_AUDIENCE` to
-`https://api.unicas.work/v1/apps/{UNICAS_SMOKE_APP_ID}` before promoting the
-tested revision to `release`. The protected deployment updates both active App
-issuer audiences idempotently, runs the App/Space smoke with prototype route,
-claim-version, broad-permission, retired-route, and retired-claim rejection
-probes. After the smoke, origin checks, and production tag succeed, set
-`APP_SPACE_V1_CUTOVER_ENABLED=false`; later releases must not repeat the
-one-time issuer step.
+The App/Space v1 issuer cutover is complete. Normal production contains no
+cutover switch or executable cutover step. Preserve its historical run and
+cutover documentation as audit evidence; do not repeat it as recovery.
 
 For the one-time Account-model production cutover, configure a required
 reviewer on the `Production` Environment before merging the promotion pull
@@ -450,9 +490,10 @@ dispatch order; every job still deploys its own validated `github.sha`. The
 job deploys in this order:
 
 1. `pnpm deploy:production` for the API/console service and canonical smoke.
-2. `pnpm deploy:site` for `unicas.work`.
-3. `pnpm deploy:docs` for `docs.unicas.work`.
-4. HTTPS checks requiring the API health JSON, the console's same-origin
+2. `pnpm deploy:spaces` for the Spaces App and file smoke.
+3. `pnpm deploy:site` for `unicas.work`.
+4. `pnpm deploy:docs` for `docs.unicas.work`.
+5. HTTPS checks requiring the API health JSON, the console's same-origin
    `/admin/` redirect, and identifying HTML from the product and documentation
    origins. Redirects to another host or protocol do not pass.
 
@@ -473,9 +514,11 @@ target is an audit-integrity incident: stop, preserve the failed run and
 ruleset history, and involve a repository owner. Never force-update, silently
 delete, or substitute a differently named tag for that workflow run.
 
-For a manual recovery run, open the **CI** workflow in GitHub Actions, choose
-**Run workflow**, and select `release`. The dispatch repeats validation and
-the same protected deployment path; selecting `main` or another branch runs
-validation but skips production, and `workflow_dispatch` is not a bypass
-around a failed check. See [CAS Middleware Operations](cas-operations.md) for
-failure diagnosis, credential rotation, and version-specific rollback.
+For a read-only comprehensive check, dispatch **CI**; it runs
+`pnpm validate:release` and has no production write path. For Spaces recovery,
+open **Recover Spaces production**, enter a full reviewed commit SHA reachable
+from `main`, choose `provision-deploy` or `principals`, and pass `Production`
+approval. The recovery workflow shares production concurrency, cannot deploy
+the service or sites, and cannot create a production tag. See
+[CAS Middleware Operations](cas-operations.md) for failure diagnosis,
+credential rotation, and version-specific rollback.

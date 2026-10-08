@@ -77,6 +77,7 @@ export interface CreateAdminBffOptions {
   readonly sessionStore: ControlSessionRepository;
   /** Inject a client for tests; defaults to a real Google client. */
   readonly oidc?: OidcClient;
+  readonly identityProviderFetch?: typeof fetch;
   /** SPA static asset fetcher (Phase C wires the built console). */
   readonly assets?: (pathname: string) => Promise<Response | null>;
   /**
@@ -160,7 +161,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       clientId: config.googleClientId,
       clientSecret: config.googleClientSecret,
       redirectUri: `${config.publicOrigin}/admin/auth/callback/google`,
-    });
+    }, { fetchImpl: options.identityProviderFetch });
   const providerRegistry = options.providerRegistry ?? new ProviderRegistry(configuredProviderAdapters());
   const assets = options.assets ?? (async () => null);
   const sessionTtlMs = config.sessionTtlMs ?? 8 * 60 * 60 * 1000;
@@ -183,6 +184,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
         clientSecret: config.microsoftClientSecret,
         discoveryUrl: config.microsoftDiscoveryUrl,
         redirectUri: `${config.publicOrigin}/admin/auth/callback/microsoft`,
+        fetchImpl: options.identityProviderFetch,
         now,
       }));
     }

@@ -1,0 +1,116 @@
+name: Publish npm package
+
+on:
+  push:
+    tags:
+      - "npm/app-user-sdk/v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out validated tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Require trusted-publishing npm CLI
+        run: |
+          npm_version="$(npm --version)"
+          node --input-type=module -e "import semver from 'semver'; if (!semver.gte(process.argv[1], '11.5.1')) throw new Error('npm 11.5.1 or newer is required')" "$npm_version"
+
+      - name: Fetch authoritative primary
+        run: git fetch --no-tags origin main:refs/remotes/origin/main
+
+      - name: Build and verify release artifacts
+        run: pnpm sdk:artifacts
+
+      - name: Validate immutable package set and registry preflight
+        run: >-
+          node scripts/prepare-npm-release.mjs
+          --tag "$GITHUB_REF_NAME"
+          --commit "$GITHUB_SHA"
+          --output "$RUNNER_TEMP/sdk-release-plan.json"
+
+      - name: Publish package set in dependency order
+        env:
+          RELEASE_PLAN: ${{ runner.temp }}/sdk-release-plan.json
+        run: |
+          node --input-type=module <<'NODE' > "$RUNNER_TEMP/sdk-package-names.txt"
+          import { readFile } from "node:fs/promises";
+          const plan = JSON.parse(await readFile(process.env.RELEASE_PLAN, "utf8"));
+          for (const entry of plan.packages) console.log(entry.name);
+          NODE
+          dist_tag="$(node --input-type=module -e 'import { readFile } from "node:fs/promises"; const plan = JSON.parse(await readFile(process.env.RELEASE_PLAN, "utf8")); process.stdout.write(plan.distTag)')"
+          while IFS= read -r package_name; do
+            node scripts/prepare-npm-release.mjs \
+              --tag "$GITHUB_REF_NAME" \
+              --commit "$GITHUB_SHA" \
+              --package "$package_name" \
+              --output "$RUNNER_TEMP/sdk-package-plan.json"
+            IFS=$'\t' read -r action tarball < <(
+              PACKAGE_PLAN="$RUNNER_TEMP/sdk-package-plan.json" node --input-type=module <<'NODE'
+          import { readFile } from "node:fs/promises";
+          const plan = JSON.parse(await readFile(process.env.PACKAGE_PLAN, "utf8"));
+          const [entry] = plan.packages;
+          if (!entry) throw new Error("Immediate package plan is empty");
+          console.log(`${entry.action}\t${entry.tarball}`);
+          NODE
+            )
+            case "$action" in
+              verified)
+                echo "Verified existing ${package_name}; skipping immutable version"
+                ;;
+              publish)
+                echo "Publishing ${package_name} from ${tarball}"
+                npm publish ".sdk-release/${tarball}" --access public --tag "$dist_tag" --provenance
+                ;;
+              *)
+                echo "::error::Unknown release action for ${package_name}: ${action}"
+                exit 1
+                ;;
+            esac
+          done < "$RUNNER_TEMP/sdk-package-names.txt"
+
+      - name: Verify published registry release
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..10}; do
+            if pnpm verify:npm-release; then
+              exit 0
+            fi
+            if [[ "$attempt" == 10 ]]; then
+              echo "::error::Registry release did not become externally verifiable"
+              exit 1
+            fi
+            sleep 15
+          done

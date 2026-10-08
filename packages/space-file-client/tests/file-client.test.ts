@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { createCasBlobClient } from "@unicas/space-blob-client";
+import { createCasBlobClient, storeNodeContent } from "@unicas/space-blob-client";
 import type { SpaceCasClient } from "@unicas/space-client";
 import type { SpaceFileRootCatalog, SpaceFileRootInfo } from "../src/index.js";
 
@@ -79,6 +79,7 @@ function casFixture(): SpaceCasClient {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks();
   state.manifests.clear();
   state.blobs.clear();
   state.retained.length = 0;
@@ -157,5 +158,26 @@ describe("Space file system", () => {
     createSpaceFileSystem({ cas, catalog: catalogFixture(), blobOptions });
 
     expect(vi.mocked(createCasBlobClient)).toHaveBeenLastCalledWith(cas, blobOptions);
+  });
+
+  test("uses the injected upload transport for file manifests", async () => {
+    const uploadFetcher = { fetch: vi.fn() };
+    const fileSystem = createSpaceFileSystem({
+      cas: casFixture(),
+      catalog: catalogFixture(),
+      blobOptions: { uploadFetcher },
+      createId: () => "root-1",
+    });
+
+    await fileSystem.createRoot("Files");
+
+    expect(vi.mocked(storeNodeContent)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(Uint8Array),
+      expect.any(String),
+      [],
+      undefined,
+      uploadFetcher,
+    );
   });
 });

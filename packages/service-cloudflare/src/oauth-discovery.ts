@@ -9,6 +9,7 @@ import {
   type OAuthDiscoveryResult,
   type JwksFetcher,
 } from "@unicas/service";
+import { traceFetchOperation, type TracingPort } from "./observability.js";
 
 const METADATA_MAX_BYTES = 128 * 1024;
 const JWKS_MAX_BYTES = 256 * 1024;
@@ -18,6 +19,7 @@ export interface CloudflareOAuthDiscoveryOptions {
   /** Optional restriction on public HTTPS origins; an explicit empty list denies all. */
   readonly allowedOrigins?: readonly string[];
   readonly fetcher?: typeof fetch;
+  readonly tracing?: TracingPort;
   readonly timeoutMs?: number;
 }
 
@@ -25,17 +27,19 @@ export interface CloudflareOAuthDiscoveryOptions {
 export class CloudflareOAuthDiscoveryPort implements OAuthDiscoveryPort {
   readonly #allowedOrigins: ReadonlySet<string> | undefined;
   readonly #fetcher: typeof fetch;
+  readonly #tracing: TracingPort | undefined;
   readonly #timeoutMs: number;
 
   constructor(options: CloudflareOAuthDiscoveryOptions = {}) {
     this.#allowedOrigins = options.allowedOrigins === undefined ? undefined : new Set(options.allowedOrigins.map(normalizeAllowedOrigin));
     this.#fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);
+    this.#tracing = options.tracing;
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
   readonly fetchJwks: JwksFetcher = async (url, options) => {
     this.#assertAllowedUrl(url, "jwks_uri");
-    const text = await this.#fetchText(url, JWKS_MAX_BYTES, options.signal);
+    const text = await this.#fetchText(url, JWKS_MAX_BYTES, "jwks", options.signal);
     return new Response(text, { headers: { "Content-Type": "application/json" } });
   };
 
@@ -47,10 +51,10 @@ export class CloudflareOAuthDiscoveryPort implements OAuthDiscoveryPort {
     for (const candidate of oauthDiscoveryCandidates(issuer)) {
       try {
         this.#assertAllowedUrl(candidate.url, "metadata URL");
-        const metadataDocument = await this.#fetchJson(candidate.url, METADATA_MAX_BYTES);
+        const metadataDocument = await this.#fetchJson(candidate.url, METADATA_MAX_BYTES, "issuer_metadata");
         const metadata = parseOAuthMetadata(metadataDocument, issuer, candidate);
         this.#assertAllowedUrl(metadata.jwksUri, "jwks_uri");
-        const jwksDocument = await this.#fetchJson(metadata.jwksUri, JWKS_MAX_BYTES);
+        const jwksDocument = await this.#fetchJson(metadata.jwksUri, JWKS_MAX_BYTES, "jwks");
         const keys = parseOAuthJwks(jwksDocument);
         return {
           metadata,
@@ -84,8 +88,12 @@ export class CloudflareOAuthDiscoveryPort implements OAuthDiscoveryPort {
     }
   }
 
-  async #fetchJson(url: string, maxBytes: number): Promise<unknown> {
-    const text = await this.#fetchText(url, maxBytes);
+  async #fetchJson(
+    url: string,
+    maxBytes: number,
+    peer: "issuer_metadata" | "jwks",
+  ): Promise<unknown> {
+    const text = await this.#fetchText(url, maxBytes, peer);
     try {
       return JSON.parse(text) as unknown;
     } catch {
@@ -93,19 +101,24 @@ export class CloudflareOAuthDiscoveryPort implements OAuthDiscoveryPort {
     }
   }
 
-  async #fetchText(url: string, maxBytes: number, signal?: AbortSignal | null): Promise<string> {
+  async #fetchText(
+    url: string,
+    maxBytes: number,
+    peer: "issuer_metadata" | "jwks",
+    signal?: AbortSignal | null,
+  ): Promise<string> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.#timeoutMs);
     const requestSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
     let response: Response | undefined;
     try {
       requestSignal.throwIfAborted();
-      response = await this.#fetcher(url, {
+      response = await traceFetchOperation(this.#tracing, peer, () => this.#fetcher(url, {
         method: "GET",
         headers: { Accept: "application/json" },
         redirect: "manual",
         signal: requestSignal,
-      });
+      }));
       this.#assertJsonResponse(response, "discovery endpoint");
       return await readBoundedText(response, maxBytes);
     } finally {

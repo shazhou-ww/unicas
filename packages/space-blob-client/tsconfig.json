@@ -4,6 +4,9 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "composite": true,
+    "sourceMap": false,
+    "declarationMap": false,
+    "newLine": "lf",
     "lib": [
       "ES2024",
       "DOM"

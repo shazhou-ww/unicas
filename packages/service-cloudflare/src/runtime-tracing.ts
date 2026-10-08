@@ -1,4 +1,5 @@
-import { tracing } from "cloudflare:workers";
-import type { TracingPort } from "./observability.js";
+import { waitUntil } from "cloudflare:workers";
 
-export const runtimeTracing: TracingPort = tracing;
+export function scheduleTraceFlush(flushing: Promise<void>): void {
+  waitUntil(flushing);
+}

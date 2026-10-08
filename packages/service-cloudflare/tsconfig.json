@@ -26,6 +26,9 @@
       "path": "../control-auth"
     },
     {
+      "path": "../observability"
+    },
+    {
       "path": "../service"
     },
     {

@@ -1,9 +1,10 @@
 import type { D1Database } from "@cloudflare/workers-types";
+import type { ManualTraceEnvironment } from "@unicas/observability";
 import { DefaultMaximumUploadBytes, MaximumUploadBytes } from "./file-service.js";
 import type { CapabilityConfig } from "./capability.js";
 import type { GoogleOidcConfig } from "./google-oidc.js";
 
-export interface SpacesEnv {
+export interface SpacesEnv extends ManualTraceEnvironment {
   readonly ASSETS: { fetch(request: Request): Promise<Response> };
   readonly SPACES_DB: D1Database;
   readonly PUBLIC_ORIGIN: string;

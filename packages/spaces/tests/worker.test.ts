@@ -1,6 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
+import {
+  createTraceUlid,
+  createInternalTraceAudience,
+  InternalTraceContextHeader,
+  parseInternalTraceContextHeader,
+  type ManualTraceSession,
+} from "@unicas/observability";
 import type { SpacesEnv } from "../src/config.js";
 import { CsrfCookieName, SessionCookieName } from "../src/http.js";
 import { SpacesRepository, type PrincipalContext } from "../src/repository.js";
@@ -70,6 +77,125 @@ async function fixture() {
 }
 
 describe("Spaces Worker", () => {
+  test("returns a canonical client ULID and propagates it only to UniCAS", async () => {
+    const { env } = await fixture();
+    const repository = new SpacesRepository(env.SPACES_DB);
+    const issued = await repository.createSession("principal-a", 60_000);
+    const requestedTraceId = createTraceUlid();
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
+    const worker = createSpacesWorker({
+      fetchImpl,
+      createFileService: async (input) => {
+        await input.fetcher?.fetch("https://api.example.test/v1/apps/app-a/spaces/space-a/cas/usage");
+        await input.fetcher?.fetch("https://account.r2.cloudflarestorage.com/bucket/key?X-Amz-Signature=secret");
+        return {
+          list: vi.fn(async () => ({ path: "/", revision: 1, entries: [] })),
+          createFolder: vi.fn(),
+          uploadFile: vi.fn(),
+          renameFile: vi.fn(),
+          deleteFile: vi.fn(),
+          download: vi.fn(),
+          cleanupPaths: vi.fn(),
+          ensureSmokeRoot: vi.fn(),
+          releaseSmokeRoot: vi.fn(),
+          reconcilePendingReleases: vi.fn(),
+        };
+      },
+    });
+    const response = await worker.fetch(new Request("https://spaces.example.test/api/entries", {
+      headers: {
+        Cookie: `${SessionCookieName}=${issued.sessionId}`,
+        "X-Trace-Id": requestedTraceId.toLowerCase(),
+      },
+    }), env);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("X-Trace-Id")).toBe(requestedTraceId);
+    const unicasRequest = fetchImpl.mock.calls[0]![0] as Request;
+    const r2Request = fetchImpl.mock.calls[1]![0] as Request;
+    expect(unicasRequest.headers.get("X-Trace-Id")).toBe(requestedTraceId);
+    expect(r2Request.headers.get("X-Trace-Id")).toBeNull();
+  });
+
+  test("propagates a signed fetch parent only to UniCAS", async () => {
+    const { env } = await fixture();
+    const repository = new SpacesRepository(env.SPACES_DB);
+    const issued = await repository.createSession("principal-a", 60_000);
+    const correlationUlid = createTraceUlid();
+    const keyRing = JSON.stringify({
+      active: "v1",
+      keys: { v1: Buffer.alloc(32, 7).toString("base64url") },
+    });
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
+    const traceSession: ManualTraceSession = {
+      correlationUlid,
+      traceId: "1234567890abcdef1234567890abcdef",
+      sampled: true,
+      context: {
+        correlationUlid,
+        traceId: "1234567890abcdef1234567890abcdef",
+        spanId: "1111111111111111",
+        sampled: true,
+      },
+      tracing: {
+        enterSpan: (_name, callback) => callback({
+          isTraced: true,
+          context: {
+            correlationUlid,
+            traceId: "1234567890abcdef1234567890abcdef",
+            spanId: "2222222222222222",
+            sampled: true,
+          },
+          setAttribute() { },
+        }),
+      },
+      end() { },
+      async flush() { },
+    };
+    const worker = createSpacesWorker({
+      fetchImpl,
+      createTraceSession: async () => traceSession,
+      createFileService: async (input) => {
+        await input.fetcher?.fetch("https://api.example.test/v1/apps/app-a/spaces/space-a/cas/usage");
+        await input.fetcher?.fetch(new Request(
+          "https://account.r2.cloudflarestorage.com/bucket/key?X-Amz-Signature=secret",
+          {
+            headers: {
+              "X-Trace-Id": "forged",
+              [InternalTraceContextHeader]: "forged",
+            },
+          },
+        ));
+        return {
+          list: vi.fn(async () => ({ path: "/", revision: 1, entries: [] })),
+          createFolder: vi.fn(), uploadFile: vi.fn(), renameFile: vi.fn(), deleteFile: vi.fn(),
+          download: vi.fn(), cleanupPaths: vi.fn(), ensureSmokeRoot: vi.fn(),
+          releaseSmokeRoot: vi.fn(), reconcilePendingReleases: vi.fn(),
+        };
+      },
+    });
+    const response = await worker.fetch(new Request("https://spaces.example.test/api/entries", {
+      headers: { Cookie: `${SessionCookieName}=${issued.sessionId}` },
+    }), { ...env, UNICAS_TRACE_HMAC_KEYS: keyRing });
+
+    expect(response.status).toBe(200);
+    const unicasRequest = fetchImpl.mock.calls[0]![0] as Request;
+    const internalHeader = unicasRequest.headers.get(InternalTraceContextHeader);
+    await expect(parseInternalTraceContextHeader(
+      internalHeader,
+      keyRing,
+      createInternalTraceAudience("unicas_request", unicasRequest.method, new URL(unicasRequest.url).pathname),
+    )).resolves.toMatchObject({
+      correlationUlid,
+      traceId: traceSession.traceId,
+      spanId: "2222222222222222",
+      sampled: true,
+    });
+    const r2Request = fetchImpl.mock.calls[1]![0] as Request;
+    expect(r2Request.headers.get("X-Trace-Id")).toBeNull();
+    expect(r2Request.headers.get(InternalTraceContextHeader)).toBeNull();
+  });
+
   test("does not persist caller-provided correlation values", async () => {
     const { env } = await fixture();
     const messages: string[] = [];
@@ -105,11 +231,15 @@ describe("Spaces Worker", () => {
   test("publishes issuer metadata and a public-only JWKS", async () => {
     const { env } = await fixture();
     const worker = createSpacesWorker();
+    const callerTraceId = createTraceUlid();
     const metadata = await worker.fetch(
-      new Request("https://spaces.example.test/.well-known/openid-configuration"),
+      new Request("https://spaces.example.test/.well-known/openid-configuration", {
+        headers: { "X-Trace-Id": callerTraceId },
+      }),
       env,
     );
     expect(metadata.status).toBe(200);
+    expect(metadata.headers.get("X-Trace-Id")).not.toBe(callerTraceId);
     expect(await metadata.json()).toMatchObject({
       issuer: "https://spaces.example.test",
       jwks_uri: "https://spaces.example.test/.well-known/jwks.json",
@@ -495,35 +625,11 @@ describe("Spaces Worker", () => {
       }),
     });
     let scheduled: Promise<unknown> | undefined;
-    const spans: Array<{ name: string; attributes: Record<string, unknown> }> = [];
     await worker.scheduled({}, env, {
       waitUntil(promise) { scheduled = promise; },
-      tracing: {
-        enterSpan(name, callback) {
-          const entry: { name: string; attributes: Record<string, unknown> } = {
-            name,
-            attributes: {},
-          };
-          spans.push(entry);
-          return callback({
-            isTraced: true,
-            setAttribute(key, value) {
-              entry.attributes[key] = value;
-            },
-          });
-        },
-      },
     });
     await scheduled;
 
     expect(reconcilePendingReleases).toHaveBeenCalledWith(20);
-    expect(spans).toEqual([{
-      name: "unicas.cleanup.run",
-      attributes: {
-        "unicas.cleanup.examined": 1,
-        "unicas.cleanup.failed": 0,
-        "unicas.outcome": "ok",
-      },
-    }]);
   });
 });

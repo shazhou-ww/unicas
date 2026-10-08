@@ -12,6 +12,7 @@ dist/
 !.dev.vars.example
 .treespec-output/
 .artifacts/
+.sdk-release/
 .playwright/
 .wrangler/
 .pnpm-store/

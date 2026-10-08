@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { resolveManualTracingDeployment } from "./manual-tracing.mjs";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const SERVICE_PACKAGE = "@unicas/service-cloudflare";
@@ -49,12 +50,25 @@ export function deploymentPlan({ dryRun = false, env, production = false, skipSm
     throw new Error("--env requires --skip-smoke; run smoke separately with an explicit base URL");
   }
   const envArgs = env ? ["--env", env] : [];
-  const workerVars = OAUTH_VARIABLE_KEYS.flatMap(key => environment[key]
-    ? ["--var", `${key}:${environment[key]}`]
-    : []);
+  const tracing = resolveManualTracingDeployment(environment);
+  const workerVariables = {
+    ...Object.fromEntries(OAUTH_VARIABLE_KEYS
+      .filter((key) => environment[key])
+      .map((key) => [key, environment[key]])),
+    ...tracing.variables,
+  };
+  const workerVars = Object.entries(workerVariables)
+    .flatMap(([key, value]) => ["--var", `${key}:${value}`]);
   const commands = production
     ? [["node", "stacks/unicas/deploy/ensure-encryption-secrets.mjs"]]
     : [];
+  if (tracing.enabled) {
+    commands.push([
+      "node",
+      "stacks/unicas/deploy/sync-manual-tracing-secrets.mjs",
+      ...envArgs,
+    ]);
+  }
   commands.push(
     ["pnpm", "--filter", SERVICE_PACKAGE, "build"],
     ["pnpm", "--filter", SERVICE_PACKAGE, "exec", "wrangler", "deploy", ...envArgs, ...workerVars],

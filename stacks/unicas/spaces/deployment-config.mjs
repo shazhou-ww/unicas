@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveManualTracingDeployment } from "../deploy/manual-tracing.mjs";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 export const SpacesTemplatePath = resolve(ROOT, "stacks/unicas/spaces/wrangler.jsonc");
@@ -48,6 +49,7 @@ export function buildProductionSpacesConfig(template, environment) {
       || privateFields.some((field) => field in key))) {
     throw new Error("SPACES_SIGNING_PUBLIC_JWKS must contain the active public EC P-256 key");
   }
+  const tracing = resolveManualTracingDeployment(environment);
   const config = structuredClone(template);
   config.d1_databases[0].database_id = databaseId;
   Object.assign(config.vars, {
@@ -57,6 +59,7 @@ export function buildProductionSpacesConfig(template, environment) {
     SPACES_SMOKE_ENABLED: environment.SPACES_SMOKE_ENABLED === "false" ? "false" : "true",
     SPACES_SMOKE_PRINCIPAL_ID: environment.SPACES_SMOKE_PRINCIPAL_ID,
     UNICAS_AUDIENCE: environment.SPACES_UNICAS_AUDIENCE,
+    ...tracing.variables,
   });
   return config;
 }
@@ -87,11 +90,13 @@ export function writeProductionSpacesSecrets(environment = process.env, outputPa
   if (missing.length > 0) {
     throw new Error(`Spaces production secrets are missing: ${missing.join(", ")}`);
   }
+  const tracing = resolveManualTracingDeployment(environment);
   mkdirSync(dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, JSON.stringify({
     GOOGLE_CLIENT_SECRET: environment.SPACES_GOOGLE_CLIENT_SECRET,
     SPACES_SIGNING_PRIVATE_KEY: environment.SPACES_SIGNING_PRIVATE_KEY_PKCS8,
     SPACES_SMOKE_CREDENTIAL: environment.SPACES_SMOKE_CREDENTIAL,
+    ...tracing.secrets,
   }), { mode: 0o600 });
   return outputPath;
 }

@@ -15,6 +15,7 @@
     "clean": "rimraf --glob dist \"*.tsbuildinfo\""
   },
   "dependencies": {
+    "@unicas/observability": "workspace:*",
     "@unicas/space-client": "workspace:*",
     "@unicas/space-file-client": "workspace:*",
     "@unicas/space-protocol": "workspace:*",

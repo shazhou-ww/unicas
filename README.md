@@ -18,9 +18,7 @@ and administrator console.
 
 ```powershell
 pnpm install
-pnpm build
-pnpm test
-pnpm typecheck
+pnpm validate
 pnpm dev
 ```
 
@@ -35,11 +33,13 @@ under `.wrangler/`.
 | Routine changes outside the Cloudflare adapter | `pnpm test:quick` | Repository checks and every package test except `@unicas/service-cloudflare` |
 | One package | `pnpm --filter <package> test` | The selected package only |
 | All package tests | `pnpm test:packages` | Every package test, without repository checks |
-| Before merge or release | `pnpm test` or `pnpm test:exhaustive` | Canonical exhaustive gate: repository checks and every package test |
+| Before delivery | `pnpm validate` | Canonical branch/PR/`main` gate: repository policy, package tests except the slow Cloudflare adapter suite, build, and typecheck |
+| Before release | `pnpm validate:release` | Strict superset with the Cloudflare adapter and release-policy suites, SDK artifacts, browser coverage, deployment dry-runs, and release planner checks |
 
-Use the exhaustive gate for changes to `packages/service-cloudflare`, shared
-test orchestration, or repository-wide behavior. CI runs the same named
-exhaustive suite.
+Use `pnpm validate` for changes to `packages/service-cloudflare`, shared test
+orchestration, or repository-wide behavior. Local delivery and ordinary CI run
+the same command. The complete trigger and trust-boundary matrix is documented
+in [`docs/validation-and-release-workflows.md`](docs/validation-and-release-workflows.md).
 
 Use Docker when a host Node.js environment is not available:
 
@@ -76,10 +76,10 @@ The accepted origin architecture is documented in
 The accepted App/Space resource vocabulary is documented in
 [`packages/docs-site/content/terminology.md`](packages/docs-site/content/terminology.md).
 
-Repository work is tracked alongside the code under stable [`tasks/`](tasks/)
-paths, with lifecycle state recorded in [`tasks/status.yaml`](tasks/status.yaml).
-The workflow is documented in
-[`docs/repository-tasks.md`](docs/repository-tasks.md).
+Long-running repository work is captured as layered Silvermoon ideas under
+stable [`.silvermoon/ideas/`](.silvermoon/ideas/) paths. The workflow is
+documented in
+[`docs/repository-ideas.md`](docs/repository-ideas.md).
 
 Report suspected vulnerabilities privately as described in
 [`SECURITY.md`](SECURITY.md).

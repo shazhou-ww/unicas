@@ -4,6 +4,10 @@ Optional browser implementation of `CasNodeCache`. The HTTP client remains
 platform-neutral and has no dependency on this package. No server or application
 manifest types are imported; the `space-client` dependency is type-only in source.
 
+```sh
+npm install @unicas/space-browser-cache@beta
+```
+
 ```ts
 import { createSpaceCasClient } from "@unicas/space-client";
 import { createBrowserCasNodeCache, clearBrowserCasNodeCaches } from "@unicas/space-browser-cache";
@@ -23,6 +27,10 @@ cache.close();
 ```
 
 ## Contract
+
+This package is browser-only and ESM-only. It requires IndexedDB and the modern
+browser Blob, URL, Web Streams, and encoding APIs; BroadcastChannel is an
+optional cross-tab invalidation enhancement.
 
 - Keys include endpoint, authenticated Principal, App, Space, hash, read kind,
   and an explicit version. Use an immutable identity key, never an access token

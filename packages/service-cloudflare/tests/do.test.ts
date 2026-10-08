@@ -7,29 +7,7 @@ import type {
   R2PutOptions,
 } from "@cloudflare/workers-types";
 
-const traceRecorder = vi.hoisted(() => {
-  const spans: Array<{ name: string; attributes: Record<string, unknown> }> = [];
-  return {
-    spans,
-    runtimeTracing: {
-      enterSpan<T>(name: string, callback: (span: {
-        readonly isTraced: boolean;
-        setAttribute(key: string, value?: boolean | number | string): void;
-      }) => T): T {
-        const entry = { name, attributes: {} };
-        spans.push(entry);
-        return callback({
-          isTraced: true,
-          setAttribute(key, value) {
-            entry.attributes[key] = value;
-          },
-        });
-      },
-    },
-  };
-});
-
-vi.mock("../src/runtime-tracing.js", () => ({ runtimeTracing: traceRecorder.runtimeTracing }));
+vi.mock("../src/runtime-tracing.js", () => ({ scheduleTraceFlush: vi.fn() }));
 import {
   CanonicalNodeContentType,
   computeNodeDigest,
@@ -58,7 +36,6 @@ afterEach(async () => {
   miniflare = undefined;
   db = undefined;
   bucket = undefined;
-  traceRecorder.spans.length = 0;
 });
 
 async function createStore(): Promise<void> {
@@ -147,10 +124,6 @@ describe("RootRefDomainDurableObject", () => {
     const response = await doInstance.fetch(domainCommand("r1", { [H1]: 1 }));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ success: true, idempotent: false, revision: 1 });
-    expect(traceRecorder.spans).toContainEqual({
-      name: "unicas.root_refs.commit",
-      attributes: { "unicas.root_refs.mutations": 1, "unicas.outcome": "ok" },
-    });
   });
 
   test("rejects commands without the verified identity headers", async () => {
@@ -489,14 +462,6 @@ describe("CasDurableObject (Space DO) — node storage operations", () => {
     ).bind(STACK, TENANT, hash).first()).toBeNull();
     expect(new Uint8Array(await (await bucket!.get(appCanonicalNodeKey(STACK, TENANT, hash)))!.arrayBuffer()))
       .toEqual(canonical);
-    expect(traceRecorder.spans).toContainEqual({
-      name: "unicas.node.validate",
-      attributes: {
-        "unicas.node.bytes": canonical.length,
-        "unicas.node.refs": 0,
-        "unicas.outcome": "ok",
-      },
-    });
   });
 
   test("reuses one internal generation while its direct upload is absent", async () => {

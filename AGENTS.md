@@ -1,48 +1,50 @@
 # UniCAS agent instructions
 
-## Task workflow
+## Guidance routing
+
+- Treat [`.agents/`](.agents/README.md) as the only supported canonical root
+  for Agent skills and reusable instructions. Do not add or require
+  provider-specific projections.
+- Before changing any file under `packages/**` or `stacks/unicas/**`, load and
+  follow the
+  [`unicas-package-boundaries` skill](.agents/skills/unicas-package-boundaries/SKILL.md).
+
+## Idea workflow
 
 Load and follow the
-[`repoledger` skill](.agents/skills/repoledger/SKILL.md)
-only when the user explicitly invokes `/repoledger`, or asks to manage an
-existing registered repository task. Then apply the UniCAS-specific profile in
-[`docs/repository-tasks.md`](docs/repository-tasks.md). Ordinary implementation
-requests remain task-free.
+[`silvermoon` skill](.agents/skills/silvermoon/SKILL.md)
+when the user invokes `/silvermoon`, explicitly asks to create an idea, or asks
+to continue an existing Silvermoon idea. Apply the UniCAS-specific profile in
+[`docs/repository-ideas.md`](docs/repository-ideas.md). Ordinary implementation
+requests remain idea-free unless the user opts into this lifecycle.
 
-- Create a task only through an explicit `/repoledger new` invocation.
-- Treat `origin/main` as the authoritative task state. Run
-  `pnpm exec repoledger task list`, `pnpm exec repoledger status <task-name>`,
-  and `pnpm exec repoledger check <task-name> --remote` as directed by the
-  skill before task work.
-- Keep every task at the stable path `tasks/<task-name>/`; lifecycle state is
-  recorded only in `tasks/status.yaml`.
-- Register accepted new tasks with `repoledger task register` and start
-  implementation with `repoledger task start`. Do not manually edit lifecycle
-  records or create identity lanes.
-- Create or update `Progress.md` only in a commit that also changes at least one
-  path outside `tasks/`. Keep it concise and outcome-focused.
-- Use the normal non-force integration path to publish implementation to
-  `main`. Never treat a branch, worktree, person, or device as task ownership.
-- Complete or abandon work only through the corresponding repoledger command
-  after the skill's review and acceptance requirements are satisfied.
+- Use `pnpm exec silvermoon create-idea --audience agent` only for explicit
+  creation requests. Use
+  `pnpm exec silvermoon whats-next [idea] --audience agent` for navigation and
+  continuation.
+- Treat the configured primary repository and branch as authoritative. Preserve
+  unknown work and follow the command's ordered synchronization instructions.
+- Keep every idea in the fixed `.silvermoon/ideas/<ULID>/` layout. Use a unique
+  alias for human navigation without changing its ULID identity.
+- Record human approval and acceptance only for the exact current world
+  revision after an explicit decision. Ledger checkboxes record Agent work,
+  never approval or acceptance.
+- Use normal non-force publication. Never force-push, reset shared history, or
+  infer lifecycle decisions from Git activity.
 
 ## Documentation boundary
 
-- Keep task-specific plans, research, impact inventories, and current-state
-  captures inside the task folder so they move with the task.
+- Keep idea-specific plans, research, impact inventories, and current-state
+  captures inside the appropriate Silvermoon world so they move with the idea.
 - Reserve `docs/` for accepted, stable architecture, terminology, protocol,
   operations, and configuration consensus.
-- Extract durable decisions from a task into `docs/`; do not move its work log
+- Extract durable decisions from an idea into `docs/`; do not move its ledger
   or unfinished plan there.
 - Never place credentials, tokens, private keys, or private customer data in
-  tasks, docs, examples, logs, or commits.
+  ideas, docs, examples, logs, or commits.
 
 ## Repository boundaries
 
-- Read [`packages/README.md`](packages/README.md) before changing package
-  ownership or dependencies.
-- Preserve the separation between administrator and data access planes and do
-  not introduce runtime dependencies on `@unidocs/*`.
 - Treat `unicas.shazhou.work` and its Cloudflare resources as a frozen legacy
   environment unless a task explicitly says otherwise.
 - Use `pnpm deploy:plan` or direct Wrangler `--dry-run` for deployment review.
@@ -50,12 +52,11 @@ requests remain task-free.
 
 ## Validation
 
-- `pnpm check:tasks` validates the worktree. CI also runs
-  `pnpm check:tasks:commit`, and main-branch CI runs `pnpm check:tasks --remote`
-  against canonical repository state.
-- Use `pnpm exec repoledger task list`, `status`, and focused `check` commands
-  for task readiness. Use `check --staged` or `check --unstaged` to validate a
-  specific local candidate.
+- `pnpm check:ideas` validates the worktree. `pnpm check:ideas:commit` validates
+  checked-out history, and main-branch CI runs `pnpm check:ideas:remote`.
+- Use `pnpm exec silvermoon whats-next [idea] --audience agent` for readiness
+  and `pnpm exec silvermoon check --staged --audience agent` for an index
+  candidate.
 - Run the narrowest relevant executable test after implementation edits.
-- Before completing a task, run the validation required by its acceptance
-  criteria and publish the final implementation-linked `Progress.md` update.
+- Before requesting acceptance, run the validation required by the current
+  world contract and update the matching ledger entries.

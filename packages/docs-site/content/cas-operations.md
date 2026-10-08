@@ -43,8 +43,10 @@ a routed probe like the live smoke's lease+read).
 Cloudflare's aggregate Worker metrics are authoritative for request volume,
 invocation outcomes, and CPU/wall-time quantiles. Persisted custom logs use a
 5% head sample and are diagnostic evidence only. Generated invocation logs,
-production tracing, and external telemetry destinations are disabled by the
-[observability contract](observability.md).
+native Cloudflare tracing, and production manual trace export are disabled by
+the [observability contract](observability.md). The manual OTLP code path is
+checked in with a zero production sample and no destination or exporter
+secrets.
 
 Existing structured events (JSON to Worker stdout and sampled Workers Logs):
 
@@ -63,8 +65,10 @@ Existing structured events (JSON to Worker stdout and sampled Workers Logs):
 Use Worker/zone metrics or the Cloudflare GraphQL API for five-minute request
 and status rollups. Query sampled event names and bounded reason/error codes in
 Workers Logs to diagnose a metric or probe signal; do not scale the 5% sample
-into an authoritative count. Production D1/R2/Durable Object waterfalls remain
-unavailable until the tracing data-safety gate can be satisfied.
+into an authoritative count. Manual D1/R2/Durable Object waterfalls are
+available for synthetic validation, but production export remains dormant
+until destination access and retention, canary evidence, and the exact
+nonzero sample receive review.
 
 ## Alerting rules
 
@@ -114,10 +118,13 @@ origins. A separate job then records a successful push deployment as an
 immutable `production-YYYYMMDD-<workflow-run-number>` annotated tag pointing
 to that exact revision; manual recovery runs do not create production tags.
 
-For a manual recovery attempt, dispatch the **CI** workflow from `release`. A
-dispatch from `main` or any other branch cannot enter the `Production`
-environment or run a production command. The manual path repeats validation;
-it does not bypass it.
+For read-only manual release validation, dispatch **CI**; it runs
+`pnpm validate:release` and cannot enter `Production`. Spaces bootstrap or
+principal recovery uses the separate **Recover Spaces production** workflow.
+Supply a full commit SHA reachable from `main`, select exactly one recovery
+operation, and pass `Production` review. Recovery shares the
+`unicas-production` concurrency group with promotion and never creates a
+production tag.
 
 Local emergency deployment remains explicit. **Always rebuild first** because
 Wrangler uploads `dist/` and stale output silently deploys old code:

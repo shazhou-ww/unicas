@@ -30,6 +30,7 @@
     "@unicas/admin-protocol": "workspace:*",
     "@unicas/codec": "workspace:*",
     "@unicas/control-auth": "workspace:*",
+    "@unicas/observability": "workspace:*",
     "@unicas/service": "workspace:*",
     "@unicas/space-protocol": "workspace:*",
     "agents": "0.21.0",

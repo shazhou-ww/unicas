@@ -10,6 +10,11 @@ import {
   parseArgs,
   validateDeploymentEnvironment,
 } from "../stacks/unicas/deploy/deploy.mjs";
+import { resolveManualTracingDeployment } from "../stacks/unicas/deploy/manual-tracing.mjs";
+import {
+  parseManualTracingSecretArgs,
+  syncManualTracingSecrets,
+} from "../stacks/unicas/deploy/sync-manual-tracing-secrets.mjs";
 import {
   ensureEncryptionSecrets,
   parseSecretNames,
@@ -43,6 +48,11 @@ import {
 
 const ROOT = join(import.meta.dirname, "..");
 const CI_WORKFLOW = readFileSync(join(ROOT, ".github/workflows/ci.yml"), "utf8");
+const ROOT_PACKAGE = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+const RECOVERY_WORKFLOW = readFileSync(
+  join(ROOT, ".github/workflows/recover-spaces.yml"),
+  "utf8",
+);
 const DEPLOYMENT_GUIDE = readFileSync(
   join(ROOT, "packages/docs-site/content/deployment-and-local-configuration.md"),
   "utf8",
@@ -79,6 +89,33 @@ const OBSERVABILITY_POLICY = {
     destinations: [],
   },
 };
+const TRACE_HMAC_KEYS = JSON.stringify({
+  active: "2026-09",
+  keys: { "2026-09": Buffer.alloc(32, 7).toString("base64url") },
+});
+const TRACE_DEPLOYMENT_ENVIRONMENT = Object.freeze({
+  UNICAS_MANUAL_TRACE_SAMPLE_RATE: "0.01",
+  UNICAS_OTLP_TRACES_ENDPOINT: "https://collector.example/otlp/v1/traces",
+  UNICAS_OTLP_AUTHORIZATION: "Basic synthetic-authorization",
+  UNICAS_TRACE_HMAC_KEYS: TRACE_HMAC_KEYS,
+});
+
+function spacesProductionEnvironment(overrides = {}) {
+  return {
+    SPACES_D1_DATABASE_ID: "11111111-1111-4111-8111-111111111111",
+    SPACES_GOOGLE_CLIENT_ID: "google-client",
+    SPACES_SIGNING_KID: "spaces-key",
+    SPACES_SIGNING_PUBLIC_JWKS: JSON.stringify({
+      keys: [{ kty: "EC", crv: "P-256", x: "x", y: "y", kid: "spaces-key" }],
+    }),
+    SPACES_SMOKE_PRINCIPAL_ID: "smoke-principal",
+    SPACES_UNICAS_AUDIENCE: "https://api.unicas.work",
+    SPACES_GOOGLE_CLIENT_SECRET: "google-secret",
+    SPACES_SIGNING_PRIVATE_KEY_PKCS8: "private-key",
+    SPACES_SMOKE_CREDENTIAL: "smoke-secret",
+    ...overrides,
+  };
+}
 
 function workflowTriggers() {
   const end = CI_WORKFLOW.indexOf("jobs:");
@@ -95,11 +132,11 @@ function productionJob() {
 }
 
 function spacesBootstrapJob() {
-  const start = CI_WORKFLOW.indexOf("  bootstrap-spaces:");
-  const end = CI_WORKFLOW.indexOf("  deploy-production:");
+  const start = RECOVERY_WORKFLOW.indexOf("  recover:");
+  const end = RECOVERY_WORKFLOW.length;
   expect(start).toBeGreaterThan(-1);
   expect(end).toBeGreaterThan(start);
-  return CI_WORKFLOW.slice(start, end);
+  return RECOVERY_WORKFLOW.slice(start, end);
 }
 
 function productionTagJob() {
@@ -111,7 +148,7 @@ function productionTagJob() {
 
 function validationJob() {
   const start = CI_WORKFLOW.indexOf("  validate:");
-  const end = CI_WORKFLOW.indexOf("  bootstrap-spaces:");
+  const end = CI_WORKFLOW.indexOf("  deploy-production:");
   expect(start).toBeGreaterThan(-1);
   expect(end).toBeGreaterThan(start);
   return CI_WORKFLOW.slice(start, end);
@@ -156,23 +193,103 @@ describe("standalone deployment plan", () => {
       "/api", "/api/*", "/auth", "/auth/*", "/.well-known", "/.well-known/*", "/oauth", "/oauth/*",
     ]);
     expect(SPACES_WRANGLER_CONFIG.observability).toEqual(OBSERVABILITY_POLICY);
+    expect(SPACES_WRANGLER_CONFIG.vars.UNICAS_MANUAL_TRACE_SAMPLE_RATE).toBe("0");
     expect(JSON.stringify(SPACES_WRANGLER_CONFIG)).not.toMatch(/CAS_CONTROL_DB|CAS_DB|CAS_R2|durable_objects|kv_namespaces/);
   });
 
-  test("generates a secret-free Spaces production config and a separate ephemeral secrets file", () => {
-    const environment = {
-      SPACES_D1_DATABASE_ID: "11111111-1111-4111-8111-111111111111",
-      SPACES_GOOGLE_CLIENT_ID: "google-client",
-      SPACES_SIGNING_KID: "spaces-key",
-      SPACES_SIGNING_PUBLIC_JWKS: JSON.stringify({
-        keys: [{ kty: "EC", crv: "P-256", x: "x", y: "y", kid: "spaces-key" }],
+  test("requires one complete validated profile for nonzero manual tracing", () => {
+    expect(resolveManualTracingDeployment({})).toEqual({
+      enabled: false,
+      variables: {},
+      secrets: {},
+    });
+    expect(resolveManualTracingDeployment({
+      UNICAS_MANUAL_TRACE_SAMPLE_RATE: "0",
+      UNICAS_OTLP_TRACES_ENDPOINT: "http://inactive.invalid",
+      UNICAS_OTLP_AUTHORIZATION: "inactive",
+      UNICAS_TRACE_HMAC_KEYS: "inactive",
+    })).toEqual({
+      enabled: false,
+      variables: {},
+      secrets: {},
+    });
+    expect(resolveManualTracingDeployment(TRACE_DEPLOYMENT_ENVIRONMENT)).toEqual({
+      enabled: true,
+      variables: {
+        UNICAS_MANUAL_TRACE_SAMPLE_RATE: "0.01",
+        UNICAS_OTLP_TRACES_ENDPOINT: "https://collector.example/otlp/v1/traces",
+      },
+      secrets: {
+        UNICAS_OTLP_AUTHORIZATION: "Basic synthetic-authorization",
+        UNICAS_TRACE_HMAC_KEYS: TRACE_HMAC_KEYS,
+      },
+    });
+
+    for (const name of [
+      "UNICAS_OTLP_TRACES_ENDPOINT",
+      "UNICAS_OTLP_AUTHORIZATION",
+      "UNICAS_TRACE_HMAC_KEYS",
+    ]) {
+      const incomplete = { ...TRACE_DEPLOYMENT_ENVIRONMENT };
+      delete incomplete[name];
+      expect(() => resolveManualTracingDeployment(incomplete)).toThrow(
+        `${name} is required when manual tracing is sampled`,
+      );
+    }
+    expect(() => resolveManualTracingDeployment({
+      ...TRACE_DEPLOYMENT_ENVIRONMENT,
+      UNICAS_OTLP_TRACES_ENDPOINT: "https://user@example.com/otlp/v1/traces",
+    })).toThrow("credential-free HTTPS");
+    expect(() => resolveManualTracingDeployment({
+      ...TRACE_DEPLOYMENT_ENVIRONMENT,
+      UNICAS_OTLP_AUTHORIZATION: "Basic value\r\nunsafe: header",
+    })).toThrow("single HTTP header value");
+    expect(() => resolveManualTracingDeployment({
+      ...TRACE_DEPLOYMENT_ENVIRONMENT,
+      UNICAS_TRACE_HMAC_KEYS: JSON.stringify({
+        active: "short",
+        keys: { short: Buffer.alloc(8).toString("base64url") },
       }),
-      SPACES_SMOKE_PRINCIPAL_ID: "smoke-principal",
-      SPACES_UNICAS_AUDIENCE: "https://api.unicas.work",
-      SPACES_GOOGLE_CLIENT_SECRET: "google-secret",
-      SPACES_SIGNING_PRIVATE_KEY_PKCS8: "private-key",
-      SPACES_SMOKE_CREDENTIAL: "smoke-secret",
-    };
+    })).toThrow("short key");
+  });
+
+  test("synchronizes service tracing secrets through stdin without exposing values in arguments", () => {
+    expect(parseManualTracingSecretArgs([])).toEqual({ env: undefined });
+    expect(parseManualTracingSecretArgs(["--env", "staging"])).toEqual({ env: "staging" });
+    expect(() => parseManualTracingSecretArgs(["--env", "Staging"]))
+      .toThrow("lowercase-environment");
+
+    const calls = [];
+    expect(syncManualTracingSecrets({
+      environment: TRACE_DEPLOYMENT_ENVIRONMENT,
+      env: "staging",
+      execute(args, input) {
+        calls.push({ args, input });
+      },
+    })).toEqual(["UNICAS_OTLP_AUTHORIZATION", "UNICAS_TRACE_HMAC_KEYS"]);
+    expect(calls).toEqual([
+      {
+        args: ["secret", "put", "UNICAS_OTLP_AUTHORIZATION", "--env", "staging"],
+        input: "Basic synthetic-authorization",
+      },
+      {
+        args: ["secret", "put", "UNICAS_TRACE_HMAC_KEYS", "--env", "staging"],
+        input: TRACE_HMAC_KEYS,
+      },
+    ]);
+    expect(calls.map(({ args }) => args.join(" ")).join("\n"))
+      .not.toContain("synthetic-authorization");
+
+    expect(syncManualTracingSecrets({
+      environment: { UNICAS_MANUAL_TRACE_SAMPLE_RATE: "0" },
+      execute() {
+        throw new Error("disabled tracing must not synchronize secrets");
+      },
+    })).toEqual([]);
+  });
+
+  test("generates a secret-free Spaces production config and a separate ephemeral secrets file", () => {
+    const environment = spacesProductionEnvironment();
     const config = buildProductionSpacesConfig(SPACES_WRANGLER_CONFIG, environment);
     expect(config.d1_databases[0].database_id).toBe(environment.SPACES_D1_DATABASE_ID);
     expect(config.vars).toMatchObject({
@@ -181,6 +298,7 @@ describe("standalone deployment plan", () => {
       SPACES_SMOKE_ENABLED: "true",
       SPACES_SMOKE_PRINCIPAL_ID: "smoke-principal",
       UNICAS_AUDIENCE: "https://api.unicas.work",
+      UNICAS_MANUAL_TRACE_SAMPLE_RATE: "0",
     });
     expect(config.observability).toEqual(OBSERVABILITY_POLICY);
     expect(JSON.stringify(config)).not.toContain("google-secret");
@@ -195,6 +313,29 @@ describe("standalone deployment plan", () => {
         GOOGLE_CLIENT_SECRET: "google-secret",
         SPACES_SIGNING_PRIVATE_KEY: "private-key",
         SPACES_SMOKE_CREDENTIAL: "smoke-secret",
+      });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("adds the same nonzero tracing profile only to Spaces variables and its ephemeral secrets file", () => {
+    const environment = spacesProductionEnvironment(TRACE_DEPLOYMENT_ENVIRONMENT);
+    const config = buildProductionSpacesConfig(SPACES_WRANGLER_CONFIG, environment);
+    expect(config.vars).toMatchObject({
+      UNICAS_MANUAL_TRACE_SAMPLE_RATE: "0.01",
+      UNICAS_OTLP_TRACES_ENDPOINT: "https://collector.example/otlp/v1/traces",
+    });
+    expect(JSON.stringify(config)).not.toContain("synthetic-authorization");
+    expect(JSON.stringify(config)).not.toContain(TRACE_HMAC_KEYS);
+
+    const directory = mkdtempSync(join(tmpdir(), "unicas-spaces-tracing-secrets-"));
+    const output = join(directory, "secrets.json");
+    try {
+      writeProductionSpacesSecrets(environment, output);
+      expect(JSON.parse(readFileSync(output, "utf8"))).toMatchObject({
+        UNICAS_OTLP_AUTHORIZATION: "Basic synthetic-authorization",
+        UNICAS_TRACE_HMAC_KEYS: TRACE_HMAC_KEYS,
       });
     } finally {
       rmSync(directory, { recursive: true, force: true });
@@ -237,10 +378,14 @@ describe("standalone deployment plan", () => {
   });
 
   test("uses disabled Google placeholders only for the one-time Spaces bootstrap", () => {
-    expect(spacesBootstrapEnvironment({ SPACES_SMOKE_ENABLED: "true" })).toMatchObject({
+    expect(spacesBootstrapEnvironment({
+      SPACES_SMOKE_ENABLED: "true",
+      UNICAS_MANUAL_TRACE_SAMPLE_RATE: "0.01",
+    })).toMatchObject({
       SPACES_GOOGLE_CLIENT_ID: "bootstrap-disabled",
       SPACES_GOOGLE_CLIENT_SECRET: "bootstrap-disabled",
       SPACES_SMOKE_ENABLED: "false",
+      UNICAS_MANUAL_TRACE_SAMPLE_RATE: "0",
     });
     expect(spacesBootstrapEnvironment({
       SPACES_GOOGLE_CLIENT_ID: "configured-client",
@@ -261,17 +406,33 @@ describe("standalone deployment plan", () => {
     expect(job).not.toMatch(/^\s+run: pnpm deploy:docs\r?$/m);
   });
 
-  test("builds every Worker upload bundle during unprivileged validation", () => {
+  test("uses the canonical standard and strict-superset release validations", () => {
     const job = validationJob();
-    expect(job).toContain("wrangler deploy --dry-run");
-    expect(job).toContain("run: pnpm deploy:spaces:plan");
-    expect(job).toContain("run: pnpm deploy:site:plan");
-    expect(job).toContain("run: pnpm --filter @unicas/docs-site deploy:plan");
-    expect(job).toContain("run: pnpm --filter @unicas/docs-site test");
-    expect(job).toContain("run: pnpm --filter @unicas/docs-site test:browser");
-    expect(job).toContain("run: pnpm --filter @unicas/docs-site build");
-    expect(job).toContain("run: pnpm --filter @unicas/docs-site typecheck");
-    expect(job).toContain("DOCS_SOURCE_REVISION: ${{ github.sha }}");
+    expect(job).toContain("run: pnpm validate");
+    expect(job).toContain("run: pnpm validate:release");
+    expect(job).toContain("github.ref != 'refs/heads/release'");
+    expect(job).toContain("github.ref == 'refs/heads/release'");
+    expect(job).toContain("github.event_name == 'workflow_dispatch'");
+    expect(job).toContain("git merge-base --is-ancestor \"$GITHUB_SHA\" origin/main");
+    expect(job).not.toContain("pnpm test:exhaustive");
+    expect(job).not.toContain("wrangler deploy --dry-run");
+    expect(job).not.toContain("DOCS_SOURCE_REVISION");
+    expect(ROOT_PACKAGE.scripts.validate).toContain("pnpm test:quick");
+    expect(ROOT_PACKAGE.scripts.validate).toContain("pnpm build");
+    expect(ROOT_PACKAGE.scripts.validate).toContain("pnpm typecheck");
+    expect(ROOT_PACKAGE.scripts["validate:release"]).toMatch(/^pnpm validate && /);
+    expect(ROOT_PACKAGE.scripts["validate:release"]).toContain("pnpm check:release");
+    expect(ROOT_PACKAGE.scripts["validate:release"]).toContain(
+      "pnpm --filter @unicas/service-cloudflare test",
+    );
+    expect(ROOT_PACKAGE.scripts["validate:release"]).toContain("pnpm sdk:artifacts");
+    expect(ROOT_PACKAGE.scripts["validate:release"]).toContain("test:browser");
+    expect(ROOT_PACKAGE.scripts["validate:release"]).toContain("wrangler deploy --dry-run");
+    expect(CI_WORKFLOW).toContain(
+      "if: github.event_name == 'push' && github.ref == 'refs/heads/main'",
+    );
+    expect(CI_WORKFLOW).toContain("run: pnpm check:ideas:remote");
+    expect(CI_WORKFLOW).toContain("DOCS_SOURCE_REVISION: ${{ github.sha }}");
   });
 
   test("gates production deployment behind validation of a release revision", () => {
@@ -279,34 +440,39 @@ describe("standalone deployment plan", () => {
     expect(job).toContain("needs: validate");
     expect(job).toContain("github.ref == 'refs/heads/release'");
     expect(job).toContain("vars.SPACES_RELEASE_ENABLED == 'true'");
-    expect(job).toContain("inputs.spaces_action == 'none'");
     expect(job).not.toContain("github.ref == 'refs/heads/main'");
     expect(job).toContain("github.event_name == 'push'");
-    expect(job).toContain("github.event_name == 'workflow_dispatch'");
+    expect(job).not.toContain("github.event_name == 'workflow_dispatch'");
     expect(job).toContain("environment: Production");
     expect(job).toContain("contents: read");
     expect(job).toContain("group: unicas-production");
     expect(job).toContain("queue: max");
     expect(job).toContain("cancel-in-progress: false");
     expect(job).toContain("ref: ${{ github.sha }}");
+    expect(job).toContain("git merge-base --is-ancestor \"$GITHUB_SHA\" origin/main");
     expect(job).not.toContain("contents: write");
   });
 
-  test("protects one-time Spaces bootstrap behind release, validation, and Production review", () => {
+  test("isolates Spaces recovery behind manual dispatch and Production review", () => {
     const job = spacesBootstrapJob();
-    expect(workflowTriggers()).toContain("spaces_action:");
-    expect(job).toContain("github.ref == 'refs/heads/release'");
-    expect(job).toContain("github.event_name == 'workflow_dispatch'");
-    expect(job).toContain("needs: validate");
+    expect(RECOVERY_WORKFLOW).toMatch(/on:\r?\n\s+workflow_dispatch:/);
+    expect(RECOVERY_WORKFLOW).not.toMatch(/\n\s+push:/);
+    expect(RECOVERY_WORKFLOW).not.toMatch(/\n\s+pull_request:/);
+    expect(workflowTriggers()).not.toContain("spaces_action:");
+    expect(CI_WORKFLOW).not.toContain("bootstrap-spaces");
     expect(job).toContain("environment: Production");
     expect(job).toContain("group: unicas-production");
-    expect(job).toContain("inputs.spaces_action == 'provision-deploy'");
+    expect(job).toContain("queue: max");
+    expect(job).toContain("cancel-in-progress: false");
+    expect(job).toContain("inputs.action == 'provision-deploy'");
+    expect(job).toContain("inputs.revision");
+    expect(job).toContain("git merge-base --is-ancestor \"$REVISION\" origin/main");
     expect(job).toContain("wrangler d1 create unicas-spaces --location enam");
     expect(job).toContain("run: pnpm deploy:spaces:bootstrap");
-    expect(job).toContain("inputs.spaces_action == 'principals'");
+    expect(job).toContain("inputs.action == 'principals'");
     expect(job).toContain("pnpm spaces:bootstrap -- --mode google");
     expect(job).toContain("pnpm spaces:bootstrap -- --mode smoke");
-    expect(job).toContain("if: ${{ always() && inputs.spaces_action == 'principals' }}");
+    expect(job).toContain("if: ${{ always() && inputs.action == 'principals' }}");
   });
 
   test("does not run validation for tag pushes", () => {
@@ -455,19 +621,22 @@ describe("standalone deployment plan", () => {
 
   test("deploys each production Worker in order with environment-scoped credentials", () => {
     const job = productionJob();
-    const issuerCutoverDeploy = job.indexOf("Deploy API and Console for App/Space v1 issuer cutover");
-    const issuerCutover = job.indexOf("Cut over App/Space v1 issuer audiences");
+    const serviceStepStart = job.indexOf("- name: Deploy API and console service");
+    const spacesStepStart = job.indexOf("- name: Deploy Spaces App");
+    const siteStepStart = job.indexOf("- name: Deploy product site");
     const service = job.indexOf("run: pnpm deploy:production");
     const spaces = job.indexOf("run: pnpm deploy:spaces");
     const site = job.indexOf("run: pnpm deploy:site");
     const docs = job.indexOf("run: pnpm deploy:docs");
+    expect(serviceStepStart).toBeGreaterThan(-1);
+    expect(spacesStepStart).toBeGreaterThan(serviceStepStart);
+    expect(siteStepStart).toBeGreaterThan(spacesStepStart);
     expect(service).toBeGreaterThan(-1);
-    expect(issuerCutoverDeploy).toBeGreaterThan(-1);
-    expect(issuerCutover).toBeGreaterThan(issuerCutoverDeploy);
-    expect(service).toBeGreaterThan(issuerCutover);
     expect(spaces).toBeGreaterThan(service);
     expect(site).toBeGreaterThan(spaces);
     expect(docs).toBeGreaterThan(site);
+    const serviceStep = job.slice(serviceStepStart, spacesStepStart);
+    const spacesStep = job.slice(spacesStepStart, siteStepStart);
 
     for (const binding of [
       "CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}",
@@ -487,6 +656,8 @@ describe("standalone deployment plan", () => {
       "OAUTH_GOOGLE_CLIENT_SECRET",
       "OAUTH_MICROSOFT_CLIENT_SECRET",
       "OAUTH_GITHUB_CLIENT_SECRET",
+      "UNICAS_OTLP_AUTHORIZATION",
+      "UNICAS_TRACE_HMAC_KEYS",
     ]) {
       expect(job).toContain(`${secret}: $` + `{{ secrets.${secret} }}`);
     }
@@ -501,12 +672,21 @@ describe("standalone deployment plan", () => {
       "SPACES_SIGNING_PRIVATE_KEY_PKCS8: ${{ secrets.SPACES_SIGNING_PRIVATE_KEY_PKCS8 }}",
       "SPACES_SMOKE_CREDENTIAL: ${{ secrets.SPACES_SMOKE_CREDENTIAL }}",
     ]) expect(job).toContain(binding);
+    for (const binding of [
+      "UNICAS_MANUAL_TRACE_SAMPLE_RATE: ${{ vars.UNICAS_MANUAL_TRACE_SAMPLE_RATE }}",
+      "UNICAS_OTLP_TRACES_ENDPOINT: ${{ vars.UNICAS_OTLP_TRACES_ENDPOINT }}",
+      "UNICAS_OTLP_AUTHORIZATION: ${{ secrets.UNICAS_OTLP_AUTHORIZATION }}",
+      "UNICAS_TRACE_HMAC_KEYS: ${{ secrets.UNICAS_TRACE_HMAC_KEYS }}",
+    ]) {
+      expect(serviceStep).toContain(binding);
+      expect(spacesStep).toContain(binding);
+    }
     expect(job).not.toContain("secrets.SESSION_ENCRYPTION_KEYS");
     expect(job).not.toContain("secrets.OAUTH_STATE_ENCRYPTION_KEY");
     expect(job).toContain('wrangler secret put "$name"');
-    expect(job).toContain("if: vars.APP_SPACE_V1_CUTOVER_ENABLED == 'true'");
-    expect(job).toContain("UNICAS_RELEASE_ADMIN_SESSION: ${{ secrets.UNICAS_RELEASE_ADMIN_SESSION }}");
-    expect(job).toContain("run: node stacks/unicas/deploy/cut-over-app-space-v1-issuers.mjs");
+    expect(job).not.toContain("APP_SPACE_V1_CUTOVER_ENABLED");
+    expect(job).not.toContain("UNICAS_RELEASE_ADMIN_SESSION");
+    expect(job).not.toContain("cut-over-app-space-v1-issuers.mjs");
     expect(job).toContain("UNICAS_SMOKE_AUDIENCE: ${{ vars.UNICAS_SMOKE_AUDIENCE }}");
     expect(job).not.toContain("format('https://api.unicas.work/stacks/{0}'");
     expect(job).not.toContain("UNICAS_SMOKE_STACK_ID");
@@ -679,6 +859,40 @@ describe("standalone deployment plan", () => {
       "--var", "OAUTH_MICROSOFT_CLIENT_ID:microsoft-id",
       "--var", "OAUTH_GITHUB_CLIENT_ID:github-id",
     ]));
+  });
+
+  test("threads nonzero tracing variables through service deployment without putting secrets in commands", () => {
+    const plan = deploymentPlan({
+      dryRun: true,
+      environment: TRACE_DEPLOYMENT_ENVIRONMENT,
+    });
+    expect(plan[0]).toEqual([
+      "node",
+      "stacks/unicas/deploy/sync-manual-tracing-secrets.mjs",
+    ]);
+    const deploy = plan.find((command) => command.includes("wrangler") && command.includes("deploy"));
+    expect(deploy).toEqual(expect.arrayContaining([
+      "--var", "UNICAS_MANUAL_TRACE_SAMPLE_RATE:0.01",
+      "--var", "UNICAS_OTLP_TRACES_ENDPOINT:https://collector.example/otlp/v1/traces",
+    ]));
+    const serializedPlan = JSON.stringify(plan);
+    expect(serializedPlan).not.toContain("synthetic-authorization");
+    expect(serializedPlan).not.toContain(TRACE_HMAC_KEYS);
+  });
+
+  test("keeps the service deployment plan dormant at an explicit zero rate", () => {
+    const plan = deploymentPlan({
+      dryRun: true,
+      environment: {
+        ...TRACE_DEPLOYMENT_ENVIRONMENT,
+        UNICAS_MANUAL_TRACE_SAMPLE_RATE: "0",
+      },
+    });
+    const serializedPlan = JSON.stringify(plan);
+    expect(serializedPlan).not.toContain("sync-manual-tracing-secrets");
+    expect(serializedPlan).not.toContain("UNICAS_OTLP_TRACES_ENDPOINT");
+    expect(serializedPlan).not.toContain("UNICAS_OTLP_AUTHORIZATION");
+    expect(serializedPlan).not.toContain("UNICAS_TRACE_HMAC_KEYS");
   });
 
   test("dry-run prints the plan without executing external commands", () => {
@@ -1035,6 +1249,7 @@ describe("standalone deployment plan", () => {
       "persist = false",
       "destinations = []",
     ].join("\n"));
+    expect(serviceConfig).toContain('UNICAS_MANUAL_TRACE_SAMPLE_RATE = "0"');
     expect(serviceConfig).not.toContain('pattern = "unicas.work"');
     expect(serviceConfig).not.toContain("docs.unicas.work");
     expect(siteConfig.routes).toEqual([{ pattern: "unicas.work", custom_domain: true }]);
