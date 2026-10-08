@@ -53,13 +53,13 @@ describe("App-user SDK npm release planner", () => {
   });
 
   test("accepts only the canonical unified-version tag", () => {
-    expect(releaseVersionFromTag("npm/app-user-sdk/v0.1.0-beta.1", matrix)).toBe("0.1.0-beta.1");
+    expect(releaseVersionFromTag("npm/app-user-sdk/v0.1.1", matrix)).toBe("0.1.1");
     for (const tag of [
-      "npm/app-user-sdk/0.1.0-beta.1",
-      "npm/codec/v0.1.0-beta.1",
+      "npm/app-user-sdk/0.1.1",
+      "npm/codec/v0.1.1",
       "npm/app-user-sdk/v0.1.0",
-      "npm/app-user-sdk/vv0.1.0-beta.1",
-      "npm/app-user-sdk/v01.0.0-beta.1",
+      "npm/app-user-sdk/vv0.1.1",
+      "npm/app-user-sdk/v01.1.0",
     ]) {
       expect(() => releaseVersionFromTag(tag, matrix), tag).toThrow();
     }
@@ -76,8 +76,8 @@ describe("App-user SDK npm release planner", () => {
     });
     expect(plan).toMatchObject({
       releaseKey: "app-user-sdk",
-      version: "0.1.0-beta.1",
-      distTag: "beta",
+      version: "0.1.1",
+      distTag: "latest",
       commit: "a".repeat(40),
     });
     expect(plan.packages.map(({ name }) => name)).toEqual(matrix.packages.map(({ name }) => name));
@@ -182,7 +182,7 @@ describe("App-user SDK npm release planner", () => {
         },
       },
       {
-        message: "registry beta tag differs",
+        message: "registry latest tag differs",
         state: {
           ...matching,
           "@unicas/codec": {
@@ -204,7 +204,7 @@ describe("App-user SDK npm release planner", () => {
     }
 
     const mixed = manifests.map((manifest, index) => index === 5
-      ? { ...manifest, version: "0.1.0-beta.2" }
+      ? { ...manifest, version: "0.1.2" }
       : manifest);
     expect(() => validatePackageSet(matrix, releaseManifest, mixed)).toThrow("source version");
   });
@@ -216,7 +216,7 @@ describe("App-user SDK npm release planner", () => {
     }, manifests)).toThrow("release manifest package names");
     expect(() => validatePackageSet(matrix, {
       ...releaseManifest,
-      version: "0.1.0-beta.2",
+      version: "0.1.2",
     }, manifests)).toThrow("version differs");
   });
 

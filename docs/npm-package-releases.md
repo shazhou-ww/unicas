@@ -19,8 +19,9 @@ All six packages use the same exact version in one release. Their internal
 `@unicas/*` dependencies use that exact version after `pnpm pack` transforms
 the maintained `workspace:*` source ranges.
 
-The first reviewed release candidate is `0.1.0-beta.1` with npm dist-tag
-`beta`. Package semver is independent from the App/Space HTTP path version,
+The first reviewed release candidate was `0.1.0-beta.1` with npm dist-tag
+`beta`. The first coherent stable release is `0.1.1` with npm dist-tag
+`latest`. Package semver is independent from the App/Space HTTP path version,
 Space capability claim version, and product maturity.
 
 ## Maintained release evidence
@@ -65,7 +66,7 @@ npm/app-user-sdk/v<version>
 For example:
 
 ```text
-npm/app-user-sdk/v0.1.0-beta.1
+npm/app-user-sdk/v0.1.1
 ```
 
 Only [`.github/workflows/publish-npm.yml`](../.github/workflows/publish-npm.yml)
@@ -121,8 +122,8 @@ pnpm verify:npm-release
 
 The command anonymously verifies exact versions, tarball SHA-512 integrity,
 exports, dependencies, the reviewed dist-tag, SLSA repository/workflow/tag/
-commit/run provenance, and bootstrap deprecation. For the first beta promotion,
-also require `latest` to match with `pnpm verify:npm-release -- --expect-latest`.
+commit/run provenance, and bootstrap deprecation. Stable releases additionally
+run `pnpm verify:npm-release -- --expect-latest`.
 It then installs only the registry packages into a temporary no-token consumer,
 typechecks shipped declarations, runs the Node and real-Chrome smoke checks, and
 audits npm registry signatures and attestations.
