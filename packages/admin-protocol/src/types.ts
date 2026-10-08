@@ -132,6 +132,19 @@ export interface AppUsage {
   readonly leasedNodeCount: number;
 }
 
+export interface AppGcRequest {
+  readonly cursor?: string;
+}
+
+export interface AppGcResult {
+  readonly spacesExamined: number;
+  readonly spacesWithDeletions: number;
+  readonly nodesExamined: number;
+  readonly nodesDeleted: number;
+  readonly reclaimedContentBytes: number;
+  readonly nextCursor: string | null;
+}
+
 export interface AppMembership {
   readonly appId: AppId;
   readonly account: AccountSummary;

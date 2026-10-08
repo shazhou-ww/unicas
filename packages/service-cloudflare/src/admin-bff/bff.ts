@@ -14,6 +14,7 @@ import {
   formatCasAdminETag,
   matchAppAdminRoute,
   matchPlatformAdminRoute,
+  AppGcRequestSchema,
   PatchAppRequestSchema,
   PatchAccountProfileSchema,
   AppInvitationQuerySchema,
@@ -28,12 +29,13 @@ import type {
 import type {
   ControlSessionRepository,
   AccountRepository,
+  AppGarbageCollector,
   AppUsageRepository,
   OAuthDiscoveryPort,
   EmailChallengeRepository,
   PlatformInvitationRepository,
 } from "@unicas/service";
-import { AccountService, AccountServiceError, AppUsageUnavailableError, EMAIL_CHALLENGE_TTL_MS, EmailChallengeError, EmailChallengeService, PlatformAccessError, PlatformInvitationService, ProviderRegistry, readAppUsage, sha256Hex } from "@unicas/service";
+import { AccountService, AccountServiceError, AppGcError, AppUsageUnavailableError, EMAIL_CHALLENGE_TTL_MS, EmailChallengeError, EmailChallengeService, PlatformAccessError, PlatformInvitationService, ProviderRegistry, readAppUsage, sha256Hex } from "@unicas/service";
 import type { AccountResolution, AuthenticatedProviderResult, ProviderAdapter } from "@unicas/service";
 import { requireInvitationEmailEvidence } from "@unicas/service";
 import type { AdminBffConfig } from "./config.js";
@@ -91,6 +93,7 @@ export interface CreateAdminBffOptions {
   readonly peopleRepository?: PeopleRepository;
   readonly providerRegistry?: ProviderRegistry;
   readonly accountRepository?: AccountRepository;
+  readonly appGarbageCollector?: AppGarbageCollector;
   readonly appUsageRepository?: AppUsageRepository;
   readonly oauthDiscovery?: OAuthDiscoveryPort;
   readonly oauthResourcePublicOrigin?: string;
@@ -296,6 +299,9 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     }
     if (appRoute?.operation === "getUsage") {
       return handleAccountAppUsage(request, appRoute.appId);
+    }
+    if (appRoute?.operation === "runGc") {
+      return handleAccountAppGc(request, appRoute.appId);
     }
     if (appRoute?.operation === "listMembers" || appRoute?.operation === "deleteMember") {
       return handleAccountAppMembers(request, url, appRoute.appId, appRoute.operation);
@@ -1788,6 +1794,59 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       }
       logUnexpectedError({ event: "unicas_app_usage_read_failed" }, error);
       return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "App usage is unavailable");
+    }
+  }
+
+  async function handleAccountAppGc(request: Request, appId: string): Promise<Response> {
+    const auth = await requireAuthenticated(request);
+    if (auth instanceof Response) return auth;
+    if (!accountService || !auth.payload.accountId || !auth.payload.externalIdentityId) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "App garbage collection is unavailable");
+    }
+    if (!(await passCsrf(request, auth.payload))) return csrfRejected();
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return invalidRequest("A JSON request body is required");
+    }
+    const parsed = AppGcRequestSchema.safeParse(body);
+    if (!parsed.success) return invalidRequest("The garbage-collection request is invalid");
+    if (!options.appGarbageCollector) {
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "App garbage collection is unavailable");
+    }
+    try {
+      await accountService.recordAppGcRequest({
+        actorAccountId: auth.payload.accountId,
+        actorExternalIdentityId: auth.payload.externalIdentityId,
+        appId,
+        requestId: request.headers.get("X-Request-Id") ?? undefined,
+        traceId: request.headers.get("X-Trace-Id") ?? undefined,
+        callerChannel: "admin-webui",
+      });
+      return json(await options.appGarbageCollector.collect({
+        appId,
+        cursor: parsed.data.cursor,
+      }), 200);
+    } catch (error) {
+      if (error instanceof AccountServiceError) {
+        if (error.code === "ACCOUNT_BLOCKED") {
+          await sessionStore.delete(auth.sessionId);
+          return adminErrorResponse(CasAdminErrorCodes.ADMIN_AUTH_REQUIRED, "login required");
+        }
+        return json(
+          { error: error.code },
+          error.code === "APP_MEMBERSHIP_REQUIRED" ? 403 : 503,
+        );
+      }
+      if (error instanceof AppGcError) {
+        return adminErrorResponse(
+          error.code === "INVALID_CURSOR" ? CasAdminErrorCodes.INVALID_CURSOR : CasAdminErrorCodes.SERVICE_UNAVAILABLE,
+          error.message,
+        );
+      }
+      logUnexpectedError({ event: "unicas_admin_request_failed" }, error);
+      return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, "App garbage collection failed");
     }
   }
 

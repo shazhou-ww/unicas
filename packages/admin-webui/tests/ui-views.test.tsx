@@ -613,10 +613,65 @@ describe("UsageView", () => {
     expect(screen.getByText("64 MiB")).toBeVisible();
     expect(screen.getByText("18,420")).toBeVisible();
     expect(screen.getByRole("button", { name: "Refresh usage" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Run garbage collection" })).toBeVisible();
     expect(fetchMock).toHaveBeenCalledWith(
       `/admin/apps/${STACK}/usage`,
       expect.objectContaining({ headers: expect.any(Headers) }),
     );
+  });
+
+  test("confirms a bounded garbage-collection pass, reports the result, and refreshes usage", async () => {
+    fetchMock
+      .mockResolvedValueOnce(json(usage))
+      .mockResolvedValueOnce(json({
+        spacesExamined: 2,
+        spacesWithDeletions: 1,
+        nodesExamined: 12,
+        nodesDeleted: 10,
+        reclaimedContentBytes: 1024,
+        nextCursor: null,
+      }))
+      .mockResolvedValueOnce(json({ ...usage, nodeCount: usage.nodeCount - 10 }));
+    const user = userEvent.setup();
+    render(<UsageView appId={STACK} />);
+    await screen.findByText("18,420");
+
+    await user.click(screen.getByRole("button", { name: "Run garbage collection" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("no Root Ref");
+    expect(screen.getByRole("dialog")).toHaveTextContent("protection lease has expired");
+    await user.click(screen.getByRole("button", { name: "Run GC pass" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Deleted 10 nodes from 1 Space");
+    expect(screen.getByRole("status")).toHaveTextContent("Released 1 KiB of logical content");
+    expect(screen.getByRole("button", { name: "Run another pass" })).toBeVisible();
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      `/admin/apps/${STACK}/gc`,
+      expect.objectContaining({ method: "POST", body: "{}" }),
+    );
+    const gcHeaders = fetchMock.mock.calls[1]![1]!.headers as Headers;
+    expect(gcHeaders.get("X-CSRF-Token")).toBe("csrf-1");
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      `/admin/apps/${STACK}/usage`,
+      expect.objectContaining({ headers: expect.any(Headers) }),
+    );
+  });
+
+  test("keeps the GC confirmation open and surfaces a failed pass", async () => {
+    fetchMock
+      .mockResolvedValueOnce(json(usage))
+      .mockResolvedValueOnce(json({ error: "SERVICE_UNAVAILABLE", message: "Garbage collection is unavailable" }, 503));
+    const user = userEvent.setup();
+    render(<UsageView appId={STACK} />);
+    await screen.findByText("18,420");
+
+    await user.click(screen.getByRole("button", { name: "Run garbage collection" }));
+    await user.click(screen.getByRole("button", { name: "Run GC pass" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Garbage collection is unavailable");
+    expect(screen.getByRole("dialog")).toBeVisible();
+    expect(screen.getByText("1.8 GiB")).toBeVisible();
   });
 
   test("keeps current values visible while refreshing and reports a refresh error", async () => {

@@ -12,6 +12,7 @@ import type {
   EmailChallengeRepository,
   AccountRecord,
   AccountRepository,
+  AppGarbageCollector,
   AppUsageProjection,
   AppUsageRepository,
   OAuthDiscoveryPort,
@@ -23,7 +24,7 @@ import type {
   StoredPlatformInvitation,
   StoredSession,
 } from "@unicas/service";
-import { ProviderRegistry, sha256Hex } from "@unicas/service";
+import { AppGcError, ProviderRegistry, sha256Hex } from "@unicas/service";
 import { createAdminBff, OidcClient, SessionCrypto, uiAssets } from "../src/admin-bff/index.js";
 import type { AdminBffConfig } from "../src/admin-bff/config.js";
 
@@ -749,6 +750,15 @@ function memoryAccountRepository(
         ? "recorded"
         : "account-unavailable";
     },
+    appendAccountAppGcAudit: async input => {
+      const identity = identities.get(input.actorExternalIdentityId);
+      const app = fakeStacks.get(input.appId);
+      return identity?.accountId === input.actorAccountId
+        && identity.unlinkedAt === null
+        && app?.members.has(`${identity.issuer}\n${identity.subject}`)
+        ? "recorded"
+        : "actor-not-member";
+    },
     commitPatchAccountApp: async input => {
       const identity = identities.get(input.actorExternalIdentityId);
       const app = fakeStacks.get(input.app.appId);
@@ -835,6 +845,7 @@ async function createBff(
   accountRepository?: AccountRepository,
   oauthDiscovery?: OAuthDiscoveryPort,
   appUsageRepository?: AppUsageRepository,
+  appGarbageCollector?: AppGarbageCollector,
 ): Promise<(request: Request) => Promise<Response>> {
   const providerFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? new URL(input) : input instanceof URL ? input : new URL(input.url);
@@ -892,6 +903,7 @@ async function createBff(
     platformInvitationRepository,
     peopleRepository,
     accountRepository: accountRepository ?? memoryAccountRepository(accountPlatform, "google-user-123"),
+    appGarbageCollector,
     appUsageRepository,
     oauthDiscovery,
   });
@@ -2293,6 +2305,84 @@ describe("cas-admin-webui BFF", () => {
     const unavailable = await authRequest(bff, `/admin/apps/${appId}/usage`, cookie);
     expect(unavailable.status).toBe(503);
     expect(await unavailable.json()).toMatchObject({ error: "SERVICE_UNAVAILABLE" });
+  });
+
+  test("App garbage collection requires CSRF and membership, records the request, and returns a bounded result", async () => {
+    const provider = await createMockProvider();
+    const platform = new MemoryPlatformAccessRepository();
+    platform.grant(ISSUER, "google-user-123");
+    const accounts = memoryAccountRepository(platform, "google-user-123");
+    const appendAudit = vi.spyOn(accounts, "appendAccountAppGcAudit");
+    const collect = vi.fn(async () => ({
+      spacesExamined: 2,
+      spacesWithDeletions: 1,
+      nodesExamined: 12,
+      nodesDeleted: 10,
+      reclaimedContentBytes: 1024,
+      nextCursor: "next-gc",
+    }));
+    const bff = await createBff(
+      provider,
+      undefined,
+      {},
+      platform,
+      fakeControlPlane(),
+      undefined,
+      undefined,
+      undefined,
+      accounts,
+      undefined,
+      undefined,
+      { collect },
+    );
+    const { cookie, csrf } = await signIn(bff, provider);
+    const appId = await createStack(bff, cookie, csrf, "GC App");
+
+    const missingCsrf = await authRequest(bff, `/admin/apps/${appId}/gc`, cookie, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    expect(missingCsrf.status).toBe(403);
+    expect(collect).not.toHaveBeenCalled();
+
+    const response = await authRequest(bff, `/admin/apps/${appId}/gc`, cookie, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf, "X-Request-Id": "request-gc" },
+      body: JSON.stringify({ cursor: "cursor-a" }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      spacesExamined: 2,
+      spacesWithDeletions: 1,
+      nodesExamined: 12,
+      nodesDeleted: 10,
+      reclaimedContentBytes: 1024,
+      nextCursor: "next-gc",
+    });
+    expect(collect).toHaveBeenCalledWith({ appId, cursor: "cursor-a" });
+    expect(appendAudit).toHaveBeenCalledWith(expect.objectContaining({
+      appId,
+      requestId: "request-gc",
+      callerChannel: "admin-webui",
+    }));
+
+    const denied = await authRequest(bff, "/admin/apps/not-a-member/gc", cookie, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+      body: "{}",
+    });
+    expect(denied.status).toBe(403);
+    expect(collect).toHaveBeenCalledTimes(1);
+
+    collect.mockRejectedValueOnce(new AppGcError("INVALID_CURSOR", "invalid cursor") as never);
+    const invalidCursor = await authRequest(bff, `/admin/apps/${appId}/gc`, cookie, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+      body: "{}",
+    });
+    expect(invalidCursor.status).toBe(400);
+    expect(await invalidCursor.json()).toMatchObject({ error: "INVALID_CURSOR" });
   });
 
   test("email-bound App invitation grants only exact acceptance, then rotates to a full membership session", async () => {

@@ -14,6 +14,7 @@ import {
   AppSpaceCapabilityVerifier,
   createUniCasService,
   matchUniCasServiceRoute,
+  runAppGarbageCollection,
   type BlobStore,
   type KeyedActorPort,
   type ServicePlatform,
@@ -34,6 +35,7 @@ import { D1PeopleRepository } from "./people-repository.js";
 import { D1AccountRepository } from "./account-repository.js";
 import { D1EmailChallengeRepository } from "./email-challenge-repository.js";
 import { CloudflareAppUsageRepository } from "./app-usage.js";
+import { CloudflareAppGcRepository } from "./app-gc.js";
 import { CloudflareEmailChallengeSender } from "./email-challenge-sender.js";
 import { CloudflareOAuthDiscoveryPort } from "./oauth-discovery.js";
 import {
@@ -488,6 +490,16 @@ async function buildAdminHandler(
     platformInvitationRepository,
     peopleRepository: new D1PeopleRepository(env.CAS_CONTROL_DB),
     accountRepository,
+    appGarbageCollector: {
+      async collect(input) {
+        await ensureSpaceSchema(env);
+        return runAppGarbageCollection({
+          repository: new CloudflareAppGcRepository(env.CAS_DB),
+          spaceActors: keyedActorPort(env.CAS_DO, "space", env),
+          ...input,
+        });
+      },
+    },
     appUsageRepository: {
       async readAppUsage(appId) {
         await ensureSpaceSchema(env);

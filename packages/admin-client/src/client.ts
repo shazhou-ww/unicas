@@ -11,6 +11,7 @@
 import {
   appAdminRoutes,
   AppAdminMeResponseSchema,
+  AppGcResultSchema,
   AppUsageSchema,
   CasAdminETagHeader,
   CasAdminIdempotencyKeyHeader,
@@ -34,6 +35,8 @@ import type {
   App,
   AppAdminMeResponse,
   AppControlAuditEvent,
+  AppGcRequest,
+  AppGcResult,
   AppId,
   AppMemberInvitation,
   AppMembership,
@@ -76,6 +79,7 @@ export interface AdminClient {
   ): Promise<AdminClientRead<{ readonly appId: AppId }>>;
   getApp(path: { readonly appId: AppId }): Promise<AdminClientRead<App>>;
   getAppUsage(path: { readonly appId: AppId }): Promise<AppUsage>;
+  runAppGc(path: { readonly appId: AppId }, body?: AppGcRequest): Promise<AppGcResult>;
   patchApp(
     path: { readonly appId: AppId },
     body: { readonly displayName?: string; readonly description?: string; readonly status?: App["status"] },
@@ -316,6 +320,23 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
       const parsed = AppUsageSchema.safeParse(body);
       if (!parsed.success) {
         throw new AdminClientError(502, "ADMIN_CONTRACT_MISMATCH", "App usage response was invalid");
+      }
+      return parsed.data;
+    },
+
+    async runAppGc(path, body = {}) {
+      const response = await requireOk(
+        await request(appAdminRoutes.gc(path), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+        "runAppGc",
+      );
+      const responseBody: unknown = await response.json();
+      const parsed = AppGcResultSchema.safeParse(responseBody);
+      if (!parsed.success) {
+        throw new AdminClientError(502, "ADMIN_CONTRACT_MISMATCH", "App garbage-collection response was invalid");
       }
       return parsed.data;
     },

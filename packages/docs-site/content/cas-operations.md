@@ -343,6 +343,26 @@ SERVICE_UNAVAILABLE` means at least one node has not completed observation or
 the accounting store is unavailable; retry after reconciliation advances. Do
 not treat it as zero usage.
 
+The Console Usage card also exposes an App-member recovery action:
+
+```http
+POST /admin/apps/{appId}/gc
+Cookie: cas_admin_session=<HttpOnly OIDC-backed session>
+X-CSRF-Token: <session token>
+Content-Type: application/json
+
+{}
+```
+
+The action records `app.gc.requested` in the control audit log, enumerates a
+bounded keyset page of usage-bearing Spaces, and dispatches each Space through
+its normal keyed mutation actor. It never bypasses the Space GC eligibility
+checks: only nodes with zero Root Refs, zero child references, and an expired
+lease may be deleted. One request has fixed Space and per-Space node budgets
+and may return a `nextCursor`; repeat with that cursor to finish the current
+App sweep. Run another sweep after deletions because removing parents can make
+their children eligible in a later pass.
+
 ### Rollback
 
 Wrangler retains prior versions. Inspect each unit that may have changed and

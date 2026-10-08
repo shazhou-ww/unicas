@@ -9,6 +9,8 @@ export type {
   App,
   AppAdminMeResponse,
   AppControlAuditEvent,
+  AppGcRequest,
+  AppGcResult,
   AppMemberInvitation,
   AppMemberInvitationStatus,
   AppMembership,
@@ -44,6 +46,8 @@ export {
   AccountSelfSchema,
   AccountSummarySchema,
   AppControlAuditEventSchema,
+  AppGcRequestSchema,
+  AppGcResultSchema,
   AppMemberInvitationSchema,
   AppMembershipSchema,
   AppOAuthIssuerInspectionSchema,
@@ -82,6 +86,7 @@ export {
   AppIssuerPreconditionSchema,
   appAdminApiContract,
   getAppUsageContract,
+  runAppGcContract,
 } from "./app-v2-contract.js";
 export type { AppAdminApiContract } from "./app-v2-contract.js";
 export { AppAdminMeResponseSchema } from "./app-v2-contract.js";

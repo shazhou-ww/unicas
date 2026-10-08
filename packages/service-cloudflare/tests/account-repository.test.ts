@@ -26,6 +26,47 @@ async function fixture() {
 }
 
 describe("D1 Account repository", () => {
+  test("records an App GC request only for a current member identity", async () => {
+    const { db, service } = await fixture();
+    const created = await service.createForExternalIdentity({
+      provider: "google",
+      issuer: "https://accounts.google.com",
+      subject: "gc-admin",
+    });
+    await db.prepare(
+      "INSERT INTO cas_apps (app_id, display_name, description, status, created_at, revision) VALUES ('app-gc', 'GC App', '', 'active', 1, 1)",
+    ).run();
+    await db.prepare(
+      "INSERT INTO cas_app_members (app_id, account_id, joined_at) VALUES ('app-gc', ?, 1)",
+    ).bind(created.account.accountId).run();
+
+    await service.recordAppGcRequest({
+      actorAccountId: created.account.accountId,
+      actorExternalIdentityId: created.authenticatedIdentity.externalIdentityId,
+      appId: "app-gc",
+      requestId: "request-gc",
+      callerChannel: "admin-webui",
+    });
+    expect(await db.prepare(
+      "SELECT app_id, action, target, request_id, caller_channel FROM cas_control_audit_events WHERE action = 'app.gc.requested'",
+    ).first()).toEqual({
+      app_id: "app-gc",
+      action: "app.gc.requested",
+      target: "app-gc",
+      request_id: "request-gc",
+      caller_channel: "admin-webui",
+    });
+
+    await db.prepare(
+      "DELETE FROM cas_app_members WHERE app_id = 'app-gc' AND account_id = ?",
+    ).bind(created.account.accountId).run();
+    await expect(service.recordAppGcRequest({
+      actorAccountId: created.account.accountId,
+      actorExternalIdentityId: created.authenticatedIdentity.externalIdentityId,
+      appId: "app-gc",
+    })).rejects.toMatchObject({ code: "APP_MEMBERSHIP_REQUIRED" });
+  });
+
   test("creates and resolves one Account for an exact external identity", async () => {
     const { db, service } = await fixture();
     const created = await service.createForExternalIdentity({

@@ -295,6 +295,18 @@ export interface AccountRepository {
     readonly callerChannel?: string;
     readonly now: number;
   }): Promise<"recorded" | "account-unavailable">;
+  appendAccountAppGcAudit(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly appId: AppId;
+    readonly eventId: string;
+    readonly requestId?: string;
+    readonly traceId?: string;
+    readonly callerChannel?: string;
+    readonly oauthClientHandle?: string;
+    readonly toolName?: string;
+    readonly now: number;
+  }): Promise<"recorded" | "actor-not-member">;
   commitPatchAccountApp(input: {
     readonly actorAccountId: AccountId;
     readonly actorExternalIdentityId: string;
@@ -1106,6 +1118,28 @@ export class AccountService {
       now: this.now(),
     });
     if (result !== "recorded") throw new AccountServiceError("ACCOUNT_NOT_FOUND");
+  }
+
+  async recordAppGcRequest(input: {
+    readonly actorAccountId: AccountId;
+    readonly actorExternalIdentityId: string;
+    readonly appId: AppId;
+    readonly requestId?: string;
+    readonly traceId?: string;
+    readonly callerChannel?: string;
+    readonly oauthClientHandle?: string;
+    readonly toolName?: string;
+  }): Promise<void> {
+    const actor = await this.#resolveCanonicalAccount(input.actorAccountId);
+    this.#requireUsableAccount(actor);
+    await this.requireActiveIdentity(actor.accountId, input.actorExternalIdentityId);
+    const result = await this.repository.appendAccountAppGcAudit({
+      ...input,
+      actorAccountId: actor.accountId,
+      eventId: generateEventId(),
+      now: this.now(),
+    });
+    if (result !== "recorded") throw new AccountServiceError("APP_MEMBERSHIP_REQUIRED");
   }
 
   async revokeAppMemberInvitation(input: {

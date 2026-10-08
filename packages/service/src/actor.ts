@@ -209,7 +209,7 @@ async function dispatchDataRequest(
   ));
 }
 
-function canonicalActorKey(appId: string, component: string): string {
+export function canonicalActorKey(appId: string, component: string): string {
   if (appId.length === 0 || component.length === 0) {
     throw new TypeError("actor key parts must not be empty");
   }

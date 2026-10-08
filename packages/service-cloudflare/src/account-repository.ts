@@ -806,6 +806,47 @@ export class D1AccountRepository implements AccountRepository {
     return (result.meta.changes ?? 0) === 1 ? "recorded" : "account-unavailable";
   }
 
+  async appendAccountAppGcAudit(
+    input: Parameters<AccountRepository["appendAccountAppGcAudit"]>[0],
+  ): Promise<"recorded" | "actor-not-member"> {
+    const result = await this.db.prepare(
+      `INSERT INTO cas_control_audit_events
+        (event_id, app_id, action, target, request_id,
+         trace_id, caller_channel, oauth_client_handle, tool_name, created_at,
+         original_account_id, external_identity_id, target_account_id)
+       SELECT ?, ?, 'app.gc.requested', ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL
+       FROM cas_external_identities AS identity
+       WHERE identity.external_identity_id = ? AND identity.account_id = ?
+         AND identity.unlinked_at IS NULL
+         AND EXISTS (
+           SELECT 1 FROM cas_accounts
+           WHERE account_id = ? AND blocked_at IS NULL
+         )
+         AND EXISTS (
+           SELECT 1 FROM cas_app_members
+           WHERE app_id = ? AND account_id = ?
+         )`,
+    ).bind(
+      input.eventId,
+      input.appId,
+      input.appId,
+      input.requestId ?? null,
+      input.traceId ?? null,
+      input.callerChannel ?? null,
+      input.oauthClientHandle ?? null,
+      input.toolName ?? null,
+      input.now,
+      input.actorAccountId,
+      input.actorExternalIdentityId,
+      input.actorExternalIdentityId,
+      input.actorAccountId,
+      input.actorAccountId,
+      input.appId,
+      input.actorAccountId,
+    ).run();
+    return (result.meta.changes ?? 0) === 1 ? "recorded" : "actor-not-member";
+  }
+
   async commitPatchAccountApp(
     input: Parameters<AccountRepository["commitPatchAccountApp"]>[0],
   ): Promise<"updated" | "actor-not-member" | "not-found" | "revision-mismatch"> {

@@ -15,6 +15,7 @@ const handlers = vi.hoisted(() => ({
   pruneSessions: vi.fn(async () => 0),
   reconcileUsage: vi.fn(async () => ({ examined: 0, observed: 0, missing: 0, failed: 0, backfill: false })),
   repairUsage: vi.fn(async () => false),
+  listGcSpaces: vi.fn(async () => []),
   readAppUsage: vi.fn(async () => ({
     nodeCount: 0,
     readyContentBytes: 0,
@@ -55,6 +56,9 @@ vi.mock("../src/usage-reconciliation.js", () => ({
 }));
 vi.mock("../src/app-usage.js", () => ({
   CloudflareAppUsageRepository: class { readAppUsage = handlers.readAppUsage; },
+}));
+vi.mock("../src/app-gc.js", () => ({
+  CloudflareAppGcRepository: class { listUsageBearingSpaceIds = handlers.listGcSpaces; },
 }));
 vi.mock("@unicas/service", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@unicas/service")>();
@@ -346,11 +350,21 @@ describe("service-cloudflare public routing", () => {
     expect(handlers.migrate).not.toHaveBeenCalled();
 
     const options = vi.mocked(createAdminBff).mock.calls.at(-1)![0] as {
+      appGarbageCollector: { collect(input: { appId: string; cursor?: string }): Promise<unknown> };
       appUsageRepository: { readAppUsage(appId: string): Promise<unknown> };
     };
     await options.appUsageRepository.readAppUsage("app-1");
     expect(handlers.migrate).toHaveBeenCalledOnce();
     expect(handlers.readAppUsage).toHaveBeenCalledWith("app-1");
+    await expect(options.appGarbageCollector.collect({ appId: "app-1" })).resolves.toMatchObject({
+      spacesExamined: 0,
+      nodesDeleted: 0,
+    });
+    expect(handlers.listGcSpaces).toHaveBeenCalledWith({
+      appId: "app-1",
+      afterSpaceId: "",
+      limit: 21,
+    });
   });
 
   test("retries control schema initialization after a failed admin dispatch", async () => {

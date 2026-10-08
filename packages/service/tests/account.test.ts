@@ -65,6 +65,7 @@ function fixture() {
     getAccountAppInvitationByTokenHash: vi.fn(async () => null),
     commitAcceptAccountAppInvitation: vi.fn(async () => "accepted"),
     appendAccountSessionAudit: vi.fn(async () => "recorded"),
+    appendAccountAppGcAudit: vi.fn(async () => "recorded"),
     commitPatchAccountApp: vi.fn(async () => "updated"),
     getAccountAppIdempotency: vi.fn(async () => null),
     commitCreateAccountApp: vi.fn(async () => "created"),
@@ -86,6 +87,25 @@ function fixture() {
 }
 
 describe("Account service", () => {
+  test("records an authenticated App GC request for an active member", async () => {
+    const { repository, service } = fixture();
+    await service.recordAppGcRequest({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      appId: "app-a",
+      requestId: "request-a",
+      callerChannel: "admin-webui",
+    });
+    expect(repository.appendAccountAppGcAudit).toHaveBeenCalledWith(expect.objectContaining({
+      actorAccountId: accountId,
+      actorExternalIdentityId: identity.externalIdentityId,
+      appId: "app-a",
+      requestId: "request-a",
+      callerChannel: "admin-webui",
+      now: 1000,
+    }));
+  });
+
   test("resolves an exact active identity without using email", async () => {
     const { repository, service } = fixture();
     await expect(service.resolveExternalIdentity(identity.issuer, identity.subject)).resolves.toMatchObject({

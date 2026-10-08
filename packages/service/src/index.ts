@@ -149,6 +149,17 @@ export type {
   AppUsageProjection,
   AppUsageRepository,
 } from "./app-usage.js";
+export {
+  AppGcError,
+  DEFAULT_APP_GC_MAX_NODES_PER_SPACE,
+  DEFAULT_APP_GC_MAX_SPACES,
+  runAppGarbageCollection,
+} from "./app-gc.js";
+export type {
+  AppGarbageCollector,
+  AppGcErrorCode,
+  AppGcSpaceRepository,
+} from "./app-gc.js";
 export { NodeOpError, NodeOpErrorCodes } from "./node-errors.js";
 export type { NodeOpErrorCode } from "./node-errors.js";
 export {

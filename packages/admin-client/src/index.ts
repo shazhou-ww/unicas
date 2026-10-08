@@ -27,6 +27,8 @@ export type {
   App,
   AppAdminMeResponse,
   AppControlAuditEvent,
+  AppGcRequest,
+  AppGcResult,
   AppId,
   AppMemberInvitation,
   AppMembership,

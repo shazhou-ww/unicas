@@ -32,6 +32,7 @@ const actionNames: Partial<Record<string, string>> = {
   "app.created": "App created",
   "app.suspended": "App suspended",
   "app.restored": "App restored",
+  "app.gc.requested": "Garbage collection requested",
   "stack.created": "App created",
   "stack.patched": "App settings changed",
   "member.invited": "Member invited",
