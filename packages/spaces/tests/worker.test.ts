@@ -117,6 +117,54 @@ describe("Spaces Worker", () => {
     expect(r2Request.headers.get("X-Trace-Id")).toBeNull();
   });
 
+  test("returns bounded outer and allowlisted downstream Server-Timing", async () => {
+    const { env } = await fixture();
+    const repository = new SpacesRepository(env.SPACES_DB);
+    const issued = await repository.createSession("principal-a", 60_000);
+    const worker = createSpacesWorker({
+      fetchImpl: async () => new Response(null, {
+        status: 204,
+        headers: {
+          "Server-Timing": 'cas_auth;dur=4.5;desc="sensitive", dynamic_id;dur=99, cas_d1_node;dur=2.0',
+        },
+      }),
+      createFileService: async (input) => ({
+        list: async () => input.timing!.time("spaces_root", () =>
+          input.timing!.time("spaces_manifest", async () => {
+            await input.fetcher!.fetch(
+              "https://api.example.test/v1/apps/app-a/spaces/space-a/cas/nodes/hash/content",
+            );
+            return { path: "/", revision: 1, entries: [] };
+          })),
+        createFolder: vi.fn(),
+        uploadFile: vi.fn(),
+        renameFile: vi.fn(),
+        deleteFile: vi.fn(),
+        download: vi.fn(),
+        cleanupPaths: vi.fn(),
+        ensureSmokeRoot: vi.fn(),
+        releaseSmokeRoot: vi.fn(),
+        reconcilePendingReleases: vi.fn(),
+      }),
+    });
+
+    const response = await worker.fetch(new Request("https://spaces.example.test/api/entries", {
+      headers: { Cookie: `${SessionCookieName}=${issued.sessionId}` },
+    }), env);
+    const header = response.headers.get("Server-Timing") ?? "";
+
+    expect(response.status).toBe(200);
+    expect(header).toContain("spaces_session;dur=");
+    expect(header).toContain("spaces_root;dur=");
+    expect(header).toContain("spaces_manifest;dur=");
+    expect(header).toContain("spaces_unicas;dur=");
+    expect(header).toContain("cas_auth;dur=4.5");
+    expect(header).toContain("cas_d1_node;dur=2.0");
+    expect(header).not.toContain("sensitive");
+    expect(header).not.toContain("dynamic_id");
+    expect(response.headers.get("Timing-Allow-Origin")).toBe("*");
+  });
+
   test("propagates a signed fetch parent only to UniCAS", async () => {
     const { env } = await fixture();
     const repository = new SpacesRepository(env.SPACES_DB);

@@ -30,6 +30,7 @@ import {
 import { SpacesRepository, type AuthenticatedSession, type PrincipalContext } from "./repository.js";
 import { verifySmokeIsolation, type IsolationEvidence } from "./smoke-probe.js";
 import { logSpacesEvent, traceCleanupRun } from "./observability.js";
+import { SpacesServerTiming } from "./timing.js";
 import {
   createConfiguredManualTraceSession,
   createInternalTraceAudience,
@@ -103,6 +104,7 @@ export function createSpacesWorker(dependencies: SpacesWorkerDependencies = {}):
       const url = new URL(request.url);
       if (!isReservedPath(url.pathname)) return env.ASSETS.fetch(request);
       const correlationId = request.headers.get("X-Request-Id") || crypto.randomUUID();
+      const timing = new SpacesServerTiming();
       let traceSession: ManualTraceSession | undefined;
       try {
         const config = readSpacesConfig(env);
@@ -116,7 +118,8 @@ export function createSpacesWorker(dependencies: SpacesWorkerDependencies = {}):
             rootSpanName: "spaces.request",
             rootAttributes: { "unicas.operation": spacesOperation(request.method, url.pathname) },
           });
-          const finish = (response: Response) => finishSpacesTrace(response, traceSession!, context);
+          const finish = (response: Response) =>
+            finishSpacesTrace(timing.decorate(response), traceSession!, context);
           const providerFetch = traceAwareProviderFetch(
             fetchImpl,
             config.google.discoveryUrl,
@@ -153,11 +156,12 @@ export function createSpacesWorker(dependencies: SpacesWorkerDependencies = {}):
               config.capability.unicasBaseUrl,
               traceSession,
               env.UNICAS_TRACE_HMAC_KEYS,
+              timing,
             ),
           ));
         }
 
-        const session = await requireSession(request, repository);
+        const session = await timing.time("spaces_session", () => requireSession(request, repository));
         traceSession = await traceSessionFactory({
           environment: env,
           requestedTraceId: request.headers.get(TraceIdHeader),
@@ -166,12 +170,14 @@ export function createSpacesWorker(dependencies: SpacesWorkerDependencies = {}):
           rootSpanName: "spaces.request",
           rootAttributes: { "unicas.operation": spacesOperation(request.method, url.pathname) },
         });
-        const finish = (response: Response) => finishSpacesTrace(response, traceSession!, context);
+        const finish = (response: Response) =>
+          finishSpacesTrace(timing.decorate(response), traceSession!, context);
         const tracedFetch = traceAwareUniCasFetch(
           fetchImpl,
           config.capability.unicasBaseUrl,
           traceSession,
           env.UNICAS_TRACE_HMAC_KEYS,
+          timing,
         );
         if (request.method === "POST" && url.pathname === "/auth/logout") {
           if (!await passesMutationProtection(request, config.publicOrigin, session, repository)) {
@@ -206,6 +212,7 @@ export function createSpacesWorker(dependencies: SpacesWorkerDependencies = {}):
           access: request.method === "GET" ? ["read"] : ["read", "write"],
           maximumUploadBytes: config.maximumUploadBytes,
           fetcher: { fetch: tracedFetch },
+          timing,
         });
         if (request.method === "GET" && url.pathname === "/api/entries") {
           return finish(json(await fileService.list(url.searchParams.get("path") ?? "/"), 200));
@@ -310,7 +317,9 @@ export function createSpacesWorker(dependencies: SpacesWorkerDependencies = {}):
           code: response.code,
           status: response.status,
         });
-        const errorResult = errorResponse(response.code, response.status, response.message, correlationId);
+        const errorResult = timing.decorate(
+          errorResponse(response.code, response.status, response.message, correlationId),
+        );
         return traceSession
           ? finishSpacesTrace(errorResult, traceSession, context)
           : errorResult;
@@ -429,6 +438,7 @@ function traceAwareUniCasFetch(
   unicasBaseUrl: string,
   traceSession: ManualTraceSession,
   traceHmacKeys: string | undefined,
+  timing?: SpacesServerTiming,
 ): typeof fetch {
   const unicasOrigin = new URL(unicasBaseUrl).origin;
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -453,7 +463,12 @@ function traceAwareUniCasFetch(
         ).catch(() => null)
         : null;
       if (internalContext) headers.set(InternalTraceContextHeader, internalContext);
-      return finishTracedFetch(span, new Request(request, { headers }), fetchImpl);
+      const execute = async () => {
+        const response = await finishTracedFetch(span, new Request(request, { headers }), fetchImpl);
+        timing?.absorbDownstream(response.headers.get("Server-Timing"));
+        return response;
+      };
+      return timing ? timing.time("spaces_unicas", execute) : execute();
     });
   }) as typeof fetch;
 }

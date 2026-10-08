@@ -64,8 +64,10 @@ Overshooting end positions are clamped to the object size.
 - Invalid or unsatisfiable ranges return `416` and
   `Content-Range: bytes */{size}`.
 
-Both successful forms return `Accept-Ranges: bytes`, `Content-Length`, and the
-node's `Content-Type`. A `206` also returns
+Both successful forms return `Accept-Ranges: bytes`, `Content-Length`, the
+node's `Content-Type`, and `X-CAS-Refs`. `X-CAS-Refs` is an ordered,
+comma-separated list of zero to 256 lowercase child digests; an empty node
+uses an empty header value. A `206` also returns
 `Content-Range: bytes {start}-{end}/{size}`. This path does not emit an
 `ETag`. The `416` JSON body is:
 
@@ -80,6 +82,13 @@ The public client exposes
 `readContent(hash, { offset, length }?, { signal }?)`. A zero-length client
 range returns an empty stream without making a request. Range offset and length
 must be non-negative safe integers.
+
+When immutable metadata and the complete content are both needed, use
+`readNode(hash, { signal }?)`. It makes one authorized content request and
+returns `{ metadata, content }`, deriving `size`, `contentType`, and ordered
+`refs` from the response headers. Use `readMetadata` separately only when the
+mutable lease or Root Ref state is required, or when a configured metadata
+cache is intentionally preferred.
 
 This read is repeatable. Use bounded retries only for transient failures and
 honor cancellation.

@@ -70,10 +70,14 @@ The deployment script writes secrets to `.wrangler/spaces/secrets.json` with
 owner-only permissions, passes that file to Wrangler, and deletes it in a
 `finally` path. The generated Wrangler config contains only non-secret values.
 
-Dynamic `/api`, `/auth`, `/.well-known`, and `/oauth` routes run near the ENAM
-D1 primary through the configured placement hint. Static SPA assets remain
-asset-first and edge-served. If the D1 primary region changes, review the
-placement hint and authenticated request-duration metrics together.
+Dynamic `/api`, `/auth`, `/.well-known`, and `/oauth` routes use Cloudflare
+Smart Placement so the runtime can account for the App D1 and downstream
+UniCAS boundaries together. Static SPA assets remain asset-first and
+edge-served. Smart Placement is a deployment candidate rather than an SLO
+guarantee: every production change must compare bounded authenticated APAC
+directory probes and the safe Server-Timing phases. If it misses the accepted
+thresholds, roll back the placement configuration before considering a
+separately reviewed APAC D1 migration.
 
 Register this callback in the dedicated Google OAuth client:
 

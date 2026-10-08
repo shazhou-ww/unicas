@@ -778,6 +778,7 @@ describe("CasDurableObject (Space DO) — node storage operations", () => {
 
     const read = await doInstance.fetch(spaceRequest("/read", "GET", { "X-CAS-Hash": hash }));
     expect(read.status).toBe(200);
+    expect(read.headers.get("X-CAS-Refs")).toBe(childHash);
     expect(new Uint8Array(await read.arrayBuffer())).toEqual(new TextEncoder().encode(parentContent));
 
     const metadata = await doInstance.fetch(spaceRequest("/metadata", "GET", { "X-CAS-Hash": hash }));

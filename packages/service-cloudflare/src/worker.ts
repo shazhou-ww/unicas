@@ -42,7 +42,6 @@ import {
   RootRefDomainDurableObject,
   type RootRefDomainDoEnv,
 } from "./domain-do.js";
-import { migrateAppSpaceSchema } from "./schema.js";
 import {
   DEFAULT_USAGE_RECONCILE_MAX_NODES,
   reconcileAppUsageObservations,
@@ -172,7 +171,6 @@ export default {
     });
     ctx.waitUntil(traceCleanupRun(traceSession.tracing, async () => {
       await ensureControlSchema(env);
-      await ensureSpaceSchema(env);
       await new D1EmailChallengeRepository(env.CAS_CONTROL_DB).pruneExpired(Date.now());
       await new ControlSessionStore(env.CAS_CONTROL_DB).pruneExpired();
       const usage = await reconcileAppUsageObservations({
@@ -270,9 +268,6 @@ async function handleFetch(
   });
 
   if (serviceRoute) {
-    if (serviceRoute.plane === "space") {
-      await timing.time("cas_schema", () => ensureSpaceSchema(env));
-    }
     try {
       const response = await actor.fetch(request);
       timing.record("cas_edge", performance.now() - requestStarted);
@@ -429,19 +424,7 @@ function isOwnedPublicOrigin(requestUrl: URL, configuredOrigin: string | undefin
 
 const spaceVerifiers = new WeakMap<object, AppSpaceCapabilityVerifier>();
 const controlSchemaInitializations = new WeakMap<object, Promise<void>>();
-const spaceSchemaInitializations = new WeakMap<object, Promise<void>>();
 const adminHandlers = new WeakMap<object, Promise<(request: Request) => Promise<Response>>>();
-
-function ensureSpaceSchema(env: Pick<Env, "CAS_DB">): Promise<void> {
-  const key = env.CAS_DB as object;
-  let initialization = spaceSchemaInitializations.get(key);
-  if (!initialization) {
-    initialization = migrateAppSpaceSchema(env.CAS_DB);
-    spaceSchemaInitializations.set(key, initialization);
-    void initialization.catch(() => spaceSchemaInitializations.delete(key));
-  }
-  return initialization;
-}
 
 function ensureControlSchema(env: Env): Promise<void> {
   const key = env as object;
@@ -492,7 +475,6 @@ async function buildAdminHandler(
     accountRepository,
     appGarbageCollector: {
       async collect(input) {
-        await ensureSpaceSchema(env);
         return runAppGarbageCollection({
           repository: new CloudflareAppGcRepository(env.CAS_DB),
           spaceActors: keyedActorPort(env.CAS_DO, "space", env),
@@ -502,7 +484,6 @@ async function buildAdminHandler(
     },
     appUsageRepository: {
       async readAppUsage(appId) {
-        await ensureSpaceSchema(env);
         return new CloudflareAppUsageRepository(env.CAS_DB).readAppUsage(appId);
       },
     },
@@ -623,7 +604,6 @@ function localAuditReader(env: Env): Fetcher {
       const normalized = request instanceof Request
         ? new Request(request, init)
         : new Request(request.toString(), init);
-      await ensureSpaceSchema(env);
       return handleAuditRpc(normalized, env, new URL(normalized.url));
     },
     connect() {

@@ -68,6 +68,18 @@ function catalogFixture(): SpaceFileRootCatalog & { readonly records: Map<string
 
 function casFixture(): SpaceCasClient {
   return {
+    async readNode(hash) {
+      const manifest = state.manifests.get(hash)!;
+      return {
+        metadata: {
+          hash,
+          size: manifest.content.length,
+          contentType: manifest.contentType,
+          refs: manifest.refs,
+        },
+        content: new Blob([manifest.content]).stream(),
+      };
+    },
     async readMetadata(hash) {
       const manifest = state.manifests.get(hash)!;
       return { hash, size: manifest.content.length, contentType: manifest.contentType, refs: manifest.refs };
@@ -150,6 +162,26 @@ describe("Space file system", () => {
     const reopened = await fileSystem.openRoot("root-1");
     await expect(new Response(await reopened.read("/a.txt")).text()).resolves.toBe("lowercase");
     await expect(new Response(await reopened.read("/B.txt")).text()).resolves.toBe("uppercase");
+  });
+
+  test("opens a catalog snapshot with one manifest read and no second catalog lookup", async () => {
+    const catalog = catalogFixture();
+    const cas = casFixture();
+    const list = vi.spyOn(catalog, "list");
+    const readNode = vi.spyOn(cas, "readNode");
+    const fileSystem = createSpaceFileSystem({
+      cas,
+      catalog,
+      createId: () => "root-1",
+    });
+    await fileSystem.createRoot("Files");
+    readNode.mockClear();
+
+    const [snapshot] = await fileSystem.listRoots();
+    await fileSystem.openRoot(snapshot);
+
+    expect(list).toHaveBeenCalledOnce();
+    expect(readNode).toHaveBeenCalledOnce();
   });
 
   test("passes bounded blob options to the public blob client", () => {

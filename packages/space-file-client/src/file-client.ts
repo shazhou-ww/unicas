@@ -60,9 +60,10 @@ export function createSpaceFileSystem(options: SpaceFileSystemOptions): SpaceFil
   }
 
   async function loadRoot(info: SpaceFileRootInfo): Promise<SpaceFileRoot> {
-    const metadata = await options.cas.readMetadata(info.manifestHash);
+    const node = await options.cas.readNode(info.manifestHash);
+    const { metadata } = node;
     if (metadata.contentType !== FileManifestContentType) throw new TypeError("File root has an unsupported manifest type");
-    const bytes = new Uint8Array(await new Response(await options.cas.readContent(info.manifestHash)).arrayBuffer());
+    const bytes = new Uint8Array(await new Response(node.content).arrayBuffer());
     const manifest = decodeFileManifest(bytes);
     const refs = fileManifestRefs(manifest, metadata.refs);
     return workingRoot(info, new Map(manifest.entries.map((entry) => [
@@ -176,8 +177,11 @@ export function createSpaceFileSystem(options: SpaceFileSystemOptions): SpaceFil
         throw error;
       }
     },
-    async openRoot(rootId) {
-      const info = (await options.catalog.list()).find((candidate) => candidate.rootId === rootId);
+    async openRoot(root) {
+      const info = typeof root === "string"
+        ? (await options.catalog.list()).find((candidate) => candidate.rootId === root)
+        : root;
+      const rootId = typeof root === "string" ? root : root.rootId;
       if (!info) throw new TypeError(`File root not found: ${rootId}`);
       return loadRoot(info);
     },

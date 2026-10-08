@@ -89,12 +89,12 @@ function fixture(options: {
       nextCursor: null,
     })),
   } as unknown as SpaceCasClient;
-  return { service: new SpacesFileService(cas, fileSystem, 10), root, cas };
+  return { service: new SpacesFileService(cas, fileSystem, 10), root, cas, fileSystem, roots };
 }
 
 describe("SpacesFileService", () => {
   test("sorts directories before files and then by name", async () => {
-    const { service } = fixture({
+    const { service, fileSystem, roots } = fixture({
       entries: [
         { path: "/z.txt", name: "z.txt", type: "file", size: 1, mediaType: "text/plain" },
         { path: "/beta", name: "beta", type: "directory" },
@@ -104,6 +104,9 @@ describe("SpacesFileService", () => {
     });
     expect((await service.list("/")).entries.map((entry) => entry.name))
       .toEqual(["alpha", "beta", "a.txt", "z.txt"]);
+    expect(fileSystem.listRoots).toHaveBeenCalledOnce();
+    expect(fileSystem.openRoot).toHaveBeenCalledOnce();
+    expect(fileSystem.openRoot).toHaveBeenCalledWith(roots[0]);
   });
 
   test("rejects a stale revision before changing the working tree", async () => {

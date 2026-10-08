@@ -28,6 +28,7 @@ export interface NodeContentStream {
   readonly body: ReadableStream<Uint8Array>;
   readonly contentType: string;
   readonly contentSize: number;
+  readonly refs: readonly string[];
   readonly range?: { readonly start: number; readonly end: number };
 }
 
@@ -55,6 +56,7 @@ export async function readNodeContent(input: {
     body,
     contentType: node.contentType,
     contentSize: node.contentSize,
+    refs,
     ...(requestedRange === undefined
       ? {}
       : { range: { start: logicalOffset, end: logicalOffset + logicalLength - 1 } }),

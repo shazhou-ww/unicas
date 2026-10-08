@@ -71,6 +71,10 @@ export function deploymentPlan({ dryRun = false, env, production = false, skipSm
   }
   commands.push(
     ["pnpm", "--filter", SERVICE_PACKAGE, "build"],
+    [
+      "pnpm", "--filter", SERVICE_PACKAGE, "exec", "wrangler", "d1", "migrations",
+      "apply", "CAS_DB", "--remote", ...envArgs,
+    ],
     ["pnpm", "--filter", SERVICE_PACKAGE, "exec", "wrangler", "deploy", ...envArgs, ...workerVars],
   );
   if (!skipSmoke) {

@@ -2,6 +2,7 @@ import type {
   CasGcResult,
   CasHash,
   CasLeaseResult,
+  CasNode,
   CasNodeMetadata,
   CasRootRefUpdate,
   CasRootRefsPage,
@@ -66,6 +67,7 @@ export interface CasNodeCacheStrategy<Key extends { readonly hash: CasHash }> {
 }
 
 export interface CasClientOperations {
+  readNode(hash: CasHash, options?: { readonly signal?: AbortSignal }): Promise<CasNode>;
   readMetadata(hash: CasHash, options?: { readonly signal?: AbortSignal }): Promise<CasNodeMetadata>;
   readContent(
     hash: CasHash,
