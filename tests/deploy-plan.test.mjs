@@ -35,6 +35,7 @@ import {
   fetchWorkflowCreatedAt,
   tagProductionDeployment,
 } from "../scripts/tag-production-deployment.mjs";
+import { verifyReleaseRevision } from "../scripts/verify-release-revision.mjs";
 import {
   buildProductionSpacesConfig,
   writeProductionSpacesSecrets,
@@ -413,7 +414,12 @@ describe("standalone deployment plan", () => {
     expect(job).toContain("github.ref != 'refs/heads/release'");
     expect(job).toContain("github.ref == 'refs/heads/release'");
     expect(job).toContain("github.event_name == 'workflow_dispatch'");
-    expect(job).toContain("git merge-base --is-ancestor \"$GITHUB_SHA\" origin/main");
+    expect(job).toContain(
+      "node scripts/verify-release-revision.mjs \"$GITHUB_SHA\" origin/main",
+    );
+    expect(job).not.toContain(
+      "git merge-base --is-ancestor \"$GITHUB_SHA\" origin/main",
+    );
     expect(job).not.toContain("pnpm test:exhaustive");
     expect(job).not.toContain("wrangler deploy --dry-run");
     expect(job).not.toContain("DOCS_SOURCE_REVISION");
@@ -449,9 +455,79 @@ describe("standalone deployment plan", () => {
     expect(job).toContain("queue: max");
     expect(job).toContain("cancel-in-progress: false");
     expect(job).toContain("ref: ${{ github.sha }}");
-    expect(job).toContain("git merge-base --is-ancestor \"$GITHUB_SHA\" origin/main");
+    expect(job).toContain(
+      "node scripts/verify-release-revision.mjs \"$GITHUB_SHA\" origin/main",
+    );
+    expect(job).not.toContain(
+      "git merge-base --is-ancestor \"$GITHUB_SHA\" origin/main",
+    );
     expect(job).not.toContain("contents: write");
   });
+
+  test("accepts only tree-identical promotion merges from main", () => {
+    const directory = mkdtempSync(join(tmpdir(), "unicas-release-revision-"));
+    try {
+      git(directory, ["init", "--initial-branch=main"]);
+      git(directory, ["config", "user.name", "Release Test"]);
+      git(directory, ["config", "user.email", "release-test@example.com"]);
+      writeFileSync(join(directory, "candidate.txt"), "base\n");
+      git(directory, ["add", "candidate.txt"]);
+      git(directory, ["commit", "-m", "base"]);
+      git(directory, ["branch", "release"]);
+
+      writeFileSync(join(directory, "candidate.txt"), "candidate\n");
+      git(directory, ["commit", "-am", "candidate"]);
+      const mainParent = git(directory, ["rev-parse", "HEAD"]);
+
+      git(directory, ["checkout", "release"]);
+      git(directory, ["merge", "--no-ff", "main", "-m", "promote main"]);
+      const releaseRevision = git(directory, ["rev-parse", "HEAD"]);
+      expect(verifyReleaseRevision({
+        revision: releaseRevision,
+        mainRef: "main",
+        cwd: directory,
+      })).toEqual({
+        releaseParent: expect.any(String),
+        mainParent,
+      });
+
+      git(directory, ["checkout", "main"]);
+      writeFileSync(join(directory, "later.txt"), "later\n");
+      git(directory, ["add", "later.txt"]);
+      git(directory, ["commit", "-m", "later main change"]);
+      git(directory, ["checkout", "release"]);
+      expect(verifyReleaseRevision({
+        revision: releaseRevision,
+        mainRef: "main",
+        cwd: directory,
+      })).toEqual({
+        releaseParent: expect.any(String),
+        mainParent,
+      });
+
+      git(directory, ["checkout", "-b", "release-with-change", `${releaseRevision}^1`]);
+      writeFileSync(join(directory, "release-only.txt"), "release-only\n");
+      git(directory, ["add", "release-only.txt"]);
+      git(directory, ["commit", "-m", "release-only change"]);
+      git(directory, ["merge", "--no-ff", mainParent, "-m", "invalid promotion"]);
+      const invalidRevision = git(directory, ["rev-parse", "HEAD"]);
+      expect(() => verifyReleaseRevision({
+        revision: invalidRevision,
+        mainRef: "main",
+        cwd: directory,
+      })).toThrow("release promotion tree differs from its main parent");
+
+      git(directory, ["checkout", "main"]);
+      const nonMergeRevision = git(directory, ["rev-parse", "HEAD"]);
+      expect(() => verifyReleaseRevision({
+        revision: nonMergeRevision,
+        mainRef: "main",
+        cwd: directory,
+      })).toThrow("two-parent promotion merge");
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }, 15_000);
 
   test("isolates Spaces recovery behind manual dispatch and Production review", () => {
     const job = spacesBootstrapJob();

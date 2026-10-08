@@ -47,9 +47,8 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REF" = "refs/heads/release"
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           git fetch --no-tags origin main:refs/remotes/origin/main
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          node scripts/verify-release-revision.mjs "$GITHUB_SHA" origin/main
 
       - name: Run standard validation
         if: github.ref != 'refs/heads/release' && github.event_name != 'workflow_dispatch'
@@ -106,9 +105,8 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REF" = "refs/heads/release"
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           git fetch --no-tags origin main:refs/remotes/origin/main
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          node scripts/verify-release-revision.mjs "$GITHUB_SHA" origin/main
 
       - name: Synchronize production provider secrets
         shell: bash
