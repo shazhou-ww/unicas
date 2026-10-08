@@ -43,6 +43,7 @@ import {
   type ManualTraceSession,
   type ManualTracingPort,
 } from "@unicas/observability";
+import { CasNodeRefsHeader, formatCasNodeRefsHeader } from "@unicas/space-protocol";
 
 export interface SpaceCasDoEnv extends ManualTraceEnvironment {
   CAS_DB: D1Database;
@@ -282,6 +283,7 @@ export class CasDurableObject {
         ? content.contentSize
         : content.range.end - content.range.start + 1),
       "Content-Type": content.contentType,
+      [CasNodeRefsHeader]: formatCasNodeRefsHeader(content.refs),
     });
     if (content.range !== undefined) {
       headers.set("Content-Range", `bytes ${content.range.start}-${content.range.end}/${content.contentSize}`);

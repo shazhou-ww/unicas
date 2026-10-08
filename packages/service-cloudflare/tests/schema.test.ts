@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
+import { readFile } from "node:fs/promises";
 import type { D1Database } from "@cloudflare/workers-types";
 import { migrateControlSchema } from "../src/control-schema.js";
 import { migrateAppSpaceSchema } from "../src/schema.js";
@@ -35,6 +36,42 @@ async function createDb(): Promise<D1Database> {
 }
 
 describe("App-scoped Space schema", () => {
+  test("applies the deployment migration to an empty database", async () => {
+    const database = await createRawDb();
+    const migration = await readFile(
+      new URL("../../../stacks/unicas/deploy/migrations/tenant/0001_baseline.sql", import.meta.url),
+      "utf8",
+    );
+    await database.exec(migration.replace(/\r?\n/g, " "));
+
+    const tables = await database.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
+    ).all<{ name: string }>();
+    expect(tables.results.map((row) => row.name)).toEqual(expect.arrayContaining([
+      "cas_nodes",
+      "cas_edges",
+      "cas_root_domain_events",
+      "cas_space_usage",
+      "cas_usage_projection_migrations",
+    ]));
+    expect(await database.prepare(
+      "SELECT COUNT(*) AS count FROM cas_usage_projection_migrations WHERE version = 1",
+    ).first()).toEqual({ count: 1 });
+  });
+
+  test("applies the deployment baseline over the previously initialized schema", async () => {
+    const database = await createDb();
+    const migration = await readFile(
+      new URL("../../../stacks/unicas/deploy/migrations/tenant/0001_baseline.sql", import.meta.url),
+      "utf8",
+    );
+
+    await expect(database.exec(migration.replace(/\r?\n/g, " "))).resolves.toBeDefined();
+    expect(await database.prepare(
+      "SELECT COUNT(*) AS count FROM cas_usage_projection_migrations WHERE version = 1",
+    ).first()).toEqual({ count: 1 });
+  });
+
   test("creates App-aware authoritative and audit tables, idempotently", async () => {
     const database = await createDb();
     await migrateAppSpaceSchema(database); // rerun must be a no-op

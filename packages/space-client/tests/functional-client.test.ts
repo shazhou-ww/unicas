@@ -60,6 +60,44 @@ describe("functional Space CAS client", () => {
     expect(error).toMatchObject({ status: 404 });
   });
 
+  it("reads immutable metadata and content in one authorized request", async () => {
+    const requests: Request[] = [];
+    const hash = "a".repeat(64);
+    const child = "b".repeat(64);
+    const client = createSpaceCasClient({
+      baseUrl: "https://cas.test/",
+      appId: "app-1",
+      spaceId: "space-1",
+      getToken: async () => "token",
+      fetcher: {
+        async fetch(input, init) {
+          const request = input instanceof Request ? input : new Request(input, init);
+          requests.push(request);
+          return new Response("node", {
+            headers: {
+              "Content-Length": "4",
+              "Content-Type": "text/plain",
+              "X-CAS-Refs": child,
+            },
+          });
+        },
+      },
+    });
+
+    const node = await client.readNode(hash);
+    expect(node.metadata).toEqual({
+      hash,
+      size: 4,
+      contentType: "text/plain",
+      refs: [child],
+    });
+    await expect(new Response(node.content).text()).resolves.toBe("node");
+    expect(requests).toHaveLength(1);
+    expect(new URL(requests[0].url).pathname)
+      .toBe(`/v1/apps/app-1/spaces/space-1/cas/nodes/${hash}/content`);
+    expect(requests[0].headers.get("Authorization")?.startsWith("Bearer ")).toBe(true);
+  });
+
   it("consumes error response bodies instead of retaining an unread clone", async () => {
     let errorResponse: Response | undefined;
     const client = createSpaceCasClient({

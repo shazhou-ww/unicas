@@ -162,7 +162,7 @@ export const readContentContract = spaceProcedure
     path: `${SpaceApiBasePath}/cas/nodes/{hash}/content`,
     operationId: "readContent",
     summary: "Read immutable node content",
-    description: "Streams canonical bytes for a ready node in the requested Space. Requires cas:nodes:read.",
+    description: "Streams canonical bytes for a ready node in the requested Space. Content-Type, Content-Length, and X-CAS-Refs describe the same immutable node so clients can consume metadata and content in one authorized request. Requires cas:nodes:read.",
     inputStructure: "detailed",
     tags: ["Nodes"],
   })

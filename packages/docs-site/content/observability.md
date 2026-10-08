@@ -245,20 +245,26 @@ include:
 | Metric | Work measured |
 | --- | --- |
 | `cas_edge` | Edge service time through response construction |
-| `cas_schema` | Lazy D1 schema initialization |
 | `cas_auth` | Space capability verification |
 | `cas_do` | Durable Object dispatch |
 | `cas_d1_*` | D1 lease, node, Root Ref, and commit operations |
 | `cas_r2_get`, `cas_r2_put`, `cas_r2_head`, `cas_r2_prefix` | R2 operations |
+| `spaces_session` | Spaces session lookup |
+| `spaces_root` | Spaces file-root catalog lookup |
+| `spaces_manifest` | File manifest load, including the downstream node read |
+| `spaces_unicas` | One Spaces-to-UniCAS HTTP boundary |
 
 ```text
-Server-Timing: cas_schema;dur=2.1, cas_auth;dur=4.5, cas_do;dur=11.8, cas_edge;dur=20.3
+Server-Timing: spaces_session;dur=4.0, spaces_root;dur=3.5, spaces_manifest;dur=18.0, spaces_unicas;dur=15.0, cas_auth;dur=4.5, cas_do;dur=8.0
 Timing-Allow-Origin: *
 ```
 
 These values end at response construction or an operation boundary. They do
 not measure complete stream consumption. `GET /health` intentionally avoids
-storage initialization and timing entries.
+storage initialization and timing entries. Spaces forwards only fixed,
+allowlisted downstream names and numeric durations; it drops descriptions,
+unknown names, and invalid values. A normal Space response must not contain
+`cas_schema`; seeing it indicates a pre-migration-cutover service version.
 
 ## Durable audit
 

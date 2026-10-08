@@ -147,6 +147,11 @@ export async function startLocalUnicasRuntime({
   }));
 
   await mf.ready;
+  const { migrateAppSpaceSchema } = await import(pathToFileURL(
+    join(ROOT, "packages", "service-cloudflare", "dist", "schema.js"),
+  ).href);
+  const tenantDb = await mf.getD1Database("CAS_DB", "unicas-service");
+  await migrateAppSpaceSchema(tenantDb);
   if (!useGoogle) {
     const { migrateControlSchema } = await import(pathToFileURL(
       join(ROOT, "packages", "service-cloudflare", "dist", "control-schema.js"),

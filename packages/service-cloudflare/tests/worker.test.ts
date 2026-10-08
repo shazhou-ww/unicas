@@ -147,7 +147,7 @@ describe("service-cloudflare public routing", () => {
     await Promise.all(pending);
 
     expect(handlers.migrateControl).toHaveBeenCalledOnce();
-    expect(handlers.migrate).toHaveBeenCalledOnce();
+    expect(handlers.migrate).not.toHaveBeenCalled();
     expect(handlers.pruneEmailChallenges).toHaveBeenCalledOnce();
     expect(handlers.pruneSessions).toHaveBeenCalledOnce();
     expect(handlers.reconcileUsage).toHaveBeenCalledWith({
@@ -293,8 +293,9 @@ describe("service-cloudflare public routing", () => {
     expect(spaceRequest.headers.get("X-CAS-Route-Family")).toBe("app-space");
     const adminRequest = handlers.admin.mock.calls[0]![0] as Request;
     expect(adminRequest.url).toBe("https://cas.example/admin/apps/app-1");
-    expect(handlers.migrate).toHaveBeenCalledTimes(1);
+    expect(handlers.migrate).not.toHaveBeenCalled();
     expect(handlers.migrateControl).toHaveBeenCalledTimes(1);
+    expect(space.headers.get("Server-Timing")).not.toContain("cas_schema");
   });
 
   test("returns Space verifier failures without Durable Object dispatch", async () => {
@@ -354,7 +355,7 @@ describe("service-cloudflare public routing", () => {
       appUsageRepository: { readAppUsage(appId: string): Promise<unknown> };
     };
     await options.appUsageRepository.readAppUsage("app-1");
-    expect(handlers.migrate).toHaveBeenCalledOnce();
+    expect(handlers.migrate).not.toHaveBeenCalled();
     expect(handlers.readAppUsage).toHaveBeenCalledWith("app-1");
     await expect(options.appGarbageCollector.collect({ appId: "app-1" })).resolves.toMatchObject({
       spacesExamined: 0,

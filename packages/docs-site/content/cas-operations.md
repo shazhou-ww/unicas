@@ -29,6 +29,9 @@ in vars or source. Deployment credentials are supplied through
 | Space + admin availability | 99.9% | `/v1/apps` + `/admin` success | 43.8 min |
 | Service p95 latency (live) | < 500 ms | Worker request duration | — |
 | Space node read p95 (cached/DB) | < 200 ms | node metadata/content reads | — |
+| Spaces APAC directory TTFB p95 | ≤ 1 s | At least 30 authenticated synthetic `/api/entries` calls from the selected APAC probes | — |
+| Spaces directory Worker wall p95 | ≤ 500 ms | `unicas-spaces` response-construction wall time for the same bounded run | — |
+| Spaces cold directory request | ≤ 2 s | First authenticated synthetic request after a controlled cold interval | — |
 | Key rotation effectiveness | new key ≤ 60 s, revoked key ≤ 60 s | JWKS cache bounds (30 s TTL / 60 s hard stale) | — |
 | Administrator revocation | denied on the next browser, CLI, or MCP request; never later than 60 s | focused authorization probes and platform audit | — |
 | Backup freshness | RPO ≤ 24 h | last successful D1 export timestamp | — |
@@ -139,6 +142,28 @@ pnpm deploy:docs
 pnpm smoke                    # App/Space v1; run twice 70s apart
 pnpm spaces:smoke -- --base-url https://spaces.unicas.work
 ```
+
+`pnpm deploy:production` applies pending `CAS_DB` D1 migrations after the
+service build and before Worker publication. Tenant schema initialization is
+not a request or cron responsibility. A migration error stops publication;
+do not deploy the new Worker separately. Worker rollback does not roll back
+the D1 migration ledger, so every future migration must state backward
+compatibility or a forward-repair procedure.
+
+The Spaces Worker uses Smart Placement rather than fixed IAD placement. Treat
+that as a candidate topology, not proof of locality. Before accepting a
+deployment, run at least 30 authenticated synthetic directory reads from the
+agreed APAC probes, report p50/p95/p99/max for TTFB and Worker wall time, record
+the observed colo/placement, and verify a controlled cold request. Compare
+`spaces_session`, `spaces_root`, `spaces_manifest`, `spaces_unicas`,
+`cas_auth`, `cas_do`, applicable `cas_d1_*`/`cas_r2_*`, and `cas_edge`.
+Do not report response-construction timing as full stream completion.
+
+If Smart Placement misses any directory threshold, restore the last accepted
+Spaces placement configuration and redeploy before evaluating an APAC
+`SPACES_DB` migration. A D1 move requires a separate copy, consistency,
+cutover, rollback, and data-validation plan; do not infer it from a broad
+region label.
 
 The App/Space smoke script uses one dedicated `deploy-smoke` Space, per-run node hashes,
 and per-run request IDs. After acquiring the parent Root Ref, it releases that

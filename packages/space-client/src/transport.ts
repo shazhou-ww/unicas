@@ -1,4 +1,9 @@
-import type { CasHash, CasNodeMetadata } from "@unicas/space-protocol";
+import {
+  CasNodeRefsHeader,
+  parseCasNodeRefsHeader,
+  type CasHash,
+  type CasNodeMetadata,
+} from "@unicas/space-protocol";
 import { CasClientError } from "./errors.js";
 import type {
   CasClientConfigBase,
@@ -61,6 +66,35 @@ export function createScopedCasClient<Key extends { readonly hash: CasHash }>(
   };
 
   const client: CasClientOperations = {
+    async readNode(hash, options: { readonly signal?: AbortSignal } = {}) {
+      options.signal?.throwIfAborted();
+      const response = await requireOk(
+        await request(routes.readContent(hash), withSignal({}, options.signal)),
+        "readNode",
+      );
+      const contentType = response.headers.get("Content-Type");
+      const contentLength = response.headers.get("Content-Length");
+      const size = contentLength === null ? NaN : Number(contentLength);
+      if (!contentType || !Number.isSafeInteger(size) || size < 0 || response.body === null) {
+        throw new CasClientError(502, "Invalid node response", "readNode");
+      }
+      let refs: readonly string[];
+      try {
+        refs = parseCasNodeRefsHeader(response.headers.get(CasNodeRefsHeader));
+      } catch (error) {
+        throw new CasClientError(
+          502,
+          "Invalid node response",
+          "readNode",
+          error instanceof Error ? error.message : undefined,
+        );
+      }
+      return {
+        metadata: { hash, size, contentType, refs },
+        content: response.body,
+      };
+    },
+
     readMetadata(hash, options: { readonly signal?: AbortSignal } = {}) {
       options.signal?.throwIfAborted();
       const key = { ...scope, hash } as Key;

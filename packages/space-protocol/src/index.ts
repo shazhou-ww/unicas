@@ -65,6 +65,11 @@ export {
   SpaceSchema,
 } from "./schemas.js";
 
+export {
+  CasNodeRefsHeader,
+  formatCasNodeRefsHeader,
+  parseCasNodeRefsHeader,
+} from "./http.js";
 export type { CasErrorResponse } from "./http.js";
 
 export { appSpaceRoutes, matchAppSpaceRoute } from "./routes.js";

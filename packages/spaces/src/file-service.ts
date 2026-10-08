@@ -22,6 +22,10 @@ import {
   type PendingRootRelease,
 } from "./file-root-catalog.js";
 import type { PrincipalContext } from "./repository.js";
+import {
+  timeSpacesOperation,
+  type SpacesTimingSink,
+} from "./timing.js";
 
 export const DefaultMaximumUploadBytes = 40 * 1024 * 1024;
 export const MaximumUploadBytes = 64 * 1024 * 1024;
@@ -82,6 +86,7 @@ export class SpacesFileService {
   readonly #maximumUploadBytes: number;
   readonly #leaseEvidence: LeaseEvidenceTracker | undefined;
   readonly #catalog: ReconciliationCatalog | undefined;
+  readonly #timing: SpacesTimingSink | undefined;
 
   constructor(
     cas: SpaceCasClient,
@@ -89,6 +94,7 @@ export class SpacesFileService {
     maximumUploadBytes = DefaultMaximumUploadBytes,
     leaseEvidence?: LeaseEvidenceTracker,
     catalog?: ReconciliationCatalog,
+    timing?: SpacesTimingSink,
   ) {
     if (!Number.isSafeInteger(maximumUploadBytes) || maximumUploadBytes <= 0 || maximumUploadBytes > MaximumUploadBytes) {
       throw new RangeError(`maximumUploadBytes must be between 1 and ${MaximumUploadBytes}`);
@@ -98,6 +104,7 @@ export class SpacesFileService {
     this.#maximumUploadBytes = maximumUploadBytes;
     this.#leaseEvidence = leaseEvidence;
     this.#catalog = catalog;
+    this.#timing = timing;
   }
 
   async list(path: string): Promise<DirectoryResult> {
@@ -292,7 +299,11 @@ export class SpacesFileService {
   }
 
   async #openRoot(): Promise<SpaceFileRoot> {
-    const roots = await this.#fileSystem.listRoots();
+    const roots = await timeSpacesOperation(
+      this.#timing,
+      "spaces_root",
+      () => this.#fileSystem.listRoots(),
+    );
     if (roots.length !== 1) {
       throw new FileServiceError(
         "root_not_provisioned",
@@ -300,7 +311,11 @@ export class SpacesFileService {
         roots.length === 0 ? "The Principal has no provisioned file root" : "The Principal has multiple file roots",
       );
     }
-    return this.#fileSystem.openRoot(roots[0].rootId);
+    return timeSpacesOperation(
+      this.#timing,
+      "spaces_manifest",
+      () => this.#fileSystem.openRoot(roots[0]),
+    );
   }
 
   async #assertRetained(manifestHash: string): Promise<void> {
@@ -332,6 +347,7 @@ export async function createSpacesFileService(input: {
   readonly access?: readonly SpaceAccess[];
   readonly maximumUploadBytes?: number;
   readonly fetcher?: { fetch(input: string | Request, init?: RequestInit): Promise<Response> };
+  readonly timing?: SpacesTimingSink;
 }): Promise<SpacesFileService> {
   const baseCas = await createPrincipalCasClient(
     input.capability,
@@ -348,7 +364,7 @@ export async function createSpacesFileService(input: {
       chunkBytes: SpacesBlobChunkBytes,
       ...(input.fetcher ? { uploadFetcher: input.fetcher } : {}),
     },
-  }), input.maximumUploadBytes, evidence, catalog);
+  }), input.maximumUploadBytes, evidence, catalog, input.timing);
 }
 
 export function createLeaseEvidenceClient(baseCas: SpaceCasClient): {
@@ -367,6 +383,7 @@ export function createLeaseEvidenceClient(baseCas: SpaceCasClient): {
     return result;
   };
   const cas = Object.freeze({
+    readNode: baseCas.readNode,
     readMetadata: baseCas.readMetadata,
     readContent: baseCas.readContent,
     leaseNode: leaseNode as SpaceCasClient["leaseNode"],

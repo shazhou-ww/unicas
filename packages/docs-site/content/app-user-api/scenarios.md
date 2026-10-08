@@ -36,27 +36,26 @@ permissions or an administrator credential.
 
 ## Read metadata and streamed content
 
-Read metadata first when the App needs size, media type, child refs, or
-retention state. Content is streamed and may be read in a byte range.
+Use the client's combined `readNode` operation when the App needs immutable
+size, media type, ordered child refs, and complete content together. It sends
+one authorized content request and reads immutable metadata from response
+headers. Use `readMetadata` separately when mutable lease or Root Ref state is
+required. Content-only reads may request a byte range.
 
 ```mermaid
 sequenceDiagram
     participant UI as App frontend
     participant CAS as UniCAS Space data plane
 
-    UI->>CAS: GET .../nodes/ROOT_HASH/metadata<br/>cas:nodes:read capability
+    UI->>CAS: GET .../nodes/ROOT_HASH/content<br/>cas:nodes:read capability
     alt Node is ready in the same Space
-        CAS-->>UI: 200 metadata + retention state
-        UI->>CAS: GET .../nodes/ROOT_HASH/content<br/>optional Range
-        alt Full read
-            CAS-->>UI: 200 streamed canonical bytes
-        else Satisfiable range
-            CAS-->>UI: 206 selected bytes
-        else Invalid or unsatisfiable range
-            CAS-->>UI: 416 + Content-Range: bytes */size
-        end
+        CAS-->>UI: 200 content + Content-Type/Length + X-CAS-Refs
     else Node absent or not readable
         CAS-->>UI: 404
+    end
+    opt Mutable retention state is needed
+        UI->>CAS: GET .../nodes/ROOT_HASH/metadata<br/>cas:nodes:read capability
+        CAS-->>UI: 200 metadata + retention state
     end
 ```
 

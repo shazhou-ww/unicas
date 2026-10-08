@@ -183,7 +183,7 @@ describe("standalone deployment plan", () => {
 
   test("keeps the Spaces App on its own public bindings", () => {
     expect(SPACES_WRANGLER_CONFIG.main).toBe("../../../packages/spaces/src/worker.ts");
-    expect(SPACES_WRANGLER_CONFIG.placement).toEqual({ region: "aws:us-east-1" });
+    expect(SPACES_WRANGLER_CONFIG.placement).toEqual({ mode: "smart" });
     expect(SPACES_WRANGLER_CONFIG.routes).toEqual([
       { pattern: "spaces.unicas.work", custom_domain: true },
     ]);
@@ -773,6 +773,10 @@ describe("standalone deployment plan", () => {
     const plan = deploymentPlan({ production: true });
     expect(plan[0]).toEqual(["node", "stacks/unicas/deploy/ensure-encryption-secrets.mjs"]);
     expect(plan[1]).toEqual(["pnpm", "--filter", "@unicas/service-cloudflare", "build"]);
+    expect(plan[2]).toEqual([
+      "pnpm", "--filter", "@unicas/service-cloudflare", "exec", "wrangler",
+      "d1", "migrations", "apply", "CAS_DB", "--remote",
+    ]);
 
     const calls = [];
     const created = ensureEncryptionSecrets({
@@ -866,6 +870,10 @@ describe("standalone deployment plan", () => {
       .toThrow("--production and --env cannot be used together");
     expect(deploymentPlan({ env: "staging", skipSmoke: true })).toEqual([
       ["pnpm", "--filter", "@unicas/service-cloudflare", "build"],
+      [
+        "pnpm", "--filter", "@unicas/service-cloudflare", "exec", "wrangler",
+        "d1", "migrations", "apply", "CAS_DB", "--remote", "--env", "staging",
+      ],
       ["pnpm", "--filter", "@unicas/service-cloudflare", "exec", "wrangler", "deploy", "--env", "staging"],
     ]);
   });
@@ -929,7 +937,8 @@ describe("standalone deployment plan", () => {
       OAUTH_MICROSOFT_CLIENT_ID: "microsoft-id",
       OAUTH_GITHUB_CLIENT_ID: "github-id",
     };
-    const deploy = deploymentPlan({ dryRun: true, environment })[1];
+    const deploy = deploymentPlan({ dryRun: true, environment })
+      .find((command) => command.includes("wrangler") && command.includes("deploy"));
     expect(deploy).toEqual(expect.arrayContaining([
       "--var", "OAUTH_GOOGLE_CLIENT_ID:google-id",
       "--var", "OAUTH_MICROSOFT_CLIENT_ID:microsoft-id",

@@ -196,9 +196,9 @@ the digest and 32 MiB limit on the subsequent lease request.
 Deploy the lease-upload migration in this order:
 
 1. Configure the R2 signing credentials and browser CORS policy.
-2. Deploy the service so its idempotent startup migration creates
-   `cas_node_uploads`, `cas_node_upload_cleanup`, and the `cas_nodes.ready`
-   column before accepting App/Space traffic.
+2. Apply the versioned `CAS_DB` D1 migrations before publishing the service.
+   `pnpm deploy:production` performs this step after building and before
+   `wrangler deploy`; the Worker never runs tenant DDL on a request or cron.
 3. Publish protocol and client consumers together. Clients using inline bodies
    or `X-CAS-Upload-*` headers are not compatible with the released endpoint.
 4. Run the App/Space smoke test, which exercises lease, direct PUT, repeated
@@ -309,8 +309,13 @@ After the plan, bundle dry-run, tests, and typecheck pass, deploy with:
 pnpm deploy:production
 ```
 
-The explicit production command builds the Worker, deploys it, rebuilds the
-protocol artifacts used by smoke, and then tests the production endpoint.
+The explicit production command builds the Worker, applies pending `CAS_DB`
+D1 migrations, deploys it, rebuilds the protocol artifacts used by smoke, and
+then tests the production endpoint. Migration failure stops before Worker
+publication. The initial migration is an additive baseline for the schema
+already established by prior accepted releases; fresh databases receive the
+same complete schema. Request handling and scheduled cleanup never run
+`CREATE`, `ALTER`, `DROP`, or schema `PRAGMA` statements.
 `pnpm deploy` intentionally refuses to run. A named Wrangler environment must
 use `--skip-smoke`; otherwise the deploy command refuses to proceed because the
 default smoke target is production:
@@ -327,6 +332,12 @@ The protected release runs `pnpm deploy:spaces` after the UniCAS service smoke
 and before product or documentation promotion. It applies App-owned D1
 migrations, deploys Spaces, runs upload/commit/readback/isolation/cleanup smoke,
 and refuses an implicit or smoke-skipping production invocation.
+
+The migration ledger is durable D1 state and is not reversed by a Worker
+rollback. Before adding a future migration, prove both the previous and new
+Worker versions can use the post-migration schema or document why rollback must
+use a forward repair. Never bypass the deployment command by relying on a cold
+Worker to repair schema.
 
 The smoke signer reads provisioned private keys from the gitignored
 `.wrangler/cas-deploy/` directory. To target one control-plane-managed App,

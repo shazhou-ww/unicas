@@ -86,6 +86,7 @@ describe("node read service kernel", () => {
     expect(result).toMatchObject({
       contentType: "text/plain",
       contentSize: 10,
+      refs: ["child-a", "child-b"],
       range: { start: 2, end: 5 },
     });
   });

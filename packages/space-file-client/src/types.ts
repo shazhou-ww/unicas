@@ -52,7 +52,7 @@ export interface SpaceFileRoot {
 export interface SpaceFileSystem {
   listRoots(): Promise<readonly SpaceFileRootInfo[]>;
   createRoot(name: string): Promise<SpaceFileRoot>;
-  openRoot(rootId: string): Promise<SpaceFileRoot>;
+  openRoot(root: string | SpaceFileRootInfo): Promise<SpaceFileRoot>;
   deleteRoot(rootId: string): Promise<void>;
 }
 
