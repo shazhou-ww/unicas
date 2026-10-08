@@ -99,14 +99,14 @@ Reviewed on 2026-09-29. The non-sensitive operational record is
   `7ae12f3f8e0c596beaa1afbc75246f2832eb10ca` 完成两个 Worker 的 build
   与 Wrangler dry run。非敏感验证记录见
   [`outer/ProductionSamplingCandidate.md`](./outer/ProductionSamplingCandidate.md)。
-- 完整 profile 已安全保存在 `cfg`，但当前 GitHub CLI 身份管理
-  repository `Production` environment 时返回 HTTP 403；受保护环境尚未
-  同步该 profile，因此 D-S02 仍未完成。
-- No Cloudflare Worker secret or production configuration has changed.
+- 完整 profile 已安全保存在 `cfg`，并同步到受保护的 GitHub
+  `Production` environment；回读确认两项 variable 与两个 secret 名称
+  均已配置。没有读取或记录 GitHub secret 值。
+- D-S02 已完成；尚未同步 Cloudflare Worker secret 或发布生产配置。
 - No production deployment, representative cross-path retained canary,
   comprehensive field inspection, effective-limit check, or rollback exercise
   has been performed.
-- D-S02 through D-S04 and D-AC02 through D-AC04 therefore remain unchecked.
+- D-S03 through D-S04 and D-AC02 through D-AC04 therefore remain unchecked.
 
 ## Implementation
 
@@ -163,7 +163,7 @@ Cloudflare secret, or deploying a Worker.
 ### Deployment steps
 
 - [x] **D-S01:** Approve and provision an OTLP destination
-- [ ] **D-S02:** Approve a bounded nonzero sample
+- [x] **D-S02:** Approve a bounded nonzero sample
 - [ ] **D-S03:** Deploy and run synthetic canaries
 - [ ] **D-S04:** Inspect retention and prove rollback
 

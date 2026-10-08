@@ -37,16 +37,17 @@
   均为 `false`，且 public vars 不包含 authorization 或 HMAC key ring。
 - Spaces build 与该 candidate 的 Wrangler `--dry-run` 通过；一次性配置
   已删除。
+- 同一四项 profile 已同步到受保护的 GitHub `Production` environment。
+  回读确认采样率为 `0.01`、endpoint 与审核记录一致，且两个 secret
+  名称均已配置；验证过程没有读取 GitHub secret 值。
 - 没有同步 Cloudflare Worker secret，没有发布 Worker，也没有向
-  Grafana 发送新的 trace。
+  Grafana 发送新的 trace。四项 profile 只会在受保护 release
+  deployment 中由现有 service 与 Spaces step 注入两个动态 Worker。
 
 ## Remaining gate
 
-- 当前 GitHub CLI 身份读取或管理 repository `Production` environment
-  variables/secrets 时返回 HTTP 403，需要 repository administrator 完成
-  或授权该同步。
-- 在受保护环境中同步同一四项 profile，并从受保护 release revision
-  再次验证后，才能完成 D-S02。
+- D-S02 已完成：精确 rate 已批准，同一完整 profile 已配置给两个动态
+  Worker 的受保护部署路径，且两个 bundle 的候选 dry run 已通过。
 - D-S03 仍需发布精确 revision，并只用 synthetic non-sensitive data
   覆盖 service、Spaces、fetch、D1、R2、Durable Object、Admin、MCP 与
   OAuth 路径。
