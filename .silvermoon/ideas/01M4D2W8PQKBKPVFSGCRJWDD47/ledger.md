@@ -44,8 +44,19 @@
 
 ### Deployment steps
 
-- [ ] **D-S01:** 待实施验收后制定部署步骤
+- [ ] **D-S01:** 锁定发布候选和回滚基线
+- [ ] **D-S02:** 同步稳定契约并通过发布前门禁
+- [ ] **D-S03:** 通过受保护 release promotion 发布
+- [ ] **D-S04:** 执行 APAC authenticated directory canary
+- [ ] **D-S05:** 观察稳定性并执行失败回滚
+- [ ] **D-S06:** 发布外部证据并进入验收门禁
 
 ### Deployment acceptance criteria
 
-- [ ] **D-AC01:** 待部署契约定义后确定验收标准
+- [ ] **D-AC01:** production 对应受保护的精确发布
+- [ ] **D-AC02:** migration、发布和 canonical smoke 全部成功
+- [ ] **D-AC03:** APAC directory TTFB 达标
+- [ ] **D-AC04:** Worker wall time 与安全 timing 达标
+- [ ] **D-AC05:** controlled cold request 达标
+- [ ] **D-AC06:** 稳定性和回滚准备得到证明
+- [ ] **D-AC07:** 外部证据安全、完整且可复核
