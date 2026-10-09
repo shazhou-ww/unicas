@@ -29,7 +29,7 @@
 - [x] **D-S03:** 证明普通 main push 为零 hosted gate
 - [x] **D-S04:** 运行 exact-primary manual release preflight
 - [x] **D-S05:** 运行 exact-primary manual CodeQL proof
-- [ ] **D-S06:** 核对无外部写入并发布证据
+- [x] **D-S06:** 核对无外部写入并发布证据
 - [x] **D-S07:** 失败时停止而不是削弱 gate
 
 ### Deployment acceptance criteria
@@ -39,4 +39,4 @@
 - [x] **D-AC03:** manual CI 对 exact primary 完成 release superset
 - [x] **D-AC04:** manual Security proof 保留独立 CodeQL
 - [x] **D-AC05:** required checks 与 environments 没有 stale 或弱化
-- [ ] **D-AC06:** 外部证据可追溯且没有未经授权写入
+- [x] **D-AC06:** 外部证据可追溯且没有未经授权写入
