@@ -56,8 +56,9 @@
   因此 Smart Placement 优化了次要 session 边界，却让主导 CAS/DO 路径跨区。
 - 显式 `aws:ap-southeast-1` 候选由 deployment config test 锁定；deploy-plan
   43/43、docs 7/7、Spaces package typecheck、`pnpm deploy:spaces:plan` Wrangler
-  dry-run 和 Silvermoon worktree check 均通过。该证据只证明候选可发布，production
-  SLO 仍必须由新 promotion 后的 APAC canary 验证。
+  dry-run、Silvermoon worktree/staged/remote check 和 main CI
+  `37869596238` 均通过。该证据只证明候选可发布，production SLO 仍必须由新
+  promotion 后的 APAC canary 验证。
 
 ## Deployment
 
