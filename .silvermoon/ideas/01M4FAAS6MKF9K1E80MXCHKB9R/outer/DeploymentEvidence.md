@@ -206,3 +206,110 @@ changelog 仍正确标记 `0.1.2 - Unreleased`/candidate。当前没有精确
 这不是可由 Agent 推断的普通歧义。精确 `/publish` 是已批准 Ideal 与
 Deployment contract 的显式 registry-write gate；在收到它之前，保持外部发布
 阻断。
+
+## Publication 延期后的 preflight
+
+维护者随后明确决定暂不发布 package，并授权在完成、确认其他 Deployment
+验收后接受 Deployment。同步后的 contract revision 是
+`dda36c80369223a2837c360f5015f3cc8875799a`。本轮 preflight 开始时，
+clean worktree 的 `HEAD` 与 refreshed `origin/main` 均为
+`3be06f8dcc06c7de06efdd1a8ebeb1023cabd1fa`。
+
+这项决定不授权 `/publish`。根 changelog 继续使用
+`0.1.2 - Unreleased`，公开 changelog 继续把 `0.1.2` 标为 candidate；两处
+都没有成功发布声明。
+
+### 公开入口与 provenance
+
+匿名 HTTP HEAD 再次证明 docs root、SDK landing、quickstart、
+compatibility、SDK reference、versioning、changelog、troubleshooting、
+SUPPORT 和 SECURITY 全部返回 200。SDK landing 包含 `App-user SDK`，公开
+changelog 包含 `0.1.2` 与 candidate，并且没有日期化的 `0.1.2` 发布标题。
+
+`https://docs.unicas.work/artifact-manifest.json` 仍报告：
+
+- `sourceRevision`：
+  `52a2088e0c4275f59438feb2e176ba238ced12f7`；
+- pages：31；
+- OpenAPI SHA-256：
+  `8c2b46ed9a803b36754068626b76d28a6eeee51138404c5a33dcb2d6ee00958d`。
+
+从该 source commit 直接读取的 Inner World tree OID 是
+`f2c8a798a8661757f944982ad3bd78e776c52dc4`，与已接受的
+`implementationRevision` 精确相等。
+
+### 未发布状态
+
+匿名 registry 读取证明六个 SDK package 的 `latest` 都仍为 `0.1.1`，version
+列表都不含 `0.1.2`。`npm/app-user-sdk/v0.1.2` Git tag 和同名 GitHub Release
+都不存在。`publish-npm.yml` 只有两个既有成功 run：
+
+- `37751689281`：`npm/app-user-sdk/v0.1.1`；
+- `35800458882`：`npm/app-user-sdk/v0.1.0-beta.1`。
+
+没有 `0.1.2` publish run，也没有本地 publish、dist-tag 写入、占位 tag、
+Release 或长期 npm token。GitHub metadata、100% community health 和
+`Production` environment 也经只读 API 重验；environment 仍只有 `main` 与
+`release` policies、required reviewer `shazhou-ww`、
+`prevent_self_review: true`，并允许 admin bypass。
+
+未来 publication 必须从当时 refreshed primary 重新执行完整 preflight，并
+重新收到精确 `/publish app-user-sdk 0.1.2`；本次 conditional acceptance
+不能复用为未来 registry write 授权。
+
+### Read-only candidate preflight
+
+以下命令在 exact primary 上通过：
+
+`pnpm --workspace-concurrency=1 validate:release`
+
+该命令包含 repository/Idea 检查、构建、typecheck、package tests、
+`check:release`、独立 declaration consumers、Node quickstart、
+Chromium/Firefox/WebKit smoke、deterministic artifacts、Worker dry-run 和所有
+deployment dry-run。随后运行：
+
+`node scripts/prepare-npm-release.mjs --candidate --tag npm/app-user-sdk/v0.1.2 --commit 3be06f8dcc06c7de06efdd1a8ebeb1023cabd1fa --output <session-artifact>/sdk-release-plan.json`
+
+planner 成功生成 read-only plan；临时 `.sdk-release` tarballs 随后删除，
+worktree 保持 clean。plan 的 `distTag` 是 `latest`，publication order 与
+`sdk/release-manifest.json` 一致：
+
+| Order | Package | Bytes | Integrity |
+| ---: | --- | ---: | --- |
+| 1 | `@unicas/codec@0.1.2` | 7564 | `sha512-QargAZpixMtmRz3TGqGWwLQJQhJ3OasyGK94awKtSeKxSSsjCn12orTikpibJusLG2PP9XqHvn+AMdRaMnbHuQ==` |
+| 2 | `@unicas/space-protocol@0.1.2` | 23247 | `sha512-GomdfT1q6tWtqsQ3JGfYvSYGfd/3YpVnu9zpLuWod8RbQFQWAcdZlx9UQKgpjLwAIm8ERfohDi+gStsdhBGxJg==` |
+| 3 | `@unicas/space-client@0.1.2` | 7002 | `sha512-iICeLEEnRi9YaoO5bYWAeoTO6nZPBag79IUitsC5GYr1J3Gk2lBe4EFhbz2x8kZA4pVK7kqOPyGT0mUA2kkXsA==` |
+| 4 | `@unicas/space-blob-client@0.1.2` | 9528 | `sha512-7gLB6NiVDoOo/svMN4Mya0BHzjy6ljJ3Pm5GIc0MCNnMyoZ/7qHAV/sP7JGj2mpVJK/Bh44XKNU9Lk7NmCm/7w==` |
+| 5 | `@unicas/space-browser-cache@0.1.2` | 7604 | `sha512-OkRFMKLgzuJNb3akGhlsGBDSSbdec95rENd6HafbzFlc0bu3XwozFkjNG7gDgxgYxfd46apXU1IOItgNbafg+A==` |
+| 6 | `@unicas/space-file-client@0.1.2` | 8728 | `sha512-Rz04mwO+Hfy9yCdUTrRsox72ZIN1iXvyR7ctVIOrU7du7Pr0kt7E1Kc+SrRreztoC61Vkho0/1CThiUF9annkA==` |
+
+`check:release` 同时证明 file allowlist、exports 和内部依赖；所有内部
+dependencies 都是 exact `0.1.2`。由于 D-S03 尚未完成，contract 要求的
+D-AC01 至 D-AC03 前置条件还没有全部满足，因此这次执行只记录为可复现
+preflight，不提前把 D-S04 或 D-AC04 标记为完成。完成 D-S03 后必须从当时
+refreshed primary 重跑 planner。
+
+### Legacy deprecation 停止点
+
+匿名 registry 重验结果：
+
+| Package | Versions | `latest` | `deprecated` |
+| --- | --- | --- | --- |
+| `@unicas/tenant-client` | `0.1.0` | `0.1.0` | 不存在 |
+| `@unicas/tenant-blob-client` | `0.1.0` | `0.1.0` | 不存在 |
+| `@unicas/tenant-protocol` | `0.1.0` | `0.1.0` | 不存在 |
+
+迁移 URL 返回 200，三个对应的 `space-*` 替代 package 已公开且
+`latest@0.1.1`。但是：
+
+`npm whoami --registry=https://registry.npmjs.org`
+
+返回 `E401 Unauthorized`。npm Web 页面也被 bot-verification challenge
+阻断，没有可复用的已登录 owner session。因此没有执行任何
+`npm deprecate`，三个 package 均未发生 registry mutation；也没有把 npm
+credential 写入仓库、日志、evidence、chat 或 GitHub secret。
+
+当前已完成 D-S01、D-S02、D-S05、D-AC01、D-AC02 与 D-AC05。D-S03 是唯一
+需要外部身份能力的剩余动作；它同时阻断 D-S04、D-S06、D-S07 以及
+D-AC03、D-AC04、D-AC06、D-AC07。维护者需要在本机建立短期 npm owner
+session，之后只能按 D-S03 对三个 exact `@0.1.0` 版本执行并逐个匿名复验。
