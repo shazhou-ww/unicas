@@ -82,6 +82,9 @@ runner 分钟。未来实际净值仍需扣除 release/manual preflight 的真�
 | `pnpm validate` | 通过：repository checks、所有非 Cloudflare adapter package tests、workspace build 与 typecheck |
 | `pnpm validate:release` | 通过：`pnpm validate` 严格超集、5 files/40 release-policy tests、29 files/268 Cloudflare tests、SDK artifacts、3 browser tests与四个 deployment dry-run |
 | `pnpm exec silvermoon check --worktree --audience agent` | 通过 |
+| `pnpm exec silvermoon check --staged --audience agent` | 通过 |
+| 合并 concurrent primary 后运行 `pnpm exec vitest run tests/deploy-plan.test.mjs tests/release-gated-ci.test.mjs` | 通过：2 files，51 tests；保留 upstream documentation deployment regression |
+| `pnpm check:ideas:remote` | 通过：remote primary `b863525a3dfa01f3d3c563dcba22273c30d5f1ec` |
 
 第一次 `pnpm validate` 把 I/O-heavy 临时 Git fixture 与既有 suites 放在同一
 Vitest invocation，导致 `stack-tenant-retirement` 的 5 秒扫描测试在竞争下超时；
@@ -89,6 +92,12 @@ Vitest invocation，导致 `stack-tenant-retirement` 的 5 秒扫描测试在竞
 独立 Vitest invocation，未提高或放宽原测试 timeout。其后
 `pnpm check:repo`、`pnpm validate` 和 `pnpm validate:release` 全部通过。
 
+实现 commit `0e7dfedd3ef43fb3c185d76fa947c79714154cac` 经普通 merge 保留 concurrent
+primary history，并由 primary commit
+`b863525a3dfa01f3d3c563dcba22273c30d5f1ec` 发布。实现 commit 可从 refreshed
+primary 到达，remote Silvermoon snapshot 有效。
+
 以上命令没有触发 release push、deployment、tag、npm publication 或 GitHub
-settings 写入。staged snapshot、primary synchronization 与 remote check 在候选
-收口时追加。
+settings 写入。真实 post-change Actions run、trigger 状态与保护设置复读属于
+Deployment，不在 Implementation acceptance 前把一次 primary push 推断为外部
+验收。

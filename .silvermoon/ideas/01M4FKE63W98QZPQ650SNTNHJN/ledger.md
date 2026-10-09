@@ -9,7 +9,7 @@
 - [x] **I-S03:** 实现 main exact-revision pre-push
 - [x] **I-S04:** 提供显式且不覆盖用户配置的 hook 生命周期
 - [x] **I-S05:** 固化 regression tests 与开发者责任边界
-- [ ] **I-S06:** 验证并发布 implementation 证据
+- [x] **I-S06:** 验证并发布 implementation 证据
 
 ### Implementation acceptance criteria
 
@@ -18,7 +18,7 @@
 - [x] **I-AC03:** pre-push 对精确 main revision fail closed
 - [x] **I-AC04:** hook 生命周期跨配置来源可诊断
 - [x] **I-AC05:** runner 基线与 settings 风险有持久证据
-- [ ] **I-AC06:** repository candidate 可重复验证且无外部写入
+- [x] **I-AC06:** repository candidate 可重复验证且无外部写入
 
 ## Deployment
 
