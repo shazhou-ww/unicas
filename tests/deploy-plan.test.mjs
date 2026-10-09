@@ -760,6 +760,8 @@ describe("standalone deployment plan", () => {
 
   test("deploys each production Worker in order with environment-scoped credentials", () => {
     const job = productionJob();
+    const cutoverDeployStepStart = job.indexOf("- name: Deploy API and Console for App/Space v1 issuer cutover");
+    const cutoverStepStart = job.indexOf("- name: Cut over App/Space v1 issuer audiences");
     const serviceStepStart = job.indexOf("- name: Deploy API and console service");
     const spacesStepStart = job.indexOf("- name: Deploy Spaces App");
     const siteStepStart = job.indexOf("- name: Deploy product site");
@@ -767,7 +769,9 @@ describe("standalone deployment plan", () => {
     const spaces = job.indexOf("run: pnpm deploy:spaces");
     const site = job.indexOf("run: pnpm deploy:site");
     const docs = job.indexOf("run: pnpm deploy:docs");
-    expect(serviceStepStart).toBeGreaterThan(-1);
+    expect(cutoverDeployStepStart).toBeGreaterThan(-1);
+    expect(cutoverStepStart).toBeGreaterThan(cutoverDeployStepStart);
+    expect(serviceStepStart).toBeGreaterThan(cutoverStepStart);
     expect(spacesStepStart).toBeGreaterThan(serviceStepStart);
     expect(siteStepStart).toBeGreaterThan(spacesStepStart);
     expect(service).toBeGreaterThan(-1);
@@ -823,9 +827,16 @@ describe("standalone deployment plan", () => {
     expect(job).not.toContain("secrets.SESSION_ENCRYPTION_KEYS");
     expect(job).not.toContain("secrets.OAUTH_STATE_ENCRYPTION_KEY");
     expect(job).toContain('wrangler secret put "$name"');
-    expect(job).not.toContain("APP_SPACE_V1_CUTOVER_ENABLED");
-    expect(job).not.toContain("UNICAS_RELEASE_ADMIN_SESSION");
-    expect(job).not.toContain("cut-over-app-space-v1-issuers.mjs");
+    const cutoverDeployStep = job.slice(cutoverDeployStepStart, cutoverStepStart);
+    const cutoverStep = job.slice(cutoverStepStart, serviceStepStart);
+    expect(cutoverDeployStep).toContain("if: vars.APP_SPACE_V1_CUTOVER_ENABLED == 'true'");
+    expect(cutoverDeployStep).toContain("node stacks/unicas/deploy/ensure-encryption-secrets.mjs");
+    expect(cutoverDeployStep).toContain("wrangler deploy");
+    expect(cutoverStep).toContain("if: vars.APP_SPACE_V1_CUTOVER_ENABLED == 'true'");
+    expect(cutoverStep).toContain("UNICAS_RELEASE_ADMIN_SESSION: ${{ secrets.UNICAS_RELEASE_ADMIN_SESSION }}");
+    expect(cutoverStep).toContain("UNICAS_SMOKE_PRIVATE_KEY_PKCS8: ${{ secrets.UNICAS_SMOKE_PRIVATE_KEY_PKCS8 }}");
+    expect(cutoverStep).toContain("SPACES_SIGNING_PRIVATE_KEY_PKCS8: ${{ secrets.SPACES_SIGNING_PRIVATE_KEY_PKCS8 }}");
+    expect(cutoverStep).toContain("run: node stacks/unicas/deploy/cut-over-app-space-v1-issuers.mjs");
     expect(job).toContain("UNICAS_SMOKE_AUDIENCE: ${{ vars.UNICAS_SMOKE_AUDIENCE }}");
     expect(job).not.toContain("format('https://api.unicas.work/stacks/{0}'");
     expect(job).not.toContain("UNICAS_SMOKE_STACK_ID");
