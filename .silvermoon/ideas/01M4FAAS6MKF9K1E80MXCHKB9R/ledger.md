@@ -10,8 +10,9 @@
 - [x] **I-S04:** 补齐社区、安全与维护入口
 - [x] **I-S05:** 强化依赖与 workflow 供应链
 - [x] **I-S06:** 汇总开源就绪检查与候选证据
-- [x] **I-S07:** 同步精确 implementation 候选
+- [ ] **I-S07:** 同步精确 implementation 候选
 - [x] **I-S08:** 增加可信 package 状态徽章
+- [x] **I-S09:** 增加受保护的 docs-only 精确 revision 发布路径
 
 ### Implementation acceptance criteria
 
@@ -21,8 +22,9 @@
 - [x] **I-AC04:** 兼容、SemVer 与 API baseline 可审查
 - [x] **I-AC05:** 社区与安全入口完整
 - [x] **I-AC06:** 安全自动化与不可变引用生效
-- [x] **I-AC07:** 完整候选验证通过且外部状态未改变
+- [ ] **I-AC07:** 完整候选验证通过且外部状态未改变
 - [x] **I-AC08:** 六包徽章准确且不改变发布边界
+- [x] **I-AC09:** Docs 可独立从 authoritative primary 安全部署
 
 ## Deployment
 

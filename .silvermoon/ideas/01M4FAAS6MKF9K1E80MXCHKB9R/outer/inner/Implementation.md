@@ -65,6 +65,26 @@ license 徽章。徽章链接必须使用公开 npm/GitHub 地址并由 readines
 简化为未经门禁证明的徽章。CI trigger 与端侧保护调整由独立 idea
 `release-gated-ci` 跟踪，不在本 implementation 中修改 workflow。
 
+### I-S09: 增加受保护的 docs-only 精确 revision 发布路径
+
+解除 Deployment preflight 发现的公开 SDK docs 404 blocker，但不为此重部署
+API、Spaces 或产品站。新增只接受手动 dispatch 的 documentation deployment
+workflow；调用者必须提供完整小写 commit ID，checkout 后在执行 repository
+代码前证明该 ID 同时等于 `HEAD` 与 refreshed `origin/main`。
+
+workflow 使用现有 `Production` protected environment、只读 repository
+permission、固定 Action SHA 和现有 Cloudflare environment credential。它只
+安装依赖、运行 docs 单元/browser tests、执行 docs dry-run、以 exact commit
+写入 `DOCS_SOURCE_REVISION` 后部署 `@unicas/docs-site`，最后匿名验证公开 SDK
+routes 与 artifact manifest revision。不得获得 npm OIDC、创建 tag、调用 service/
+Spaces/site deployment 或改变普通 branch、pull request、`main` CI trigger。
+
+为 exact-primary revision verifier 和 workflow trust boundary 增加回归测试，并
+在 docs-site 运维文档说明手动输入、protected approval、可观测结果和现有
+Wrangler version rollback。`0.1.2` changelog 继续保持 candidate，只有收到
+精确 `/publish app-user-sdk 0.1.2` 授权并确定实际发布日期后才 release-finalize；
+docs-only publication 本身不构成 npm 发布授权。
+
 ## Acceptance criteria
 
 ### I-AC01: SDK 入口与六包文档一致
@@ -118,3 +138,17 @@ npm registry、GitHub metadata、GitHub Release、tag 与 dist-tag 在 Deploymen
 六个候选 tarball 的 README 分别链接对应 npm package/version/license；
 自动测试拒绝包名错配、CI badge 和未经决定的 monthly downloads badge。
 徽章只展示公开 npm 状态，不构成 CI、兼容、支持或发布授权。
+
+### I-AC09: Docs 可独立从 authoritative primary 安全部署
+
+自动测试证明 documentation workflow 只有 `workflow_dispatch`，要求 full
+lowercase revision，且在运行 pnpm 或 repository script 前用 Git 原生命令证明
+checkout 与 refreshed `origin/main` 精确相等。job 使用 `Production`
+environment、`contents: read`、固定依赖和 serial concurrency；Cloudflare
+credential 只暴露给 docs deploy step。
+
+workflow 执行 docs tests、Chrome browser test、dry-run 与 exact-source deploy，
+随后证明 SDK landing、compatibility、API reference、versioning、changelog、
+support、security 和 `artifact-manifest.json` 可公开读取，manifest 的
+`sourceRevision` 等于输入 revision。测试同时证明 workflow 不含 service、
+Spaces、site、npm、tag 或其他 production write，不改变现有 CI triggers。
