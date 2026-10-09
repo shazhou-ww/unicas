@@ -133,7 +133,7 @@ catalog row:
 
 ```powershell
 $env:SPACES_BOOTSTRAP_APP_ID = "<app-id>"
-$env:SPACES_BOOTSTRAP_SPACE_ID = "<dedicated-user-space-id>"
+$env:SPACES_BOOTSTRAP_SPACE_ID = "/users/<dedicated-user-space-id>"
 $env:SPACES_BOOTSTRAP_PRINCIPAL_ID = "<opaque-principal-id>"
 $env:SPACES_BOOTSTRAP_DISPLAY_NAME = "<display-name>"
 $env:SPACES_BOOTSTRAP_GOOGLE_SUBJECT = "<stable-google-sub>"
@@ -147,7 +147,7 @@ identity and no persistent Root; each smoke run creates and later releases its
 own Root:
 
 ```powershell
-$env:SPACES_BOOTSTRAP_SPACE_ID = "<dedicated-smoke-space-id>"
+$env:SPACES_BOOTSTRAP_SPACE_ID = "/smoke/<dedicated-smoke-space-id>"
 $env:SPACES_BOOTSTRAP_PRINCIPAL_ID = "<smoke-principal-id>"
 $env:SPACES_BOOTSTRAP_DISPLAY_NAME = "Release smoke"
 $env:SPACES_BOOTSTRAP_REF_DOMAIN = "spaces:smoke"

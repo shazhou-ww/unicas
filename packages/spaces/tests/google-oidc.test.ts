@@ -15,7 +15,7 @@ describe("GoogleOidcClient", () => {
       displayName: "Ada",
       provider: "google",
       appId: "app-a",
-      spaceId: "space-a",
+      spaceId: "/space-a",
       refDomain: "spaces",
     };
     const repository = {
@@ -146,7 +146,7 @@ describe("GoogleOidcClient", () => {
       displayName: "Ada",
       provider: "google" as const,
       appId: "app-a",
-      spaceId: "space-a",
+      spaceId: "/space-a",
       refDomain: "spaces",
     };
     const client = new GoogleOidcClient({

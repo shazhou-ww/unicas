@@ -87,6 +87,20 @@ export type { CasErrorResponse } from "./http.js";
 export { appSpaceRoutes, matchAppSpaceRoute } from "./routes.js";
 export type { AppSpaceRoute } from "./routes.js";
 
+export {
+  parseSpaceSelector,
+  spaceSelectorMatches,
+  validateSpaceId,
+  SPACE_ID_MAX_LENGTH,
+  SPACE_ID_PATTERN,
+  SPACE_SELECTOR_MAX_LENGTH,
+} from "./space-id.js";
+export type {
+  ParsedSpaceSelector,
+  SpaceSelector,
+  SpaceSelectorKind,
+} from "./space-id.js";
+
 // Space capability claim vocabulary
 export {
   canonicalPermissionSegment,
@@ -100,6 +114,7 @@ export {
   spaceUsageReadPermission,
   CapabilityAlgorithm,
   CapabilityTokenType,
+  MaximumSpaceCapabilityGrants,
   SpaceCapabilityVersion,
   SpaceCapabilityClaimsSchema,
   SpaceCapabilityPermissionKinds,
@@ -121,6 +136,7 @@ export type {
   CapabilityProtectedHeader,
   ParsedSpaceCapabilityPermission,
   SpaceCapabilityClaims,
+  SpaceCapabilityGrant,
   SpaceCapabilityPermission,
   SpaceCapabilityPermissionKind,
   SpaceOperationPolicy,

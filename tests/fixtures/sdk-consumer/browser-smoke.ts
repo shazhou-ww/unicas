@@ -11,7 +11,7 @@ async function main(): Promise<void> {
     namespace: { endpoint: "https://api.example", principal: "issuer:subject" },
     databaseName: `sdk-consumer-${crypto.randomUUID()}`,
   });
-  const key = { version: 1 as const, appId: "app-1", spaceId: "space-1", hash };
+  const key = { version: 1 as const, appId: "app-1", spaceId: "/space-1", hash };
   let loads = 0;
   const metadata = { hash, size: 1, contentType: "text/plain", refs: [] as string[] };
   await cache.metadata(key, async () => {
@@ -27,7 +27,7 @@ async function main(): Promise<void> {
   const cas = createSpaceCasClient({
     baseUrl: "https://api.example",
     appId: "app-1",
-    spaceId: "space-1",
+    spaceId: "/space-1",
     getToken: async () => "capability",
     cache,
     fetcher: { fetch: async () => Response.json({ error: "NOT_CALLED" }, { status: 500 }) },
@@ -40,7 +40,7 @@ async function main(): Promise<void> {
   };
 
   if (encodeHeader(1, "text/plain", 0).length === 0) throw new Error("codec unavailable");
-  if (!appSpaceRoutes.usage({ appId: "app-1", spaceId: "space-1" }).startsWith("/v1/apps/")) {
+  if (!appSpaceRoutes.usage({ appId: "app-1", spaceId: "/space-1" }).startsWith("/v1/cas/")) {
     throw new Error("protocol route unavailable");
   }
   if (typeof createCasBlobClient(cas).storeBlob !== "function") throw new Error("blob client unavailable");

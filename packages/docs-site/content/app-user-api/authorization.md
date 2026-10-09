@@ -12,9 +12,10 @@ configured external issuer. The UniCAS service:
 3. rejects a suspended App before accepting capability claims;
 4. verifies the ES256 signature, issuer, configured audience, time claims, and
    capability shape;
-5. requires the issuer-derived App to equal route `appId`;
-6. requires claim `spaceId` to equal route `spaceId`;
-7. requires the exact operation permission for that Space; and
+5. requires the issuer-derived App to equal query `appId`;
+6. finds grants whose selector matches the route `spaceId`;
+7. requires at least one matching grant to contain the exact operation
+   permission; and
 8. requires a valid `refDomain` for Root Ref list or update.
 
 Client-side route construction or operation visibility is not an authorization
@@ -24,16 +25,17 @@ boundary.
 
 | Claim | Requirement and meaning |
 | --- | --- |
-| `ver` | Space capability family-local version `1` for the HTTP v1 API. |
+| `ver` | Space capability family-local version `2` for the HTTP v1 API. |
 | `iss` | Exact configured external issuer. It determines the App authority. |
 | `sub` | App-defined subject for audit correlation; it does not replace App or Space scope checks. |
-| `aud` | Exact resource audience configured for the App. |
+| `aud` | Exact CAS v1 resource audience: `https://api.unicas.work/v1/cas/` on the production origin. |
 | `iat` | Issued-at NumericDate. |
 | `nbf` | Not-before NumericDate. |
 | `exp` | Expiry NumericDate. The lifetime must not exceed the App's configured maximum. |
 | `jti` | Unique token identifier for audit and operational correlation. |
-| `spaceId` | Exact Space allowed by the token. |
-| `permissions` | Array containing exact `cas:{resource}:{action}` operation strings. |
+| `grants` | Non-empty array of at most 32 Space selector and permission bindings. |
+| `grants[].selector` | Canonical exact, terminal single-segment prefix, or terminal recursive Space selector. |
+| `grants[].permissions` | Non-empty array of exact `cas:{resource}:{action}` operation strings for that selector. |
 | `refDomain` | Optional for non-Root-Ref operations; required and validated for Root Ref list/update. |
 
 The generated OpenAPI publishes this shape as
@@ -61,9 +63,36 @@ cas:usage:read
 cas:gc:execute
 ```
 
-The required signed `spaceId` claim is the token's sole Space scope and must
-match the route before permission evaluation. Permission strings contain no
-resource ID and are not independently transferable capabilities.
+Permission strings contain no resource ID and are not independently
+transferable capabilities. Their resource scope comes only from the selector
+in the same grant.
+
+## Space IDs and selectors
+
+A canonical Space ID:
+
+- is at most 256 characters;
+- begins with `/`;
+- contains one or more non-empty path segments;
+- uses only ASCII letters, digits, `_`, and `-` in each segment; and
+- is case-sensitive.
+
+Examples are `/users/u_123`, `/shared/report-2026`, and
+`/archive/2026/q1`. Trailing `/`, empty segments, `.`, `..`, percent escapes,
+and other characters are invalid.
+
+Selectors support exactly three forms:
+
+| Form | Example | Matches |
+| --- | --- | --- |
+| Exact | `/users/u_123` | Only that Space |
+| Terminal single-segment prefix | `/shared/report-*` | `/shared/report-2026`, but not a child below it |
+| Terminal recursive prefix | `/archive/**` | Descendants such as `/archive/2026` and `/archive/2026/q1`, but not `/archive` itself |
+
+`*`, `/foo/*`, `/foo/*/bar`, and `/foo/**/bar` are invalid. Selector and
+permission checks are inseparable: one grant must satisfy both. For example, a
+token with write permission on `/users/u_123` and read permission on
+`/shared/**` cannot write a shared Space.
 
 ## Operation-to-permission matrix
 
@@ -77,9 +106,11 @@ resource ID and are not independently transferable capabilities.
 | Get usage | `cas:usage:read` | Not used |
 | Run GC | `cas:gc:execute` | Not used |
 
-A token may contain multiple permissions when one user action genuinely needs
-them, but issue the smallest set and shortest practical lifetime. Do not issue
-GC authority merely because a client library also exposes usage inspection.
+A grant may contain multiple permissions when one user action genuinely needs
+them, and a token may contain multiple grants for owned and shared resources.
+Issue the smallest selector and permission set and shortest practical
+lifetime. Do not issue GC authority merely because a client library also
+exposes usage inspection.
 
 ## Recommended issuance profiles
 
@@ -118,24 +149,36 @@ different domain through query, body, or header manipulation.
 
 The App owns the meaning and lifecycle of domains. Use separate domains when
 independent business root catalogs need independent revisions and authority.
+`refDomain` applies to the whole token, not to an individual grant; use
+separate tokens when selected Spaces require different Root Ref domains.
 
 ## Least-privilege examples
 
-Read one Space:
+Read an owned Space and matching shared Spaces:
 
 ```json
 {
-  "ver": 1,
+  "ver": 2,
   "iss": "https://issuer.example",
   "sub": "principal-123",
-  "aud": "https://api.unicas.work/v1/apps/APP_ID",
+  "aud": "https://api.unicas.work/v1/cas/",
   "iat": 1760000000,
   "nbf": 1760000000,
   "exp": 1760000300,
   "jti": "cap-001",
-  "spaceId": "SPACE_ID",
-  "permissions": [
-    "cas:nodes:read"
+  "grants": [
+    {
+      "selector": "/users/principal-123",
+      "permissions": [
+        "cas:nodes:read"
+      ]
+    },
+    {
+      "selector": "/shared/report-*",
+      "permissions": [
+        "cas:nodes:read"
+      ]
+    }
   ]
 }
 ```
@@ -144,17 +187,21 @@ Commit roots in one domain:
 
 ```json
 {
-  "ver": 1,
+  "ver": 2,
   "iss": "https://issuer.example",
   "sub": "principal-123",
-  "aud": "https://api.unicas.work/v1/apps/APP_ID",
+  "aud": "https://api.unicas.work/v1/cas/",
   "iat": 1760000000,
   "nbf": 1760000000,
   "exp": 1760000300,
   "jti": "cap-002",
-  "spaceId": "SPACE_ID",
-  "permissions": [
-    "cas:root-refs:update"
+  "grants": [
+    {
+      "selector": "/users/principal-123",
+      "permissions": [
+        "cas:root-refs:update"
+      ]
+    }
   ],
   "refDomain": "files:primary"
 }
@@ -167,30 +214,31 @@ Signing keys remain only with the App's issuer.
 
 ### Cross-App
 
-A token from issuer authority for `APP_A` calls a route under `APP_B`.
+A token from issuer authority for `APP_A` sends query `appId=APP_B`.
 
 ```text
 403 resource_scope_mismatch
 ```
 
-The arbitrary claim or route value does not override issuer-derived App
-identity.
+The shared CAS audience identifies the protected API, while the globally
+unique verified issuer determines App authority. An arbitrary query value does
+not override that identity.
 
 ### Cross-Space
 
-A token with `spaceId: SPACE_A` and `cas:nodes:read` calls a route for
-`SPACE_B`.
+A token whose grants do not select `/users/u_456` calls that Space.
 
 ```text
 403 resource_scope_mismatch
 ```
 
-Adding other operation permissions does not make claim `spaceId` match that
-route.
+Adding permissions to a non-matching grant does not make its selector match
+that route.
 
 ### Insufficient authority
 
-A token without the route's exact operation permission calls that route.
+A token has a matching selector, but no matching grant contains the route's
+exact operation permission.
 
 ```text
 403 insufficient_permission
@@ -253,10 +301,11 @@ Avoid persistent browser storage when an in-memory token is sufficient. Never
 log bearer tokens, include them in URLs, commit them as examples, or exchange an
 administrator session for data-plane authority in the browser.
 
-## Prototype capability rejection
+## Previous capability rejection
 
-Prototype Space capability versions 2 and 3 are rejected with
-`401 invalid_token`. Broad prototype permissions are not part of the released
-grammar and are also rejected. There is no issuance cutoff or compatibility
-mode. See [Prototype v2 migration](migration-v2-to-v1.md) for the complete
-consumer cutover.
+Space capability versions 1 and 3 are rejected with `401 invalid_token`.
+Top-level `spaceId` and `permissions` do not replace required `grants`.
+Malformed selectors, empty permissions, and more than 32 grants are also
+rejected. There is no issuance cutoff or compatibility mode. See
+[Space grants migration](migration-space-grants.md) for the complete consumer
+cutover.

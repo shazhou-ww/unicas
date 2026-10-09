@@ -48,7 +48,7 @@
       "version": "0.1.2"
     },
     {
-      "bytes": 23247,
+      "bytes": 24890,
       "dependencies": {
         "@opentelemetry/api": "^1.9.0",
         "@orpc/contract": "1.15.0",
@@ -80,12 +80,14 @@
         "dist/space-capability.js",
         "dist/space-contract.d.ts",
         "dist/space-contract.js",
+        "dist/space-id.d.ts",
+        "dist/space-id.js",
         "dist/types.d.ts",
         "dist/types.js",
         "openapi/app-space-v1.openapi.json",
         "package.json"
       ],
-      "integrity": "sha512-GomdfT1q6tWtqsQ3JGfYvSYGfd/3YpVnu9zpLuWod8RbQFQWAcdZlx9UQKgpjLwAIm8ERfohDi+gStsdhBGxJg==",
+      "integrity": "sha512-phxUh1cal9pXoTIvZajzMQQFt/DOuCJtfbd66Eyr7ROtObi11SkYw2mOGTOw05rTu5nPlaxVu+e+VQQG+HKQqQ==",
       "name": "@unicas/space-protocol",
       "order": 2,
       "runtime": "node-browser",

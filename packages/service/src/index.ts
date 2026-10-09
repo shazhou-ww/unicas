@@ -252,7 +252,7 @@ export {
 } from "./control-possession.js";
 export {
   canonicalJson,
-  appOAuthResource,
+  casOAuthResource,
   CONTROL_LIST_DEFAULT_LIMIT,
   CONTROL_LIST_MAX_LIMIT,
   OAUTH_CAPABILITY_MAX_LIFETIME_SECONDS,

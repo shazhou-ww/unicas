@@ -1148,7 +1148,7 @@ describe("standalone deployment plan", () => {
         stack_id: stackId,
         mode: "external",
         issuer: "https://unicas.work/deploy-smoke",
-        audience: `https://api.unicas.work/v1/apps/${stackId}`,
+        audience: "https://api.unicas.work/v1/cas/",
         metadata_url: "https://unicas.work/.well-known/oauth-authorization-server/deploy-smoke",
         metadata_type: "oauth",
         authorization_endpoint: "https://unicas.work/deploy-smoke/authorize",
@@ -1270,7 +1270,7 @@ describe("standalone deployment plan", () => {
         stack_id: "cas_smoke",
         mode: "external",
         issuer: "https://unicas.work/deploy-smoke",
-        audience: "https://api.unicas.work/v1/apps/cas_smoke",
+        audience: "https://api.unicas.work/v1/cas/",
         metadata_url: "https://unicas.work/.well-known/oauth-authorization-server/deploy-smoke",
         metadata_type: "oauth",
         authorization_endpoint: "https://unicas.work/deploy-smoke/authorize",
@@ -1320,7 +1320,7 @@ describe("standalone deployment plan", () => {
       });
       expect(database.prepare("SELECT issuer, audience, status FROM cas_app_oauth_issuers").get()).toEqual({
         issuer: "https://unicas.work/deploy-smoke",
-        audience: "https://api.unicas.work/v1/apps/cas_smoke",
+        audience: "https://api.unicas.work/v1/cas/",
         status: "active",
       });
       expect(database.prepare("SELECT COUNT(*) AS count FROM cas_platform_audit_events").get()).toEqual({ count: 2 });

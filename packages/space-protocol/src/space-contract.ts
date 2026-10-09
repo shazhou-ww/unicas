@@ -13,7 +13,7 @@ import type {
   SpaceNodeUploadRejection,
 } from "./types.js";
 
-export const SpaceApiBasePath = "/v1/apps/{appId}/spaces/{spaceId}";
+export const SpaceApiBasePath = "/v1/cas";
 export const DefaultSpaceNodeLeaseDurationMs = 15 * 60 * 1000;
 
 const ErrorDataSchema = z.object({ message: z.string().optional() }).readonly();
@@ -83,11 +83,11 @@ const HashSchema = z.string()
   .describe("Lowercase hexadecimal SHA-256 digest of canonical CAS node bytes.");
 const TimestampSchema = z.number().int().nonnegative()
   .describe("Unix timestamp in milliseconds since 1970-01-01T00:00:00Z.");
-const spaceParams = z.object({
+const scopeQuery = z.object({
   appId: AppIdSchema.describe("App that establishes issuer authority and storage isolation."),
   spaceId: SpaceIdSchema.describe("Space authorized by the capability for this request."),
 }).readonly();
-const nodeParams = spaceParams.unwrap().extend({
+const nodeParams = z.object({
   hash: HashSchema.describe("Lowercase SHA-256 content digest."),
 }).readonly();
 
@@ -318,7 +318,7 @@ const RootRefsPageSchema = z.object({
 export const readContentContract = spaceProcedure
   .route({
     method: "GET",
-    path: `${SpaceApiBasePath}/cas/nodes/{hash}/content`,
+    path: `${SpaceApiBasePath}/nodes/{hash}`,
     operationId: "readContent",
     summary: "Read immutable node content",
     description: "Streams canonical bytes for a ready node in the requested Space. Content-Type, Content-Length, and X-CAS-Refs describe the same immutable node so clients can consume metadata and content in one authorized request. Requires cas:nodes:read.",
@@ -328,6 +328,7 @@ export const readContentContract = spaceProcedure
   })
   .input(z.object({
     params: nodeParams,
+    query: scopeQuery,
     headers: z.object({ Range: RangeHeaderSchema.optional() }).readonly().optional(),
   }).readonly())
   .output(ReadContentOutputSchema);
@@ -335,21 +336,21 @@ export const readContentContract = spaceProcedure
 export const readMetadataContract = spaceProcedure
   .route({
     method: "GET",
-    path: `${SpaceApiBasePath}/cas/nodes/{hash}/metadata`,
+    path: `${SpaceApiBasePath}/nodes/{hash}/metadata`,
     operationId: "readMetadata",
     summary: "Read node metadata",
     description: "Returns immutable metadata and mutable retention state for one Space node. Requires cas:nodes:read.",
     inputStructure: "detailed",
     tags: ["Nodes"],
   })
-  .input(z.object({ params: nodeParams }).readonly())
+  .input(z.object({ params: nodeParams, query: scopeQuery }).readonly())
   .output(z.object({ metadata: NodeMetadataSchema, state: NodeStateSchema }).readonly()
     .meta({ id: "SpaceReadMetadataResponse" }));
 
 export const leaseNodeContract = spaceProcedure
   .route({
     method: "POST",
-    path: `${SpaceApiBasePath}/cas/nodes/{hash}/lease`,
+    path: `${SpaceApiBasePath}/nodes/{hash}/lease`,
     operationId: "leaseNode",
     summary: "Lease a node",
     description: "Advances the lease-driven node state machine and returns the resulting ready, upload, replacement-upload, or dependency state. Requires cas:nodes:lease.",
@@ -358,6 +359,7 @@ export const leaseNodeContract = spaceProcedure
   })
   .input(z.object({
     params: nodeParams,
+    query: scopeQuery,
     body: SpaceNodeLeaseRequestSchema,
   }).readonly())
   .output(LeaseOperationResultSchema);
@@ -365,20 +367,20 @@ export const leaseNodeContract = spaceProcedure
 export const getUsageContract = spaceProcedure
   .route({
     method: "GET",
-    path: `${SpaceApiBasePath}/cas/usage`,
+    path: `${SpaceApiBasePath}/usage`,
     operationId: "getUsage",
     summary: "Read Space CAS usage",
     description: "Returns current operational accounting for one Space. Requires cas:usage:read.",
     inputStructure: "detailed",
     tags: ["Operations"],
   })
-  .input(z.object({ params: spaceParams }).readonly())
+  .input(z.object({ query: scopeQuery }).readonly())
   .output(UsageSchema);
 
 export const runGcContract = spaceProcedure
   .route({
     method: "POST",
-    path: `${SpaceApiBasePath}/cas/gc`,
+    path: `${SpaceApiBasePath}/gc`,
     operationId: "runGc",
     summary: "Run Space garbage collection",
     description: "Runs one bounded and race-safe garbage-collection pass within the Space. Requires cas:gc:execute.",
@@ -386,7 +388,7 @@ export const runGcContract = spaceProcedure
     tags: ["Operations"],
   })
   .input(z.object({
-    params: spaceParams,
+    query: scopeQuery,
     body: z.object({ maxNodes: z.number().int().positive().optional() }).readonly().optional(),
   }).readonly())
   .output(GcResultSchema);
@@ -402,11 +404,12 @@ export const listRootRefsContract = spaceProcedure
     tags: ["Root Refs"],
   })
   .input(z.object({
-    params: spaceParams,
     query: z.object({
+      appId: AppIdSchema.describe("App that establishes issuer authority and storage isolation."),
+      spaceId: SpaceIdSchema.describe("Space authorized by the capability for this request."),
       limit: z.number().int().min(1).max(200).optional(),
       cursor: z.string().min(1).optional(),
-    }).readonly().optional(),
+    }).readonly(),
   }).readonly())
   .output(RootRefsPageSchema);
 
@@ -420,7 +423,7 @@ export const updateRootRefsContract = spaceProcedure
     inputStructure: "detailed",
     tags: ["Root Refs"],
   })
-  .input(z.object({ params: spaceParams, body: CasRootRefUpdateSchema }).readonly())
+  .input(z.object({ query: scopeQuery, body: CasRootRefUpdateSchema }).readonly())
   .output(z.object({
     success: z.literal(true),
     idempotent: z.boolean(),

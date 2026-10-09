@@ -60,7 +60,7 @@ describe("documentation static site", () => {
       "/app-user-api/scenarios/",
       "/app-user-api/http-api/",
       "/app-user-api/authorization/",
-      "/app-user-api/migration-v2-to-v1/",
+      "/app-user-api/migration-space-grants/",
       "/cas-architecture/",
       "/cas-binary-format/",
       "/cas-state-protection-and-gc/",

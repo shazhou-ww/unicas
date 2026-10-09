@@ -27,7 +27,7 @@ export async function generateSpaceOpenApiDocument() {
       description: [
         "App-scoped Space API for immutable content-addressed nodes, leases, usage accounting, garbage collection, and atomic Root Ref commits.",
         "",
-        "Every request uses a version 1 JWT capability on the version 1 HTTP API. The registered issuer establishes App authority; the token's signed `spaceId` must match the route and its exact operation permission must authorize the request.",
+        "Every request uses a version 2 JWT capability for the shared CAS v1 audience. The registered issuer establishes App authority; one signed grant must select query `spaceId` and contain the operation's exact permission.",
         "",
         "Principal identity and Profile metadata are independent of Space ownership and authorization.",
       ].join("\n"),
@@ -47,7 +47,7 @@ export async function generateSpaceOpenApiDocument() {
           type: "http",
           scheme: "bearer",
           bearerFormat: "JWT",
-          description: "Version 1 Space capability. Issuer authority and signed spaceId must match the request path, and the permission set must contain the operation's exact CAS authority.",
+          description: "Version 2 Space capability for the shared CAS v1 audience. The verified issuer authority must match query appId, and one signed grant must both select query spaceId and contain the operation's exact CAS permission.",
         },
       },
     },
@@ -117,7 +117,7 @@ export async function generateSpaceOpenApiDocument() {
   }
 
   const readContent = document.paths?.[
-    `${SpaceApiBasePath}/cas/nodes/{hash}/content`
+    `${SpaceApiBasePath}/nodes/{hash}`
   ]?.get;
   if (readContent?.responses === undefined) {
     throw new Error("Generated Space OpenAPI is missing the readContent operation");

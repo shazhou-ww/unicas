@@ -291,13 +291,15 @@ export interface CasRootRefUpdate {
 The canonical service operation is:
 
 ```http
-POST /v1/apps/{appId}/spaces/{spaceId}/root-refs
+POST /v1/cas/root-refs?appId={appId}&spaceId={spaceId}
 Authorization: Bearer <capability carrying refDomain>
 ```
 
 The request body does not carry App, Space, or domain identity. CAS maps the
-verified issuer to App authority, requires path App and token Space equality,
-and derives `refDomain` from the signed capability.
+globally unique verified issuer to App authority, requires query `appId` to
+match that authority, requires one signed grant to select query `spaceId` and
+contain the operation permission, and derives `refDomain` from the signed
+capability.
 
 The update operation:
 
@@ -398,7 +400,7 @@ CAS owns its native Space and App administrator route contracts. `@unicas/servic
 provides one cloud-neutral HTTP actor that matches both protocols and receives
 storage/concurrency strategies through explicit platform ports.
 `@unicas/service-cloudflare` wraps that actor as the only production Worker and
-public endpoint. The same Worker serves `/v1/apps`, `/admin`, MCP/OAuth, and the
+public endpoint. The same Worker serves `/v1/cas`, `/admin`, MCP/OAuth, and the
 admin UI while preserving credential isolation between route classes. D1, R2,
 KV, and Durable Object bindings are Cloudflare adapter concerns; keyed actor
 ports preserve the single-writer semantics required by Space and ref-domain
@@ -455,7 +457,7 @@ short-lived, write-once R2 target returned by the service.
 ### 11.1 Read content
 
 ```http
-GET /v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{sha256}/content
+GET /v1/cas/nodes/{sha256}?appId={appId}&spaceId={spaceId}
 Authorization: Bearer <CAS capability>
 ```
 
@@ -467,7 +469,7 @@ Responses:
 ### 11.2 Read metadata
 
 ```http
-GET /v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{sha256}/metadata
+GET /v1/cas/nodes/{sha256}/metadata?appId={appId}&spaceId={spaceId}
 Authorization: Bearer <CAS capability>
 ```
 
@@ -476,7 +478,7 @@ Returns immutable metadata and mutable state. Unknown nodes return `404`.
 ### 11.3 Lease or obtain upload instructions
 
 ```http
-POST /v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{sha256}/lease
+POST /v1/cas/nodes/{sha256}/lease?appId={appId}&spaceId={spaceId}
 Authorization: Bearer <CAS capability>
 Content-Type: application/json
 
@@ -501,7 +503,7 @@ publication. The response `state` is one of `ready`, `awaiting_upload`,
 ### 11.4 Extend an existing lease
 
 ```http
-POST /v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{sha256}/lease
+POST /v1/cas/nodes/{sha256}/lease?appId={appId}&spaceId={spaceId}
 Authorization: Bearer <CAS capability>
 Content-Type: application/json
 
@@ -514,8 +516,8 @@ content. A missing node returns upload instructions rather than `404`.
 ### 11.5 Space usage and GC
 
 ```http
-GET  /v1/apps/{appId}/spaces/{spaceId}/cas/usage
-POST /v1/apps/{appId}/spaces/{spaceId}/cas/gc
+GET  /v1/cas/usage?appId={appId}&spaceId={spaceId}
+POST /v1/cas/gc?appId={appId}&spaceId={spaceId}
 Authorization: Bearer <CAS capability>
 ```
 
@@ -548,7 +550,7 @@ SERVICE_UNAVAILABLE` instead of returning a partial physical total.
 Business services apply signed non-zero count deltas:
 
 ```http
-POST /v1/apps/{appId}/spaces/{spaceId}/root-refs
+POST /v1/cas/root-refs?appId={appId}&spaceId={spaceId}
 Authorization: Bearer <CAS capability carrying refDomain>
 Content-Type: application/json
 
