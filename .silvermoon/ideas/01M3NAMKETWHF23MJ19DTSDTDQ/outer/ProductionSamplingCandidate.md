@@ -44,20 +44,21 @@
   Grafana 发送新的 trace。四项 profile 只会在受保护 release
   deployment 中由现有 service 与 Spaces step 注入两个动态 Worker。
 
-## Remaining gate
+## 生产执行结果
 
-- D-S02 已完成：精确 rate 已批准，同一完整 profile 已配置给两个动态
-  Worker 的受保护部署路径，且两个 bundle 的候选 dry run 已通过。
-- Draft promotion PR
-  [#28](https://github.com/shazhou-ww/unicas/pull/28) 将 `main` 提升到
-  `release`。其初始候选 head
-  `b03f870cdefb305dc77c3578f53c43a781658f10` 可合并，CI `validate`
-  已通过；`Deploy production` 与 `Tag verified production deployment`
-  均按预期跳过。
-- PR #28 保持 draft 且未合并，因此没有生产发布。它包含上次 production
-  promotion 之后的 53 个 non-merge commits，不只包含 tracing 变更。
-- D-S03 仍需发布精确 revision，并只用 synthetic non-sensitive data
-  覆盖 service、Spaces、fetch、D1、R2、Durable Object、Admin、MCP 与
-  OAuth 路径。
-- D-S04 仍需直接检查 retained fields、有效 retention/limit/cost，并
-  证明将采样率恢复为 `0` 的回滚。
+- D-S02 的 `0.01` profile 通过受保护 workflow 部署到 exact revision
+  `80838475010aa5a5c53bebd5d7dd335ab14be4e7`，production tag 为
+  `production-20261008-571`。
+- Synthetic canary 覆盖 service、Spaces、fetch、D1、R2、Durable
+  Object、Admin、MCP、OAuth、success 与 error paths。Direct retained
+  inspection 和字段审计结果见
+  [`ProductionTracingEvidence.md`](./ProductionTracingEvidence.md)。
+- 生产复核完成后，sample rate 已恢复为 `0`。受保护 workflow 从最新
+  release revision `d69e27d086cfdaa6a6449d47122861c89be08db9`
+  完成真实回滚，并创建 `production-20261009-578`。
+- 当前两个 dynamic Worker 的实际 sample rate 均为 `0`，没有 OTLP
+  endpoint binding；Cloudflare native tracing 继续保持关闭。
+
+该候选记录保留最初的批准与 dry-run 事实；生产 retained evidence、
+已知 streamed-response parentage limitation 和 rollback 结果以 linked
+Outer World evidence 为准。
