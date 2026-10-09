@@ -150,17 +150,25 @@ do not deploy the new Worker separately. Worker rollback does not roll back
 the D1 migration ledger, so every future migration must state backward
 compatibility or a forward-repair procedure.
 
-The Spaces Worker uses Smart Placement rather than fixed IAD placement. Treat
-that as a candidate topology, not proof of locality. Before accepting a
-deployment, run at least 30 authenticated synthetic directory reads from the
-agreed APAC probes, report p50/p95/p99/max for TTFB and Worker wall time, record
-the observed colo/placement, and verify a controlled cold request. Compare
-`spaces_session`, `spaces_manifest`, `spaces_unicas`, `spaces_root` when present,
-`cas_auth`, `cas_do`, applicable `cas_d1_*`/`cas_r2_*`, and `cas_edge`.
-Do not report response-construction timing as full stream completion.
+The Spaces Worker uses the explicit `aws:ap-southeast-1` placement hint rather
+than fixed IAD or Smart Placement. `SPACES_DB` remains in ENAM, while the
+UniCAS tenant D1 and Durable Object data plane are in APAC. An authenticated
+directory read therefore pays one bounded session query across regions before
+executing the dominant manifest path near the APAC data plane. Do not switch
+back to Smart Placement without a new canary: optimizing the first query can
+increase the downstream Durable Object dispatch time.
 
-If Smart Placement misses any directory threshold, restore the last accepted
-Spaces placement configuration and redeploy before evaluating an APAC
+Treat the placement hint as a candidate topology, not proof of latency. Before
+accepting a deployment, run at least 30 authenticated synthetic directory reads
+from the agreed APAC probes, report p50/p95/p99/max for TTFB and Worker wall
+time, record the observed colo/placement, and verify a controlled cold request.
+Compare `spaces_session`, `spaces_manifest`, `spaces_unicas`, `spaces_root`
+when present, `cas_auth`, `cas_do`, applicable `cas_d1_*`/`cas_r2_*`, and
+`cas_edge`. Do not report response-construction timing as full stream
+completion.
+
+If explicit APAC placement misses any directory threshold, restore the last
+accepted Spaces version and placement configuration before evaluating an APAC
 `SPACES_DB` migration. A D1 move requires a separate copy, consistency,
 cutover, rollback, and data-validation plan; do not infer it from a broad
 region label.

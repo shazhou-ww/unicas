@@ -36,18 +36,20 @@ allowlist 内的 `cas_auth`、`cas_do`、`cas_d1_*`、`cas_r2_*`、`cas_edge` �
 固定计时项。解析器忽略 description、未知名称和非有限时长；响应不得包含
 标识符、路径、URL、header 值、SQL 值或内容。
 
-### I-S05: 用 Smart Placement 替代固定 IAD
+### I-S05: 将 Spaces placement 锁定到 APAC 数据面
 
-将 `unicas-spaces` 从固定 `aws:us-east-1` 改为 `mode: smart`，作为无需搬迁
-`SPACES_DB` 数据且可直接回滚的第一候选。暂不迁移 `SPACES_DB`，因为数据库搬迁
-会引入数据复制、停写和一致性切换风险；Deployment 必须用 APAC 合成 canary
-验证实际 placement 和端到端阈值，若 Smart Placement 仍选择不合格路径则不接受
-部署，并回滚配置后再评估 APAC D1 迁移。
+首轮将 `unicas-spaces` 从固定 `aws:us-east-1` 改为 `mode: smart`；production
+canary 证明该候选在 session/root 合并后把 `spaces_session` 降至几十毫秒，却让
+`cas_do` 的 Worker-to-DO dispatch 成为主要等待。`SPACES_DB` 位于 ENAM，而
+UniCAS tenant D1 和 DO 数据面位于 APAC，因此将 Spaces 改为显式
+`region: aws:ap-southeast-1`。目录读取保留一次跨区 session query，但把占主导的
+manifest/CAS 路径放回 APAC 数据面附近。暂不迁移 `SPACES_DB`；失败时回滚到当前
+Smart Placement version，再单独设计需要复制、停写和一致性切换的 D1 搬迁。
 
 ### I-S06: 锁定兼容性、运维和验证证据
 
 补充协议、可观测性、CAS 运维和部署文档，覆盖组合读取 header、migration
-顺序、Smart Placement 假设、SLO、合成探测和回滚。增加路由、client、file
+顺序、显式 APAC placement 假设、SLO、合成探测和回滚。增加路由、client、file
 service、Worker timing、deployment plan 与 schema migration 测试，并运行相关
 package 测试、typecheck、文档检查和两个 Worker dry-run。
 
@@ -82,12 +84,12 @@ allowlist 内的下游计时；只有 catalog fallback 才出现 `spaces_root`�
 description、负数、非有限值和动态值不会进入响应。新服务的正常 Space 响应不再
 出现 `cas_schema`。通过 timing 与 Worker 单元测试证明。
 
-### I-AC05: 固定 IAD placement 已被可回滚候选替代
+### I-AC05: Spaces 使用可回滚的显式 APAC placement
 
-Spaces Wrangler 配置为 Smart Placement，配置测试锁定该值；部署文档明确 APAC
-canary 门禁、失败回滚到已知配置，以及只有实测不达标后才进入 D1 搬迁设计。
-实现验收不声称已经满足生产延迟 SLO，生产 p50/p95/p99/max 由 Deployment 世界
-验证。
+Spaces Wrangler 配置为 `region: aws:ap-southeast-1`，配置测试锁定该值；运维与
+Deployment 文档明确 APAC canary 门禁、失败回滚到当前 Smart Placement version，
+以及只有实测不达标后才进入 D1 搬迁设计。实现验收不声称已经满足生产延迟 SLO，
+生产 p50/p95/p99/max 由 Deployment 世界验证。
 
 ### I-AC06: 候选通过窄测试和发布前检查
 

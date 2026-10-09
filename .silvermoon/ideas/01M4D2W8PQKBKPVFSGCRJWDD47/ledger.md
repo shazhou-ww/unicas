@@ -8,7 +8,7 @@
 - [x] **I-S02:** 合并 manifest metadata 与 content 读取
 - [x] **I-S03:** 复用 file-root catalog snapshot
 - [x] **I-S04:** 暴露安全的外层分段计时
-- [x] **I-S05:** 用 Smart Placement 替代固定 IAD
+- [x] **I-S05:** 将 Spaces placement 锁定到 APAC 数据面
 - [x] **I-S06:** 锁定兼容性、运维和验证证据
 
 ### Implementation acceptance criteria
@@ -17,7 +17,7 @@
 - [x] **I-AC02:** 目录读取只有一个 session/root lookup 和一个 manifest 边界
 - [x] **I-AC03:** 授权、隔离和 API 兼容性保持不变
 - [x] **I-AC04:** Server-Timing 有界且不泄露数据
-- [x] **I-AC05:** 固定 IAD placement 已被可回滚候选替代
+- [x] **I-AC05:** Spaces 使用可回滚的显式 APAC placement
 - [x] **I-AC06:** 候选通过窄测试和发布前检查
 
 ### Implementation evidence
@@ -49,21 +49,31 @@
   `@unicas/spaces` suite 67/67、package typecheck、docs 7/7 和
   `pnpm deploy:spaces:plan` 均通过。移除一个生产中约 220 ms 的 D1 网络边界是
   可验证的实现结果；新的 production wall SLO 仍留给后续 Deployment canary。
+- 第二轮 production canary 证明 root snapshot 已生效：`spaces_root` 消失且
+  `spaces_session` p95 降至 41–76 ms；但 warm TTFB p95 为 2020.5–2133.1 ms，
+  `spaces_unicas` p95 为 1392–1474 ms，`cas_do` p95 最高 1467 ms。只读 D1
+  metadata 同时确认 `unicas-spaces` 位于 ENAM、`unicas-tenant` 位于 APAC；
+  因此 Smart Placement 优化了次要 session 边界，却让主导 CAS/DO 路径跨区。
+- 显式 `aws:ap-southeast-1` 候选由 deployment config test 锁定；deploy-plan
+  43/43、docs 7/7、Spaces package typecheck、`pnpm deploy:spaces:plan` Wrangler
+  dry-run、Silvermoon worktree/staged/remote check 和 main CI
+  `37869596238` 均通过。该证据只证明候选可发布，production SLO 仍必须由新
+  promotion 后的 APAC canary 验证。
 
 ## Deployment
 
 ### Deployment steps
 
-- [x] **D-S01:** 锁定发布候选和回滚基线
-- [x] **D-S02:** 同步稳定契约并通过发布前门禁
-- [x] **D-S03:** 通过受保护 release promotion 发布
+- [ ] **D-S01:** 锁定发布候选和回滚基线
+- [ ] **D-S02:** 同步稳定契约并通过发布前门禁
+- [ ] **D-S03:** 通过受保护 release promotion 发布
 - [ ] **D-S04:** 执行 APAC authenticated directory canary
 - [ ] **D-S05:** 观察稳定性并执行失败回滚
 - [ ] **D-S06:** 发布外部证据并进入验收门禁
 
 ### Deployment acceptance criteria
 
-- [x] **D-AC01:** production 对应受保护的精确发布
+- [ ] **D-AC01:** production 对应受保护的精确发布
 - [ ] **D-AC02:** migration、发布和 canonical smoke 全部成功
 - [ ] **D-AC03:** APAC directory TTFB 达标
 - [ ] **D-AC04:** Worker wall time 与安全 timing 达标
@@ -88,6 +98,7 @@
 - T+15 APAC 无正文 probe 再次确认五个 public origin 返回预期状态，HKG/NRT
   colo 可用；缺少同窗口 Worker outcome、CPU/wall 和 5xx，因此 D-S05 与
   D-AC06 保持未勾选。
-- 共享浏览器没有安全登录态且自动化连接超时；APAC canary、Workers metrics、
-  controlled cold observation 和 15 分钟稳定性仍未完成。不得以 workflow
-  smoke 或本地 benchmark 替代 D-S04、D-S05 或 D-AC03–D-AC07。
+- 第二轮 root-snapshot release 已通过受保护 promotion 和全部 smoke，但两次
+  authenticated APAC canary 均违反 warm TTFB SLO，首次 cold observation 也
+  违反 2 秒门槛；当前 production 不能进入 Deployment 验收。新的显式 APAC
+  placement 候选必须重新验收、promotion、canary 和稳定性观察。
