@@ -4,17 +4,17 @@
 
 - Idea：`spaces-entries-latency`
 - ULID：`01M4D2W8PQKBKPVFSGCRJWDD47`
-- 已验收 Implementation revision：
+- 首轮已验收 Implementation revision：
   `ed42de517d1694ac17e8c68aab471cebf04aa929`
-- 实现 commit：`65605f2073e63623699ec8f235b221709f85ff92`
-- acceptance commit：`8a1f360c7e86f6d303384754c617105a96966fa4`
-- Deployment contract revision：
+- 首轮实现 commit：`65605f2073e63623699ec8f235b221709f85ff92`
+- 首轮 acceptance commit：`8a1f360c7e86f6d303384754c617105a96966fa4`
+- 初始 Deployment contract revision：
   `bd6aa93fb588d09e9b06e5fccd57e540b6cc92a9`
-- 最终 `main` candidate：
+- 首轮 `main` candidate：
   `e37a2a81a8e12d3487d8d5d7bacbe28fee109672`
-- production release revision：
+- 首轮 production release revision：
   `80838475010aa5a5c53bebd5d7dd335ab14be4e7`
-- production tag：`production-20261008-571`
+- 首轮 production tag：`production-20261008-571`
 
 ## Controlled local pre-validation
 
@@ -174,3 +174,59 @@ release branch policy 和 `prevent_self_review=true`。最终 credential 只保�
 - 当前结论：production 发布、credential 撤销、authenticated TTFB、cold 与安全
   timing 已有可复核证据；Worker wall 失败已持久化并触发补充实现。D-S04–D-S06
   和 D-AC02–D-AC07 保持未完成，直到新候选通过完整发布与稳定性门禁。
+
+## Root-snapshot follow-up release
+
+- 已验收 follow-up Implementation revision：
+  `d99da2637861b94edbc562e7e8304b6d30ab41a2`
+- 实现 commit：`d40045099ce1e9dfd63e33d0e0edf23a53e8d4c1`
+- acceptance commit：`3cf48f8fdaba84d741bcb663d1a825bb72fa10be`
+- [Promotion #35](https://github.com/shazhou-ww/unicas/pull/35) 生成 two-parent
+  release revision `d69e27d086cfdaa6a6449d47122861c89be08db9`，release tree
+  与 main parent tree 一致。
+- [Workflow 37865051908](https://github.com/shazhou-ww/unicas/actions/runs/37865051908)
+  attempt 1 在 Spaces publication 后的即时 authentication 因 credential
+  propagation 返回 401；attempt 2 在传播完成后全链路成功。新的 bounded
+  credential 建立后，attempt 3 被一个未过期 active smoke run 的 preflight
+  阻止；没有修改 D1，等待其约 15 分钟 TTL 自然到期后，attempt 4 于
+  `2026-10-09T01:13:31Z` 全链路成功。
+- attempt 4 再次通过 release validation、migration、canonical service smoke、
+  Spaces file smoke 和五个 public origin probe，并确认 Production protection
+  已恢复。最终 tag 与 version 为：
+  - tag：`production-20261009-578`
+  - service：`2f35887a-ea3a-4778-a3cd-0e9c7903c657`
+  - Spaces：`809775fb-4ec0-41bd-b260-aaf9f9e3bf88`
+  - site：`49dc589d-b9f3-414c-a795-6d5fbb0ee2c4`
+  - docs：`88f836aa-78fa-4168-81b7-b2af63f8903f`
+
+## Root-snapshot follow-up APAC canary
+
+- attempt 4 后首个 controlled observation 为 2171.9 ms，超过 2 秒 cold
+  门槛。随后 30 次 warm read 连同 cold observation 为 31/31 HTTP 200；warm
+  TTFB p50/p95/max 为 863.9/2020.5/2062.9 ms，D-AC03 与 D-AC05 均失败。
+- 同一次 probe 中 `spaces_session` p95 为 41 ms，`spaces_root` 完全消失，
+  证明 session/root 单 query 候选已生效；`spaces_unicas` p95 为 1392 ms，
+  `cas_do` p95 为 578 ms。header 只含 allowlist timing 且没有 `cas_schema`。
+- 为排除刚发布的 cold effect，随后执行独立 steady-state probe：cold 为
+  1011.1 ms，30 次 warm read 的 TTFB p50/p95 为 1066.7/2133.1 ms；
+  `spaces_session` p95 为 76 ms，`spaces_unicas` p95 为 1474 ms，
+  `cas_do` p95 为 1467 ms。31/31 请求仍为 HTTP 200，且 timing 安全。
+- `cas_do` 相对 `cas_do_route` 的新增差值把主要等待定位到 service Worker 与
+  Durable Object 之间的 dispatch/network 边界，而不是 DO 内部 D1 或 R2 工作。
+  同期只读 `wrangler d1 info` 确认 `unicas-spaces` 位于 ENAM、
+  `unicas-tenant` 位于 APAC；低 `spaces_session` 与高 `cas_do` 的组合与 Smart
+  Placement 靠近 ENAM session 数据库、远离 APAC CAS 数据面一致。
+
+## Follow-up rollback disposition
+
+- 第二轮 canary 明确触发 rollback threshold，当前 release 不满足 Deployment
+  contract。固定 IAD 基线已有约 9 秒级 APAC wall/TTFB 证据，直接恢复该版本会
+  明知恶化可用性；因此没有把失败 canary 伪装成稳定性通过，也没有执行该有害
+  rollback。
+- 当前 Smart Placement version 保持服务可用并作为下一候选的回滚基线。idea
+  返回 Implementation，把 Spaces placement 改为显式
+  `aws:ap-southeast-1`，在不搬迁 D1 的情况下优先共置 APAC CAS/DO 主路径。
+  该候选必须获得新的 exact Implementation acceptance 后才能 promotion。
+- 当前 synthetic credential 的明文未写入输出或仓库；受保护 secret 与本地
+  DPAPI 密文只保留到最终候选完成 canary，之后必须再次轮换、验证旧 credential
+  失效并精确删除本地临时文件。
