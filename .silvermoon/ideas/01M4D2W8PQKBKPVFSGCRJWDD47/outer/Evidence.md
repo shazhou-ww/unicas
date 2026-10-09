@@ -4,17 +4,17 @@
 
 - Idea：`spaces-entries-latency`
 - ULID：`01M4D2W8PQKBKPVFSGCRJWDD47`
-- 已验收 Implementation revision：
+- 首轮已验收 Implementation revision：
   `ed42de517d1694ac17e8c68aab471cebf04aa929`
-- 实现 commit：`65605f2073e63623699ec8f235b221709f85ff92`
-- acceptance commit：`8a1f360c7e86f6d303384754c617105a96966fa4`
-- Deployment contract revision：
+- 首轮实现 commit：`65605f2073e63623699ec8f235b221709f85ff92`
+- 首轮 acceptance commit：`8a1f360c7e86f6d303384754c617105a96966fa4`
+- 初始 Deployment contract revision：
   `bd6aa93fb588d09e9b06e5fccd57e540b6cc92a9`
-- 最终 `main` candidate：
+- 首轮 `main` candidate：
   `e37a2a81a8e12d3487d8d5d7bacbe28fee109672`
-- production release revision：
+- 首轮 production release revision：
   `80838475010aa5a5c53bebd5d7dd335ab14be4e7`
-- production tag：`production-20261008-571`
+- 首轮 production tag：`production-20261008-571`
 
 ## Controlled local pre-validation
 
@@ -87,21 +87,70 @@ migration 从首个请求移到启动阶段的预期取舍。两侧热请求约 
 - immutable tag：`production-20261008-571`，由成功 workflow 在
   `2026-10-08T08:28:30Z` 创建并指向最终 release revision。
 
+## Synthetic credential rotation
+
+为避免依赖真实账户或浏览器 cookie，Production environment 的
+`SPACES_SMOKE_CREDENTIAL` 被轮换为一次性 256-bit synthetic credential，并对同一
+release workflow 执行 rerun attempt 2。validation、migration、service/Spaces
+publication、canonical smoke、五个 origin 和 tag job 全部成功；tag 保持
+`production-20261008-571`。该次 publication 的 version 为：
+
+- service：`ac553f5a-ebb5-4de1-9e4e-1cec562444f1`
+- Spaces：`fc3d0a04-0890-40fb-a84e-8fa4bf18ea32`
+- site：`97b800f5-9ac6-4090-917f-9ea1c2e8050f`
+- docs：`582de9d7-55a9-4f69-baaf-3a12bc53b0b3`
+
+完成首轮 APAC probe 后，Production secret 再次轮换为新的随机值并执行 rerun
+attempt 3，从而使首个临时 credential 失效。attempt 3 的完整 release workflow
+成功，最终 production version 为：
+
+- service：`f7a4bad3-ce15-4793-842e-189f437be3f6`
+- Spaces：`3de0e383-025e-4821-8cb0-a4b9f3765189`
+- site：`d9da9cc8-e606-4815-a778-3e672517f6fd`
+- docs：`75ef7ef2-8a09-4cd4-94fc-26953a70ab32`
+
+每次 environment gate 前均确认精确 run attempt、release SHA、唯一 waiting run 与
+原 protection policy；只临时关闭 self-review，批准后立即恢复唯一 reviewer、
+release branch policy 和 `prevent_self_review=true`。最终 credential 只保留在
+受保护 GitHub environment；本地 DPAPI 副本已删除。workflow、探针输出和仓库均
+未记录 credential、cookie 或 session 内容。
+
 ## APAC authenticated canary
 
-- Probe 与时间窗口：未执行；共享 APAC 浏览器仍在 OAuth 登录边界，浏览器自动化
-  连接也连续超时。没有读取或保存 cookie、身份字段或响应内容。
-- Cold observation：未捕获。不能把后续热请求追认为部署后的首个 observation；
-  D-AC05 保持未完成。
-- 请求数与成功率：`0`，不构成 canary。
-- TTFB p50/p95/p99/max：待执行
-- Worker wall p50/p95/p99/max：待执行
-- Colo 与 placement：待执行
-- 安全 Server-Timing 汇总：待执行
+- attempt 2 首个 observation 在 HKG 为 2011.8 ms，超过 2 秒门槛 11.8 ms；
+  随后的 30 次 warm read 为 30/30 HTTP 200，TTFB p95 840.7 ms。该 probe 只通过
+  结构与安全校验，不能声称 cold criterion 通过。
+- attempt 3 成功结束后的首个 APAC authenticated directory observation 于
+  `2026-10-08T09:11:21.213Z` 开始，在 SIN 为 1620.0 ms，满足 2 秒门槛。
+  之后 30 次顺序、`cache: no-store` 的 warm read 全部 HTTP 200；目录正文被流式
+  丢弃，没有检查或持久化目录项、路径、身份字段或 cookie。
+- 最终 warm TTFB：p50 718.8 ms、p95 741.8 ms、p99/max 743.0 ms；31/31
+  directory request 成功，满足 D-AC03。所有 `CF-Ray` colo 均为 SIN。
+- `Server-Timing` parser 只接受固定名称和数值 duration；未发现未知名称、
+  description 或 `cas_schema`。最终 31 次请求的有界汇总如下，单位为 ms：
 
-因此当前证据不声称 APAC TTFB、Worker wall、Smart Placement 或
-`cas_schema` header 条件已经达标。需在安全登录态可用后重新安排受控 canary；
-若要满足 D-AC05，还需为可观测的部署后首个请求重新建立 cold canary 窗口。
+| Phase | p50 | p95 | p99 | max |
+| --- | ---: | ---: | ---: | ---: |
+| `spaces_session` | 219 | 233 | 233 | 233 |
+| `spaces_root` | 219 | 226 | 228 | 228 |
+| `spaces_manifest` / `spaces_unicas` | 181 | 193 | 760 | 760 |
+| `cas_auth` | 0 | 0 | 178 | 178 |
+| `cas_do` | 173 | 183 | 186 | 186 |
+| `cas_do_route` | 157 | 168 | 169 | 169 |
+| `cas_d1_node` | 6 | 7 | 9 | 9 |
+| `cas_d1_refs` | 5 | 10 | 12 | 12 |
+| `cas_r2_get` | 147 | 158 | 158 | 158 |
+| `cas_edge` | 174 | 186 | 339 | 339 |
+
+- Cloudflare `workersInvocationsAdaptive` 的秒级聚合将 session 创建、
+  directory、cleanup 与 logout 分离；`09:11:25Z`–`09:11:46Z` 恰好包含上述
+  31 次 directory invocation。该精确窗口为 31 requests、0 errors、全部
+  `success`；CPU p50/p95/p99/max 为 3.706/5.881/14.702/14.702 ms，Worker
+  wall p50/p95/p99/max 为 626.675/647.975/1222.982/1222.982 ms。
+- 因此 TTFB、cold、outcome 和 timing safety 达标，但 Worker wall p95 超过
+  500 ms，D-AC04 明确失败。`spaces_session`、`spaces_root` 与
+  `spaces_manifest` 的串行等待解释了低 CPU、高 wall；不能用 TTFB 或
+  `Server-Timing` 取代 Cloudflare wall 证据。
 
 ## Stability and rollback
 
@@ -111,10 +160,73 @@ migration 从首个请求移到启动阶段的预期取舍。两侧热请求约 
   Spaces `200` / 640 ms / NRT，product `200` / 512 ms / HKG，docs `200` /
   927 ms / HKG。该结果证明 public origins 在 T+15 仍可用，不是 authenticated
   directory SLO 或 Worker response-construction wall 证据。
-- Worker outcome、CPU/wall 与 5xx：Cloudflare dashboard 未登录，待执行。
-- Rollback threshold：待判断
-- Rollback disposition：release workflow、canonical smoke 与 origin probe
-  以及 T+15 public probe 没有触发回滚；性能门禁尚未观测，因此仍保留上述四个
-  已知良好 version 作为 rollback targets。
-- 最终结论：production 发布成功且可由 immutable tag 复核；性能验收仍被 APAC
-  authenticated canary、Workers metrics 和 15 分钟稳定性证据阻塞。
+- Worker outcome、CPU/wall 与 5xx：最终 directory 窗口为 31 success、
+  0 errors，探针为 31/31 HTTP 200；CPU 正常但 wall p95 超标。该窗口证明本次
+  synthetic run 没有 Worker error 或 HTTP 5xx，不替代最终候选的 15 分钟趋势。
+- Rollback threshold：Worker wall 阈值已命中。没有请求 Deployment 验收，也没有
+  把该版本标记为满足性能合同。
+- Rollback disposition：固定 IAD 基线的已知 APAC wall/TTFB 更差，而 attempt
+  2/3 的旧 Worker version 还包含已撤销的 synthetic credential；直接 version
+  rollback 会恢复更差拓扑或失效 credential。当前 production 保持 0 error 且
+  TTFB/cold 达标，因此保留可用版本并把 idea 重新带回 Implementation，新增
+  session/root 单次 D1 query 修复；该补充候选必须重新验收、promotion 和 canary，
+  不能在失败版本上继续观察来满足 D-AC04。
+- 当前结论：production 发布、credential 撤销、authenticated TTFB、cold 与安全
+  timing 已有可复核证据；Worker wall 失败已持久化并触发补充实现。D-S04–D-S06
+  和 D-AC02–D-AC07 保持未完成，直到新候选通过完整发布与稳定性门禁。
+
+## Root-snapshot follow-up release
+
+- 已验收 follow-up Implementation revision：
+  `d99da2637861b94edbc562e7e8304b6d30ab41a2`
+- 实现 commit：`d40045099ce1e9dfd63e33d0e0edf23a53e8d4c1`
+- acceptance commit：`3cf48f8fdaba84d741bcb663d1a825bb72fa10be`
+- [Promotion #35](https://github.com/shazhou-ww/unicas/pull/35) 生成 two-parent
+  release revision `d69e27d086cfdaa6a6449d47122861c89be08db9`，release tree
+  与 main parent tree 一致。
+- [Workflow 37865051908](https://github.com/shazhou-ww/unicas/actions/runs/37865051908)
+  attempt 1 在 Spaces publication 后的即时 authentication 因 credential
+  propagation 返回 401；attempt 2 在传播完成后全链路成功。新的 bounded
+  credential 建立后，attempt 3 被一个未过期 active smoke run 的 preflight
+  阻止；没有修改 D1，等待其约 15 分钟 TTL 自然到期后，attempt 4 于
+  `2026-10-09T01:13:31Z` 全链路成功。
+- attempt 4 再次通过 release validation、migration、canonical service smoke、
+  Spaces file smoke 和五个 public origin probe，并确认 Production protection
+  已恢复。最终 tag 与 version 为：
+  - tag：`production-20261009-578`
+  - service：`2f35887a-ea3a-4778-a3cd-0e9c7903c657`
+  - Spaces：`809775fb-4ec0-41bd-b260-aaf9f9e3bf88`
+  - site：`49dc589d-b9f3-414c-a795-6d5fbb0ee2c4`
+  - docs：`88f836aa-78fa-4168-81b7-b2af63f8903f`
+
+## Root-snapshot follow-up APAC canary
+
+- attempt 4 后首个 controlled observation 为 2171.9 ms，超过 2 秒 cold
+  门槛。随后 30 次 warm read 连同 cold observation 为 31/31 HTTP 200；warm
+  TTFB p50/p95/max 为 863.9/2020.5/2062.9 ms，D-AC03 与 D-AC05 均失败。
+- 同一次 probe 中 `spaces_session` p95 为 41 ms，`spaces_root` 完全消失，
+  证明 session/root 单 query 候选已生效；`spaces_unicas` p95 为 1392 ms，
+  `cas_do` p95 为 578 ms。header 只含 allowlist timing 且没有 `cas_schema`。
+- 为排除刚发布的 cold effect，随后执行独立 steady-state probe：cold 为
+  1011.1 ms，30 次 warm read 的 TTFB p50/p95 为 1066.7/2133.1 ms；
+  `spaces_session` p95 为 76 ms，`spaces_unicas` p95 为 1474 ms，
+  `cas_do` p95 为 1467 ms。31/31 请求仍为 HTTP 200，且 timing 安全。
+- `cas_do` 相对 `cas_do_route` 的新增差值把主要等待定位到 service Worker 与
+  Durable Object 之间的 dispatch/network 边界，而不是 DO 内部 D1 或 R2 工作。
+  同期只读 `wrangler d1 info` 确认 `unicas-spaces` 位于 ENAM、
+  `unicas-tenant` 位于 APAC；低 `spaces_session` 与高 `cas_do` 的组合与 Smart
+  Placement 靠近 ENAM session 数据库、远离 APAC CAS 数据面一致。
+
+## Follow-up rollback disposition
+
+- 第二轮 canary 明确触发 rollback threshold，当前 release 不满足 Deployment
+  contract。固定 IAD 基线已有约 9 秒级 APAC wall/TTFB 证据，直接恢复该版本会
+  明知恶化可用性；因此没有把失败 canary 伪装成稳定性通过，也没有执行该有害
+  rollback。
+- 当前 Smart Placement version 保持服务可用并作为下一候选的回滚基线。idea
+  返回 Implementation，把 Spaces placement 改为显式
+  `aws:ap-southeast-1`，在不搬迁 D1 的情况下优先共置 APAC CAS/DO 主路径。
+  该候选必须获得新的 exact Implementation acceptance 后才能 promotion。
+- 当前 synthetic credential 的明文未写入输出或仓库；受保护 secret 与本地
+  DPAPI 密文只保留到最终候选完成 canary，之后必须再次轮换、验证旧 credential
+  失效并精确删除本地临时文件。

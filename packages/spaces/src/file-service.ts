@@ -3,6 +3,7 @@ import {
   FileManifestMaxPathBytes,
   type SpaceFileRoot,
   type SpaceFileRootCatalog,
+  type SpaceFileRootInfo,
   type SpaceFileStat,
   type SpaceFileSystem,
 } from "@unicas/space-file-client";
@@ -87,6 +88,7 @@ export class SpacesFileService {
   readonly #leaseEvidence: LeaseEvidenceTracker | undefined;
   readonly #catalog: ReconciliationCatalog | undefined;
   readonly #timing: SpacesTimingSink | undefined;
+  #rootSnapshot: readonly SpaceFileRootInfo[] | undefined;
 
   constructor(
     cas: SpaceCasClient,
@@ -95,6 +97,7 @@ export class SpacesFileService {
     leaseEvidence?: LeaseEvidenceTracker,
     catalog?: ReconciliationCatalog,
     timing?: SpacesTimingSink,
+    rootSnapshot?: readonly SpaceFileRootInfo[],
   ) {
     if (!Number.isSafeInteger(maximumUploadBytes) || maximumUploadBytes <= 0 || maximumUploadBytes > MaximumUploadBytes) {
       throw new RangeError(`maximumUploadBytes must be between 1 and ${MaximumUploadBytes}`);
@@ -105,6 +108,7 @@ export class SpacesFileService {
     this.#leaseEvidence = leaseEvidence;
     this.#catalog = catalog;
     this.#timing = timing;
+    this.#rootSnapshot = rootSnapshot;
   }
 
   async list(path: string): Promise<DirectoryResult> {
@@ -299,7 +303,9 @@ export class SpacesFileService {
   }
 
   async #openRoot(): Promise<SpaceFileRoot> {
-    const roots = await timeSpacesOperation(
+    const snapshot = this.#rootSnapshot;
+    this.#rootSnapshot = undefined;
+    const roots = snapshot ?? await timeSpacesOperation(
       this.#timing,
       "spaces_root",
       () => this.#fileSystem.listRoots(),
@@ -348,6 +354,7 @@ export async function createSpacesFileService(input: {
   readonly maximumUploadBytes?: number;
   readonly fetcher?: { fetch(input: string | Request, init?: RequestInit): Promise<Response> };
   readonly timing?: SpacesTimingSink;
+  readonly rootSnapshot?: readonly SpaceFileRootInfo[];
 }): Promise<SpacesFileService> {
   const baseCas = await createPrincipalCasClient(
     input.capability,
@@ -364,7 +371,7 @@ export async function createSpacesFileService(input: {
       chunkBytes: SpacesBlobChunkBytes,
       ...(input.fetcher ? { uploadFetcher: input.fetcher } : {}),
     },
-  }), input.maximumUploadBytes, evidence, catalog, input.timing);
+  }), input.maximumUploadBytes, evidence, catalog, input.timing, input.rootSnapshot);
 }
 
 export function createLeaseEvidenceClient(baseCas: SpaceCasClient): {

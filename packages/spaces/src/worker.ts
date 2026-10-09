@@ -213,6 +213,7 @@ export function createSpacesWorker(dependencies: SpacesWorkerDependencies = {}):
           maximumUploadBytes: config.maximumUploadBytes,
           fetcher: { fetch: tracedFetch },
           timing,
+          rootSnapshot: session.fileRoots,
         });
         if (request.method === "GET" && url.pathname === "/api/entries") {
           return finish(json(await fileService.list(url.searchParams.get("path") ?? "/"), 200));

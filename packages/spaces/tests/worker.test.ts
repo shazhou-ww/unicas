@@ -343,7 +343,10 @@ describe("Spaces Worker", () => {
       headers: { Cookie: cookie },
     }), env);
     expect(listed.status).toBe(200);
-    expect(createFileService).toHaveBeenLastCalledWith(expect.objectContaining({ access: ["read"] }));
+    expect(createFileService).toHaveBeenLastCalledWith(expect.objectContaining({
+      access: ["read"],
+      rootSnapshot: [],
+    }));
 
     const created = await worker.fetch(new Request("https://spaces.example.test/api/folders", {
       method: "POST",

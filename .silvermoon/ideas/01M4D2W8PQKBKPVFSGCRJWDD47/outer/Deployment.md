@@ -4,14 +4,12 @@
 
 ### D-S01: 锁定发布候选和回滚基线
 
-以已验收的 Implementation revision
-`ed42de517d1694ac17e8c68aab471cebf04aa929` 和实现 commit
-`65605f2073e63623699ec8f235b221709f85ff92` 为代码基线。发布前记录当前
-production tag、`release` tip、`unicas` 与 `unicas-spaces` 的已知良好 Worker
-version，以及 Spaces 的固定 IAD placement 回滚基线。确认没有并发 production
-workflow，tenant baseline migration 是 additive 且旧 Worker 可继续读取迁移后的
-schema。证据只记录 revision、version、时间窗口和有界状态，不记录凭据、Principal、
-Space、路径或响应内容。
+以本轮显式 APAC placement 的已验收 Implementation revision 和对应实现 commit
+为代码基线。发布前记录当前 production tag、`release` tip、`unicas` 与
+`unicas-spaces` 的现行 Worker version，并把当前 Smart Placement Spaces version
+作为回滚基线。确认没有并发 production workflow，tenant baseline migration 已
+应用且旧 Worker 可继续读取现有 schema。证据只记录 revision、version、时间窗口
+和有界状态，不记录凭据、Principal、Space、路径或响应内容。
 
 ### D-S02: 同步稳定契约并通过发布前门禁
 
@@ -49,11 +47,11 @@ response-construction timing 描述为完整流传输时间。
 
 canary 后保持至少 15 分钟观察窗口，确认所有 public origin、canonical smoke、
 Worker invocation outcome、CPU/wall time 和 5xx 趋势无回归。任一目录 SLO、smoke、
-origin 或安全 timing 条件失败时，在请求 Deployment 验收前回滚：Smart Placement
-失败优先把 Spaces Worker 恢复到记录的已知良好 version；service 或协议回归则按
-docs、site、Spaces、service 的逆发布顺序回滚已变更单元。D1 migration ledger
-不回滚；已接受 baseline 必须保持旧 Worker 兼容。回滚后重跑 smoke、origin probe
-和 APAC canary，不在失败版本上继续观察以代替回滚。
+origin 或安全 timing 条件失败时，在请求 Deployment 验收前回滚：显式 APAC
+placement 失败优先把 Spaces Worker 恢复到记录的 Smart Placement version；
+service 或协议回归则按 docs、site、Spaces、service 的逆发布顺序回滚已变更单元。
+D1 migration ledger 不回滚；已接受 baseline 必须保持旧 Worker 兼容。回滚后
+重跑 smoke、origin probe 和 APAC canary，不在失败版本上继续观察以代替回滚。
 
 ### D-S06: 发布外部证据并进入验收门禁
 
