@@ -93,24 +93,39 @@ Reviewed on 2026-09-29. The non-sensitive operational record is
   This proves destination compatibility for one shape, not representative
   Worker coverage or comprehensive field safety.
 
-### Still outstanding
+### 生产验证与回滚
 
-- 2026-10-08 已明确批准初始 manual OTLP 生产采样率 `0.01`，并从候选提交
-  `7ae12f3f8e0c596beaa1afbc75246f2832eb10ca` 完成两个 Worker 的 build
-  与 Wrangler dry run。非敏感验证记录见
-  [`outer/ProductionSamplingCandidate.md`](./outer/ProductionSamplingCandidate.md)。
-- 完整 profile 已安全保存在 `cfg`，并同步到受保护的 GitHub
-  `Production` environment；回读确认两项 variable 与两个 secret 名称
-  均已配置。没有读取或记录 GitHub secret 值。
-- D-S02 已完成；尚未同步 Cloudflare Worker secret 或发布生产配置。
-- Draft promotion PR
-  [#28](https://github.com/shazhou-ww/unicas/pull/28) 的初始 head
-  `b03f870cdefb305dc77c3578f53c43a781658f10` 可合并且 CI `validate`
-  已通过。Production 与 tag jobs 均跳过，PR 保持 draft 且未合并。
-- No production deployment, representative cross-path retained canary,
-  comprehensive field inspection, effective-limit check, or rollback exercise
-  has been performed.
-- D-S03 through D-S04 and D-AC02 through D-AC04 therefore remain unchecked.
+2026-10-08 至 2026-10-09 的非敏感聚合证据见
+[`outer/ProductionTracingEvidence.md`](./outer/ProductionTracingEvidence.md)。
+
+- Exact revision `80838475010aa5a5c53bebd5d7dd335ab14be4e7`
+  以批准的 manual sample `0.01` 部署为 `production-20261008-571`。
+  Cloudflare native traces 始终关闭。
+- 最终 revision 的 2,500 次公开 success/error canary 全部返回预期结果；
+  Admin、authenticated MCP 和 10 轮 authenticated Spaces smoke 也完成。
+- 定向 retained Spaces waterfall 共 159 spans，覆盖 cross-Worker fetch、
+  request、capability、Durable Object、D1、R2、node validation 和 Root Ref
+  commit。159 个 spans 的 parent 均可解析。
+- 对这 159 个 spans 和 431 个 attributes 的 strict allowlist audit 为
+  0 violations、0 events、0 links、0 status message。其他代表性 retained
+  success/error windows 同样为 0 prohibited/unknown fields。
+- Streamed `file_download` trace 重查后仍有 8 个 unresolved request
+  parents；ledger 不把该 trace 表述为完整 parentage。D-AC02 的完整
+  hierarchy 证据来自 upload/commit waterfall。
+- Grafana production recheck 记录 trial 剩余 5 天、Max Retention 30 天、
+  rounded current usage 0 GB 和 Free Account limit 50 GB；没有 paid
+  upgrade 授权。
+- Sample rate 已在 `cfg` 和受保护 environment 恢复为 `0`。最新 release
+  revision `d69e27d086cfdaa6a6449d47122861c89be08db9` 通过 workflow
+  `37865051908` attempt 2 完成真实回滚并创建
+  `production-20261009-578`。
+- 当前 service 与 Spaces active versions 的实际 sample rate 都是 `0`，
+  没有 OTLP endpoint binding；native traces 为
+  `enabled=false`、`persist=false`。回滚后 250/250 次公开 synthetic
+  canary 成功，同窗 direct Tempo query 对两个 service 均返回 0 traces。
+- 第一次 zero deployment 的 synthetic smoke 暴露 credential drift，
+  workflow 正确失败且未 tag；重新对齐受保护 secret 后完整 rerun 通过。
+  Production self-review 保护已恢复为原值。
 
 ## Implementation
 
@@ -168,12 +183,12 @@ Cloudflare secret, or deploying a Worker.
 
 - [x] **D-S01:** Approve and provision an OTLP destination
 - [x] **D-S02:** Approve a bounded nonzero sample
-- [ ] **D-S03:** Deploy and run synthetic canaries
-- [ ] **D-S04:** Inspect retention and prove rollback
+- [x] **D-S03:** Deploy and run synthetic canaries
+- [x] **D-S04:** Inspect retention and prove rollback
 
 ### Deployment acceptance criteria
 
 - [x] **D-AC01:** Destination governance is explicit
-- [ ] **D-AC02:** Representative waterfalls are useful
-- [ ] **D-AC03:** Retained telemetry contains no prohibited values
-- [ ] **D-AC04:** Production operation remains bounded and reversible
+- [x] **D-AC02:** Representative waterfalls are useful
+- [x] **D-AC03:** Retained telemetry contains no prohibited values
+- [x] **D-AC04:** Production operation remains bounded and reversible

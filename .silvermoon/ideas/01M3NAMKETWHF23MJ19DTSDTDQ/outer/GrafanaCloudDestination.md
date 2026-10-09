@@ -107,6 +107,22 @@ one synthetic shape only. It does not prove the representative Worker
 waterfalls or comprehensive retained-field review required by D-AC02 and
 D-AC03.
 
+## 2026-10-08 生产复核
+
+- Grafana Portal 显示 Cloud Trial 剩余 5 天，trial 内 unlimited usage
+  不计费；未配置 payment method，也未授权 paid upgrade。
+- 当前 Max Retention 为 30 天，Traces current usage 显示 0 GB。该 usage
+  是 Portal 的 rounded display，不用于证明没有写入 trace。
+- Free Account traces limit 显示 50 GB。Trial 结束后仍需按日常运维要求
+  复核实际 Free retention；达到 Free limit 时接受诊断 trace loss，不自动
+  购买容量。
+- 使用单独的最小 `traces:read` credential 完成 direct Tempo query。
+  Ingest access policy 继续只授予 `traces:write`，query 与 ingest
+  credential 均只保存在批准的 secret store。
+- Production retained evidence、完整 allowlist 审计和 sample-zero rollback
+  见
+  [`ProductionTracingEvidence.md`](./ProductionTracingEvidence.md)。
+
 ## Evidence sources
 
 - Grafana Cloud regional availability:
@@ -120,14 +136,13 @@ D-AC03.
 - Grafana Cloud access policies:
   <https://grafana.com/docs/grafana-cloud/platform/security-and-account-management/security-and-access/authentication-and-permissions/access-policies/>
 
-## Remaining gates
+## 当前状态
 
-At the time of this review:
-
-- The accepted Implementation now provides a protected, shared production
-  activation path for both Workers, but no nonzero profile has been
-  provisioned through it.
-- No exact nonzero production sample has been proposed or approved.
-- No destination credential has been provisioned to either Cloudflare Worker.
-- No Worker has been deployed, and no representative cross-path canary,
-  effective-limit check, or rollback exercise has been performed.
+- Exact `0.01` profile 已按批准范围完成短期 synthetic production
+  validation。
+- Representative retained query、字段安全审计、effective retention/limit/
+  cost 复核和真实 sample-zero rollback 均已完成。
+- 当前两个 production Worker 的 manual sample rate 都是 `0`，且
+  Cloudflare native tracing 继续关闭。
+- Destination credential 仍按已审核的 rotation、revocation 与 incident
+  policy 管理；任何新的非零 production sample 都需要单独明确决策。
