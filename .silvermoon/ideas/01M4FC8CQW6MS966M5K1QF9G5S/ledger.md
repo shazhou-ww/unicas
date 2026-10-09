@@ -22,15 +22,15 @@
 
 ### Deployment steps
 
-- [ ] **D-S01:** 固定已验收候选与无写入边界
-- [ ] **D-S02:** 执行只读 artifact 与 deployment preflight
-- [ ] **D-S03:** 记录公开状态与兼容性结论
-- [ ] **D-S04:** 发布 Outer World 证据并请求验收
+- [x] **D-S01:** 固定已验收候选与无写入边界
+- [x] **D-S02:** 执行只读 artifact 与 deployment preflight
+- [x] **D-S03:** 记录公开状态与兼容性结论
+- [x] **D-S04:** 发布 Outer World 证据并请求验收
 
 ### Deployment acceptance criteria
 
-- [ ] **D-AC01:** 候选与已验收 Implementation 可追溯
-- [ ] **D-AC02:** 生成 artifact 与 dry-run 可交付
-- [ ] **D-AC03:** 生产兼容性与公开文档状态准确
-- [ ] **D-AC04:** 发布与 deployment authority 未扩大
-- [ ] **D-AC05:** Outer World 证据完整且可安全审查
+- [x] **D-AC01:** 候选与已验收 Implementation 可追溯
+- [x] **D-AC02:** 生成 artifact 与 dry-run 可交付
+- [x] **D-AC03:** 生产兼容性与公开文档状态准确
+- [x] **D-AC04:** 发布与 deployment authority 未扩大
+- [x] **D-AC05:** Outer World 证据完整且可安全审查
