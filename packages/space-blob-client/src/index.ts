@@ -1,9 +1,9 @@
 /**
  * @unicas/space-blob-client — Blob layer above `@unicas/space-client`.
  *
- * The tenant blob interface for business users: write blobs, open
- * random-access handles, and retain/release blob roots. Node-level and tenant
- * administration operations remain available through `unicasClient`.
+ * The App/Space blob interface for business users: write blobs, open
+ * random-access handles, and retain/release blob roots. Node-level and Space
+ * operations remain available through `unicasClient`.
  */
 
 export {

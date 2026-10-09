@@ -230,3 +230,95 @@ release branch policy 和 `prevent_self_review=true`。最终 credential 只保�
 - 当前 synthetic credential 的明文未写入输出或仓库；受保护 secret 与本地
   DPAPI 密文只保留到最终候选完成 canary，之后必须再次轮换、验证旧 credential
   失效并精确删除本地临时文件。
+
+## Explicit APAC placement release
+
+- 已验收 Implementation revision：
+  `e0f056dc9d40eee358668920db94d96f3a843f54`
+- placement 实现 commit：`e06bb1a4bd4df81abd3d561692b0394f8e30b41b`
+- validation evidence commit：`34a6fb30aa16aa4b36d4860c806dfa9f50ba8521`
+- acceptance commit：`aac00c41157f847be9dd28f3d6096f44aa3d8831`
+- [Promotion #38](https://github.com/shazhou-ww/unicas/pull/38) 从
+  `d69e27d086cfdaa6a6449d47122861c89be08db9` 和 acceptance commit 生成
+  two-parent release `f6b91703e419509f3723acb340aeab7d60bcc0ba`。release tree 与
+  main parent tree 均为 `5faacf10b71d3a9fb89b28ca121836510a84eaf2`。
+- [Workflow 37874444277](https://github.com/shazhou-ww/unicas/actions/runs/37874444277)
+  attempt 1 完成 release validation、migration、canonical service smoke、
+  Spaces file smoke、五个 public origin probe 和 tag
+  `production-20261009-589`。attempt 2 对相同 release 做受控新 publication，
+  用于取得部署后首个 cold observation。
+- 所有 Production gate 均核对 exact attempt、release SHA、唯一 waiting run、
+  environment `21951143624`、唯一 reviewer、`release` custom branch policy
+  和 `prevent_self_review=true`。只在批准 exact pending deployment 时临时关闭
+  self-review，并在 `finally` 恢复；最终独立检查确认 protection 未漂移。
+
+## Passing APAC directory canary
+
+- attempt 1 后首个 observation 为 2296.3 ms，超过 2 秒 cold 门槛；30 次 warm
+  request 仍以 793.7 ms p95 通过 TTFB 门槛。没有把该 observation 作为 cold
+  acceptance。
+- attempt 2 于 `2026-10-09T02:45:40.887Z` 完成 publication 后首个受控 APAC
+  authenticated directory observation。cold 为 1350.4 ms，随后 30 次 warm
+  read 为 30/30 HTTP 200；warm TTFB p50/p95/p99/max 为
+  531.4/627.8/3131.1/3131.1 ms。全部 31 次请求来自 SIN，D-AC03 与 D-AC05
+  通过；单个 p99 outlier 不改变约定的 p95 结果。
+- 固定 allowlist `Server-Timing` 汇总如下，单位为 ms：
+
+| Phase | p50 | p95 | p99 | max |
+| --- | ---: | ---: | ---: | ---: |
+| `spaces_session` | 226 | 238 | 243 | 243 |
+| `spaces_manifest` / `spaces_unicas` | 184 | 220 | 685 | 685 |
+| `cas_auth` | 0 | 0 | 145 | 145 |
+| `cas_do` | 169 | 184 | 211 | 211 |
+| `cas_do_route` | 151 | 168 | 170 | 170 |
+| `cas_d1_node` | 5 | 10 | 16 | 16 |
+| `cas_d1_refs` | 5 | 7 | 8 | 8 |
+| `cas_r2_get` | 141 | 156 | 159 | 159 |
+| `cas_edge` | 169 | 211 | 323 | 323 |
+
+- `spaces_root` 未出现，证明 session/root snapshot common path 保持生效；
+  `cas_schema` 未出现。parser 未接受未知 timing name、description、动态值或
+  非有限时长，header 不包含标识符、路径、URL、SQL、凭据或内容。
+- 同一 bounded run 的 warm directory Workers metrics 为：wall
+  p50/p95/p99/max 422.023/470.346/2639.323/2639.323 ms，CPU
+  p50/p95/p99/max 4.977/10.238/22.148/22.148 ms。认证、cleanup 和 logout
+  invocation 与 directory window 分离；D-AC04 以 470.346 ms p95 通过。单个
+  p99 wall outlier 与低 CPU 一致，已保留而没有从证据中删除。
+
+## Credential revocation and final versions
+
+- performance canary 后生成新的随机 synthetic credential，并于
+  `2026-10-09T02:48:03Z` 更新 Production environment secret；新值未落盘或
+  输出。workflow attempt 3 在 Spaces publication 后立即 authenticate 时因边缘
+  credential propagation 返回 `smoke_credential_invalid` 401，没有创建 smoke
+  run。等待传播后只 rerun failed jobs；attempt 4 全链路成功，tag 保持
+  `production-20261009-589`。
+- 最终 production versions：
+  - service：`335175dd-578d-4973-af11-ad8c1f405372`
+  - Spaces：`a939ba6b-b685-4ef1-b271-6cbd263aa1a9`
+  - site：`edf0c08a-d5b5-4a5a-8b4a-529adeadefc2`
+  - docs：`eef664e3-91f2-4713-8625-06fd4cefdc12`
+- 旧 credential 对 `/api/smoke/session` 的负向验证返回 401；本地 DPAPI 密文与
+  canary 脚本随后被精确删除并确认不存在。最终只读 D1 aggregate 显示未过期
+  `cleanup_state='active'` smoke run 为 0。
+
+## Final stability and rollback
+
+- 最终 credential-only production state 于 `2026-10-09T03:00:32Z` 完成。
+  `03:15:44Z` 的 T+15 probe 使用 workflow 同款 API health 和 public origins：
+  API health 200 / 963.4 ms，console 302 / 568.7 ms，Spaces 200 / 491.1 ms，
+  product 200 / 599.3 ms，docs 200 / 501.5 ms；没有 5xx。
+- `03:00:32Z`–`03:15:44Z` Workers metrics：
+
+| Worker | Outcome | Requests | Errors | CPU p50/p95/p99/max (ms) | Wall p50/p95/p99/max (ms) |
+| --- | --- | ---: | ---: | --- | --- |
+| `unicas-spaces` | success | 2 | 0 | 0.854 / 6.178 / 6.178 / 6.178 | 1.180 / 6.893 / 6.893 / 6.893 |
+| `unicas` | success | 2 | 0 | 1.822 / 1.995 / 1.995 / 1.995 | 2.120 / 2.319 / 2.319 / 2.319 |
+
+- 稳定性窗口流量较低，因此该 aggregate 证明观察到的 invocation 无 runtime
+  error，不替代 31-request directory canary。两组证据合并后覆盖性能 SLO、
+  outcome、5xx、CPU/wall 与 public availability。
+- Rollback disposition：显式 APAC placement 的 warm TTFB p95、Worker wall
+  p95 和 cold observation 全部通过，workflow smoke、origins 和稳定性窗口没有
+  触发 rollback threshold，因此未回滚。Smart Placement Spaces version
+  `809775fb-4ec0-41bd-b260-aaf9f9e3bf88` 仍作为记录的回滚基线。

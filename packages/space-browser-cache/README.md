@@ -1,16 +1,44 @@
 # @unicas/space-browser-cache
 
+[![npm version](https://img.shields.io/npm/v/%40unicas%2Fspace-browser-cache?label=npm)](https://www.npmjs.com/package/%40unicas%2Fspace-browser-cache)
+[![MIT license](https://img.shields.io/npm/l/%40unicas%2Fspace-browser-cache)](https://github.com/shazhou-ww/unicas/blob/main/LICENSE)
+
 Optional browser implementation of `CasNodeCache`. The HTTP client remains
 platform-neutral and has no dependency on this package. No server or application
 manifest types are imported; the `space-client` dependency is type-only in source.
 
+## When to use this package
+
+Use this package in an authenticated browser session to avoid repeatedly
+downloading immutable node metadata and complete node content. Do not use it as
+an authorization decision, mutable catalog, offline file system, or server
+cache.
+
+## Install
+
 ```sh
-npm install @unicas/space-browser-cache@beta
+npm install @unicas/space-client @unicas/space-browser-cache
 ```
 
+## Cache authenticated node reads
+
+<!-- sdk-snippet: space-browser-cache -->
 ```ts
 import { createSpaceCasClient } from "@unicas/space-client";
-import { createBrowserCasNodeCache, clearBrowserCasNodeCaches } from "@unicas/space-browser-cache";
+import {
+  clearBrowserCasNodeCaches,
+  createBrowserCasNodeCache,
+} from "@unicas/space-browser-cache";
+
+declare const identity: {
+  readonly identityIssuer: string;
+  readonly subject: string;
+};
+declare const casBaseUrl: string;
+declare const appId: string;
+declare const spaceId: string;
+declare const hash: string;
+declare const getToken: () => Promise<string>;
 
 const principal = JSON.stringify([identity.identityIssuer, identity.subject]);
 const cache = createBrowserCasNodeCache({
@@ -19,12 +47,29 @@ const cache = createBrowserCasNodeCache({
   maxMemoryBytes: 8 * 1024 * 1024,
   maxEntryBytes: 4 * 1024 * 1024,
 });
-const cas = createSpaceCasClient({ baseUrl: casBaseUrl, appId, spaceId, getToken, cache });
+const cas = createSpaceCasClient({
+  baseUrl: casBaseUrl,
+  appId,
+  spaceId,
+  getToken,
+  cache,
+});
+
+const metadata = await cas.readMetadata(hash);
+const content = await cas.readContent(hash);
+
+// A full content read is cached only after the stream is completely consumed.
+const bytes = new Uint8Array(await new Response(content).arrayBuffer());
 
 // At logout, stop new reads before clearing every endpoint for this principal.
 await clearBrowserCasNodeCaches({ principal });
 cache.close();
 ```
+
+`readMetadata` and complete `readContent` calls participate in this cache.
+Range misses pass through without being stored. `readNode` remains a combined
+one-request network operation and does not use the separate metadata/content
+cache hooks.
 
 ## Contract
 
@@ -80,3 +125,19 @@ Principal-wide clearing.
 pnpm --filter @unicas/space-browser-cache test
 pnpm --filter @unicas/space-browser-cache typecheck
 ```
+
+The package is browser-only and ESM-only. Supported engines and required Web
+APIs are listed in the
+[compatibility matrix](https://docs.unicas.work/app-user-api/compatibility/).
+Only the package-root export is public.
+
+## Documentation and support
+
+- [SDK package guide](https://docs.unicas.work/app-user-api/sdk/)
+- [Browser quickstart](https://docs.unicas.work/app-user-api/quickstart/#browser-cache-quickstart)
+- [Compatibility](https://docs.unicas.work/app-user-api/compatibility/)
+- [TypeScript API reference](https://docs.unicas.work/app-user-api/sdk-reference/)
+- [Versioning](https://docs.unicas.work/app-user-api/versioning/)
+- [Changelog](https://docs.unicas.work/app-user-api/changelog/)
+- [Support](https://github.com/shazhou-ww/unicas/blob/main/SUPPORT.md)
+- [Security](https://github.com/shazhou-ww/unicas/blob/main/SECURITY.md)

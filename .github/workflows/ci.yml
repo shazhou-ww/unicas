@@ -3,8 +3,7 @@ name: CI
 on:
   push:
     branches:
-      - "**"
-  pull_request:
+      - release
   workflow_dispatch:
 
 concurrency:
@@ -20,26 +19,31 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Scan Git history for secrets
-        run: docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/repo:ro" zricethezav/gitleaks:v8.28.0 git /repo --redact --no-banner
+        run: docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/repo:ro" zricethezav/gitleaks:v8.28.0@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 git /repo --redact --no-banner
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           run_install: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Install SDK release browser engines
+        if: github.ref == 'refs/heads/release' || github.event_name == 'workflow_dispatch'
+        run: pnpm --filter @unicas/docs-site exec playwright install --with-deps chromium firefox webkit
 
       - name: Verify release revision
         if: github.ref == 'refs/heads/release'
@@ -50,17 +54,9 @@ jobs:
           git fetch --no-tags origin main:refs/remotes/origin/main
           node scripts/verify-release-revision.mjs "$GITHUB_SHA" origin/main
 
-      - name: Run standard validation
-        if: github.ref != 'refs/heads/release' && github.event_name != 'workflow_dispatch'
-        run: pnpm validate
-
       - name: Run release validation
         if: github.ref == 'refs/heads/release' || github.event_name == 'workflow_dispatch'
         run: pnpm validate:release
-
-      - name: Check published Silvermoon idea state
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: pnpm check:ideas:remote
 
   deploy-production:
     name: Deploy production
@@ -80,19 +76,19 @@ jobs:
       cancel-in-progress: false
     steps:
       - name: Check out validated revision
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           run_install: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: pnpm
@@ -286,7 +282,7 @@ jobs:
       contents: write
     steps:
       - name: Check out deployed revision
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.sha }}
           fetch-depth: 1

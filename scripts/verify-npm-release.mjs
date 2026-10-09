@@ -14,11 +14,13 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium } from "@playwright/test";
+import { chromium, firefox, webkit } from "@playwright/test";
+import { writeSdkSnippetFixtures } from "./sdk-readiness.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const REGISTRY = "https://registry.npmjs.org";
 const CONSUMER_FIXTURE = join(ROOT, "tests", "fixtures", "sdk-consumer");
+const SDK_EXAMPLES = join(ROOT, "examples", "app-user-sdk");
 const NPM = resolveNpmCommand();
 const EXPECTED_REPOSITORY = "https://github.com/shazhou-ww/unicas";
 const EXPECTED_WORKFLOW_PATH = ".github/workflows/publish-npm.yml";
@@ -186,7 +188,7 @@ async function verifyInstalledPackages(matrix, consumerDirectory) {
   }
 }
 
-async function runBrowserSmoke(siteDirectory) {
+async function runBrowserSmoke(siteDirectory, browserEngines) {
   const server = createServer(async (request, response) => {
     const path = request.url === "/app.js" ? "app.js" : "index.html";
     try {
@@ -204,23 +206,31 @@ async function runBrowserSmoke(siteDirectory) {
   });
   const address = server.address();
   assert(address && typeof address === "object", "registry consumer server has no address");
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const browserTypes = { chromium, firefox, webkit };
   try {
-    const page = await browser.newPage();
-    const errors = [];
-    page.on("pageerror", (error) => errors.push(error.message));
-    page.on("console", (message) => {
-      if (message.type() === "error") errors.push(message.text());
-    });
-    await page.goto(`http://127.0.0.1:${address.port}/`, { waitUntil: "load" });
-    await page.waitForFunction(() => document.body.dataset.result !== undefined, null, { timeout: 20_000 });
-    const result = await page.locator("body").getAttribute("data-result");
-    const text = await page.locator("body").innerText();
-    assert(result === "pass", `registry browser consumer failed: ${text}`);
-    assert(errors.length === 0, `registry browser consumer errors: ${errors.join("; ")}`);
-    console.log(text);
+    for (const name of browserEngines) {
+      const browserType = browserTypes[name];
+      assert(browserType !== undefined, `unsupported browser engine in package matrix: ${name}`);
+      const browser = await browserType.launch({ headless: true });
+      try {
+        const page = await browser.newPage();
+        const errors = [];
+        page.on("pageerror", (error) => errors.push(error.message));
+        page.on("console", (message) => {
+          if (message.type() === "error") errors.push(message.text());
+        });
+        await page.goto(`http://127.0.0.1:${address.port}/`, { waitUntil: "load" });
+        await page.waitForFunction(() => document.body.dataset.result !== undefined, null, { timeout: 20_000 });
+        const result = await page.locator("body").getAttribute("data-result");
+        const text = await page.locator("body").innerText();
+        assert(result === "pass", `${name} registry browser consumer failed: ${text}`);
+        assert(errors.length === 0, `${name} registry browser consumer errors: ${errors.join("; ")}`);
+        console.log(`${name}: ${text}`);
+      } finally {
+        await browser.close();
+      }
+    }
   } finally {
-    await browser.close();
     await new Promise((resolvePromise) => server.close(resolvePromise));
   }
 }
@@ -229,6 +239,8 @@ async function verifyRegistryConsumer(matrix) {
   const consumerDirectory = await mkdtemp(join(tmpdir(), "unicas-sdk-registry-consumer-"));
   try {
     await cp(CONSUMER_FIXTURE, consumerDirectory, { recursive: true });
+    await cp(SDK_EXAMPLES, join(consumerDirectory, "examples"), { recursive: true });
+    await writeSdkSnippetFixtures(ROOT, matrix, join(consumerDirectory, "snippets"));
     const dependencies = Object.fromEntries(matrix.packages.map(({ name }) => [name, matrix.version]));
     await writeFile(join(consumerDirectory, "package.json"), canonicalJson({
       name: "unicas-sdk-registry-consumer",
@@ -238,8 +250,8 @@ async function verifyRegistryConsumer(matrix) {
       dependencies,
       devDependencies: {
         "@types/node": "24.13.3",
-        esbuild: "0.28.2",
-        typescript: "5.9.3",
+        esbuild: matrix.compatibility.esbuild,
+        typescript: matrix.compatibility.typescript,
       },
     }));
     const userConfig = join(consumerDirectory, ".npmrc");
@@ -280,18 +292,27 @@ async function verifyRegistryConsumer(matrix) {
       "--outfile=out/node-smoke.mjs",
     ], { cwd: consumerDirectory, env });
     run(process.execPath, [join(consumerDirectory, "out", "node-smoke.mjs")], { cwd: consumerDirectory, env });
+    run(process.execPath, [
+      join(consumerDirectory, "node_modules", "esbuild", "bin", "esbuild"),
+      "examples/node-quickstart.ts", "--bundle", "--platform=node", "--format=esm",
+      "--outfile=out/node-quickstart.mjs",
+    ], { cwd: consumerDirectory, env });
+    run(process.execPath, [join(consumerDirectory, "out", "node-quickstart.mjs")], {
+      cwd: consumerDirectory,
+      env,
+    });
 
     await mkdir(join(consumerDirectory, "site"), { recursive: true });
     run(process.execPath, [
       join(consumerDirectory, "node_modules", "esbuild", "bin", "esbuild"),
-      "browser-smoke.ts", "--bundle", "--platform=browser", "--format=esm",
+      "examples/browser-quickstart.ts", "--bundle", "--platform=browser", "--format=esm",
       "--outfile=site/app.js",
     ], { cwd: consumerDirectory, env });
     await writeFile(
       join(consumerDirectory, "site", "index.html"),
       "<!doctype html><html><body><script type=\"module\" src=\"/app.js\"></script></body></html>\n",
     );
-    await runBrowserSmoke(join(consumerDirectory, "site"));
+    await runBrowserSmoke(join(consumerDirectory, "site"), matrix.compatibility.browserEngines);
     runNpm(["audit", "signatures"], { cwd: consumerDirectory, env });
     console.log("registry: external consumer passed");
   } finally {
@@ -311,6 +332,10 @@ async function main() {
   const manifest = await readJson(join(ROOT, "sdk", "release-manifest.json"));
   assert(manifest.version === matrix.version, "release manifest version differs from matrix");
   assert(manifest.distTag === matrix.distTag, "release manifest dist-tag differs from matrix");
+  assert(
+    canonicalJson(manifest.compatibility) === canonicalJson(matrix.compatibility),
+    "release manifest compatibility differs from matrix",
+  );
   assert(manifest.packages.length === matrix.packages.length, "release manifest package count differs");
   const expectedCommit = gitTagCommit(manifest.tag);
   const invocationIds = new Set();

@@ -10,9 +10,18 @@ export {
   DefaultSpaceNodeLeaseDurationMs,
   SpaceApiBasePath,
   SpaceApiErrorMap,
+  SpaceApiStableErrorMap,
+  SpaceApiStableErrorCodesByStatus,
+  SpaceReadContentHttpContract,
+  SpaceReadContentRangeNotSatisfiable,
   spaceApiContract,
 } from "./space-contract.js";
-export type { SpaceApiContract } from "./space-contract.js";
+export type {
+  SpaceApiContract,
+  SpaceApiStableErrorCode,
+  SpaceReadContentHttpResponse,
+  SpaceReadContentResponseHeaders,
+} from "./space-contract.js";
 
 export type {
   AppId,
@@ -46,6 +55,9 @@ export type {
 
 export {
   AppIdSchema,
+  CAS_MAX_REQUEST_ID_LENGTH,
+  CAS_MAX_ROOT_REF_CHANGES,
+  CAS_MAX_ROOT_REF_DELTA,
   CasGcResultSchema,
   CasHashSchema,
   CasLeaseOperationResultSchema,
@@ -75,10 +87,25 @@ export type { CasErrorResponse } from "./http.js";
 export { appSpaceRoutes, matchAppSpaceRoute } from "./routes.js";
 export type { AppSpaceRoute } from "./routes.js";
 
+export {
+  parseSpaceSelector,
+  spaceSelectorMatches,
+  validateSpaceId,
+  SPACE_ID_MAX_LENGTH,
+  SPACE_ID_PATTERN,
+  SPACE_SELECTOR_MAX_LENGTH,
+} from "./space-id.js";
+export type {
+  ParsedSpaceSelector,
+  SpaceSelector,
+  SpaceSelectorKind,
+} from "./space-id.js";
+
 // Space capability claim vocabulary
 export {
   canonicalPermissionSegment,
   parseSpaceCapabilityPermission,
+  spaceOperationPolicyFor,
   spaceGcExecutePermission,
   spaceNodeLeasePermission,
   spaceNodeReadPermission,
@@ -87,7 +114,12 @@ export {
   spaceUsageReadPermission,
   CapabilityAlgorithm,
   CapabilityTokenType,
+  MaximumSpaceCapabilityGrants,
   SpaceCapabilityVersion,
+  SpaceCapabilityClaimsSchema,
+  SpaceCapabilityPermissionKinds,
+  SpaceOperationPolicies,
+  SpaceRefDomainClaimSchema,
   DefaultCapabilityLifetimeSeconds,
   isReservedRefDomain,
   MaximumCapabilityClockSkewSeconds,
@@ -104,7 +136,9 @@ export type {
   CapabilityProtectedHeader,
   ParsedSpaceCapabilityPermission,
   SpaceCapabilityClaims,
+  SpaceCapabilityGrant,
   SpaceCapabilityPermission,
   SpaceCapabilityPermissionKind,
+  SpaceOperationPolicy,
   VerifiedSpaceCapability,
 } from "./space-capability.js";

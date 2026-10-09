@@ -1,9 +1,22 @@
 {
   "schemaVersion": 1,
   "releaseKey": "app-user-sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "distTag": "latest",
   "tagPrefix": "npm/app-user-sdk/v",
+  "compatibility": {
+    "moduleFormat": "esm",
+    "node": ">=24",
+    "typescriptRange": ">=5.9 <6",
+    "typescript": "5.9.3",
+    "esbuild": "0.28.2",
+    "playwright": "1.55.1",
+    "browserEngines": [
+      "chromium",
+      "firefox",
+      "webkit"
+    ]
+  },
   "packages": [
     {
       "name": "@unicas/codec",

@@ -1,6 +1,6 @@
 {
   "name": "@unicas/codec",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Wire-format encodings for the UniCAS data plane: canonical node binary format, digest, streaming parse, and validation limits",
   "license": "MIT",
   "sideEffects": false,
@@ -12,7 +12,15 @@
   "bugs": {
     "url": "https://github.com/shazhou-ww/unicas/issues"
   },
-  "homepage": "https://docs.unicas.work/app-user-api/",
+  "homepage": "https://docs.unicas.work/app-user-api/sdk/#codec",
+  "keywords": [
+    "unicas",
+    "content-addressed-storage",
+    "cas",
+    "canonical-encoding",
+    "typescript",
+    "esm"
+  ],
   "engines": {
     "node": ">=24"
   },

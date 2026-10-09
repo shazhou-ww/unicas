@@ -64,41 +64,46 @@
 
 ### Deployment steps
 
-- [ ] **D-S01:** 锁定发布候选和回滚基线
-- [ ] **D-S02:** 同步稳定契约并通过发布前门禁
-- [ ] **D-S03:** 通过受保护 release promotion 发布
-- [ ] **D-S04:** 执行 APAC authenticated directory canary
-- [ ] **D-S05:** 观察稳定性并执行失败回滚
-- [ ] **D-S06:** 发布外部证据并进入验收门禁
+- [x] **D-S01:** 锁定发布候选和回滚基线
+- [x] **D-S02:** 同步稳定契约并通过发布前门禁
+- [x] **D-S03:** 通过受保护 release promotion 发布
+- [x] **D-S04:** 执行 APAC authenticated directory canary
+- [x] **D-S05:** 观察稳定性并执行失败回滚
+- [x] **D-S06:** 发布外部证据并进入验收门禁
 
 ### Deployment acceptance criteria
 
-- [ ] **D-AC01:** production 对应受保护的精确发布
-- [ ] **D-AC02:** migration、发布和 canonical smoke 全部成功
-- [ ] **D-AC03:** APAC directory TTFB 达标
-- [ ] **D-AC04:** Worker wall time 与安全 timing 达标
-- [ ] **D-AC05:** controlled cold request 达标
-- [ ] **D-AC06:** 稳定性和回滚准备得到证明
-- [ ] **D-AC07:** 外部证据安全、完整且可复核
+- [x] **D-AC01:** production 对应受保护的精确发布
+- [x] **D-AC02:** migration、发布和 canonical smoke 全部成功
+- [x] **D-AC03:** APAC directory TTFB 达标
+- [x] **D-AC04:** Worker wall time 与安全 timing 达标
+- [x] **D-AC05:** controlled cold request 达标
+- [x] **D-AC06:** 稳定性和回滚准备得到证明
+- [x] **D-AC07:** 外部证据安全、完整且可复核
 
 ### Deployment evidence
 
-- D-S01：记录了 `production-20261008-560`、已知良好 service/Spaces/site/docs
-  version、固定 IAD placement 回滚基线、最终候选和无并发 workflow 状态。
-- D-S02：Deployment contract revision
-  `bd6aa93fb588d09e9b06e5fccd57e540b6cc92a9` 已同步；worktree、staged、remote、
-  deploy plan、targeted migration tests 与 main CI 均通过。
-- D-S03 / D-AC01：[#34](https://github.com/shazhou-ww/unicas/pull/34) 生成
-  two-parent release revision `80838475010aa5a5c53bebd5d7dd335ab14be4e7`；
-  [workflow 37749102134](https://github.com/shazhou-ww/unicas/actions/runs/37749102134)
-  成功并创建 `production-20261008-571`。
-- `CAS_DB` migration、service/Spaces publication、canonical smoke、Spaces file
-  smoke 和五个 public origin probe 已成功，但 D-AC02 还要求一个 bounded
-  production Space response header 证明普通请求不含 `cas_schema`，因此保持未勾选。
-- T+15 APAC 无正文 probe 再次确认五个 public origin 返回预期状态，HKG/NRT
-  colo 可用；缺少同窗口 Worker outcome、CPU/wall 和 5xx，因此 D-S05 与
-  D-AC06 保持未勾选。
-- 第二轮 root-snapshot release 已通过受保护 promotion 和全部 smoke，但两次
-  authenticated APAC canary 均违反 warm TTFB SLO，首次 cold observation 也
-  违反 2 秒门槛；当前 production 不能进入 Deployment 验收。新的显式 APAC
-  placement 候选必须重新验收、promotion、canary 和稳定性观察。
+- D-S01 / D-S02：以 Smart Placement Spaces version
+  `809775fb-4ec0-41bd-b260-aaf9f9e3bf88` 为回滚基线；显式 APAC placement
+  Implementation revision `e0f056dc9d40eee358668920db94d96f3a843f54`
+  已验收并通过 deploy-plan 43/43、docs 7/7、Spaces typecheck、Wrangler
+  dry-run、Silvermoon checks 和 main CI。
+- D-S03 / D-AC01 / D-AC02：[#38](https://github.com/shazhou-ww/unicas/pull/38)
+  生成 two-parent release `f6b91703e419509f3723acb340aeab7d60bcc0ba`；
+  [workflow 37874444277](https://github.com/shazhou-ww/unicas/actions/runs/37874444277)
+  完成 migration、service/Spaces publication、两个 canonical smoke、五个
+  origin probe 和 immutable tag `production-20261009-589`。
+- D-S04 / D-AC03 / D-AC04 / D-AC05：attempt 2 后的 31 次 SIN directory
+  observation 为 31/31 HTTP 200；cold 1350.4 ms，warm TTFB p95 627.8 ms，
+  warm Worker wall p95 470.346 ms。`spaces_session`、`spaces_unicas` 和
+  `cas_do` p95 分别为 238/220/184 ms；无 `spaces_root`、`cas_schema` 或
+  unsafe timing。
+- D-S05 / D-AC06：最终 credential-only publication 于
+  `2026-10-09T03:00:32Z` 完成；至 `03:15:44Z` 的五个 canonical origin
+  均为预期状态且无 5xx。`unicas-spaces` 与 `unicas` metrics 均只有
+  `success` outcome、各 2 requests、0 errors；Production protection 已恢复，
+  无 active/waiting release run，未触发回滚。
+- D-S06 / D-AC07：旧 synthetic credential 已返回 401，新 credential 只保留在
+  Production environment；本地 DPAPI 密文和 canary 脚本已精确删除。完整 release、
+  version、canary、metrics、stability 和 rollback disposition 已写入
+  `outer/Evidence.md`。

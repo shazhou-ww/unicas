@@ -28,7 +28,7 @@ describe("issueSpaceCapability", () => {
       displayName: "Ada",
       provider: "google",
       appId: "app-a",
-      spaceId: "space-a",
+      spaceId: "/space-a",
       refDomain: "spaces",
     }, ["read", "write"], () => 1_000_000);
     const publicKey = await importJWK(await exportJWK(pair.publicKey), CapabilityAlgorithm);
@@ -43,13 +43,17 @@ describe("issueSpaceCapability", () => {
     expect(verified.payload).toMatchObject({
       ver: SpaceCapabilityVersion,
       sub: "principal-a",
-      spaceId: "space-a",
       refDomain: "spaces",
-      permissions: [
-        "cas:nodes:read",
-        "cas:nodes:lease",
-        "cas:root-refs:read",
-        "cas:root-refs:update",
+      grants: [
+        {
+          selector: "/space-a",
+          permissions: [
+            "cas:nodes:read",
+            "cas:nodes:lease",
+            "cas:root-refs:read",
+            "cas:root-refs:update",
+          ],
+        },
       ],
       iat: 1000,
       exp: 1300,
@@ -70,7 +74,7 @@ describe("issueSpaceCapability", () => {
       displayName: "Ada",
       provider: "google",
       appId: "app-a",
-      spaceId: "space-a",
+      spaceId: "/space-a",
       refDomain: "spaces",
     }, [])).rejects.toThrow("At least one Space access permission is required");
   });

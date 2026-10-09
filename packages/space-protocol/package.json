@@ -1,6 +1,6 @@
 {
   "name": "@unicas/space-protocol",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "UniCAS App/Space v1 data-plane contracts and capability vocabulary",
   "license": "MIT",
   "sideEffects": false,
@@ -12,7 +12,15 @@
   "bugs": {
     "url": "https://github.com/shazhou-ww/unicas/issues"
   },
-  "homepage": "https://docs.unicas.work/app-user-api/",
+  "homepage": "https://docs.unicas.work/app-user-api/sdk/#space-protocol",
+  "keywords": [
+    "unicas",
+    "content-addressed-storage",
+    "cas",
+    "openapi",
+    "typescript",
+    "esm"
+  ],
   "engines": {
     "node": ">=24"
   },

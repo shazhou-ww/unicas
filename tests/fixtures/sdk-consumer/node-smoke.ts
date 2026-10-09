@@ -151,17 +151,17 @@ const digest = await computeNodeDigest(header, contentType, [], content);
 const canonical = concatenateNodeBytes(header, new TextEncoder().encode(contentType), [], content);
 assert.equal(hashToHex(digest).length, 64);
 assert.equal(parseNodeBytes(canonical).contentType, contentType);
-assert.equal(SpaceIdSchema.safeParse("space-1").success, true);
+assert.equal(SpaceIdSchema.safeParse("/space-1").success, true);
 assert.equal(
-  appSpaceRoutes.usage({ appId: "app/1", spaceId: "space/1" }),
-  "/v1/apps/app%2F1/spaces/space%2F1/cas/usage",
+  appSpaceRoutes.usage({ appId: "app/1", spaceId: "/space/1" }),
+  "/v1/cas/usage?appId=app%2F1&spaceId=%2Fspace%2F1",
 );
 
 let transportRequest: Request | undefined;
 const transport = createSpaceCasClient({
   baseUrl: "https://api.example",
   appId: "app-1",
-  spaceId: "space-1",
+  spaceId: "/space-1",
   getToken: async () => "capability",
   fetcher: {
     async fetch(input, init) {
@@ -172,7 +172,9 @@ const transport = createSpaceCasClient({
 });
 await transport.readMetadata("a".repeat(64));
 assert.equal(transportRequest?.headers.get("Authorization"), "Bearer capability");
-assert.equal(new URL(transportRequest!.url).pathname, `/v1/apps/app-1/spaces/space-1/cas/nodes/${"a".repeat(64)}/metadata`);
+assert.equal(new URL(transportRequest!.url).pathname, `/v1/cas/nodes/${"a".repeat(64)}/metadata`);
+assert.equal(new URL(transportRequest!.url).searchParams.get("appId"), "app-1");
+assert.equal(new URL(transportRequest!.url).searchParams.get("spaceId"), "/space-1");
 
 const cas = new MemoryCas();
 const blobs = createCasBlobClient(cas, { chunkBytes: 4, indexFanout: 2, uploadFetcher: cas });

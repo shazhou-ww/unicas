@@ -1,0 +1,62 @@
+{
+  "packages": [
+    {
+      "declaration": "sdk/api/codec.d.ts",
+      "exports": [
+        "."
+      ],
+      "name": "@unicas/codec",
+      "sha256": "759b0092151651feb5c18c9bfe00aab88b0d234676cc863a8a6d8848aa872bf4",
+      "version": "0.1.2"
+    },
+    {
+      "declaration": "sdk/api/space-protocol.d.ts",
+      "exports": [
+        ".",
+        "./openapi.json"
+      ],
+      "name": "@unicas/space-protocol",
+      "sha256": "1486f02c1653a931c76da15a6b87eff74ba4ba2453c686f617f3ee80ecd31484",
+      "version": "0.1.2"
+    },
+    {
+      "declaration": "sdk/api/space-client.d.ts",
+      "exports": [
+        "."
+      ],
+      "name": "@unicas/space-client",
+      "sha256": "441e589e9cfd7c2bf06a6c8c9f92503bb0f6b9961e7b362b870479b1757d716e",
+      "version": "0.1.2"
+    },
+    {
+      "declaration": "sdk/api/space-blob-client.d.ts",
+      "exports": [
+        "."
+      ],
+      "name": "@unicas/space-blob-client",
+      "sha256": "51b6b80512821b7d684194d343b382653fb3ac5526da56a33096b12d0d4e36dd",
+      "version": "0.1.2"
+    },
+    {
+      "declaration": "sdk/api/space-browser-cache.d.ts",
+      "exports": [
+        "."
+      ],
+      "name": "@unicas/space-browser-cache",
+      "sha256": "9420c4ea5d6941272ce2a6e54373b8c4a12b7a44233bbb60e60b94c4a1530435",
+      "version": "0.1.2"
+    },
+    {
+      "declaration": "sdk/api/space-file-client.d.ts",
+      "exports": [
+        "."
+      ],
+      "name": "@unicas/space-file-client",
+      "sha256": "5b7d646195b9f066ca49143993f36c67083f2facd0f89d8e6d4d65e091b13b84",
+      "version": "0.1.2"
+    }
+  ],
+  "releaseKey": "app-user-sdk",
+  "schemaVersion": 1,
+  "version": "0.1.2"
+}

@@ -10,14 +10,16 @@ CAS nodes plus atomic Root Refs without exposing administrator credentials.
 ## Reading path
 
 1. Read this page for the actors, trust boundaries, and ownership split.
-2. Follow [Scenarios and sequences](scenarios.md) for complete request flows.
-3. Explore the [interactive API reference](/app-user-api/reference/) for
+2. Use the [App-user SDK guide](sdk.md) to select a package.
+3. Run the [packed-artifact quickstarts](quickstart.md).
+4. Follow [Scenarios and sequences](scenarios.md) for complete request flows.
+5. Explore the [interactive API reference](/app-user-api/reference/) for
   OpenAPI schemas, examples, and client snippets.
-4. Use [HTTP operation reference](http-api.md) for runtime behavior and known
-  contract gaps across all seven public operations.
-5. Use [Capability authorization](authorization.md) for claims, permissions,
+6. Use [HTTP operation reference](http-api.md) for the aligned runtime and
+  machine-readable contract across all seven public operations.
+7. Use [Capability authorization](authorization.md) for claims, permissions,
   denial behavior, and least-privilege examples.
-6. Use [Prototype v2 migration](migration-v2-to-v1.md) when updating an
+8. Use [Space grants migration](migration-space-grants.md) when updating an
   existing pre-release integration.
 
 Machine-readable sources remain authoritative:
@@ -28,15 +30,22 @@ Machine-readable sources remain authoritative:
 - [`@unicas/space-client` transport](../../../space-client/src/client.ts)
 
 The guide explains those sources; it does not define a second schema.
+The OpenAPI security scheme links the capability claim schema through
+`x-unicas-capability`, and every operation declares its exact permission and
+required signed claims through `x-unicas-authorization`.
 
 ## Capability contract at a glance
 
 The route version and capability version are intentionally independent:
 
-- public Space routes use `/v1/apps/{appId}/spaces/{spaceId}`;
-- released Space capability claims use family-local `ver: 1`;
-- the required signed `spaceId` is the capability's sole Space scope; and
-- every operation requires one exact permission from the following set.
+- public Space routes use `/v1/cas/...` with required `appId` and `spaceId`
+  query parameters;
+- production capabilities use shared audience
+  `https://api.unicas.work/v1/cas/`, while the verified issuer determines App
+  authority;
+- released Space capability claims use family-local `ver: 2`;
+- `grants[]` binds each Space selector to its exact operation permissions; and
+- one matching grant must contain the permission required by the operation.
 
 ```text
 cas:nodes:read
@@ -48,8 +57,8 @@ cas:gc:execute
 ```
 
 Permissions do not imply one another. Both Root Ref permissions additionally
-require a valid signed `refDomain`. Prototype Space capability versions 2 and
-3 and their broad permissions are rejected without a compatibility cutoff.
+require a valid signed `refDomain`. Capability versions 1 and 3 and malformed
+grant shapes are rejected without a compatibility cutoff.
 
 ## Actors and trust boundaries
 
@@ -58,7 +67,7 @@ require a valid signed `refDomain`. Prototype Space capability versions 2 and
 | App user | Authenticates to the App. The user never receives an App administrator session or credential. |
 | App frontend | Presents the App experience. It requests short-lived capability delivery through an App-controlled authenticated flow and calls the Space API only with authority intentionally delegated to it. |
 | App backend or issuer | Authenticates App users, resolves the business Principal, selects allowed App and Space identifiers, chooses a `refDomain`, and signs short-lived capabilities from the App's configured issuer. |
-| UniCAS Space data plane | Verifies the bearer capability and server-side App state, enforces exact App, Space, permission, and `refDomain` boundaries, and performs CAS operations. |
+| UniCAS Space data plane | Verifies the bearer capability and server-side App state, enforces App, same-grant Space selector and permission, and `refDomain` boundaries, and performs CAS operations. |
 | App administrator | Configures the App and its external OAuth issuer through the separate administrator plane. Administrator credentials never participate in an App-user API request. |
 
 ```mermaid
@@ -136,12 +145,14 @@ architecture.
 ## Minimal integration shape
 
 1. Authenticate the user to the App.
-2. Resolve an App-owned Principal and the allowed Space.
-3. Choose only the permissions required for the immediate workflow.
+2. Resolve an App-owned Principal and the allowed Space or Spaces.
+3. Build grants that bind each allowed selector to only the permissions
+   required for the immediate workflow.
 4. Add a valid `refDomain` only when listing or updating Root Refs.
 5. Issue a short-lived capability for the configured UniCAS audience.
 6. Deliver it over the App's authenticated channel.
-7. Call `https://api.unicas.work/v1/apps/{appId}/spaces/{spaceId}/...`.
+7. Call
+   `https://api.unicas.work/v1/cas/...?appId={appId}&spaceId={spaceId}`.
 8. Treat Root Ref commit, not upload completion, as the durable business-state
    boundary.
 9. Refresh expired capabilities through the App; never turn authorization
@@ -152,9 +163,9 @@ seven operations described in this guide. Higher-level blob and file clients
 may be used when their business abstraction matches the App, but their package
 behavior does not add Space API authority.
 
-## App-user SDK beta packages
+## App-user SDK packages
 
-The public SDK is an ESM-only, unified-version beta set:
+The public SDK is an ESM-only, unified-version release set:
 
 ```text
 @unicas/codec
@@ -165,24 +176,27 @@ The public SDK is an ESM-only, unified-version beta set:
 @unicas/space-file-client
 ```
 
-Install only the layers an App needs, using the `beta` dist-tag during beta:
+Install only the layers an App needs. The default npm dist-tag is the current
+stable release:
 
 ```sh
-npm install @unicas/space-client@beta
+npm install @unicas/space-client
 ```
 
 The browser cache is browser-only. The other packages support Node.js 24+ and
-modern browsers with the documented Web APIs. Package semver, HTTP path `v1`,
-capability claim version `1`, and beta product maturity are independent. Every
+the tested browser engines and Web APIs in the
+[compatibility matrix](compatibility.md). Shipped declarations are checked
+with TypeScript 5.9. Package semver, HTTP path `v1`, capability claim version
+`2`, and product maturity are independent. Every
 package in one SDK release uses the same exact version; package-root imports
 are public, and `@unicas/space-protocol/openapi.json` is the only public
 subpath.
 
 ## Compatibility and source-of-truth rules
 
-This guide documents only released App/Space v1 routes under
-`/v1/apps/{appId}/spaces/`. It does not reinterpret historical routes, tokens,
-or storage names.
+This guide documents only released App/Space routes under the unified
+`/v1/cas/` base with query-scoped App and Space IDs. It does not reinterpret
+historical routes, tokens, or storage names.
 
 When sources differ:
 
@@ -191,7 +205,8 @@ When sources differ:
 2. service authorization and behavioral tests establish enforced runtime
    behavior;
 3. client behavior describes what the published client can send or consume;
-4. this guide reports any gap explicitly rather than inventing a normalized
-   contract.
+4. this guide explains the generated contract without inventing a second
+   schema.
 
-Current gaps are listed in [HTTP operation reference](http-api.md#contract-gaps).
+The cross-surface guarantees and implementation-only diagnostics are listed in
+[HTTP operation reference](http-api.md#contract-alignment).

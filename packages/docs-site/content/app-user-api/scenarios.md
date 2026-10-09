@@ -47,7 +47,7 @@ sequenceDiagram
     participant UI as App frontend
     participant CAS as UniCAS Space data plane
 
-    UI->>CAS: GET .../nodes/ROOT_HASH/content<br/>cas:nodes:read capability
+    UI->>CAS: GET /v1/cas/nodes/ROOT_HASH?appId=...&spaceId=...<br/>cas:nodes:read capability
     alt Node is ready in the same Space
         CAS-->>UI: 200 content + Content-Type/Length + X-CAS-Refs
     else Node absent or not readable

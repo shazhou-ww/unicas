@@ -5,7 +5,7 @@ Runbooks, SLOs, and alerting for the independently deployed CAS middleware
 
 | Component | Worker / resource | Notes |
 |---|---|---|
-| UniCAS service (public) | `unicas` | Single `@unicas/service-cloudflare` Worker for `/v1/apps`, `/admin`, MCP/OAuth, and admin UI |
+| UniCAS service (public) | `unicas` | Single `@unicas/service-cloudflare` Worker for `/v1/cas`, `/admin`, MCP/OAuth, and admin UI |
 | Spaces file App | `unicas-spaces` | Separate `@unicas/spaces` Worker, Google user login, App-owned issuer, file catalog, and release smoke |
 | OAuth KV | dedicated `OAUTH_KV` namespace | OAuth clients, grants, token hashes, and encrypted authorization transactions |
 | Control D1 | `unicas-control` (`3a64d58d-…`) | Apps, issuers, members, and audit; physical tables still use Stack names |
@@ -26,7 +26,7 @@ in vars or source. Deployment credentials are supplied through
 | SLO | Target | Measurement | Error budget (30d) |
 |---|---|---|---|
 | Service availability | 99.9% | `/health` + Space/admin request success | 43.8 min |
-| Space + admin availability | 99.9% | `/v1/apps` + `/admin` success | 43.8 min |
+| Space + admin availability | 99.9% | `/v1/cas` + `/admin` success | 43.8 min |
 | Service p95 latency (live) | < 500 ms | Worker request duration | — |
 | Space node read p95 (cached/DB) | < 200 ms | node metadata/content reads | — |
 | Spaces APAC directory TTFB p95 | ≤ 1 s | At least 30 authenticated synthetic `/api/entries` calls from the selected APAC probes | — |
@@ -129,6 +129,15 @@ operation, and pass `Production` review. Recovery shares the
 `unicas-production` concurrency group with promotion and never creates a
 production tag.
 
+Documentation-only publication uses the separate **Deploy documentation**
+workflow. Supply the full lowercase SHA of the current `main` tip and pass
+`Production` review. The workflow requires the checkout and refreshed
+`origin/main` to equal that SHA before it runs repository code, shares the
+`unicas-production` concurrency group with complete releases, and runs docs
+tests, a browser test, a Wrangler dry-run, the docs deployment, public SDK route
+checks, and an `artifact-manifest.json` source-revision check. It cannot deploy
+the service, Spaces, product site, npm packages, tags, or GitHub Releases.
+
 Local emergency deployment remains explicit. **Always rebuild first** because
 Wrangler uploads `dist/` and stale output silently deploys old code:
 
@@ -173,7 +182,7 @@ accepted Spaces version and placement configuration before evaluating an APAC
 cutover, rollback, and data-validation plan; do not infer it from a broad
 region label.
 
-The App/Space smoke script uses one dedicated `deploy-smoke` Space, per-run node hashes,
+The App/Space smoke script uses one dedicated `/deploy-smoke` Space, per-run node hashes,
 and per-run request IDs. After acquiring the parent Root Ref, it releases that
 ref in a `finally` path even when a later assertion fails, so subsequent runs
 do not accumulate positive Root Refs. It also checks an empty isolation Space
@@ -545,7 +554,7 @@ Operational checks:
 
 ### Incident checklist
 
-1. Confirm service `/health`; confirm `/v1/apps` + `/admin/apps` probes.
+1. Confirm service `/health`; confirm `/v1/cas` + `/admin/apps` probes.
 2. `wrangler deployments list` for `unicas` — recent deploy?
    Rollback first, diagnose later.
 3. Query `cas_app_authorization` for `fail_closed` / `unknown_issuer` —

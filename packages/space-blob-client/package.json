@@ -1,6 +1,6 @@
 {
   "name": "@unicas/space-blob-client",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Blob layer above @unicas/space-client: chunked storage, random-access handles, and root retention",
   "license": "MIT",
   "sideEffects": false,
@@ -12,7 +12,15 @@
   "bugs": {
     "url": "https://github.com/shazhou-ww/unicas/issues"
   },
-  "homepage": "https://docs.unicas.work/app-user-api/",
+  "homepage": "https://docs.unicas.work/app-user-api/sdk/#space-blob-client",
+  "keywords": [
+    "unicas",
+    "content-addressed-storage",
+    "cas",
+    "blob-storage",
+    "typescript",
+    "esm"
+  ],
   "engines": {
     "node": ">=24"
   },

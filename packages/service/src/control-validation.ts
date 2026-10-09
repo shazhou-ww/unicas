@@ -44,8 +44,8 @@ function oauthResourceOrigin(publicOrigin: string): string {
   return url.origin;
 }
 
-export function appOAuthResource(publicOrigin: string, appId: string): string {
-  return `${oauthResourceOrigin(publicOrigin)}/v1/apps/${encodeURIComponent(appId)}`;
+export function casOAuthResource(publicOrigin: string): string {
+  return `${oauthResourceOrigin(publicOrigin)}/v1/cas/`;
 }
 
 /** Email is display metadata; used only for invitation display constraints. */
