@@ -313,3 +313,24 @@ credential 写入仓库、日志、evidence、chat 或 GitHub secret。
 需要外部身份能力的剩余动作；它同时阻断 D-S04、D-S06、D-S07 以及
 D-AC03、D-AC04、D-AC06、D-AC07。维护者需要在本机建立短期 npm owner
 session，之后只能按 D-S03 对三个 exact `@0.1.0` 版本执行并逐个匿名复验。
+
+### Owner authentication 重试
+
+同步上述停止点后再次执行 `npm whoami`，结果仍为 `E401 Unauthorized`。
+官方 `npm login --auth-type=web` 流程已启动，但 npm Web 的
+bot-verification challenge 阻止建立新会话；等待后主动终止 CLI 登录进程，
+没有修改 registry。
+
+随后只对第一个 exact version 运行同消息的 `npm deprecate --dry-run`，证明
+package 与 version 可解析；npm CLI 源码确认 dry-run 不发送 PUT。使用同一个
+exact package、version 和消息执行实际命令时，registry 返回
+`E404 Not Found`，并明确表示 package 不存在或当前 identity 没有权限。按
+D-S03 的 stop-on-failure 规则，没有继续尝试另外两个 package。
+
+失败后立即匿名读取
+`@unicas/tenant-client@0.1.0`，其 `deprecated` 字段仍不存在；另外两个
+package 也没有收到写命令。因此本轮重试没有完成任何 deprecation，没有产生
+部分成功状态，也没有改变 version、dist-tag、owner 或 package 内容。OIDC
+trusted publishing 仅支持 `npm publish`，不能作为 `npm deprecate` 的 owner
+authentication；仓库和 GitHub environments 也没有 npm token secret，故不能
+在不引入新长期 credential 或绕过身份验证的前提下自动完成 D-S03。
