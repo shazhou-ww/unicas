@@ -66,7 +66,7 @@ describe("functional Space CAS client", () => {
     const client = createSpaceCasClient({
       baseUrl: "https://cas.test/",
       appId: "app-1",
-      spaceId: "space-1",
+      spaceId: "/space-1",
       getToken: async () => "token",
       fetcher: {
         async fetch(input, init) {
