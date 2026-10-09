@@ -10,7 +10,7 @@
 - [x] **I-S04:** 补齐社区、安全与维护入口
 - [x] **I-S05:** 强化依赖与 workflow 供应链
 - [x] **I-S06:** 汇总开源就绪检查与候选证据
-- [ ] **I-S07:** 同步精确 implementation 候选
+- [x] **I-S07:** 同步精确 implementation 候选
 
 ### Implementation acceptance criteria
 
@@ -20,7 +20,7 @@
 - [x] **I-AC04:** 兼容、SemVer 与 API baseline 可审查
 - [x] **I-AC05:** 社区与安全入口完整
 - [x] **I-AC06:** 安全自动化与不可变引用生效
-- [ ] **I-AC07:** 完整候选验证通过且外部状态未改变
+- [x] **I-AC07:** 完整候选验证通过且外部状态未改变
 
 ## Deployment
 
