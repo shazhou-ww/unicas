@@ -14,7 +14,7 @@
 ### Implementation acceptance criteria
 
 - [x] **I-AC01:** 普通 Space 请求不执行 schema migration
-- [x] **I-AC02:** 目录读取只有一个 root lookup 和一个 manifest 边界
+- [x] **I-AC02:** 目录读取只有一个 session/root lookup 和一个 manifest 边界
 - [x] **I-AC03:** 授权、隔离和 API 兼容性保持不变
 - [x] **I-AC04:** Server-Timing 有界且不泄露数据
 - [x] **I-AC05:** 固定 IAD placement 已被可回滚候选替代
@@ -39,24 +39,55 @@
 - 实现证据只证明候选行为、兼容性和可发布性。Smart Placement 尚未部署，APAC
   TTFB、Worker wall time 和 cold-request SLO 仍由 Deployment 世界的 canary
   验证；本阶段不声称生产延迟目标已经达成。
+- 首次 production canary 的 31 次目录请求为 31/31 HTTP 200，TTFB p95
+  741.8 ms、cold 1.620 s，但 Cloudflare Workers directory-only wall p95 为
+  647.975 ms，超过 500 ms 门槛；CPU p95 仅 5.881 ms。该结果将候选重新带回
+  Implementation，不能以 TTFB 或 `Server-Timing` 替代失败的 wall 证据。
+- 补充候选让 `readSession()` 在同一条 `SPACES_DB` 查询中返回 0/1 root
+  snapshot，并让 file service 直接打开该 snapshot；repository snapshot 测试和
+  file-service call-count 测试证明常见目录路径不再调用 `listRoots()`。完整
+  `@unicas/spaces` suite 67/67、package typecheck、docs 7/7 和
+  `pnpm deploy:spaces:plan` 均通过。移除一个生产中约 220 ms 的 D1 网络边界是
+  可验证的实现结果；新的 production wall SLO 仍留给后续 Deployment canary。
 
 ## Deployment
 
 ### Deployment steps
 
-- [ ] **D-S01:** 锁定发布候选和回滚基线
-- [ ] **D-S02:** 同步稳定契约并通过发布前门禁
-- [ ] **D-S03:** 通过受保护 release promotion 发布
+- [x] **D-S01:** 锁定发布候选和回滚基线
+- [x] **D-S02:** 同步稳定契约并通过发布前门禁
+- [x] **D-S03:** 通过受保护 release promotion 发布
 - [ ] **D-S04:** 执行 APAC authenticated directory canary
 - [ ] **D-S05:** 观察稳定性并执行失败回滚
 - [ ] **D-S06:** 发布外部证据并进入验收门禁
 
 ### Deployment acceptance criteria
 
-- [ ] **D-AC01:** production 对应受保护的精确发布
+- [x] **D-AC01:** production 对应受保护的精确发布
 - [ ] **D-AC02:** migration、发布和 canonical smoke 全部成功
 - [ ] **D-AC03:** APAC directory TTFB 达标
 - [ ] **D-AC04:** Worker wall time 与安全 timing 达标
 - [ ] **D-AC05:** controlled cold request 达标
 - [ ] **D-AC06:** 稳定性和回滚准备得到证明
 - [ ] **D-AC07:** 外部证据安全、完整且可复核
+
+### Deployment evidence
+
+- D-S01：记录了 `production-20261008-560`、已知良好 service/Spaces/site/docs
+  version、固定 IAD placement 回滚基线、最终候选和无并发 workflow 状态。
+- D-S02：Deployment contract revision
+  `bd6aa93fb588d09e9b06e5fccd57e540b6cc92a9` 已同步；worktree、staged、remote、
+  deploy plan、targeted migration tests 与 main CI 均通过。
+- D-S03 / D-AC01：[#34](https://github.com/shazhou-ww/unicas/pull/34) 生成
+  two-parent release revision `80838475010aa5a5c53bebd5d7dd335ab14be4e7`；
+  [workflow 37749102134](https://github.com/shazhou-ww/unicas/actions/runs/37749102134)
+  成功并创建 `production-20261008-571`。
+- `CAS_DB` migration、service/Spaces publication、canonical smoke、Spaces file
+  smoke 和五个 public origin probe 已成功，但 D-AC02 还要求一个 bounded
+  production Space response header 证明普通请求不含 `cas_schema`，因此保持未勾选。
+- T+15 APAC 无正文 probe 再次确认五个 public origin 返回预期状态，HKG/NRT
+  colo 可用；缺少同窗口 Worker outcome、CPU/wall 和 5xx，因此 D-S05 与
+  D-AC06 保持未勾选。
+- 共享浏览器没有安全登录态且自动化连接超时；APAC canary、Workers metrics、
+  controlled cold observation 和 15 分钟稳定性仍未完成。不得以 workflow
+  smoke 或本地 benchmark 替代 D-S04、D-S05 或 D-AC03–D-AC07。

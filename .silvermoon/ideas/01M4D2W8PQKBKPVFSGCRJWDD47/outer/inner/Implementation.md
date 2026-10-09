@@ -20,15 +20,18 @@ node 的有界有序 refs；content type 和 content length 继续使用标准 H
 
 ### I-S03: 复用 file-root catalog snapshot
 
-让 file system 的 `openRoot` 接受 catalog 已返回的 `SpaceFileRootInfo` snapshot，
-同时保留按 `rootId` 打开的现有调用方式。Spaces file service 在确认 Principal
-恰好拥有一个 root 后直接打开该 snapshot，不再为同一次目录读取重复执行
-`catalog.list()`。
+让 session lookup 在同一条 `SPACES_DB` 查询中带回 Principal 的 0/1
+`SpaceFileRootInfo` snapshot；数据库的 `principal_id` 唯一约束继续保证最多一个
+root。Spaces file service 首次打开 root 时直接使用该 snapshot，不再为同一次
+目录读取执行独立的 file-root catalog 网络往返。保留无 snapshot 时的
+`catalog.list()` fallback、按 `rootId` 打开的现有调用方式和 mutation revision
+冲突保护。
 
 ### I-S04: 暴露安全的外层分段计时
 
-在 Spaces Worker 中记录固定名称的 `spaces_session`、`spaces_root`、
-`spaces_manifest` 和 `spaces_unicas` Server-Timing，并只吸收 UniCAS 响应中
+在 Spaces Worker 中记录固定名称的 `spaces_session`、`spaces_manifest` 和
+`spaces_unicas` Server-Timing；只有使用 catalog fallback 时才记录
+`spaces_root`。只吸收 UniCAS 响应中
 allowlist 内的 `cas_auth`、`cas_do`、`cas_d1_*`、`cas_r2_*`、`cas_edge` 等
 固定计时项。解析器忽略 description、未知名称和非有限时长；响应不得包含
 标识符、路径、URL、header 值、SQL 值或内容。
@@ -59,9 +62,11 @@ Space 数据面请求、审计 RPC、App usage、App GC 和定时维护均不调
 
 ### I-AC02: 目录读取只有一个 root lookup 和一个 manifest 边界
 
-一次 `SpacesFileService.list()` 只调用一次 `listRoots()`，并把所得 snapshot
-传给 `openRoot()`；manifest 加载只调用一次 `readNode()`，该调用只发出一个
-content HTTP 请求。通过 call-count 单元测试和 client 路由测试证明。
+一次 authenticated directory read 只用一条 `SPACES_DB` query 完成 session
+验证和 0/1 root snapshot 读取；`SpacesFileService.list()` 直接把 snapshot
+传给 `openRoot()`，不再调用 `listRoots()`。manifest 加载只调用一次
+`readNode()`，该调用只发出一个 content HTTP 请求。通过 repository snapshot、
+file-service call-count 和 client 路由测试证明。
 
 ### I-AC03: 授权、隔离和 API 兼容性保持不变
 
@@ -72,10 +77,10 @@ space-file-client 和 spaces 的相关测试证明。
 
 ### I-AC04: Server-Timing 有界且不泄露数据
 
-经过认证的 `/api/entries` 响应包含外层 session/root/manifest/UniCAS 边界以及
-allowlist 内的下游计时；未知名称、description、负数、非有限值和动态值不会进入
-响应。新服务的正常 Space 响应不再出现 `cas_schema`。通过 timing 与 Worker
-单元测试证明。
+经过认证的 `/api/entries` 响应包含外层 session/manifest/UniCAS 边界以及
+allowlist 内的下游计时；只有 catalog fallback 才出现 `spaces_root`。未知名称、
+description、负数、非有限值和动态值不会进入响应。新服务的正常 Space 响应不再
+出现 `cas_schema`。通过 timing 与 Worker 单元测试证明。
 
 ### I-AC05: 固定 IAD placement 已被可回滚候选替代
 

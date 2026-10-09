@@ -1,4 +1,5 @@
 import type { D1Database } from "@cloudflare/workers-types";
+import type { SpaceFileRootInfo } from "@unicas/space-file-client";
 import { randomToken, sha256Hex } from "./crypto.js";
 
 export type IdentityProvider = "google" | "microsoft" | "github";
@@ -29,6 +30,7 @@ export interface AuthenticatedSession {
   readonly context: PrincipalContext;
   readonly csrfTokenHash: string;
   readonly expiresAt: number;
+  readonly fileRoots: readonly SpaceFileRootInfo[];
 }
 
 export interface SmokeCleanupPlan {
@@ -53,6 +55,12 @@ interface SessionRow extends PrincipalRow {
   readonly csrf_token_hash: string;
   readonly expires_at: number;
   readonly last_seen_at: number;
+  readonly root_id: string | null;
+  readonly root_name: string | null;
+  readonly manifest_hash: string | null;
+  readonly root_revision: number | null;
+  readonly root_created_at: number | null;
+  readonly root_updated_at: number | null;
 }
 
 const SessionTouchIntervalMs = 5 * 60 * 1000;
@@ -142,11 +150,15 @@ export class SpacesRepository {
     const row = await this.#db.prepare(`
       SELECT p.principal_id, p.status, p.display_name, i.provider,
              m.app_id, m.space_id, m.ref_domain,
-              s.csrf_token_hash, s.expires_at, s.last_seen_at
+             s.csrf_token_hash, s.expires_at, s.last_seen_at,
+             r.root_id, r.name AS root_name, r.manifest_hash,
+             r.revision AS root_revision, r.created_at AS root_created_at,
+             r.updated_at AS root_updated_at
       FROM spaces_sessions s
       JOIN spaces_principals p ON p.principal_id = s.principal_id
       LEFT JOIN spaces_external_identities i ON i.principal_id = p.principal_id
       JOIN spaces_principal_spaces m ON m.principal_id = p.principal_id
+      LEFT JOIN spaces_file_system_roots r ON r.principal_id = p.principal_id
       WHERE s.session_id_hash = ?
       ORDER BY CASE i.provider WHEN 'google' THEN 0 WHEN 'microsoft' THEN 1 ELSE 2 END
       LIMIT 1
@@ -166,6 +178,7 @@ export class SpacesRepository {
       context: toPrincipalContext(row),
       csrfTokenHash: row.csrf_token_hash,
       expiresAt: row.expires_at,
+      fileRoots: toFileRootSnapshot(row),
     };
   }
 
@@ -348,4 +361,23 @@ function toPrincipalContext(row: PrincipalRow): PrincipalContext {
     spaceId: row.space_id,
     refDomain: row.ref_domain,
   };
+}
+
+function toFileRootSnapshot(row: SessionRow): readonly SpaceFileRootInfo[] {
+  if (row.root_id === null) return [];
+  if (row.root_name === null
+    || row.manifest_hash === null
+    || row.root_revision === null
+    || row.root_created_at === null
+    || row.root_updated_at === null) {
+    throw new TypeError("Session file-root snapshot is incomplete");
+  }
+  return [{
+    rootId: row.root_id,
+    name: row.root_name,
+    manifestHash: row.manifest_hash,
+    revision: row.root_revision,
+    createdAt: row.root_created_at,
+    updatedAt: row.root_updated_at,
+  }];
 }

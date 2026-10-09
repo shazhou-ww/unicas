@@ -68,12 +68,34 @@ describe("SpacesRepository", () => {
     expect(stored?.csrf_token_hash).not.toContain(issued.csrfToken);
     const session = await repository.readSession(issued.sessionId);
     expect(session?.context.principalId).toBe("principal-a");
+    expect(session?.fileRoots).toEqual([]);
     await expect(repository.verifyCsrf(session!, issued.csrfToken)).resolves.toBe(true);
     await expect(repository.verifyCsrf(session!, `${issued.csrfToken}x`)).resolves.toBe(false);
 
     const expiredRepository = new SpacesRepository(db, () => 1_501);
     await expect(expiredRepository.readSession(issued.sessionId)).resolves.toBeNull();
     expect(await db.prepare("SELECT COUNT(*) AS count FROM spaces_sessions").first()).toEqual({ count: 0 });
+  });
+
+  test("returns the file-root snapshot with the authenticated session", async () => {
+    const { db, repository } = await fixture();
+    await db.prepare(`
+      INSERT INTO spaces_file_system_roots (
+        root_id, principal_id, name, manifest_hash, revision, created_at, updated_at
+      ) VALUES ('root-a', 'principal-a', 'Files', 'manifest-a', 3, 10, 20)
+    `).run();
+    const issued = await repository.createSession("principal-a", 500);
+
+    await expect(repository.readSession(issued.sessionId)).resolves.toMatchObject({
+      fileRoots: [{
+        rootId: "root-a",
+        name: "Files",
+        manifestHash: "manifest-a",
+        revision: 3,
+        createdAt: 10,
+        updatedAt: 20,
+      }],
+    });
   });
 
   test("throttles session last-seen writes", async () => {
