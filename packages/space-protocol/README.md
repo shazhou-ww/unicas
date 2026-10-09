@@ -1,7 +1,6 @@
 # @unicas/space-protocol
 
 [![npm version](https://img.shields.io/npm/v/%40unicas%2Fspace-protocol?label=npm)](https://www.npmjs.com/package/%40unicas%2Fspace-protocol)
-[![SDK CI](https://github.com/shazhou-ww/unicas/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/shazhou-ww/unicas/actions/workflows/ci.yml)
 [![MIT license](https://img.shields.io/npm/l/%40unicas%2Fspace-protocol)](https://github.com/shazhou-ww/unicas/blob/main/LICENSE)
 
 Cloud-neutral UniCAS Space data-plane contracts and capability vocabulary.

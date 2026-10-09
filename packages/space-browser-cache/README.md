@@ -1,7 +1,6 @@
 # @unicas/space-browser-cache
 
 [![npm version](https://img.shields.io/npm/v/%40unicas%2Fspace-browser-cache?label=npm)](https://www.npmjs.com/package/%40unicas%2Fspace-browser-cache)
-[![SDK CI](https://github.com/shazhou-ww/unicas/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/shazhou-ww/unicas/actions/workflows/ci.yml)
 [![MIT license](https://img.shields.io/npm/l/%40unicas%2Fspace-browser-cache)](https://github.com/shazhou-ww/unicas/blob/main/LICENSE)
 
 Optional browser implementation of `CasNodeCache`. The HTTP client remains
