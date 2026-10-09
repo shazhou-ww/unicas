@@ -11,6 +11,7 @@ import {
   CapabilityAuthorizationError,
   SpaceCapabilityClaimsSchema,
   spaceOperationPolicyFor,
+  spaceSelectorMatches,
   validateRefDomainClaim,
   type AppSpaceRoute,
 } from "@unicas/space-protocol";
@@ -168,7 +169,7 @@ export class AppSpaceCapabilityVerifier {
       throw new CapabilityAuthorizationError("APP_SUSPENDED", "App is suspended");
     }
     const keySet = this.#remoteKeySet(authority.jwksUri);
-    let payload: Omit<VerifiedAppSpacePayload, "appId" | "kid">;
+    let payload: NormalizedAppSpacePayload;
     let lifetimeSeconds = 0;
     try {
       const result = await jwtVerify(token, keySet, {
@@ -177,7 +178,7 @@ export class AppSpaceCapabilityVerifier {
         audience: authority.audience,
         clockTolerance: CLOCK_TOLERANCE_SECONDS,
         currentDate: new Date(this.#now()),
-        requiredClaims: ["ver", "sub", "iat", "nbf", "exp", "jti", "spaceId", "permissions"],
+        requiredClaims: ["ver", "sub", "iat", "nbf", "exp", "jti", "grants"],
       });
       payload = normalizeAppSpacePayload(result.payload);
       lifetimeSeconds = Number(result.payload.exp) - Number(result.payload.iat);
@@ -198,18 +199,20 @@ export class AppSpaceCapabilityVerifier {
     if (authority.appId !== route.appId) {
       throw new CapabilityAuthorizationError(
         "resource_scope_mismatch",
-        "CAS capability App does not match the requested path",
+        "CAS capability App does not match the requested resource",
       );
     }
-    if (payload.spaceId !== route.spaceId) {
+    const matchingGrants = payload.grants.filter(grant =>
+      spaceSelectorMatches(grant.selector, route.spaceId));
+    if (matchingGrants.length === 0) {
       throw new CapabilityAuthorizationError(
         "resource_scope_mismatch",
-        "CAS capability Space does not match the requested path",
+        "CAS capability Space does not match the requested resource",
       );
     }
 
     const permission = appSpacePermissionFor(route);
-    if (!payload.permissions.includes(permission)) {
+    if (!matchingGrants.some(grant => grant.permissions.includes(permission))) {
       throw new CapabilityAuthorizationError(
         "insufficient_permission",
         `CAS ${route.operation} requires ${permission}`,
@@ -220,7 +223,16 @@ export class AppSpaceCapabilityVerifier {
     if (route.operation === "listRootRefs" || route.operation === "updateRootRefs") {
       refDomain = this.#requireValidRefDomain(payload);
     }
-    return { ...payload, appId: authority.appId, kid, refDomain };
+    return {
+      subject: payload.subject,
+      jti: payload.jti,
+      issuer: payload.issuer,
+      appId: authority.appId,
+      spaceId: route.spaceId,
+      kid,
+      permissions: [...new Set(matchingGrants.flatMap(grant => grant.permissions))],
+      ...(refDomain === undefined ? {} : { refDomain }),
+    };
   }
 
   #remoteKeySet(jwksUri: string): ReturnType<typeof createRemoteJWKSet> {
@@ -288,7 +300,7 @@ export class AppSpaceCapabilityVerifier {
   }
 
   #requireValidRefDomain(
-    payload: Omit<VerifiedAppSpacePayload, "appId" | "kid">,
+    payload: Pick<NormalizedAppSpacePayload, "refDomain">,
   ): string {
     const claimed = payload.refDomain;
     if (claimed === undefined) {
@@ -320,6 +332,17 @@ interface VerifiedAppSpacePayload {
   readonly kid: string;
 }
 
+interface NormalizedAppSpacePayload {
+  readonly subject: string;
+  readonly jti: string;
+  readonly grants: readonly {
+    readonly selector: string;
+    readonly permissions: readonly string[];
+  }[];
+  readonly issuer: string;
+  readonly refDomain?: string;
+}
+
 interface CachedAppAuthority {
   readonly authority: ResolvedAppAuthority;
   readonly fetchedAt: number;
@@ -327,7 +350,7 @@ interface CachedAppAuthority {
 
 function normalizeAppSpacePayload(
   payload: unknown,
-): Omit<VerifiedAppSpacePayload, "appId" | "kid"> {
+): NormalizedAppSpacePayload {
   const result = SpaceCapabilityClaimsSchema.safeParse(payload);
   if (!result.success) {
     throw new CapabilityAuthenticationError("invalid_token", "CAS capability claims are invalid");
@@ -336,8 +359,7 @@ function normalizeAppSpacePayload(
   return {
     subject: claims.sub,
     jti: claims.jti,
-    spaceId: claims.spaceId,
-    permissions: claims.permissions,
+    grants: claims.grants,
     issuer: claims.iss,
     ...(claims.refDomain === undefined ? {} : { refDomain: claims.refDomain }),
   };

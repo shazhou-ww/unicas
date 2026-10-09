@@ -4,6 +4,9 @@ All six public App-user SDK packages share each version.
 
 ## 0.1.2 - Unreleased
 
+- Replaces single-Space capability claims with `ver: 2` selector-bound grants,
+  canonical slash-based Space IDs, unified `/v1/cas` routes with query
+  App/Space scope, and one shared CAS v1 OAuth audience.
 - Adds complete client usage guides, package selection, compatibility,
   versioning, TypeScript API, troubleshooting, and support entry points.
 - Adds packed-artifact Node and Chromium/Firefox/WebKit quickstarts, tested

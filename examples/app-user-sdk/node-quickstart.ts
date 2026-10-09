@@ -7,7 +7,7 @@ let request: Request | undefined;
 const cas = createSpaceCasClient({
   baseUrl: "https://api.example",
   appId: "app-example",
-  spaceId: "space-example",
+  spaceId: "/space-example",
   getToken: async () => "synthetic-capability",
   fetcher: {
     async fetch(input, init) {
@@ -32,7 +32,9 @@ assert.equal(scheme, "Bearer");
 assert.equal(token, "synthetic-capability");
 assert.equal(
   new URL(request!.url).pathname,
-  `/v1/apps/app-example/spaces/space-example/cas/nodes/${hash}/metadata`,
+  `/v1/cas/nodes/${hash}/metadata`,
 );
+assert.equal(new URL(request!.url).searchParams.get("appId"), "app-example");
+assert.equal(new URL(request!.url).searchParams.get("spaceId"), "/space-example");
 
 console.log("SDK NODE QUICKSTART PASS");

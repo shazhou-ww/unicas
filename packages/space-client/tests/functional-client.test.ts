@@ -17,7 +17,7 @@ describe("functional Space CAS client", () => {
     const client = createSpaceCasClient({
       baseUrl: "https://cas.test/",
       appId: "app-1",
-      spaceId: "space-1",
+      spaceId: "/space-1",
       getToken: async () => `token-${++tokenCounter}`,
       fetcher: {
         async fetch(input, init) {
@@ -51,7 +51,7 @@ describe("functional Space CAS client", () => {
     const client = createSpaceCasClient({
       baseUrl: "https://cas.test/",
       appId: "app-1",
-      spaceId: "space-1",
+      spaceId: "/space-1",
       getToken: async () => "token",
       fetcher: { fetch: async () => Response.json({ error: "NOT_FOUND" }, { status: 404 }) },
     });
@@ -107,7 +107,7 @@ describe("functional Space CAS client", () => {
     const client = createSpaceCasClient({
       baseUrl: "https://cas.test/",
       appId: "app-1",
-      spaceId: "space-1",
+      spaceId: "/space-1",
       getToken: async () => "token",
       fetcher: {
         async fetch(input, init) {
@@ -134,7 +134,9 @@ describe("functional Space CAS client", () => {
     await expect(new Response(node.content).text()).resolves.toBe("node");
     expect(requests).toHaveLength(1);
     expect(new URL(requests[0].url).pathname)
-      .toBe(`/v1/apps/app-1/spaces/space-1/cas/nodes/${hash}/content`);
+      .toBe(`/v1/cas/nodes/${hash}`);
+    expect(new URL(requests[0].url).searchParams.get("appId")).toBe("app-1");
+    expect(new URL(requests[0].url).searchParams.get("spaceId")).toBe("/space-1");
     expect(requests[0].headers.get("Authorization")?.startsWith("Bearer ")).toBe(true);
   });
 
@@ -143,7 +145,7 @@ describe("functional Space CAS client", () => {
     const client = createSpaceCasClient({
       baseUrl: "https://cas.test/",
       appId: "app-1",
-      spaceId: "space-1",
+      spaceId: "/space-1",
       getToken: async () => "token",
       fetcher: {
         async fetch() {
@@ -164,7 +166,7 @@ describe("functional Space CAS client", () => {
     const client = createSpaceCasClient({
       baseUrl: "https://cas.test/",
       appId: "app/1",
-      spaceId: "space/1",
+      spaceId: "/space/1",
       getToken: async () => "space-token",
       cache: {
         async metadata(key, load) {
@@ -206,13 +208,13 @@ describe("functional Space CAS client", () => {
     await client.usage();
     await client.gc({ maxNodes: 25 });
 
-    expect(metadataKeys).toEqual([{ version: 1, appId: "app/1", spaceId: "space/1", hash }]);
+    expect(metadataKeys).toEqual([{ version: 1, appId: "app/1", spaceId: "/space/1", hash }]);
     expect(requests.map((request) => new URL(request.url).pathname + new URL(request.url).search)).toEqual([
-      `/v1/apps/app%2F1/spaces/space%2F1/cas/nodes/${hash}/metadata`,
-      "/v1/apps/app%2F1/spaces/space%2F1/root-refs?limit=10&cursor=next",
-      "/v1/apps/app%2F1/spaces/space%2F1/root-refs",
-      "/v1/apps/app%2F1/spaces/space%2F1/cas/usage",
-      "/v1/apps/app%2F1/spaces/space%2F1/cas/gc",
+      `/v1/cas/nodes/${hash}/metadata?appId=app%2F1&spaceId=%2Fspace%2F1`,
+      "/v1/cas/root-refs?appId=app%2F1&spaceId=%2Fspace%2F1&limit=10&cursor=next",
+      "/v1/cas/root-refs?appId=app%2F1&spaceId=%2Fspace%2F1",
+      "/v1/cas/usage?appId=app%2F1&spaceId=%2Fspace%2F1",
+      "/v1/cas/gc?appId=app%2F1&spaceId=%2Fspace%2F1",
     ]);
     expect(requests.every((request) => request.headers.get("Authorization") === "Bearer space-token")).toBe(true);
     expect(requests.every((request) => !new URL(request.url).pathname.startsWith("/stacks/"))).toBe(true);

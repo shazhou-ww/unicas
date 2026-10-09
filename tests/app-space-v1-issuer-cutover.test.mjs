@@ -1,7 +1,7 @@
 import { compactVerify, exportPKCS8, generateKeyPair } from "jose";
 import { describe, expect, test } from "vitest";
 import {
-  appSpaceV1Audience,
+  casV1Audience,
   cutOverAppSpaceV1Issuers,
   parseIssuerInspectionChallenge,
 } from "../stacks/unicas/deploy/cut-over-app-space-v1-issuers.mjs";
@@ -17,7 +17,7 @@ describe("App/Space v1 production issuer cutover", () => {
       inspectionId: "inspection-1",
       appId: "app-1",
       issuer: "https://issuer.example",
-      audience: "https://api.unicas.work/v1/apps/app-1",
+      audience: "https://api.unicas.work/v1/cas/",
       metadataDigest: "metadata-digest",
       jwksDigest: "jwks-digest",
       capabilityMaxLifetimeSeconds: 1_800,
@@ -41,7 +41,7 @@ describe("App/Space v1 production issuer cutover", () => {
           inspectionId: "inspection-1",
           appId: "app/1",
           issuer: "https://issuer.example",
-          audience: "https://api.unicas.work/v1/apps/app%2F1",
+          audience: "https://api.unicas.work/v1/cas/",
           metadataDigest: "metadata-digest",
           jwksDigest: "jwks-digest",
           capabilityMaxLifetimeSeconds: 1_800,
@@ -59,7 +59,7 @@ describe("App/Space v1 production issuer cutover", () => {
       if (request.method === "PUT") {
         const body = await request.json();
         const verified = await compactVerify(body.activationProof, publicKey);
-        expect(new TextDecoder().decode(verified.payload)).toContain("https://api.unicas.work/v1/apps/app%2F1");
+        expect(new TextDecoder().decode(verified.payload)).toContain("https://api.unicas.work/v1/cas/");
         expect(verified.protectedHeader).toMatchObject({ alg: "ES256", kid: "key-1" });
         activated = true;
         return new Response(null, { status: 204 });
@@ -67,8 +67,8 @@ describe("App/Space v1 production issuer cutover", () => {
       return Response.json({
         issuer: "https://issuer.example",
         audience: activated
-          ? "https://api.unicas.work/v1/apps/app%2F1"
-          : "https://api.unicas.work/v2/apps/app%2F1",
+          ? "https://api.unicas.work/v1/cas/"
+          : "https://api.unicas.work/v1/apps/app%2F1",
         status: "active",
       }, { headers: { ETag: activated ? '"2"' : '"1"' } });
     };
@@ -86,7 +86,7 @@ describe("App/Space v1 production issuer cutover", () => {
       fetchImpl,
     })).resolves.toEqual([{
       appId: "app/1",
-      audience: "https://api.unicas.work/v1/apps/app%2F1",
+      audience: "https://api.unicas.work/v1/cas/",
       status: "updated",
     }]);
 
@@ -100,7 +100,7 @@ describe("App/Space v1 production issuer cutover", () => {
   test("skips an issuer that already has the released audience", async () => {
     const fetchImpl = async () => Response.json({
       issuer: "https://issuer.example",
-      audience: "https://api.unicas.work/v1/apps/app-1",
+      audience: "https://api.unicas.work/v1/cas/",
       status: "active",
     }, { headers: { ETag: '"2"' } });
     await expect(cutOverAppSpaceV1Issuers({
@@ -111,7 +111,7 @@ describe("App/Space v1 production issuer cutover", () => {
       fetchImpl,
     })).resolves.toEqual([{
       appId: "app-1",
-      audience: appSpaceV1Audience("https://api.unicas.work/path", "app-1"),
+      audience: casV1Audience("https://api.unicas.work/path"),
       status: "current",
     }]);
   });

@@ -3,8 +3,8 @@ import { signIssuerChallenge } from "../../../packages/spaces/scripts/sign-issue
 
 const OAUTH_ISSUER_INSPECTION_CHALLENGE_VERSION = "cas-oauth-issuer-inspection-v1";
 
-export function appSpaceV1Audience(publicOrigin, appId) {
-  return `${new URL(publicOrigin).origin}/v1/apps/${encodeURIComponent(appId)}`;
+export function casV1Audience(publicOrigin) {
+  return `${new URL(publicOrigin).origin}/v1/cas/`;
 }
 
 export function parseIssuerInspectionChallenge(challenge) {
@@ -68,7 +68,7 @@ export async function cutOverAppSpaceV1Issuers({
     const path = `/admin/apps/${encodeURIComponent(issuer.appId)}/oauth-issuer`;
     const currentResponse = await request(path);
     const current = await currentResponse.json();
-    const targetAudience = appSpaceV1Audience(publicOrigin, issuer.appId);
+    const targetAudience = casV1Audience(publicOrigin);
     if (current.audience === targetAudience) {
       results.push({ appId: issuer.appId, audience: targetAudience, status: "current" });
       continue;

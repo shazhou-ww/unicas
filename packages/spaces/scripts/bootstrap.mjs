@@ -10,6 +10,7 @@ import {
   CapabilityAlgorithm,
   CapabilityTokenType,
   SpaceCapabilityVersion,
+  parseSpaceSelector,
   spaceNodeLeasePermission,
   spaceNodeReadPermission,
   spaceRootRefsReadPermission,
@@ -45,10 +46,15 @@ export function readBootstrapConfig(mode, environment = process.env) {
   const refDomain = environment.SPACES_BOOTSTRAP_REF_DOMAIN ?? (mode === "smoke" ? "spaces:smoke" : "spaces:files");
   const refDomainError = validateRefDomainClaim(refDomain);
   if (refDomainError) throw new Error(`SPACES_BOOTSTRAP_REF_DOMAIN: ${refDomainError}`);
+  const spaceId = boundedText(environment.SPACES_BOOTSTRAP_SPACE_ID, "SPACES_BOOTSTRAP_SPACE_ID");
+  const selector = parseSpaceSelector(spaceId);
+  if (!selector || selector.kind !== "exact") {
+    throw new Error("SPACES_BOOTSTRAP_SPACE_ID must be a canonical exact Space ID");
+  }
   return {
     mode,
     appId: boundedText(environment.SPACES_BOOTSTRAP_APP_ID, "SPACES_BOOTSTRAP_APP_ID"),
-    spaceId: boundedText(environment.SPACES_BOOTSTRAP_SPACE_ID, "SPACES_BOOTSTRAP_SPACE_ID"),
+    spaceId,
     principalId: boundedText(environment.SPACES_BOOTSTRAP_PRINCIPAL_ID, "SPACES_BOOTSTRAP_PRINCIPAL_ID"),
     displayName: boundedText(environment.SPACES_BOOTSTRAP_DISPLAY_NAME, "SPACES_BOOTSTRAP_DISPLAY_NAME"),
     googleSubject: mode === "google"
@@ -152,13 +158,15 @@ export async function bootstrapSpacesPrincipal(config, execute = executeD1) {
   const issuedAt = Math.floor(Date.now() / 1000);
   const token = await new SignJWT({
     ver: SpaceCapabilityVersion,
-    spaceId: config.spaceId,
-    permissions: [
-      spaceNodeReadPermission(),
-      spaceNodeLeasePermission(),
-      spaceRootRefsReadPermission(),
-      spaceRootRefsUpdatePermission(),
-    ],
+    grants: [{
+      selector: config.spaceId,
+      permissions: [
+        spaceNodeReadPermission(),
+        spaceNodeLeasePermission(),
+        spaceRootRefsReadPermission(),
+        spaceRootRefsUpdatePermission(),
+      ],
+    }],
     refDomain: config.refDomain,
   })
     .setProtectedHeader({ alg: CapabilityAlgorithm, kid: config.keyId, typ: CapabilityTokenType })

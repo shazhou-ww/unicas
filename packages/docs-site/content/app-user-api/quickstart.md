@@ -17,7 +17,7 @@ const hash = "a".repeat(64);
 const cas = createSpaceCasClient({
   baseUrl: "https://api.example",
   appId: "app-example",
-  spaceId: "space-example",
+  spaceId: "/space-example",
   getToken: async () => "synthetic-capability",
   fetcher: {
     fetch: async () => Response.json({
@@ -56,7 +56,7 @@ const cache = createBrowserCasNodeCache({
 const cas = createSpaceCasClient({
   baseUrl: "https://api.example",
   appId: "app-example",
-  spaceId: "space-example",
+  spaceId: "/space-example",
   getToken: async () => "synthetic-capability",
   cache,
 });

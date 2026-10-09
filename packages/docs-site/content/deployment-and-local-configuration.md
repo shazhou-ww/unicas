@@ -24,7 +24,7 @@ It starts:
 | Surface | Default URL |
 | --- | --- |
 | Administrator console | `http://localhost:4070/admin/` |
-| Browser-facing UniCAS edge | `http://localhost:4070/v1/apps/.../spaces/...` |
+| Browser-facing UniCAS edge | `http://localhost:4070/v1/cas/...?appId=...&spaceId=...` |
 | Direct Miniflare edge | `http://127.0.0.1:8794` |
 | Mock OIDC discovery | `http://127.0.0.1:8793/.well-known/openid-configuration` |
 
@@ -206,13 +206,14 @@ Deploy the lease-upload migration in this order:
 
 ### App/Space v1 rollout
 
-The released Space HTTP API and its family-local capability claim both use
-version 1 with exact operation permissions. Deploy the service and maintained
-App consumers from the same accepted repository revision. Prototype routes,
-claim versions, and broad permissions are rejected immediately; there is no
+The released Space HTTP API uses the unified `/v1/cas` base, shared
+`https://api.unicas.work/v1/cas/` audience, and independent capability version
+2 grants. Deploy the service and maintained App consumers from the same
+accepted repository revision. Old App-in-path data routes, old audiences,
+claim versions, and malformed grants are rejected immediately; there is no
 cutoff binding or compatibility mode. Follow the
-[prototype migration guide](app-user-api/migration-v2-to-v1.md) for consumer
-changes and rollback boundaries.
+[Space grants migration guide](app-user-api/migration-space-grants.md) for
+consumer changes and rollback boundaries.
 
 Optional OIDC/session variables include `OIDC_ISSUER`, `OIDC_DISCOVERY_URL`,
 `SESSION_TTL_MS`, `SESSION_COOKIE_NAME`, `SESSION_COOKIE_SECURE`, and
@@ -343,7 +344,7 @@ The smoke signer reads provisioned private keys from the gitignored
 `.wrangler/cas-deploy/` directory. To target one control-plane-managed App,
 set `UNICAS_SMOKE_APP_ID`, `UNICAS_SMOKE_ISSUER`, `UNICAS_SMOKE_AUDIENCE`,
 `UNICAS_SMOKE_KID`, and `UNICAS_SMOKE_KEY_FILE`; optional
-`UNICAS_SMOKE_SPACE_ID` defaults to `deploy-smoke`. The default smoke covers
+`UNICAS_SMOKE_SPACE_ID` defaults to `/deploy-smoke`. The default smoke covers
 lease, read, metadata, Root Ref idempotency, usage, GC, cross-Space isolation,
 prototype-version denial, retired-claim denial, and retired-route `404`. Never
 commit the key files or print their contents.
@@ -407,7 +408,7 @@ secrets:
 | Variable | `UNICAS_SMOKE_ISSUER` | Issuer registered for the smoke App |
 | Variable | `UNICAS_SMOKE_AUDIENCE` | Audience registered for the smoke App |
 | Variable | `UNICAS_SMOKE_KID` | Key ID published by the smoke issuer |
-| Variable | `UNICAS_SMOKE_SPACE_ID` | Dedicated smoke Space, normally `deploy-smoke` |
+| Variable | `UNICAS_SMOKE_SPACE_ID` | Dedicated smoke Space, normally `/deploy-smoke` |
 | Secret | `UNICAS_SMOKE_PRIVATE_KEY_PKCS8` | PEM-encoded PKCS#8 private key matching the smoke key ID |
 
 Do not create a GitHub value for `UNICAS_SMOKE_KEY_FILE`. The workflow assigns
@@ -445,7 +446,7 @@ Initial provisioning is an explicit bootstrap operation:
    the new key and activate that inspection. Never pass the private key to the
    control plane.
 4. Set the five `UNICAS_SMOKE_*` variables from the activated response, set
-   `UNICAS_SMOKE_SPACE_ID=deploy-smoke`, and stream the PKCS#8 PEM directly
+   `UNICAS_SMOKE_SPACE_ID=/deploy-smoke`, and stream the PKCS#8 PEM directly
    into the `UNICAS_SMOKE_PRIVATE_KEY_PKCS8` GitHub environment secret without
    printing it.
 5. If recovery is required, dispatch **Recover Spaces production** with the

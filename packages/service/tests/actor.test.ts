@@ -63,7 +63,7 @@ describe("createUniCasService", () => {
       platform,
       authorizeSpaceRequest: async () => ({
         appId: "app/a",
-        spaceId: "space/b",
+        spaceId: "/space/b",
         subject: "caller",
         jti: "request-2",
         kid: "key-1",
@@ -72,7 +72,7 @@ describe("createUniCasService", () => {
       }),
     });
     const response = await actor.fetch(new Request(
-      "https://cas.example/v1/apps/app%2Fa/spaces/space%2Fb/root-refs",
+      "https://cas.example/v1/cas/root-refs?appId=app%2Fa&spaceId=%2Fspace%2Fb",
       {
         method: "POST",
         headers: {
@@ -85,17 +85,17 @@ describe("createUniCasService", () => {
     ));
     expect(await response.text()).toBe("space");
     const [key, forwarded] = spaceActorFetch.mock.calls.at(-1)!;
-    expect(key).toBe("app%2Fa|space%2Fb");
+    expect(key).toBe("app%2Fa|%2Fspace%2Fb");
     expect(forwarded.headers.get("X-CAS-App-Id")).toBe("app/a");
-    expect(forwarded.headers.get("X-CAS-Space-Id")).toBe("space/b");
+    expect(forwarded.headers.get("X-CAS-Space-Id")).toBe("/space/b");
     expect(forwarded.headers.get("X-CAS-Ref-Domain")).toBe("doc");
 
     await actor.fetch(new Request(
-      "https://cas.example/v1/apps/app%2Fa/spaces/space%2Fb/root-refs?limit=10&cursor=abc",
+      "https://cas.example/v1/cas/root-refs?appId=app%2Fa&spaceId=%2Fspace%2Fb&limit=10&cursor=abc&ignored=drop",
       { headers: { "X-CAS-Ref-Domain": "attacker" } },
     ));
     const [readKey, readForwarded] = spaceActorFetch.mock.calls.at(-1)!;
-    expect(readKey).toBe("app%2Fa|space%2Fb");
+    expect(readKey).toBe("app%2Fa|%2Fspace%2Fb");
     expect(readForwarded.url).toBe("https://space.internal/rootRefs?limit=10&cursor=abc");
     expect(readForwarded.method).toBe("GET");
     expect(readForwarded.headers.get("X-CAS-Ref-Domain")).toBe("doc");
@@ -103,10 +103,10 @@ describe("createUniCasService", () => {
 
   test("classifies App/Space and administrator routes", () => {
     expect(matchUniCasServiceRoute(new Request(
-      "https://api.unicas.work/v1/apps/app-1/spaces/space-1/cas/usage",
+      "https://api.unicas.work/v1/cas/usage?appId=app-1&spaceId=%2Fspace-1",
     ))).toEqual({
       plane: "space",
-      route: { operation: "usage", appId: "app-1", spaceId: "space-1" },
+      route: { operation: "usage", appId: "app-1", spaceId: "/space-1" },
     });
     expect(matchUniCasServiceRoute(new Request(
       "https://console.unicas.work/admin/apps/app-1",
@@ -146,20 +146,20 @@ describe("createUniCasService", () => {
       platform,
     });
     expect((await actor.fetch(new Request(
-      "https://api.unicas.work/v1/apps/app-1/spaces/space-1/cas/usage",
+      "https://api.unicas.work/v1/cas/usage?appId=app-1&spaceId=%2Fspace-1",
     ))).status).toBe(501);
     expect((await actor.fetch(new Request(
       "https://console.unicas.work/admin/apps/app-1",
     ))).status).toBe(501);
     expect((await actor.fetch(new Request(
-      "https://api.unicas.work/v2/apps/app-1/spaces/space-1/cas/usage",
+      "https://api.unicas.work/v2/cas/usage?appId=app-1&spaceId=%2Fspace-1",
     ))).status).toBe(404);
   });
 
   test("dispatches Space requests from the authorized App and Space scope", async () => {
     const authorizeSpaceRequest = vi.fn(async () => ({
       appId: "app/a",
-      spaceId: "space/b",
+      spaceId: "/space/b",
       subject: "caller",
       jti: "request-v1",
       kid: "key-v1",
@@ -171,17 +171,17 @@ describe("createUniCasService", () => {
       handleAppAdminRequest: vi.fn(),
     });
     const response = await actor.fetch(new Request(
-      "https://api.unicas.work/v1/apps/app%2Fa/spaces/space%2Fb/cas/usage",
+      "https://api.unicas.work/v1/cas/usage?appId=app%2Fa&spaceId=%2Fspace%2Fb",
       { headers: { "X-CAS-App-Id": "attacker", "X-CAS-Space-Id": "attacker" } },
     ));
     expect(await response.text()).toBe("space");
     expect(authorizeSpaceRequest).toHaveBeenCalledWith(expect.objectContaining({
-      route: { operation: "usage", appId: "app/a", spaceId: "space/b" },
+      route: { operation: "usage", appId: "app/a", spaceId: "/space/b" },
     }));
     const [key, forwarded] = spaceActorFetch.mock.calls.at(-1)!;
-    expect(key).toBe("app%2Fa|space%2Fb");
+    expect(key).toBe("app%2Fa|%2Fspace%2Fb");
     expect(forwarded.headers.get("X-CAS-App-Id")).toBe("app/a");
-    expect(forwarded.headers.get("X-CAS-Space-Id")).toBe("space/b");
+    expect(forwarded.headers.get("X-CAS-Space-Id")).toBe("/space/b");
     expect(forwarded.headers.get("X-CAS-Stack-Id")).toBeNull();
     expect(forwarded.headers.get("X-CAS-Tenant-Id")).toBeNull();
   });
@@ -191,7 +191,7 @@ describe("createUniCasService", () => {
       platform,
       authorizeSpaceRequest: async () => ({
         appId: "app-1",
-        spaceId: "space-1",
+        spaceId: "/space-1",
         subject: "caller",
         jti: "request-v1-lease",
         kid: "key-v1",
@@ -199,7 +199,7 @@ describe("createUniCasService", () => {
       }),
       handleAppAdminRequest: vi.fn(),
     });
-    const url = `https://api.unicas.work/v1/apps/app-1/spaces/space-1/cas/nodes/${"a".repeat(64)}/lease`;
+    const url = `https://api.unicas.work/v1/cas/nodes/${"a".repeat(64)}/lease?appId=app-1&spaceId=%2Fspace-1`;
     await actor.fetch(new Request(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -234,7 +234,7 @@ describe("createUniCasService", () => {
     });
 
     const spaceResponse = await actor.fetch(new Request(
-      "https://api.unicas.work/v1/apps/app-1/spaces/space-1/cas/usage",
+      "https://api.unicas.work/v1/cas/usage?appId=app-1&spaceId=%2Fspace-1",
     ));
     expect(spaceResponse.status).toBe(403);
     await expect(spaceResponse.json()).resolves.toEqual({

@@ -7,6 +7,8 @@ import {
   SpaceRefDomainClaimSchema,
   parseSpaceCapabilityPermission,
   spaceOperationPolicyFor,
+  parseSpaceSelector,
+  spaceSelectorMatches,
   spaceGcExecutePermission,
   spaceNodeLeasePermission,
   spaceNodeReadPermission,
@@ -15,9 +17,9 @@ import {
   spaceUsageReadPermission,
 } from "../src/index.js";
 
-describe("Space capability v1 vocabulary", () => {
+describe("Space capability vocabulary", () => {
   test("uses an explicit version and operation permission grammar", () => {
-    expect(SpaceCapabilityVersion).toBe(1);
+    expect(SpaceCapabilityVersion).toBe(2);
     expect(SpaceCapabilityPermissionKinds).toEqual([
       "cas:nodes:read",
       "cas:nodes:lease",
@@ -55,7 +57,7 @@ describe("Space capability v1 vocabulary", () => {
 
   test("publishes the verified capability claim shape", () => {
     const claims = {
-      ver: 1,
+      ver: 2,
       iss: "https://issuer.example",
       sub: "principal-1",
       aud: "unicas-cas",
@@ -63,18 +65,21 @@ describe("Space capability v1 vocabulary", () => {
       nbf: 1,
       exp: 2,
       jti: "token-1",
-      spaceId: "space-1",
-      permissions: ["cas:nodes:read"],
+      grants: [{
+        selector: "/space-1",
+        permissions: ["cas:nodes:read"],
+      }],
     };
     expect(SpaceCapabilityClaimsSchema.safeParse(claims).success).toBe(true);
     expect(SpaceCapabilityClaimsSchema.safeParse({
       ...claims,
-      permissions: ["cas:read"],
+      grants: [{ selector: "/space-1", permissions: ["cas:read"] }],
     }).success).toBe(false);
     expect(SpaceCapabilityClaimsSchema.safeParse({
       ...claims,
-      spaceId: "",
+      grants: [{ selector: "space-1", permissions: ["cas:nodes:read"] }],
     }).success).toBe(false);
+    expect(SpaceCapabilityClaimsSchema.safeParse({ ...claims, grants: [] }).success).toBe(false);
     expect(SpaceRefDomainClaimSchema.safeParse("files:primary").success).toBe(true);
     expect(SpaceRefDomainClaimSchema.safeParse("_reserved").success).toBe(false);
     expect(SpaceRefDomainClaimSchema.safeParse(`a${"b".repeat(64)}`).success).toBe(false);
@@ -85,39 +90,77 @@ describe("Space capability v1 vocabulary", () => {
       readContent: {
         operationId: "readContent",
         permission: "cas:nodes:read",
-        requiredClaims: ["spaceId"],
+        requiredClaims: ["grants"],
       },
       readMetadata: {
         operationId: "readMetadata",
         permission: "cas:nodes:read",
-        requiredClaims: ["spaceId"],
+        requiredClaims: ["grants"],
       },
       lease: {
         operationId: "leaseNode",
         permission: "cas:nodes:lease",
-        requiredClaims: ["spaceId"],
+        requiredClaims: ["grants"],
       },
       usage: {
         operationId: "getUsage",
         permission: "cas:usage:read",
-        requiredClaims: ["spaceId"],
+        requiredClaims: ["grants"],
       },
       gc: {
         operationId: "runGc",
         permission: "cas:gc:execute",
-        requiredClaims: ["spaceId"],
+        requiredClaims: ["grants"],
       },
       listRootRefs: {
         operationId: "listRootRefs",
         permission: "cas:root-refs:read",
-        requiredClaims: ["spaceId", "refDomain"],
+        requiredClaims: ["grants", "refDomain"],
       },
       updateRootRefs: {
         operationId: "updateRootRefs",
         permission: "cas:root-refs:update",
-        requiredClaims: ["spaceId", "refDomain"],
+        requiredClaims: ["grants", "refDomain"],
       },
     });
     expect(spaceOperationPolicyFor("lease")).toBe(SpaceOperationPolicies.lease);
+  });
+
+  test.each([
+    ["/users/u_123", "exact", "/users/u_123"],
+    ["/shared/public/report-*", "segment-prefix", "/shared/public/report-"],
+    ["/shared/public/**", "recursive-prefix", "/shared/public/"],
+  ] as const)("parses the supported %s selector", (selector, kind, literalPrefix) => {
+    expect(parseSpaceSelector(selector)).toMatchObject({ selector, kind, literalPrefix });
+  });
+
+  test.each([
+    "",
+    "users/u_123",
+    "/users/",
+    "/users//u_123",
+    "/users/u.123",
+    "*",
+    "/users/*",
+    "/users/u_*/*",
+    "/users/**/private",
+    "/users/u_**",
+    "/users/***",
+  ])("rejects unsupported selector %s", (selector) => {
+    expect(parseSpaceSelector(selector)).toBeNull();
+  });
+
+  test("matches exact, non-recursive suffix, and recursive suffix selectors", () => {
+    expect(spaceSelectorMatches("/users/u_123", "/users/u_123")).toBe(true);
+    expect(spaceSelectorMatches("/users/u_123", "/users/u_124")).toBe(false);
+
+    expect(spaceSelectorMatches("/shared/public/report-*", "/shared/public/report-2026")).toBe(true);
+    expect(spaceSelectorMatches("/shared/public/report-*", "/shared/public/report-2026/draft")).toBe(false);
+    expect(spaceSelectorMatches("/shared/public/report-*", "/shared/public/other-report-2026")).toBe(false);
+
+    expect(spaceSelectorMatches("/shared/public/**", "/shared/public/report-2026")).toBe(true);
+    expect(spaceSelectorMatches("/shared/public/**", "/shared/public/reports/2026")).toBe(true);
+    expect(spaceSelectorMatches("/shared/public/**", "/shared/public")).toBe(false);
+    expect(spaceSelectorMatches("/shared/public/**", "/shared/private/report-2026")).toBe(false);
   });
 });

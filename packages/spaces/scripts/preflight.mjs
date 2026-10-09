@@ -6,6 +6,7 @@ import {
   CapabilityAlgorithm,
   CapabilityTokenType,
   SpaceCapabilityVersion,
+  parseSpaceSelector,
   spaceRootRefsReadPermission,
 } from "@unicas/space-protocol";
 import { executeD1 } from "./bootstrap.mjs";
@@ -54,6 +55,8 @@ export async function runSpacesPreflight(environment = process.env, execute = ex
   const principalId = required(environment.SPACES_SMOKE_PRINCIPAL_ID, "SPACES_SMOKE_PRINCIPAL_ID");
   const rows = await execute(smokePreflightQuery(principalId));
   const mapping = validateSmokePreflightRow({ ...rows[0], principal_id: principalId });
+  const selector = parseSpaceSelector(mapping.spaceId);
+  if (!selector || selector.kind !== "exact") throw new Error("smoke_space_id_invalid");
   const issuedAt = Math.floor(Date.now() / 1000);
   const privateKey = await importPKCS8(
     required(environment.SPACES_SIGNING_PRIVATE_KEY_PKCS8, "SPACES_SIGNING_PRIVATE_KEY_PKCS8"),
@@ -61,8 +64,10 @@ export async function runSpacesPreflight(environment = process.env, execute = ex
   );
   const token = await new SignJWT({
     ver: SpaceCapabilityVersion,
-    spaceId: mapping.spaceId,
-    permissions: [spaceRootRefsReadPermission()],
+    grants: [{
+      selector: selector.selector,
+      permissions: [spaceRootRefsReadPermission()],
+    }],
     refDomain: mapping.refDomain,
   })
     .setProtectedHeader({

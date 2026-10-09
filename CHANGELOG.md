@@ -19,6 +19,9 @@ This changelog covers the unified release set: `@unicas/codec`,
 
 ### Changed
 
+- Space capability `ver: 2` replaces the single-Space claim with selector-bound
+  grants, canonical slash-based Space IDs, unified `/v1/cas` routes with query
+  App/Space scope, and one shared CAS v1 OAuth audience.
 - Stable installation replaces prerelease installation guidance in every
   package.
 - Browser compatibility is defined by Chromium, Firefox, and WebKit consumer

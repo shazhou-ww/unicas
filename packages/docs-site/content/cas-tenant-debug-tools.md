@@ -6,8 +6,9 @@ Status: frozen historical v1 requirements; not implemented and not the current
 This document is retained to preserve the August 2026 design record. Its
 Stack/Tenant routes, claims, session layout, command names, and provider
 assumptions must not be reinterpreted as App/Space. Any future data-plane debug
-tool must use the reviewed App/Space HTTP v1 design based on `appId`, signed
-`spaceId`, family-local capability `ver: 1`, and exact operation permissions.
+tool must use the reviewed App/Space HTTP v1 design based on unified
+`/v1/cas` routes, query `appId` and `spaceId`, family-local capability `ver: 2`
+grants, and exact operation permissions.
 
 `unicas-tenant` is the tenant-facing debug tooling for the CAS data plane
 (`/stacks/{stackId}/tenants/{tenantId}/cas/...`). It lets a tenant user query

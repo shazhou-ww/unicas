@@ -24,7 +24,7 @@ candidate version, changelog, and any migration document.
 Package SemVer does not change or reinterpret:
 
 - the App/Space HTTP path version (`v1`);
-- the Space capability claim version (`ver: 1`);
+- the Space capability claim version (`ver: 2`);
 - the canonical node wire-format version; or
 - product deployment maturity.
 

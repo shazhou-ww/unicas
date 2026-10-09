@@ -46,7 +46,7 @@ async function fixture() {
   await db.prepare(`
     INSERT INTO spaces_principal_spaces (
       principal_id, app_id, space_id, ref_domain, created_at, updated_at
-    ) VALUES ('principal-a', 'app-a', 'space-a', 'spaces', 1, 1)
+    ) VALUES ('principal-a', 'app-a', '/space-a', 'spaces', 1, 1)
   `).run();
   const assets = { fetch: vi.fn(async () => new Response("spaces asset")) };
   const env: SpacesEnv = {
@@ -70,7 +70,7 @@ async function fixture() {
     displayName: "Ada",
     provider: "google",
     appId: "app-a",
-    spaceId: "space-a",
+    spaceId: "/space-a",
     refDomain: "spaces",
   };
   return { assets, db, env, principal };
@@ -86,7 +86,7 @@ describe("Spaces Worker", () => {
     const worker = createSpacesWorker({
       fetchImpl,
       createFileService: async (input) => {
-        await input.fetcher?.fetch("https://api.example.test/v1/apps/app-a/spaces/space-a/cas/usage");
+        await input.fetcher?.fetch("https://api.example.test/v1/cas/usage?appId=app-a&spaceId=%2Fspace-a");
         await input.fetcher?.fetch("https://account.r2.cloudflarestorage.com/bucket/key?X-Amz-Signature=secret");
         return {
           list: vi.fn(async () => ({ path: "/", revision: 1, entries: [] })),
@@ -132,7 +132,7 @@ describe("Spaces Worker", () => {
         list: async () => input.timing!.time("spaces_root", () =>
           input.timing!.time("spaces_manifest", async () => {
             await input.fetcher!.fetch(
-              "https://api.example.test/v1/apps/app-a/spaces/space-a/cas/nodes/hash/content",
+              "https://api.example.test/v1/cas/nodes/hash?appId=app-a&spaceId=%2Fspace-a",
             );
             return { path: "/", revision: 1, entries: [] };
           })),
@@ -204,7 +204,7 @@ describe("Spaces Worker", () => {
       fetchImpl,
       createTraceSession: async () => traceSession,
       createFileService: async (input) => {
-        await input.fetcher?.fetch("https://api.example.test/v1/apps/app-a/spaces/space-a/cas/usage");
+        await input.fetcher?.fetch("https://api.example.test/v1/cas/usage?appId=app-a&spaceId=%2Fspace-a");
         await input.fetcher?.fetch(new Request(
           "https://account.r2.cloudflarestorage.com/bucket/key?X-Amz-Signature=secret",
           {
@@ -493,7 +493,7 @@ describe("Spaces Worker", () => {
     await db.prepare(`
       INSERT INTO spaces_principal_spaces (
         principal_id, app_id, space_id, ref_domain, created_at, updated_at
-      ) VALUES ('smoke-principal', 'app-a', 'smoke-space', 'spaces:smoke', 1, 1)
+      ) VALUES ('smoke-principal', 'app-a', '/smoke-space', 'spaces:smoke', 1, 1)
     `).run();
     const smokeEnv = {
       ...env,
@@ -565,7 +565,7 @@ describe("Spaces Worker", () => {
     await db.prepare(`
       INSERT INTO spaces_principal_spaces (
         principal_id, app_id, space_id, ref_domain, created_at, updated_at
-      ) VALUES ('smoke-principal', 'app-a', 'smoke-space', 'spaces:smoke', 1, 1)
+      ) VALUES ('smoke-principal', 'app-a', '/smoke-space', 'spaces:smoke', 1, 1)
     `).run();
     await db.prepare(`
       INSERT INTO spaces_file_system_roots (

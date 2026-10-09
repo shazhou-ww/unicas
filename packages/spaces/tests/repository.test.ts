@@ -36,7 +36,7 @@ async function fixture(now = 1_000) {
   await db.prepare(`
     INSERT INTO spaces_principal_spaces (
       principal_id, app_id, space_id, ref_domain, created_at, updated_at
-    ) VALUES ('principal-a', 'app-a', 'space-a', 'spaces', 1, 1)
+    ) VALUES ('principal-a', 'app-a', '/space-a', 'spaces', 1, 1)
   `).run();
   return { db, repository: new SpacesRepository(db, () => now) };
 }
@@ -50,7 +50,7 @@ describe("SpacesRepository", () => {
       displayName: "Ada",
       provider: "google",
       appId: "app-a",
-      spaceId: "space-a",
+      spaceId: "/space-a",
       refDomain: "spaces",
     });
     await expect(repository.resolveExternalIdentity("google", "unknown")).resolves.toBeNull();
@@ -179,13 +179,13 @@ describe("SpacesRepository", () => {
     await db.prepare(`
       INSERT INTO spaces_principal_spaces (
         principal_id, app_id, space_id, ref_domain, created_at, updated_at
-      ) VALUES ('smoke-principal', 'app-a', 'smoke-space', 'spaces-smoke', 1, 1)
+      ) VALUES ('smoke-principal', 'app-a', '/smoke-space', 'spaces-smoke', 1, 1)
     `).run();
 
     await expect(repository.readPrincipal("smoke-principal")).resolves.toMatchObject({
       principalId: "smoke-principal",
       provider: "smoke",
-      spaceId: "smoke-space",
+      spaceId: "/smoke-space",
     });
     const issued = await repository.createSession("smoke-principal", 500);
     await expect(repository.readSession(issued.sessionId)).resolves.toMatchObject({

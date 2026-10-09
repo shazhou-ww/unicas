@@ -2,7 +2,7 @@
   "info": {
     "title": "UniCAS Space API",
     "version": "1.0.0",
-    "description": "App-scoped Space API for immutable content-addressed nodes, leases, usage accounting, garbage collection, and atomic Root Ref commits.\n\nEvery request uses a version 1 JWT capability on the version 1 HTTP API. The registered issuer establishes App authority; the token's signed `spaceId` must match the route and its exact operation permission must authorize the request.\n\nPrincipal identity and Profile metadata are independent of Space ownership and authorization."
+    "description": "App-scoped Space API for immutable content-addressed nodes, leases, usage accounting, garbage collection, and atomic Root Ref commits.\n\nEvery request uses a version 2 JWT capability for the shared CAS v1 audience. The registered issuer establishes App authority; one signed grant must select query `spaceId` and contain the operation's exact permission.\n\nPrincipal identity and Profile metadata are independent of Space ownership and authorization."
   },
   "servers": [
     {
@@ -35,9 +35,9 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT",
-        "description": "Version 1 Space capability. Issuer authority and signed spaceId must match the request path, and the permission set must contain the operation's exact CAS authority.",
+        "description": "Version 2 Space capability for the shared CAS v1 audience. The verified issuer authority must match query appId, and one signed grant must both select query spaceId and contain the operation's exact CAS permission.",
         "x-unicas-capability": {
-          "version": 1,
+          "version": 2,
           "claimsSchema": "#/components/schemas/SpaceCapabilityClaims",
           "permissions": [
             "cas:nodes:read",
@@ -58,7 +58,7 @@
         "properties": {
           "ver": {
             "type": "number",
-            "const": 1
+            "const": 2
           },
           "iss": {
             "type": "string",
@@ -98,23 +98,43 @@
             "type": "string",
             "minLength": 1
           },
-          "spaceId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "permissions": {
+          "grants": {
             "readOnly": true,
+            "minItems": 1,
+            "maxItems": 32,
             "type": "array",
             "items": {
-              "type": "string",
-              "enum": [
-                "cas:nodes:read",
-                "cas:nodes:lease",
-                "cas:root-refs:read",
-                "cas:root-refs:update",
-                "cas:usage:read",
-                "cas:gc:execute"
-              ]
+              "readOnly": true,
+              "type": "object",
+              "properties": {
+                "selector": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 258,
+                  "description": "Exact, terminal segment-prefix, or terminal recursive-prefix Space selector."
+                },
+                "permissions": {
+                  "readOnly": true,
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "cas:nodes:read",
+                      "cas:nodes:lease",
+                      "cas:root-refs:read",
+                      "cas:root-refs:update",
+                      "cas:usage:read",
+                      "cas:gc:execute"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "selector",
+                "permissions"
+              ],
+              "additionalProperties": false
             }
           },
           "refDomain": {
@@ -130,8 +150,7 @@
           "nbf",
           "exp",
           "jti",
-          "spaceId",
-          "permissions"
+          "grants"
         ],
         "additionalProperties": {}
       },
@@ -145,7 +164,7 @@
   },
   "openapi": "3.1.1",
   "paths": {
-    "/v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/content": {
+    "/v1/cas/nodes/{hash}": {
       "get": {
         "operationId": "readContent",
         "summary": "Read immutable node content",
@@ -155,26 +174,6 @@
         ],
         "parameters": [
           {
-            "name": "appId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "description": "App that establishes issuer authority and storage isolation."
-            }
-          },
-          {
-            "name": "spaceId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Space authorized by the capability for this request."
-            }
-          },
-          {
             "name": "hash",
             "in": "path",
             "required": true,
@@ -183,6 +182,31 @@
               "pattern": "^[0-9a-f]{64}$",
               "description": "Lowercase SHA-256 content digest."
             }
+          },
+          {
+            "name": "appId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "App that establishes issuer authority and storage isolation."
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "spaceId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 256,
+              "pattern": "^\\/[A-Za-z0-9_-]+(?:\\/[A-Za-z0-9_-]+)*$",
+              "description": "Space authorized by the capability for this request."
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
           },
           {
             "name": "Range",
@@ -529,15 +553,15 @@
           }
         },
         "x-unicas-authorization": {
-          "capabilityVersion": 1,
+          "capabilityVersion": 2,
           "requiredPermission": "cas:nodes:read",
           "requiredClaims": [
-            "spaceId"
+            "grants"
           ]
         }
       }
     },
-    "/v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/metadata": {
+    "/v1/cas/nodes/{hash}/metadata": {
       "get": {
         "operationId": "readMetadata",
         "summary": "Read node metadata",
@@ -547,26 +571,6 @@
         ],
         "parameters": [
           {
-            "name": "appId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "description": "App that establishes issuer authority and storage isolation."
-            }
-          },
-          {
-            "name": "spaceId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Space authorized by the capability for this request."
-            }
-          },
-          {
             "name": "hash",
             "in": "path",
             "required": true,
@@ -575,6 +579,31 @@
               "pattern": "^[0-9a-f]{64}$",
               "description": "Lowercase SHA-256 content digest."
             }
+          },
+          {
+            "name": "appId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "App that establishes issuer authority and storage isolation."
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "spaceId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 256,
+              "pattern": "^\\/[A-Za-z0-9_-]+(?:\\/[A-Za-z0-9_-]+)*$",
+              "description": "Space authorized by the capability for this request."
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
           }
         ],
         "responses": {
@@ -877,15 +906,15 @@
           }
         },
         "x-unicas-authorization": {
-          "capabilityVersion": 1,
+          "capabilityVersion": 2,
           "requiredPermission": "cas:nodes:read",
           "requiredClaims": [
-            "spaceId"
+            "grants"
           ]
         }
       }
     },
-    "/v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/lease": {
+    "/v1/cas/nodes/{hash}/lease": {
       "post": {
         "operationId": "leaseNode",
         "summary": "Lease a node",
@@ -895,26 +924,6 @@
         ],
         "parameters": [
           {
-            "name": "appId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "description": "App that establishes issuer authority and storage isolation."
-            }
-          },
-          {
-            "name": "spaceId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Space authorized by the capability for this request."
-            }
-          },
-          {
             "name": "hash",
             "in": "path",
             "required": true,
@@ -923,6 +932,31 @@
               "pattern": "^[0-9a-f]{64}$",
               "description": "Lowercase SHA-256 content digest."
             }
+          },
+          {
+            "name": "appId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "App that establishes issuer authority and storage isolation."
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "spaceId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 256,
+              "pattern": "^\\/[A-Za-z0-9_-]+(?:\\/[A-Za-z0-9_-]+)*$",
+              "description": "Space authorized by the capability for this request."
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
           }
         ],
         "requestBody": {
@@ -1362,15 +1396,15 @@
           }
         },
         "x-unicas-authorization": {
-          "capabilityVersion": 1,
+          "capabilityVersion": 2,
           "requiredPermission": "cas:nodes:lease",
           "requiredClaims": [
-            "spaceId"
+            "grants"
           ]
         }
       }
     },
-    "/v1/apps/{appId}/spaces/{spaceId}/cas/usage": {
+    "/v1/cas/usage": {
       "get": {
         "operationId": "getUsage",
         "summary": "Read Space CAS usage",
@@ -1381,23 +1415,28 @@
         "parameters": [
           {
             "name": "appId",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "string",
               "minLength": 1,
               "description": "App that establishes issuer authority and storage isolation."
-            }
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
           },
           {
             "name": "spaceId",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "string",
-              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^\\/[A-Za-z0-9_-]+(?:\\/[A-Za-z0-9_-]+)*$",
               "description": "Space authorized by the capability for this request."
-            }
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
           }
         ],
         "responses": {
@@ -1666,15 +1705,15 @@
           }
         },
         "x-unicas-authorization": {
-          "capabilityVersion": 1,
+          "capabilityVersion": 2,
           "requiredPermission": "cas:usage:read",
           "requiredClaims": [
-            "spaceId"
+            "grants"
           ]
         }
       }
     },
-    "/v1/apps/{appId}/spaces/{spaceId}/cas/gc": {
+    "/v1/cas/gc": {
       "post": {
         "operationId": "runGc",
         "summary": "Run Space garbage collection",
@@ -1685,23 +1724,28 @@
         "parameters": [
           {
             "name": "appId",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "string",
               "minLength": 1,
               "description": "App that establishes issuer authority and storage isolation."
-            }
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
           },
           {
             "name": "spaceId",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "string",
-              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^\\/[A-Za-z0-9_-]+(?:\\/[A-Za-z0-9_-]+)*$",
               "description": "Space authorized by the capability for this request."
-            }
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
           }
         ],
         "requestBody": {
@@ -1965,15 +2009,15 @@
           }
         },
         "x-unicas-authorization": {
-          "capabilityVersion": 1,
+          "capabilityVersion": 2,
           "requiredPermission": "cas:gc:execute",
           "requiredClaims": [
-            "spaceId"
+            "grants"
           ]
         }
       }
     },
-    "/v1/apps/{appId}/spaces/{spaceId}/root-refs": {
+    "/v1/cas/root-refs": {
       "get": {
         "operationId": "listRootRefs",
         "summary": "List Space Root Ref balances",
@@ -1984,27 +2028,33 @@
         "parameters": [
           {
             "name": "appId",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "string",
               "minLength": 1,
               "description": "App that establishes issuer authority and storage isolation."
-            }
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
           },
           {
             "name": "spaceId",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "string",
-              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^\\/[A-Za-z0-9_-]+(?:\\/[A-Za-z0-9_-]+)*$",
               "description": "Space authorized by the capability for this request."
-            }
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
           },
           {
             "name": "limit",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "integer",
               "minimum": 1,
@@ -2016,6 +2066,7 @@
           {
             "name": "cursor",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string",
               "minLength": 1
@@ -2298,10 +2349,10 @@
           }
         },
         "x-unicas-authorization": {
-          "capabilityVersion": 1,
+          "capabilityVersion": 2,
           "requiredPermission": "cas:root-refs:read",
           "requiredClaims": [
-            "spaceId",
+            "grants",
             "refDomain"
           ],
           "claimSchemas": {
@@ -2319,23 +2370,28 @@
         "parameters": [
           {
             "name": "appId",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "string",
               "minLength": 1,
               "description": "App that establishes issuer authority and storage isolation."
-            }
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
           },
           {
             "name": "spaceId",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "string",
-              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^\\/[A-Za-z0-9_-]+(?:\\/[A-Za-z0-9_-]+)*$",
               "description": "Space authorized by the capability for this request."
-            }
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
           }
         ],
         "requestBody": {
@@ -2618,10 +2674,10 @@
           }
         },
         "x-unicas-authorization": {
-          "capabilityVersion": 1,
+          "capabilityVersion": 2,
           "requiredPermission": "cas:root-refs:update",
           "requiredClaims": [
-            "spaceId",
+            "grants",
             "refDomain"
           ],
           "claimSchemas": {

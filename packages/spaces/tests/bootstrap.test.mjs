@@ -17,7 +17,7 @@ import {
 function environment(overrides = {}) {
   return {
     SPACES_BOOTSTRAP_APP_ID: "app-a",
-    SPACES_BOOTSTRAP_SPACE_ID: "space-a",
+    SPACES_BOOTSTRAP_SPACE_ID: "/space-a",
     SPACES_BOOTSTRAP_PRINCIPAL_ID: "principal-a",
     SPACES_BOOTSTRAP_DISPLAY_NAME: "Ada",
     SPACES_BOOTSTRAP_GOOGLE_SUBJECT: "google-subject",
@@ -38,7 +38,7 @@ describe("Spaces bootstrap", () => {
     });
     const smoke = readBootstrapConfig("smoke", environment({
       SPACES_BOOTSTRAP_PRINCIPAL_ID: "smoke-principal",
-      SPACES_BOOTSTRAP_SPACE_ID: "smoke-space",
+      SPACES_BOOTSTRAP_SPACE_ID: "/smoke-space",
       SPACES_BOOTSTRAP_GOOGLE_SUBJECT: "",
     }));
     expect(smoke).toMatchObject({
@@ -56,7 +56,7 @@ describe("Spaces bootstrap", () => {
       principal_status: "active",
       display_name: "Ada",
       app_id: "app-a",
-      space_id: "space-a",
+      space_id: "/space-a",
       ref_domain: "spaces:files",
       root_id: "root-a",
       identity_count: 1,
@@ -84,13 +84,13 @@ describe("Spaces bootstrap", () => {
 
     const smoke = readBootstrapConfig("smoke", environment({
       SPACES_BOOTSTRAP_PRINCIPAL_ID: "smoke-principal",
-      SPACES_BOOTSTRAP_SPACE_ID: "smoke-space",
+      SPACES_BOOTSTRAP_SPACE_ID: "/smoke-space",
       SPACES_BOOTSTRAP_GOOGLE_SUBJECT: "",
       SPACES_BOOTSTRAP_KEY_FILE: "",
     }));
     expect(classifyBootstrapState(smoke, {
       ...existing,
-      space_id: "smoke-space",
+      space_id: "/smoke-space",
       ref_domain: "spaces:smoke",
       root_id: null,
       identity_count: 0,
@@ -99,7 +99,7 @@ describe("Spaces bootstrap", () => {
     })).toBe("existing");
     expect(() => classifyBootstrapState(smoke, {
       ...existing,
-      space_id: "smoke-space",
+      space_id: "/smoke-space",
       ref_domain: "spaces:smoke",
       root_id: null,
       identity_count: 1,
@@ -147,7 +147,7 @@ describe("Spaces bootstrap", () => {
       principal_id: "smoke-principal",
       principal_status: "active",
       app_id: "app-a",
-      space_id: "smoke-space",
+      space_id: "/smoke-space",
       ref_domain: "spaces:smoke",
       identity_count: 0,
       root_count: 0,
@@ -156,13 +156,13 @@ describe("Spaces bootstrap", () => {
     })).toEqual({
       principalId: "smoke-principal",
       appId: "app-a",
-      spaceId: "smoke-space",
+      spaceId: "/smoke-space",
       refDomain: "spaces:smoke",
     });
     expect(() => validateSmokePreflightRow({
       principal_status: "active",
       app_id: "app-a",
-      space_id: "smoke-space",
+      space_id: "/smoke-space",
       ref_domain: "spaces:smoke",
       identity_count: 1,
       root_count: 0,
@@ -173,7 +173,7 @@ describe("Spaces bootstrap", () => {
       principal_id: "smoke-principal",
       principal_status: "active",
       app_id: "app-a",
-      space_id: "smoke-space",
+      space_id: "/smoke-space",
       ref_domain: "spaces:smoke",
       identity_count: 0,
       root_count: 1,

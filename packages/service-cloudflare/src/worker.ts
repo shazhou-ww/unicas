@@ -401,7 +401,7 @@ function publicRouteOwner(pathname: string): PublicRouteOwner | null {
   ) return "mcp";
   if (
     pathname === "/health"
-    || pathname.startsWith("/v1/apps/")
+    || pathname.startsWith("/v1/cas/")
     || pathname.startsWith("/.well-known/")
   ) return "cas";
   return null;

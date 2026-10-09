@@ -13,7 +13,7 @@ async function main(): Promise<void> {
   const cas = createSpaceCasClient({
     baseUrl: "https://api.example",
     appId: "app-example",
-    spaceId: "space-example",
+    spaceId: "/space-example",
     getToken: async () => "synthetic-capability",
     cache,
     fetcher: {
