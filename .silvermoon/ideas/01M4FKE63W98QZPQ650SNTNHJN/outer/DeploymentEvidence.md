@@ -125,5 +125,19 @@ workflow 实现缺陷必须形成新 Inner World implementation revision 并重�
 settings 问题必须先记录前后状态和恢复方案。不得通过删除
 `pnpm validate:release`、放宽 environment 或把 `--no-verify` 当作证明恢复。
 
-Silvermoon worktree/staged/remote checks、evidence commit 和最终 primary
-reachability在候选收口时追加。
+## Evidence 发布
+
+- `pnpm exec silvermoon check --worktree --audience agent`：通过。
+- `pnpm exec silvermoon check --staged --audience agent`：通过。
+- evidence commit:
+  `858a4da0825f163372279cf2f51029875256f15c`
+- concurrent primary 通过普通 merge 保留后，evidence 由 primary commit
+  `797e5dc53d58642a76e8f604150e16dd85d9ce30` 发布。
+- evidence commit 可从 refreshed `origin/main` 到达。
+- `pnpm check:ideas:remote`：通过，remote
+  `797e5dc53d58642a76e8f604150e16dd85d9ce30`。
+- GitHub Actions 对该 primary SHA 的 CI/Security 查询为 0 runs，继续符合
+  ordinary main push 零 hosted gate。
+
+最终 ledger 收口仍需通过 worktree/staged checks、同步到 refreshed primary 并
+重新观测精确 deployment revision。
