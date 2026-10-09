@@ -129,6 +129,15 @@ operation, and pass `Production` review. Recovery shares the
 `unicas-production` concurrency group with promotion and never creates a
 production tag.
 
+Documentation-only publication uses the separate **Deploy documentation**
+workflow. Supply the full lowercase SHA of the current `main` tip and pass
+`Production` review. The workflow requires the checkout and refreshed
+`origin/main` to equal that SHA before it runs repository code, shares the
+`unicas-production` concurrency group with complete releases, and runs docs
+tests, a browser test, a Wrangler dry-run, the docs deployment, public SDK route
+checks, and an `artifact-manifest.json` source-revision check. It cannot deploy
+the service, Spaces, product site, npm packages, tags, or GitHub Releases.
+
 Local emergency deployment remains explicit. **Always rebuild first** because
 Wrangler uploads `dist/` and stale output silently deploys old code:
 
