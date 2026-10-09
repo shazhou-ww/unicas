@@ -60,6 +60,14 @@ describe("App-user SDK open-source readiness", () => {
       expect(manifest.keywords.length).toBeGreaterThanOrEqual(5);
       expect(manifest.description).not.toMatch(/\btenant\b/iu);
       const readme = read(`${entry.directory}/README.md`);
+      const encodedName = encodeURIComponent(entry.name);
+      expect(readme).toContain(`https://img.shields.io/npm/v/${encodedName}?label=npm`);
+      expect(readme).toContain(`https://www.npmjs.com/package/${encodedName}`);
+      expect(readme).toContain(
+        "https://github.com/shazhou-ww/unicas/actions/workflows/ci.yml/badge.svg?branch=main",
+      );
+      expect(readme).toContain(`https://img.shields.io/npm/l/${encodedName}`);
+      expect(readme).not.toContain("https://img.shields.io/npm/dm/");
       expect(readme).not.toMatch(/npm install[^\n]*@beta/iu);
       expect(readme).not.toMatch(/modern browsers/iu);
       for (const target of [

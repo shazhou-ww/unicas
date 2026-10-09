@@ -57,6 +57,12 @@ World 的证据文件。
 人工验收。验收前不得执行 npm deprecation、GitHub metadata/Release、tag 或
 `0.1.2` publish。
 
+### I-S08: 增加可信 package 状态徽章
+
+在六个 packed README 标题下增加各包独立的 npm `latest` version、共享 primary
+CI 和 MIT license 徽章。徽章链接必须使用公开 npm/GitHub 地址并由 readiness
+检查覆盖；不把下载量、兼容性或 provenance 简化为未经门禁证明的徽章。
+
 ## Acceptance criteria
 
 ### I-AC01: SDK 入口与六包文档一致
@@ -104,3 +110,9 @@ Dependabot、Dependency Review、CodeQL 配置有效；仓库 workflow 不再使
 Silvermoon checks 全部通过，证据记录精确 primary commit 和 artifact 结论。
 npm registry、GitHub metadata、GitHub Release、tag 与 dist-tag 在 Deployment
 前均未被修改。
+
+### I-AC08: 六包徽章准确且不改变发布边界
+
+六个候选 tarball 的 README 分别链接对应 npm package/version/license，CI
+徽章链接同一 primary workflow；自动测试拒绝包名错配和未经决定的 monthly
+downloads 徽章。徽章只展示公开状态，不构成兼容、支持或发布授权。

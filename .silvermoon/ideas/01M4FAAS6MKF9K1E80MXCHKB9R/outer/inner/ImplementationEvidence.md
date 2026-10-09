@@ -4,8 +4,9 @@
 
 本证据对应已批准的 `idealRevision`
 `4c206b400a3025f0f244302861cec068c18613f1`，覆盖 `Implementation.md` 中
-I-S01 至 I-S06 和 I-AC01 至 I-AC06。I-S07 与 I-AC07 只有在候选提交通过
-Silvermoon checks、同步到刷新后的 primary 并重新观察后才完成。
+I-S01 至 I-S06、I-S08 和对应 acceptance criteria。I-S07 与 I-AC07 只有在
+包含 badge 的新候选通过 Silvermoon checks、同步到刷新后的 primary 并重新
+观察后才再次完成。
 
 候选仍是未发布的统一 `app-user-sdk@0.1.2`。本阶段没有创建 tag、GitHub
 Release、npm 版本或 dist-tag，也没有执行旧包 deprecation。
@@ -26,6 +27,9 @@ Release、npm 版本或 dist-tag，也没有执行旧包 deprecation。
 - `prepare-sdk-release.mjs` 从候选 tarball 安装到 workspace 外，使用 shipped
   declarations typecheck 六包 README、SDK 文档片段和公开 examples，运行 Node
   quickstart，并在三个浏览器引擎运行 browser quickstart。
+- 六个 packed README 分别包含对应 npm version、共享 primary CI 和 npm MIT
+  license badge；readiness test 校验 package 名称、链接并拒绝 monthly
+  downloads badge。13 个实际 badge image endpoints 均返回 HTTP 200。
 - CONTRIBUTING、Contributor Covenant、SUPPORT、SECURITY、CODEOWNERS、
   Issue forms 和 PR template 已补齐；Dependabot、Dependency Review、CodeQL、
   Action commit SHA 与 gitleaks image digest 已配置。
@@ -37,6 +41,7 @@ Release、npm 版本或 dist-tag，也没有执行旧包 deprecation。
 | 命令 | 结果 |
 | --- | --- |
 | `pnpm check:sdk-readiness` | 11/11 tests passed |
+| 13 个 npm/CI badge endpoint HEAD probes | 全部返回 HTTP 200 |
 | `pnpm --filter @unicas/docs-site test` | 7/7 tests passed；31 个文档页面可确定性构建 |
 | `pnpm sdk:prepare` | 通过；六包两轮 tarball 一致，API baseline 与 release manifest 已刷新 |
 | packed external consumer | Node workflow 与公开 Node quickstart 通过；Chromium、Firefox、WebKit browser quickstart 全部通过 |

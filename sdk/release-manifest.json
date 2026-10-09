@@ -15,7 +15,7 @@
   "distTag": "latest",
   "packages": [
     {
-      "bytes": 7483,
+      "bytes": 7611,
       "dependencies": {
         "cborg": "^6.1.1"
       },
@@ -40,7 +40,7 @@
         "dist/validation.js",
         "package.json"
       ],
-      "integrity": "sha512-nmYT4eyhtcJ/wklfUguJygq2nrK61bgSdXXQGV9DOHSki0SSpRW8LOKCU68p6rCfy2PZSr1hJ8PKTF3pKyoPVQ==",
+      "integrity": "sha512-fKI+ehN7T2KB/PD+Kpl8XB9JJJetHOanuJoAPD9Ja+qxL3WllPLyFhf2H7cz+rBZWD1uJGZpVeJxkt/V9LUVsw==",
       "name": "@unicas/codec",
       "order": 1,
       "runtime": "node-browser",
@@ -48,7 +48,7 @@
       "version": "0.1.2"
     },
     {
-      "bytes": 17758,
+      "bytes": 17896,
       "dependencies": {
         "@opentelemetry/api": "^1.9.0",
         "@orpc/contract": "1.15.0",
@@ -85,7 +85,7 @@
         "openapi/app-space-v1.openapi.json",
         "package.json"
       ],
-      "integrity": "sha512-q/Hu4baCbSrucaSEaVrzGbaBN/Joliak+QKK++v7yCrAxu3AEhtXgn6eBDg15z8x3+xlUx5Jw24OZ4gOwE/uRA==",
+      "integrity": "sha512-zZuBQnFd8/IRa8o4n1BcBlYp91TIHPKzsUtcpb14OoouUWVwNg3kvF7kKV5bC+EJO9//WnyxAUTx32hdnTCwEg==",
       "name": "@unicas/space-protocol",
       "order": 2,
       "runtime": "node-browser",
@@ -93,7 +93,7 @@
       "version": "0.1.2"
     },
     {
-      "bytes": 6799,
+      "bytes": 6932,
       "dependencies": {
         "@unicas/space-protocol": "0.1.2"
       },
@@ -120,7 +120,7 @@
         "dist/types.js",
         "package.json"
       ],
-      "integrity": "sha512-MNBYOANVSI9XsNAZimJtWfmXzOpgPHzE0yU+v28DUHmmzzdxHQpd3CP573Bxw8fYmz7hW78YxdQegRNZOFzHQw==",
+      "integrity": "sha512-K1AzzfMc9ide9+oHMV+yGfI93Itg0nL88sBw2R6Rkcf1D7uqlumzkWpOc70Jay8ONBEKjcKsOF5plt4MDKN89g==",
       "name": "@unicas/space-client",
       "order": 3,
       "runtime": "node-browser",
@@ -128,7 +128,7 @@
       "version": "0.1.2"
     },
     {
-      "bytes": 9443,
+      "bytes": 9750,
       "dependencies": {
         "@unicas/codec": "0.1.2",
         "@unicas/space-client": "0.1.2",
@@ -155,7 +155,7 @@
         "dist/types.js",
         "package.json"
       ],
-      "integrity": "sha512-KXL9LjkOh3fJmePoi6KuYLU7ODs1r5uqIGZXLGgsTtIWOg6iUE4wUSxo6JIhsvMJuy6weLGvBJHae8fJ8VuMSg==",
+      "integrity": "sha512-NW4uO2Q5DAYjiIoqvrpQG3ZTWhaBu9YbFROd4mAdXPIEzyq/slx76aOegp+VQtF2nUaEbfdogRN9NL5rHihq1g==",
       "name": "@unicas/space-blob-client",
       "order": 4,
       "runtime": "node-browser",
@@ -163,7 +163,7 @@
       "version": "0.1.2"
     },
     {
-      "bytes": 7510,
+      "bytes": 7646,
       "dependencies": {
         "@unicas/space-client": "0.1.2",
         "idb": "^8.0.3"
@@ -183,7 +183,7 @@
         "dist/index.js",
         "package.json"
       ],
-      "integrity": "sha512-p0voxcXCxg77W+/dndyG09nAZJDj7eb6r+7Dl3l322SqWag0smbgkCsLei/jSDhh5oawh9cRfQy3SjYnk1SZYQ==",
+      "integrity": "sha512-GhETvYESyQHSj+oo1mFAfXoaiAFcGBfvzIbpaEavM5uguyYQfvPMltZlMIsY17hLlLEBw7+ZOtGbDQ6eOGmBtA==",
       "name": "@unicas/space-browser-cache",
       "order": 5,
       "runtime": "browser",
@@ -191,7 +191,7 @@
       "version": "0.1.2"
     },
     {
-      "bytes": 8647,
+      "bytes": 8772,
       "dependencies": {
         "@unicas/space-blob-client": "0.1.2",
         "@unicas/space-client": "0.1.2",
@@ -218,7 +218,7 @@
         "dist/types.js",
         "package.json"
       ],
-      "integrity": "sha512-yYm3bPUPkRwZWiXJrg7m+63KTjuznlzrXTXxTD4b6uJCc+XZFYR5PtV/ap4pQ419xhPS+US0N4MGFcmOqqdyCQ==",
+      "integrity": "sha512-4OsNzPxP4pHeZMBUbANsSUROsUzldDE5jtczGwnT1cjhxPa5t3mWxsVo1R2mcKmzIM7RkqArWApaTyTrjsZeSQ==",
       "name": "@unicas/space-file-client",
       "order": 6,
       "runtime": "node-browser",
