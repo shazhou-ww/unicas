@@ -35,7 +35,111 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT",
-        "description": "Version 1 Space capability. Issuer authority and signed spaceId must match the request path, and the permission set must contain the operation's exact CAS authority."
+        "description": "Version 1 Space capability. Issuer authority and signed spaceId must match the request path, and the permission set must contain the operation's exact CAS authority.",
+        "x-unicas-capability": {
+          "version": 1,
+          "claimsSchema": "#/components/schemas/SpaceCapabilityClaims",
+          "permissions": [
+            "cas:nodes:read",
+            "cas:nodes:lease",
+            "cas:root-refs:read",
+            "cas:root-refs:update",
+            "cas:usage:read",
+            "cas:gc:execute"
+          ],
+          "oauthScopes": false
+        }
+      }
+    },
+    "schemas": {
+      "SpaceCapabilityClaims": {
+        "readOnly": true,
+        "type": "object",
+        "properties": {
+          "ver": {
+            "type": "number",
+            "const": 1
+          },
+          "iss": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sub": {
+            "type": "string",
+            "minLength": 1
+          },
+          "aud": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "readOnly": true,
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            ]
+          },
+          "iat": {
+            "type": "number"
+          },
+          "nbf": {
+            "type": "number"
+          },
+          "exp": {
+            "type": "number"
+          },
+          "jti": {
+            "type": "string",
+            "minLength": 1
+          },
+          "spaceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "permissions": {
+            "readOnly": true,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "cas:nodes:read",
+                "cas:nodes:lease",
+                "cas:root-refs:read",
+                "cas:root-refs:update",
+                "cas:usage:read",
+                "cas:gc:execute"
+              ]
+            }
+          },
+          "refDomain": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ver",
+          "iss",
+          "sub",
+          "aud",
+          "iat",
+          "nbf",
+          "exp",
+          "jti",
+          "spaceId",
+          "permissions"
+        ],
+        "additionalProperties": {}
+      },
+      "SpaceRefDomainClaim": {
+        "type": "string",
+        "maxLength": 64,
+        "pattern": "^[a-z][a-z0-9]*(?::[a-z0-9]+)*$",
+        "description": "Root Ref business namespace required by Root Ref operations."
       }
     }
   },
@@ -79,12 +183,113 @@
               "pattern": "^[0-9a-f]{64}$",
               "description": "Lowercase SHA-256 content digest."
             }
+          },
+          {
+            "name": "Range",
+            "in": "header",
+            "schema": {
+              "type": "string",
+              "pattern": "^bytes=(?:[0-9]+-[0-9]*|-[0-9]+)$",
+              "description": "One RFC 9110 byte range: bounded, open-ended, or suffix."
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {}
+            "description": "Complete node content",
+            "headers": {
+              "Accept-Ranges": {
+                "schema": {
+                  "const": "bytes"
+                },
+                "required": true
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "string",
+                  "pattern": "^(?:0|[1-9][0-9]*)$",
+                  "description": "Decimal response body length in bytes."
+                },
+                "required": true
+              },
+              "Content-Type": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "required": true
+              },
+              "X-CAS-Refs": {
+                "schema": {
+                  "type": "string",
+                  "maxLength": 16639,
+                  "pattern": "^(?:[0-9a-f]{64}(?:,[0-9a-f]{64})*)?$",
+                  "description": "Ordered comma-separated child node digests, or an empty string."
+                },
+                "required": true
+              }
+            },
+            "content": {
+              "application/vnd.unidocs.cas-node.v1": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/vnd.unidocs.cas-node.v1",
+                  "contentEncoding": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Partial node content",
+            "headers": {
+              "Accept-Ranges": {
+                "schema": {
+                  "const": "bytes"
+                },
+                "required": true
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "string",
+                  "pattern": "^(?:0|[1-9][0-9]*)$",
+                  "description": "Decimal response body length in bytes."
+                },
+                "required": true
+              },
+              "Content-Type": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "required": true
+              },
+              "X-CAS-Refs": {
+                "schema": {
+                  "type": "string",
+                  "maxLength": 16639,
+                  "pattern": "^(?:[0-9a-f]{64}(?:,[0-9a-f]{64})*)?$",
+                  "description": "Ordered comma-separated child node digests, or an empty string."
+                },
+                "required": true
+              },
+              "Content-Range": {
+                "schema": {
+                  "type": "string",
+                  "pattern": "^bytes [0-9]+-[0-9]+/[0-9]+$",
+                  "description": "Selected inclusive byte range and complete content length."
+                },
+                "required": true
+              }
+            },
+            "content": {
+              "application/vnd.unidocs.cas-node.v1": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/vnd.unidocs.cas-node.v1",
+                  "contentEncoding": "binary"
+                }
+              }
+            }
           },
           "400": {
             "description": "400",
@@ -96,7 +301,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "INVALID_REQUEST"
+                        "INVALID_REQUEST",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -120,7 +326,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "UNAUTHORIZED"
+                        "missing_token",
+                        "invalid_token",
+                        "unknown_issuer",
+                        "registry_unavailable"
                       ]
                     },
                     "message": {
@@ -144,7 +353,12 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "FORBIDDEN"
+                        "insufficient_permission",
+                        "resource_scope_mismatch",
+                        "unsupported_algorithm",
+                        "registry_unavailable",
+                        "APP_SUSPENDED",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -168,7 +382,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "NOT_FOUND"
+                        "NODE_NOT_FOUND"
                       ]
                     },
                     "message": {
@@ -192,7 +406,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "CONFLICT"
+                        "NODE_CONFLICT",
+                        "NODE_NOT_READY",
+                        "NEGATIVE_AGGREGATE",
+                        "IDEMPOTENCY_CONFLICT"
                       ]
                     },
                     "message": {
@@ -230,6 +447,36 @@
               }
             }
           },
+          "416": {
+            "description": "Range Not Satisfiable",
+            "headers": {
+              "Content-Range": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "pattern": "^bytes \\*/[0-9]+$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "const": "INVALID_REQUEST"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
           "429": {
             "description": "429",
             "content": {
@@ -240,7 +487,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "RESOURCE_EXHAUSTED"
+                        "CAS_UPLOAD_LIMIT"
                       ]
                     },
                     "message": {
@@ -264,6 +511,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
+                        "STORAGE_ERROR",
+                        "ROOT_REF_BUSY",
                         "SERVICE_UNAVAILABLE"
                       ]
                     },
@@ -278,6 +527,13 @@
               }
             }
           }
+        },
+        "x-unicas-authorization": {
+          "capabilityVersion": 1,
+          "requiredPermission": "cas:nodes:read",
+          "requiredClaims": [
+            "spaceId"
+          ]
         }
       }
     },
@@ -423,7 +679,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "INVALID_REQUEST"
+                        "INVALID_REQUEST",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -447,7 +704,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "UNAUTHORIZED"
+                        "missing_token",
+                        "invalid_token",
+                        "unknown_issuer",
+                        "registry_unavailable"
                       ]
                     },
                     "message": {
@@ -471,7 +731,12 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "FORBIDDEN"
+                        "insufficient_permission",
+                        "resource_scope_mismatch",
+                        "unsupported_algorithm",
+                        "registry_unavailable",
+                        "APP_SUSPENDED",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -495,7 +760,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "NOT_FOUND"
+                        "NODE_NOT_FOUND"
                       ]
                     },
                     "message": {
@@ -519,7 +784,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "CONFLICT"
+                        "NODE_CONFLICT",
+                        "NODE_NOT_READY",
+                        "NEGATIVE_AGGREGATE",
+                        "IDEMPOTENCY_CONFLICT"
                       ]
                     },
                     "message": {
@@ -567,7 +835,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "RESOURCE_EXHAUSTED"
+                        "CAS_UPLOAD_LIMIT"
                       ]
                     },
                     "message": {
@@ -591,6 +859,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
+                        "STORAGE_ERROR",
+                        "ROOT_REF_BUSY",
                         "SERVICE_UNAVAILABLE"
                       ]
                     },
@@ -605,6 +875,13 @@
               }
             }
           }
+        },
+        "x-unicas-authorization": {
+          "capabilityVersion": 1,
+          "requiredPermission": "cas:nodes:read",
+          "requiredClaims": [
+            "spaceId"
+          ]
         }
       }
     },
@@ -887,7 +1164,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "INVALID_REQUEST"
+                        "INVALID_REQUEST",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -911,7 +1189,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "UNAUTHORIZED"
+                        "missing_token",
+                        "invalid_token",
+                        "unknown_issuer",
+                        "registry_unavailable"
                       ]
                     },
                     "message": {
@@ -935,7 +1216,12 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "FORBIDDEN"
+                        "insufficient_permission",
+                        "resource_scope_mismatch",
+                        "unsupported_algorithm",
+                        "registry_unavailable",
+                        "APP_SUSPENDED",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -959,7 +1245,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "NOT_FOUND"
+                        "NODE_NOT_FOUND"
                       ]
                     },
                     "message": {
@@ -983,7 +1269,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "CONFLICT"
+                        "NODE_CONFLICT",
+                        "NODE_NOT_READY",
+                        "NEGATIVE_AGGREGATE",
+                        "IDEMPOTENCY_CONFLICT"
                       ]
                     },
                     "message": {
@@ -1031,7 +1320,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "RESOURCE_EXHAUSTED"
+                        "CAS_UPLOAD_LIMIT"
                       ]
                     },
                     "message": {
@@ -1055,6 +1344,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
+                        "STORAGE_ERROR",
+                        "ROOT_REF_BUSY",
                         "SERVICE_UNAVAILABLE"
                       ]
                     },
@@ -1069,6 +1360,13 @@
               }
             }
           }
+        },
+        "x-unicas-authorization": {
+          "capabilityVersion": 1,
+          "requiredPermission": "cas:nodes:lease",
+          "requiredClaims": [
+            "spaceId"
+          ]
         }
       }
     },
@@ -1170,7 +1468,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "INVALID_REQUEST"
+                        "INVALID_REQUEST",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -1194,7 +1493,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "UNAUTHORIZED"
+                        "missing_token",
+                        "invalid_token",
+                        "unknown_issuer",
+                        "registry_unavailable"
                       ]
                     },
                     "message": {
@@ -1218,7 +1520,12 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "FORBIDDEN"
+                        "insufficient_permission",
+                        "resource_scope_mismatch",
+                        "unsupported_algorithm",
+                        "registry_unavailable",
+                        "APP_SUSPENDED",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -1242,7 +1549,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "NOT_FOUND"
+                        "NODE_NOT_FOUND"
                       ]
                     },
                     "message": {
@@ -1266,7 +1573,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "CONFLICT"
+                        "NODE_CONFLICT",
+                        "NODE_NOT_READY",
+                        "NEGATIVE_AGGREGATE",
+                        "IDEMPOTENCY_CONFLICT"
                       ]
                     },
                     "message": {
@@ -1314,7 +1624,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "RESOURCE_EXHAUSTED"
+                        "CAS_UPLOAD_LIMIT"
                       ]
                     },
                     "message": {
@@ -1338,6 +1648,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
+                        "STORAGE_ERROR",
+                        "ROOT_REF_BUSY",
                         "SERVICE_UNAVAILABLE"
                       ]
                     },
@@ -1352,6 +1664,13 @@
               }
             }
           }
+        },
+        "x-unicas-authorization": {
+          "capabilityVersion": 1,
+          "requiredPermission": "cas:usage:read",
+          "requiredClaims": [
+            "spaceId"
+          ]
         }
       }
     },
@@ -1448,7 +1767,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "INVALID_REQUEST"
+                        "INVALID_REQUEST",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -1472,7 +1792,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "UNAUTHORIZED"
+                        "missing_token",
+                        "invalid_token",
+                        "unknown_issuer",
+                        "registry_unavailable"
                       ]
                     },
                     "message": {
@@ -1496,7 +1819,12 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "FORBIDDEN"
+                        "insufficient_permission",
+                        "resource_scope_mismatch",
+                        "unsupported_algorithm",
+                        "registry_unavailable",
+                        "APP_SUSPENDED",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -1520,7 +1848,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "NOT_FOUND"
+                        "NODE_NOT_FOUND"
                       ]
                     },
                     "message": {
@@ -1544,7 +1872,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "CONFLICT"
+                        "NODE_CONFLICT",
+                        "NODE_NOT_READY",
+                        "NEGATIVE_AGGREGATE",
+                        "IDEMPOTENCY_CONFLICT"
                       ]
                     },
                     "message": {
@@ -1592,7 +1923,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "RESOURCE_EXHAUSTED"
+                        "CAS_UPLOAD_LIMIT"
                       ]
                     },
                     "message": {
@@ -1616,6 +1947,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
+                        "STORAGE_ERROR",
+                        "ROOT_REF_BUSY",
                         "SERVICE_UNAVAILABLE"
                       ]
                     },
@@ -1630,6 +1963,13 @@
               }
             }
           }
+        },
+        "x-unicas-authorization": {
+          "capabilityVersion": 1,
+          "requiredPermission": "cas:gc:execute",
+          "requiredClaims": [
+            "spaceId"
+          ]
         }
       }
     },
@@ -1760,7 +2100,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "INVALID_REQUEST"
+                        "INVALID_REQUEST",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -1784,7 +2125,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "UNAUTHORIZED"
+                        "missing_token",
+                        "invalid_token",
+                        "unknown_issuer",
+                        "registry_unavailable"
                       ]
                     },
                     "message": {
@@ -1808,7 +2152,12 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "FORBIDDEN"
+                        "insufficient_permission",
+                        "resource_scope_mismatch",
+                        "unsupported_algorithm",
+                        "registry_unavailable",
+                        "APP_SUSPENDED",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -1832,7 +2181,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "NOT_FOUND"
+                        "NODE_NOT_FOUND"
                       ]
                     },
                     "message": {
@@ -1856,7 +2205,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "CONFLICT"
+                        "NODE_CONFLICT",
+                        "NODE_NOT_READY",
+                        "NEGATIVE_AGGREGATE",
+                        "IDEMPOTENCY_CONFLICT"
                       ]
                     },
                     "message": {
@@ -1904,7 +2256,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "RESOURCE_EXHAUSTED"
+                        "CAS_UPLOAD_LIMIT"
                       ]
                     },
                     "message": {
@@ -1928,6 +2280,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
+                        "STORAGE_ERROR",
+                        "ROOT_REF_BUSY",
                         "SERVICE_UNAVAILABLE"
                       ]
                     },
@@ -1941,6 +2295,17 @@
                 }
               }
             }
+          }
+        },
+        "x-unicas-authorization": {
+          "capabilityVersion": 1,
+          "requiredPermission": "cas:root-refs:read",
+          "requiredClaims": [
+            "spaceId",
+            "refDomain"
+          ],
+          "claimSchemas": {
+            "refDomain": "#/components/schemas/SpaceRefDomainClaim"
           }
         }
       },
@@ -1984,7 +2349,7 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 256,
-                    "description": "Stable idempotency identity for this commit."
+                    "description": "Stable caller-generated idempotency identity. Retrying the same requestId with the same changes returns the original result."
                   },
                   "changes": {
                     "type": "object",
@@ -2055,7 +2420,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "INVALID_REQUEST"
+                        "INVALID_REQUEST",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -2079,7 +2445,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "UNAUTHORIZED"
+                        "missing_token",
+                        "invalid_token",
+                        "unknown_issuer",
+                        "registry_unavailable"
                       ]
                     },
                     "message": {
@@ -2103,7 +2472,12 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "FORBIDDEN"
+                        "insufficient_permission",
+                        "resource_scope_mismatch",
+                        "unsupported_algorithm",
+                        "registry_unavailable",
+                        "APP_SUSPENDED",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -2127,7 +2501,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "NOT_FOUND"
+                        "NODE_NOT_FOUND"
                       ]
                     },
                     "message": {
@@ -2151,7 +2525,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "CONFLICT"
+                        "NODE_CONFLICT",
+                        "NODE_NOT_READY",
+                        "NEGATIVE_AGGREGATE",
+                        "IDEMPOTENCY_CONFLICT"
                       ]
                     },
                     "message": {
@@ -2199,7 +2576,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "RESOURCE_EXHAUSTED"
+                        "CAS_UPLOAD_LIMIT"
                       ]
                     },
                     "message": {
@@ -2223,6 +2600,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
+                        "STORAGE_ERROR",
+                        "ROOT_REF_BUSY",
                         "SERVICE_UNAVAILABLE"
                       ]
                     },
@@ -2236,6 +2615,17 @@
                 }
               }
             }
+          }
+        },
+        "x-unicas-authorization": {
+          "capabilityVersion": 1,
+          "requiredPermission": "cas:root-refs:update",
+          "requiredClaims": [
+            "spaceId",
+            "refDomain"
+          ],
+          "claimSchemas": {
+            "refDomain": "#/components/schemas/SpaceRefDomainClaim"
           }
         }
       }

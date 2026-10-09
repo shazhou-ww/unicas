@@ -143,11 +143,15 @@ try {
   await cas.readMetadata(hash);
 } catch (error) {
   if (error instanceof CasClientError) {
-    console.error(error.status, error.message);
+    console.error(error.status, error.code, error.message);
   }
   throw error;
 }
 ```
+
+`status` always preserves the non-success HTTP status. `code` preserves the
+response envelope's stable `error` value when the server returned one; branch
+on `code`, not the optional diagnostic text in `message`.
 
 The client preserves non-success HTTP status in `CasClientError`. It does not
 automatically retry or broaden permissions. Retry only transient failures with

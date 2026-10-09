@@ -10,9 +10,18 @@ export {
   DefaultSpaceNodeLeaseDurationMs,
   SpaceApiBasePath,
   SpaceApiErrorMap,
+  SpaceApiStableErrorMap,
+  SpaceApiStableErrorCodesByStatus,
+  SpaceReadContentHttpContract,
+  SpaceReadContentRangeNotSatisfiable,
   spaceApiContract,
 } from "./space-contract.js";
-export type { SpaceApiContract } from "./space-contract.js";
+export type {
+  SpaceApiContract,
+  SpaceApiStableErrorCode,
+  SpaceReadContentHttpResponse,
+  SpaceReadContentResponseHeaders,
+} from "./space-contract.js";
 
 export type {
   AppId,
@@ -46,6 +55,9 @@ export type {
 
 export {
   AppIdSchema,
+  CAS_MAX_REQUEST_ID_LENGTH,
+  CAS_MAX_ROOT_REF_CHANGES,
+  CAS_MAX_ROOT_REF_DELTA,
   CasGcResultSchema,
   CasHashSchema,
   CasLeaseOperationResultSchema,
@@ -79,6 +91,7 @@ export type { AppSpaceRoute } from "./routes.js";
 export {
   canonicalPermissionSegment,
   parseSpaceCapabilityPermission,
+  spaceOperationPolicyFor,
   spaceGcExecutePermission,
   spaceNodeLeasePermission,
   spaceNodeReadPermission,
@@ -88,6 +101,10 @@ export {
   CapabilityAlgorithm,
   CapabilityTokenType,
   SpaceCapabilityVersion,
+  SpaceCapabilityClaimsSchema,
+  SpaceCapabilityPermissionKinds,
+  SpaceOperationPolicies,
+  SpaceRefDomainClaimSchema,
   DefaultCapabilityLifetimeSeconds,
   isReservedRefDomain,
   MaximumCapabilityClockSkewSeconds,
@@ -106,5 +123,6 @@ export type {
   SpaceCapabilityClaims,
   SpaceCapabilityPermission,
   SpaceCapabilityPermissionKind,
+  SpaceOperationPolicy,
   VerifiedSpaceCapability,
 } from "./space-capability.js";

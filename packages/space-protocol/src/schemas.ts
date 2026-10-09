@@ -1,3 +1,4 @@
+import { JSON_SCHEMA_INPUT_REGISTRY } from "@orpc/zod/zod4";
 import { z } from "zod";
 import type {
   AppId,
@@ -97,15 +98,49 @@ export const CasReferencesSchema: z.ZodType<CasReferences> =
     .describe("Reference counts keyed by child node digest.")
     .meta({ id: "CasReferences" });
 
+export const CAS_MAX_REQUEST_ID_LENGTH = 256;
+export const CAS_MAX_ROOT_REF_CHANGES = 1_000;
+export const CAS_MAX_ROOT_REF_DELTA = 1_000_000;
+
 export const CasRefChangesSchema: z.ZodType<CasRefChanges> =
   z.record(CasHashSchema, z.number().int()).readonly()
+    .refine(
+      (changes) => {
+        const deltas = Object.values(changes);
+        return deltas.length >= 1
+          && deltas.length <= CAS_MAX_ROOT_REF_CHANGES
+          && deltas.every(
+            delta => Number.isSafeInteger(delta)
+              && delta !== 0
+              && Math.abs(delta) <= CAS_MAX_ROOT_REF_DELTA,
+          );
+      },
+      `Expected 1 to ${CAS_MAX_ROOT_REF_CHANGES} non-zero safe-integer deltas with an absolute value no greater than ${CAS_MAX_ROOT_REF_DELTA}`,
+    )
     .describe("Signed, non-zero Root Ref deltas keyed by node digest. Positive values acquire references; negative values release them.")
     .meta({ id: "CasRefChanges" });
 
+JSON_SCHEMA_INPUT_REGISTRY.add(CasRefChangesSchema, {
+  type: "object",
+  minProperties: 1,
+  maxProperties: CAS_MAX_ROOT_REF_CHANGES,
+  propertyNames: {
+    type: "string",
+    pattern: "^[0-9a-f]{64}$",
+  },
+  additionalProperties: {
+    type: "integer",
+    minimum: -CAS_MAX_ROOT_REF_DELTA,
+    maximum: CAS_MAX_ROOT_REF_DELTA,
+    not: { const: 0 },
+  },
+  description: "One to 1,000 non-zero signed Root Ref deltas keyed by lowercase SHA-256 digest.",
+});
+
 export const CasRootRefUpdateSchema: z.ZodType<CasRootRefUpdate> = z.object({
-  requestId: z.string().min(1)
+  requestId: z.string().min(1).max(CAS_MAX_REQUEST_ID_LENGTH)
     .describe("Stable caller-generated idempotency identity. Retrying the same requestId with the same changes returns the original result."),
-  changes: CasRefChangesSchema.describe("Complete atomic set of Root Ref balance changes for this commit."),
+  changes: CasRefChangesSchema,
 }).readonly().meta({ id: "CasRootRefUpdate" });
 
 export const CasRootRefBalanceSchema: z.ZodType<CasRootRefBalance> = z.object({

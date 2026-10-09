@@ -18,13 +18,17 @@ generated declarations with the committed
 ## `@unicas/space-protocol`
 
 - Contract: `spaceApiContract`, `SpaceApiContract`, `SpaceApiBasePath`,
-  `SpaceApiErrorMap`, `DefaultSpaceNodeLeaseDurationMs`.
+  `SpaceApiErrorMap`, `SpaceApiStableErrorMap`,
+  `SpaceApiStableErrorCodesByStatus`,
+  `SpaceReadContentHttpContract`, `SpaceReadContentHttpResponse`,
+  `SpaceReadContentRangeNotSatisfiable`, `DefaultSpaceNodeLeaseDurationMs`.
 - Data types and Zod schemas for App, Space, nodes, leases, Root Refs, usage,
-  and GC.
+  and GC, including the shared Root Ref request bounds.
 - HTTP helpers: `CasNodeRefsHeader`, `formatCasNodeRefsHeader`,
   `parseCasNodeRefsHeader`, `appSpaceRoutes`, `matchAppSpaceRoute`.
-- Capability permissions, constants, parsing, validation, claims, verified
-  values, and typed authentication/authorization errors.
+- Capability permissions, constants, parsing, validation, claim schema,
+  operation policies, verified values, and typed authentication/authorization
+  errors.
 - OpenAPI JSON through the explicit `./openapi.json` subpath.
 
 ## `@unicas/space-client`
@@ -34,7 +38,8 @@ generated declarations with the committed
   `listRootRefs`, `updateRootRefs`, `usage`, and `gc`.
 - Configuration and result types include fetcher, cache, range, node source,
   lease, Root Ref, usage, and GC contracts.
-- `CasClientError` preserves the non-success HTTP status.
+- `CasClientError` preserves the non-success HTTP status and stable response
+  error code when present.
 
 ## `@unicas/space-blob-client`
 

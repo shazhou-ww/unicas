@@ -48,7 +48,7 @@
       "version": "0.1.2"
     },
     {
-      "bytes": 17896,
+      "bytes": 23298,
       "dependencies": {
         "@opentelemetry/api": "^1.9.0",
         "@orpc/contract": "1.15.0",
@@ -85,7 +85,7 @@
         "openapi/app-space-v1.openapi.json",
         "package.json"
       ],
-      "integrity": "sha512-zZuBQnFd8/IRa8o4n1BcBlYp91TIHPKzsUtcpb14OoouUWVwNg3kvF7kKV5bC+EJO9//WnyxAUTx32hdnTCwEg==",
+      "integrity": "sha512-5ILWmTcvGnz0jHaL/IZLhfheWW39EHd6LG29r9kDfC0lurY/6T4xz4exzKmsMOGOFJc2sLu+h84ZaLdJaLGN7Q==",
       "name": "@unicas/space-protocol",
       "order": 2,
       "runtime": "node-browser",
@@ -93,7 +93,7 @@
       "version": "0.1.2"
     },
     {
-      "bytes": 6932,
+      "bytes": 7042,
       "dependencies": {
         "@unicas/space-protocol": "0.1.2"
       },
@@ -120,7 +120,7 @@
         "dist/types.js",
         "package.json"
       ],
-      "integrity": "sha512-K1AzzfMc9ide9+oHMV+yGfI93Itg0nL88sBw2R6Rkcf1D7uqlumzkWpOc70Jay8ONBEKjcKsOF5plt4MDKN89g==",
+      "integrity": "sha512-vHEiLOGb/GU8TWLrBMLWZx2hiYT6PuMURCJoqVdsii409j3i21dD8LLYkaxd8JtSzdM49/nGlwwy2p6Tv9V5Mg==",
       "name": "@unicas/space-client",
       "order": 3,
       "runtime": "node-browser",

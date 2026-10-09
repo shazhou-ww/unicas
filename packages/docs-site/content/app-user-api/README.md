@@ -15,8 +15,8 @@ CAS nodes plus atomic Root Refs without exposing administrator credentials.
 4. Follow [Scenarios and sequences](scenarios.md) for complete request flows.
 5. Explore the [interactive API reference](/app-user-api/reference/) for
   OpenAPI schemas, examples, and client snippets.
-6. Use [HTTP operation reference](http-api.md) for runtime behavior and known
-  contract gaps across all seven public operations.
+6. Use [HTTP operation reference](http-api.md) for the aligned runtime and
+  machine-readable contract across all seven public operations.
 7. Use [Capability authorization](authorization.md) for claims, permissions,
   denial behavior, and least-privilege examples.
 8. Use [Prototype v2 migration](migration-v2-to-v1.md) when updating an
@@ -30,6 +30,9 @@ Machine-readable sources remain authoritative:
 - [`@unicas/space-client` transport](../../../space-client/src/client.ts)
 
 The guide explains those sources; it does not define a second schema.
+The OpenAPI security scheme links the capability claim schema through
+`x-unicas-capability`, and every operation declares its exact permission and
+required signed claims through `x-unicas-authorization`.
 
 ## Capability contract at a glance
 
@@ -196,7 +199,8 @@ When sources differ:
 2. service authorization and behavioral tests establish enforced runtime
    behavior;
 3. client behavior describes what the published client can send or consume;
-4. this guide reports any gap explicitly rather than inventing a normalized
-   contract.
+4. this guide explains the generated contract without inventing a second
+   schema.
 
-Current gaps are listed in [HTTP operation reference](http-api.md#contract-gaps).
+The cross-surface guarantees and implementation-only diagnostics are listed in
+[HTTP operation reference](http-api.md#contract-alignment).

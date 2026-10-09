@@ -1,11 +1,17 @@
+import type {
+  InferContractRouterInputs,
+  InferContractRouterOutputs,
+} from "@orpc/contract";
 import { describe, expect, test } from "vitest";
 import type { AppId, Space, SpaceId } from "../src/index.js";
 import {
   AppIdSchema,
   CasHashSchema,
   CasRootRefUpdateSchema,
+  SpaceOperationPolicies,
   SpaceIdSchema,
   SpaceSchema,
+  spaceApiContract,
 } from "../src/index.js";
 import { generateSpaceOpenApiDocument } from "../scripts/openapi.js";
 
@@ -31,6 +37,18 @@ describe("CAS schemas", () => {
 });
 
 describe("CAS App/Space v1 OpenAPI", () => {
+  test("keeps existing readContent contract callers source-compatible", () => {
+    type Inputs = InferContractRouterInputs<typeof spaceApiContract>;
+    type Outputs = InferContractRouterOutputs<typeof spaceApiContract>;
+    const input: Inputs["nodes"]["readContent"] = {
+      params: { appId: "app-1", spaceId: "space-1", hash: "a".repeat(64) },
+    };
+    const output: Outputs["nodes"]["readContent"] = new ReadableStream<Uint8Array>();
+
+    expect(input).not.toHaveProperty("headers");
+    expect(output).toBeInstanceOf(ReadableStream);
+  });
+
   test("generates the released App/Space v1 document", async () => {
     const document = await generateSpaceOpenApiDocument();
     const serialized = JSON.stringify(document);
@@ -58,6 +76,57 @@ describe("CAS App/Space v1 OpenAPI", () => {
     expect(document.paths?.["/v1/apps/{appId}/spaces/{spaceId}/cas/usage"]?.get)
       .toHaveProperty("operationId", "getUsage");
     expect(document.paths?.["/v2/apps/{appId}/spaces/{spaceId}/cas/usage"]).toBeUndefined();
+    const readContent = document.paths
+      ?.["/v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/content"]?.get;
+    expect(readContent?.parameters?.find(parameter =>
+      "in" in parameter && parameter.in === "header"
+    )).toMatchObject({
+      name: "Range",
+      required: undefined,
+      schema: {
+        type: "string",
+        pattern: "^bytes=(?:[0-9]+-[0-9]*|-[0-9]+)$",
+      },
+    });
+    for (const status of ["200", "206"] as const) {
+      expect(readContent?.responses?.[status]).toMatchObject({
+        content: {
+          "application/vnd.unidocs.cas-node.v1": {
+            schema: {
+              type: "string",
+              contentMediaType: "application/vnd.unidocs.cas-node.v1",
+              contentEncoding: "binary",
+            },
+          },
+        },
+      });
+      expect(readContent?.responses?.[status]).toHaveProperty("headers.Accept-Ranges.required", true);
+      expect(readContent?.responses?.[status]).toHaveProperty("headers.Content-Length.required", true);
+      expect(readContent?.responses?.[status]).toHaveProperty("headers.Content-Type.required", true);
+      expect(readContent?.responses?.[status]).toHaveProperty("headers.X-CAS-Refs.required", true);
+    }
+    expect(readContent?.responses?.["206"]).toHaveProperty("headers.Content-Range.required", true);
+    expect(readContent?.responses?.["416"]).toMatchObject({
+      description: "Range Not Satisfiable",
+      headers: {
+        "Content-Range": {
+          required: true,
+          schema: { type: "string", pattern: "^bytes \\*/[0-9]+$" },
+        },
+      },
+    });
+    expect(readContent?.responses?.["416"]).toHaveProperty(
+      "content.application/json.schema.properties.error.const",
+      "INVALID_REQUEST",
+    );
+    expect(readContent?.responses?.["404"]).toHaveProperty(
+      "content.application/json.schema.properties.error.enum",
+      ["NODE_NOT_FOUND"],
+    );
+    expect(readContent?.responses?.["429"]).toHaveProperty(
+      "content.application/json.schema.properties.error.enum",
+      ["CAS_UPLOAD_LIMIT"],
+    );
     const lease = document.paths?.["/v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/lease"]?.post;
     const leaseJson = JSON.stringify(lease);
     expect(lease?.parameters?.filter((parameter) => "in" in parameter && parameter.in === "header"))
@@ -78,6 +147,56 @@ describe("CAS App/Space v1 OpenAPI", () => {
     expect(updateJson).toContain('"minimum":-1000000');
     expect(updateJson).toContain('"maximum":1000000');
     expect(updateJson).toContain('"not":{"const":0}');
+    expect(document.components?.schemas?.SpaceCapabilityClaims).toMatchObject({
+      type: "object",
+      properties: {
+        ver: { const: 1 },
+        spaceId: { type: "string", minLength: 1 },
+        permissions: {
+          type: "array",
+          items: {
+            enum: [
+              "cas:nodes:read",
+              "cas:nodes:lease",
+              "cas:root-refs:read",
+              "cas:root-refs:update",
+              "cas:usage:read",
+              "cas:gc:execute",
+            ],
+          },
+        },
+      },
+    });
+    expect(document.components?.schemas?.SpaceRefDomainClaim).toMatchObject({
+      type: "string",
+      maxLength: 64,
+      pattern: "^[a-z][a-z0-9]*(?::[a-z0-9]+)*$",
+    });
+    expect(document.components?.securitySchemes?.spaceCapability).toHaveProperty(
+      "x-unicas-capability",
+      expect.objectContaining({
+        version: 1,
+        claimsSchema: "#/components/schemas/SpaceCapabilityClaims",
+        oauthScopes: false,
+      }),
+    );
+    for (const policy of Object.values(SpaceOperationPolicies)) {
+      const operation = Object.values(document.paths ?? {}).flatMap(path =>
+        [path?.get, path?.post, path?.put, path?.patch, path?.delete]
+      ).find(candidate => candidate?.operationId === policy.operationId);
+      expect(operation).toHaveProperty("x-unicas-authorization", {
+        capabilityVersion: 1,
+        requiredPermission: policy.permission,
+        requiredClaims: [...policy.requiredClaims],
+        ...(policy.requiredClaims.some(claim => claim === "refDomain")
+          ? {
+              claimSchemas: {
+                refDomain: "#/components/schemas/SpaceRefDomainClaim",
+              },
+            }
+          : {}),
+      });
+    }
     expect(serialized).not.toContain("stackId");
     expect(serialized).not.toContain("tenantId");
     expect(serialized).not.toContain("Tenant");
