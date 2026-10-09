@@ -57,10 +57,11 @@ export function createScopedCasClient<Key extends { readonly hash: CasHash }>(
   const requireOk = async (response: Response, operation: string): Promise<Response> => {
     if (!response.ok) {
       const body = await response.json().catch(() => null) as { message?: unknown; error?: unknown } | null;
+      const code = typeof body?.error === "string" ? body.error : undefined;
       const detail = typeof body?.message === "string"
         ? body.message
-        : typeof body?.error === "string" ? body.error : undefined;
-      throw new CasClientError(response.status, response.statusText, operation, detail);
+        : code;
+      throw new CasClientError(response.status, response.statusText, operation, detail, code);
     }
     return response;
   };

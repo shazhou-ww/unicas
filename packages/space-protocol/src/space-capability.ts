@@ -1,5 +1,10 @@
-import type { JWTPayload } from "jose";
-import type { CapabilityProtectedHeader } from "./shared-capability.js";
+import { z } from "zod";
+import {
+  REF_DOMAIN_MAX_LENGTH,
+  REF_DOMAIN_PATTERN,
+  type CapabilityProtectedHeader,
+} from "./shared-capability.js";
+import type { AppSpaceRoute } from "./routes.js";
 
 export {
   CapabilityAlgorithm,
@@ -27,56 +32,53 @@ export type SpaceCapabilityPermission = string & {
   readonly [spaceCapabilityPermissionBrand]: true;
 };
 
+export const SpaceCapabilityPermissionKinds = [
+  "cas:nodes:read",
+  "cas:nodes:lease",
+  "cas:root-refs:read",
+  "cas:root-refs:update",
+  "cas:usage:read",
+  "cas:gc:execute",
+] as const;
+
 export type SpaceCapabilityPermissionKind =
-  | "cas:nodes:read"
-  | "cas:nodes:lease"
-  | "cas:root-refs:read"
-  | "cas:root-refs:update"
-  | "cas:usage:read"
-  | "cas:gc:execute";
+  (typeof SpaceCapabilityPermissionKinds)[number];
 
 export type ParsedSpaceCapabilityPermission = {
   readonly kind: SpaceCapabilityPermissionKind;
 };
 
 export function spaceNodeReadPermission(): SpaceCapabilityPermission {
-  return spaceOperationPermission("cas:nodes:read");
+  return spaceOperationPermission(SpaceOperationPolicies.readContent.permission);
 }
 
 export function spaceNodeLeasePermission(): SpaceCapabilityPermission {
-  return spaceOperationPermission("cas:nodes:lease");
+  return spaceOperationPermission(SpaceOperationPolicies.lease.permission);
 }
 
 export function spaceRootRefsReadPermission(): SpaceCapabilityPermission {
-  return spaceOperationPermission("cas:root-refs:read");
+  return spaceOperationPermission(SpaceOperationPolicies.listRootRefs.permission);
 }
 
 export function spaceRootRefsUpdatePermission(): SpaceCapabilityPermission {
-  return spaceOperationPermission("cas:root-refs:update");
+  return spaceOperationPermission(SpaceOperationPolicies.updateRootRefs.permission);
 }
 
 export function spaceUsageReadPermission(): SpaceCapabilityPermission {
-  return spaceOperationPermission("cas:usage:read");
+  return spaceOperationPermission(SpaceOperationPolicies.usage.permission);
 }
 
 export function spaceGcExecutePermission(): SpaceCapabilityPermission {
-  return spaceOperationPermission("cas:gc:execute");
+  return spaceOperationPermission(SpaceOperationPolicies.gc.permission);
 }
 
 export function parseSpaceCapabilityPermission(
   permission: string,
 ): ParsedSpaceCapabilityPermission | null {
-  switch (permission) {
-    case "cas:nodes:read":
-    case "cas:nodes:lease":
-    case "cas:root-refs:read":
-    case "cas:root-refs:update":
-    case "cas:usage:read":
-    case "cas:gc:execute":
-      return { kind: permission };
-    default:
-      return null;
+  if (!(SpaceCapabilityPermissionKinds as readonly string[]).includes(permission)) {
+    return null;
   }
+  return { kind: permission as SpaceCapabilityPermissionKind };
 }
 
 function spaceOperationPermission(
@@ -87,18 +89,83 @@ function spaceOperationPermission(
 
 export const SpaceCapabilityVersion = 1 as const;
 
-export interface SpaceCapabilityClaims extends JWTPayload {
-  readonly ver: typeof SpaceCapabilityVersion;
-  readonly iss: string;
-  readonly sub: string;
-  readonly aud: string;
-  readonly iat: number;
-  readonly nbf: number;
-  readonly exp: number;
-  readonly jti: string;
-  readonly spaceId: string;
-  readonly permissions: readonly SpaceCapabilityPermission[];
-  readonly refDomain?: string;
+export const SpaceRefDomainClaimSchema = z.string()
+  .max(REF_DOMAIN_MAX_LENGTH)
+  .regex(REF_DOMAIN_PATTERN)
+  .describe("Root Ref business namespace required by Root Ref operations.");
+
+export const SpaceCapabilityClaimsSchema = z.object({
+  ver: z.literal(SpaceCapabilityVersion),
+  iss: z.string().min(1),
+  sub: z.string().min(1),
+  aud: z.union([
+    z.string().min(1),
+    z.array(z.string().min(1)).min(1).readonly(),
+  ]),
+  iat: z.number(),
+  nbf: z.number(),
+  exp: z.number(),
+  jti: z.string().min(1),
+  spaceId: z.string().min(1),
+  permissions: z.array(z.enum(SpaceCapabilityPermissionKinds)).readonly(),
+  refDomain: z.string().optional(),
+}).passthrough().readonly().meta({ id: "SpaceCapabilityClaims" });
+
+export type SpaceCapabilityClaims =
+  Omit<z.infer<typeof SpaceCapabilityClaimsSchema>, "permissions">
+  & { readonly permissions: readonly SpaceCapabilityPermission[] };
+
+type SpaceOperationPolicyDefinition = {
+  readonly operationId: string;
+  readonly permission: SpaceCapabilityPermissionKind;
+  readonly requiredClaims: readonly ("spaceId" | "refDomain")[];
+};
+
+export const SpaceOperationPolicies = {
+  readContent: {
+    operationId: "readContent",
+    permission: "cas:nodes:read",
+    requiredClaims: ["spaceId"],
+  },
+  readMetadata: {
+    operationId: "readMetadata",
+    permission: "cas:nodes:read",
+    requiredClaims: ["spaceId"],
+  },
+  lease: {
+    operationId: "leaseNode",
+    permission: "cas:nodes:lease",
+    requiredClaims: ["spaceId"],
+  },
+  usage: {
+    operationId: "getUsage",
+    permission: "cas:usage:read",
+    requiredClaims: ["spaceId"],
+  },
+  gc: {
+    operationId: "runGc",
+    permission: "cas:gc:execute",
+    requiredClaims: ["spaceId"],
+  },
+  listRootRefs: {
+    operationId: "listRootRefs",
+    permission: "cas:root-refs:read",
+    requiredClaims: ["spaceId", "refDomain"],
+  },
+  updateRootRefs: {
+    operationId: "updateRootRefs",
+    permission: "cas:root-refs:update",
+    requiredClaims: ["spaceId", "refDomain"],
+  },
+} as const satisfies Record<AppSpaceRoute["operation"], SpaceOperationPolicyDefinition>;
+
+export type SpaceOperationPolicy =
+  (typeof SpaceOperationPolicies)[keyof typeof SpaceOperationPolicies];
+
+export function spaceOperationPolicyFor<TOperation extends AppSpaceRoute["operation"]>(
+  operation: TOperation,
+): (typeof SpaceOperationPolicies)[TOperation] {
+  return SpaceOperationPolicies[operation];
 }
 
 export interface VerifiedSpaceCapability {

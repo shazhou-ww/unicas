@@ -1,9 +1,16 @@
 import { validateHash } from "@unicas/codec";
+import {
+  CAS_MAX_REQUEST_ID_LENGTH,
+  CAS_MAX_ROOT_REF_CHANGES,
+  CAS_MAX_ROOT_REF_DELTA,
+} from "@unicas/space-protocol";
 import type { AppSpaceScope } from "./space-scope.js";
 
-export const CAS_MAX_ROOT_REF_CHANGES = 1000;
-export const CAS_MAX_ROOT_REF_DELTA = 1_000_000;
-export const CAS_MAX_REQUEST_ID_LENGTH = 256;
+export {
+  CAS_MAX_REQUEST_ID_LENGTH,
+  CAS_MAX_ROOT_REF_CHANGES,
+  CAS_MAX_ROOT_REF_DELTA,
+} from "@unicas/space-protocol";
 
 export const RootRefsErrorCodes = {
   INVALID_REQUEST: "ROOT_REF_INVALID",
