@@ -59,9 +59,11 @@ World 的证据文件。
 
 ### I-S08: 增加可信 package 状态徽章
 
-在六个 packed README 标题下增加各包独立的 npm `latest` version、共享 primary
-CI 和 MIT license 徽章。徽章链接必须使用公开 npm/GitHub 地址并由 readiness
-检查覆盖；不把下载量、兼容性或 provenance 简化为未经门禁证明的徽章。
+在六个 packed README 标题下增加各包独立的 npm `latest` version 和 MIT
+license 徽章。徽章链接必须使用公开 npm/GitHub 地址并由 readiness 检查覆盖；
+不展示与高频 primary 更新耦合的 CI badge，也不把下载量、兼容性或 provenance
+简化为未经门禁证明的徽章。CI trigger 与端侧保护调整由独立 idea
+`release-gated-ci` 跟踪，不在本 implementation 中修改 workflow。
 
 ## Acceptance criteria
 
@@ -113,6 +115,6 @@ npm registry、GitHub metadata、GitHub Release、tag 与 dist-tag 在 Deploymen
 
 ### I-AC08: 六包徽章准确且不改变发布边界
 
-六个候选 tarball 的 README 分别链接对应 npm package/version/license，CI
-徽章链接同一 primary workflow；自动测试拒绝包名错配和未经决定的 monthly
-downloads 徽章。徽章只展示公开状态，不构成兼容、支持或发布授权。
+六个候选 tarball 的 README 分别链接对应 npm package/version/license；
+自动测试拒绝包名错配、CI badge 和未经决定的 monthly downloads badge。
+徽章只展示公开 npm 状态，不构成 CI、兼容、支持或发布授权。

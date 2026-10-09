@@ -1,7 +1,6 @@
 # @unicas/space-file-client
 
 [![npm version](https://img.shields.io/npm/v/%40unicas%2Fspace-file-client?label=npm)](https://www.npmjs.com/package/%40unicas%2Fspace-file-client)
-[![SDK CI](https://github.com/shazhou-ww/unicas/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/shazhou-ww/unicas/actions/workflows/ci.yml)
 [![MIT license](https://img.shields.io/npm/l/%40unicas%2Fspace-file-client)](https://github.com/shazhou-ww/unicas/blob/main/LICENSE)
 
 File manifests and mutable working trees above the UniCAS blob and Space
