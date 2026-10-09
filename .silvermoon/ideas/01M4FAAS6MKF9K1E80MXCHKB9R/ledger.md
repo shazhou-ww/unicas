@@ -28,8 +28,20 @@
 
 ### Deployment steps
 
-- [ ] **D-S01:** 实施被接受后制定外部动作
+- [ ] **D-S01:** 固定 deployment 候选与外部写入门禁
+- [ ] **D-S02:** 更新 GitHub 产品 metadata 并确认 community health
+- [ ] **D-S03:** 以精确迁移消息退役三个 Tenant 包
+- [ ] **D-S04:** 生成并审查无写入 npm 发布计划
+- [ ] **D-S05:** 通过 immutable tag 与 protected workflow 发布六包
+- [ ] **D-S06:** 创建同 tag GitHub Release 并执行独立外部验证
+- [ ] **D-S07:** 发布 deployment evidence 并请求验收
 
 ### Deployment acceptance criteria
 
-- [ ] **D-AC01:** 外部状态与已接受实现可追溯
+- [ ] **D-AC01:** 发布前公开入口与 release notes 已就绪
+- [ ] **D-AC02:** GitHub metadata 使用当前产品语言
+- [ ] **D-AC03:** 旧包展示精确迁移路径
+- [ ] **D-AC04:** 六包 0.1.2 registry release 完整且可复现
+- [ ] **D-AC05:** GitHub Release 与 registry/tag/changelog 对齐
+- [ ] **D-AC06:** 外部写入遵守授权与恢复边界
+- [ ] **D-AC07:** 外部状态与接受的实现可追溯
