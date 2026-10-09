@@ -75,6 +75,16 @@ orchestration。
 integration test 为 5.492 秒；两项都在独立复跑中通过且没有 assertion failure。
 缓存变热后的同一标准命令完整 exit 0，因此没有为了本变更放宽无关测试 timeout。
 
+提交 I-S09 后，`origin/main` 已并发前进 11 个提交，包含 App/Space capability
+contract、Space client、公开 README、API baseline 与 release manifest 变化。
+候选通过普通非强制 merge 集成双方历史，生成 merge commit
+`5d884a511d22c742df08a76407b1c031109c4304`，没有冲突。针对该 merge commit
+重新运行 docs workflow 2 files/55 tests、docs 7 unit/3 browser tests、
+typecheck、docs dry-run 和完整
+`pnpm --workspace-concurrency=1 validate:release`，全部 exit 0；合并后六包
+deterministic artifacts 与更新后的 API/release evidence 一致。只有在该复验
+之后才继续同步候选。
+
 ## 外部只读核验
 
 2026-10-09 的匿名 npm/GitHub 读取结果：
