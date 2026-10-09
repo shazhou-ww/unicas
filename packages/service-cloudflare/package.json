@@ -25,22 +25,22 @@
     "deploy": "wrangler deploy"
   },
   "dependencies": {
-    "@cloudflare/workers-oauth-provider": "0.10.3",
-    "@modelcontextprotocol/server": "2.0.0",
+    "@cloudflare/workers-oauth-provider": "1.2.1",
+    "@modelcontextprotocol/server": "2.3.1",
     "@unicas/admin-protocol": "workspace:*",
     "@unicas/codec": "workspace:*",
     "@unicas/control-auth": "workspace:*",
     "@unicas/observability": "workspace:*",
     "@unicas/service": "workspace:*",
     "@unicas/space-protocol": "workspace:*",
-    "agents": "0.21.0",
+    "agents": "0.26.0",
     "aws4fetch": "^1.0.20",
-    "jose": "^6.2.10",
-    "zod": "^4.0.0"
+    "jose": "^6.2.12",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250817.0",
-    "jose": "^6.2.10",
+    "jose": "^6.2.12",
     "miniflare": "5.20260811.1-alpha",
     "typescript": "^5.9.0",
     "vitest": "^3.2.0",

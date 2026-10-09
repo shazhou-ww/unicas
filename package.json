@@ -50,7 +50,7 @@
     "@playwright/test": "1.55.1",
     "@types/node": "^24.0.0",
     "esbuild": "^0.28.2",
-    "jose": "^6.2.10",
+    "jose": "^6.2.12",
     "miniflare": "5.20260811.1-alpha",
     "rimraf": "^6.1.3",
     "semver": "7.8.5",

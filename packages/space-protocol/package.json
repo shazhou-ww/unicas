@@ -48,7 +48,7 @@
     "clean": "rimraf --glob dist \"*.tsbuildinfo\""
   },
   "devDependencies": {
-    "@orpc/openapi": "1.15.0",
+    "@orpc/openapi": "1.15.4",
     "@types/node": "^24.13.3",
     "tsx": "^4.23.13",
     "typescript": "^5.9.0",
@@ -68,9 +68,9 @@
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@orpc/contract": "1.15.0",
-    "@orpc/zod": "1.15.0",
-    "jose": "^6.2.10",
-    "zod": "^4.4.3"
+    "@orpc/contract": "1.15.4",
+    "@orpc/zod": "1.15.4",
+    "jose": "^6.2.12",
+    "zod": "^4.6.5"
   }
 }
