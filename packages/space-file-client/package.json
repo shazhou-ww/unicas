@@ -1,6 +1,6 @@
 {
   "name": "@unicas/space-file-client",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "File-manifest and Principal-owned root-catalog layer above UniCAS data-plane clients",
   "license": "MIT",
   "sideEffects": false,
