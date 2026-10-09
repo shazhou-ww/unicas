@@ -454,9 +454,23 @@ Initial provisioning is an explicit bootstrap operation:
    only in the approved operator credential store until rotation or recovery
    no longer requires it.
 
-The App/Space v1 issuer cutover is complete. Normal production contains no
-cutover switch or executable cutover step. Preserve its historical run and
-cutover documentation as audit evidence; do not repeat it as recovery.
+The production workflow retains an explicit App/Space issuer cutover gate for
+pre-release contract migrations. Leave `APP_SPACE_V1_CUTOVER_ENABLED=false`
+during normal releases. For a coordinated audience migration:
+
+1. Set `APP_SPACE_V1_CUTOVER_ENABLED=true` and update both maintained issuer
+   audience variables to the accepted shared CAS audience.
+2. Update every maintained Space deployment variable to a canonical `/`-led
+   Space ID before approving the release.
+3. Approve one release. The workflow first deploys the verifier, activates both
+   issuer authorities with the release-admin session, and then performs the
+   normal deployment and smoke checks.
+4. After the release and public-origin checks succeed, verify both active
+   authorities and set `APP_SPACE_V1_CUTOVER_ENABLED=false`.
+
+The cutover script is idempotent when an authority already has the target
+audience. Do not use the gate as general recovery or leave it enabled after the
+coordinated release.
 
 For the one-time Account-model production cutover, configure a required
 reviewer on the `Production` Environment before merging the promotion pull

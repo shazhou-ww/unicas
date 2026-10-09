@@ -72,3 +72,10 @@ its Durable Object identity and storage namespace, and changing a client cache
 key creates a distinct cache entry. Pre-release environments must explicitly
 migrate or discard data bound to non-canonical IDs before cutover. Canonical
 node encoding and file manifest formats do not change.
+
+The maintained Spaces deployment applies a one-time D1 migration that prefixes
+its existing Principal-to-Space mappings with `/`. This only updates the
+mapping: it does not copy node data, Root Refs, or file manifests from the old
+CAS storage namespace. Treat that first-party migration as an explicit
+pre-release data cutover, and discard or separately migrate any data that must
+survive before enabling the shared-audience issuer cutover.
