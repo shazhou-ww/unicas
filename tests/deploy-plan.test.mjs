@@ -407,11 +407,10 @@ describe("standalone deployment plan", () => {
     expect(job).not.toMatch(/^\s+run: pnpm deploy:docs\r?$/m);
   });
 
-  test("uses the canonical standard and strict-superset release validations", () => {
+  test("keeps validation authoritative at release and explicit preflight boundaries", () => {
     const job = validationJob();
-    expect(job).toContain("run: pnpm validate");
     expect(job).toContain("run: pnpm validate:release");
-    expect(job).toContain("github.ref != 'refs/heads/release'");
+    expect(job).not.toMatch(/^\s+run: pnpm validate\r?$/mu);
     expect(job).toContain("github.ref == 'refs/heads/release'");
     expect(job).toContain("github.event_name == 'workflow_dispatch'");
     expect(job).toContain(
@@ -434,10 +433,7 @@ describe("standalone deployment plan", () => {
     expect(ROOT_PACKAGE.scripts["validate:release"]).toContain("pnpm sdk:artifacts");
     expect(ROOT_PACKAGE.scripts["validate:release"]).toContain("test:browser");
     expect(ROOT_PACKAGE.scripts["validate:release"]).toContain("wrangler deploy --dry-run");
-    expect(CI_WORKFLOW).toContain(
-      "if: github.event_name == 'push' && github.ref == 'refs/heads/main'",
-    );
-    expect(CI_WORKFLOW).toContain("run: pnpm check:ideas:remote");
+    expect(CI_WORKFLOW).not.toContain("run: pnpm check:ideas:remote");
     expect(CI_WORKFLOW).toContain("DOCS_SOURCE_REVISION: ${{ github.sha }}");
   });
 
@@ -551,9 +547,12 @@ describe("standalone deployment plan", () => {
     expect(job).toContain("if: ${{ always() && inputs.action == 'principals' }}");
   });
 
-  test("does not run validation for tag pushes", () => {
+  test("runs validation only for release pushes and manual preflight", () => {
     const triggers = workflowTriggers();
-    expect(triggers).toMatch(/push:\r?\n\s+branches:\r?\n\s+- "\*\*"/);
+    expect(triggers).toMatch(/push:\r?\n\s+branches:\r?\n\s+- release/);
+    expect(triggers).toContain("workflow_dispatch:");
+    expect(triggers).not.toContain("pull_request:");
+    expect(triggers).not.toContain('      - "**"');
     expect(triggers).not.toContain("tags:");
   });
 

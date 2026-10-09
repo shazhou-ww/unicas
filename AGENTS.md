@@ -53,7 +53,9 @@ requests remain idea-free unless the user opts into this lifecycle.
 ## Validation
 
 - `pnpm check:ideas` validates the worktree. `pnpm check:ideas:commit` validates
-  checked-out history, and main-branch CI runs `pnpm check:ideas:remote`.
+  checked-out history. After synchronizing a candidate to primary, run
+  `pnpm check:ideas:remote` explicitly; ordinary `main` pushes do not start
+  hosted validation.
 - Use `pnpm exec silvermoon whats-next [idea] --audience agent` for readiness
   and `pnpm exec silvermoon check --staged --audience agent` for an index
   candidate.

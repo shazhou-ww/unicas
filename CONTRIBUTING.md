@@ -20,8 +20,18 @@ UniCAS requires Node.js 24 or newer and pnpm 11.
 
 ```powershell
 pnpm install --frozen-lockfile
+pnpm hooks:install
+pnpm hooks:status
 pnpm validate
 ```
+
+The repository-managed pre-push hook runs `pnpm validate` only when a push
+updates remote `main`. It validates the exact checked-out commit and refuses a
+dirty worktree or a different local SHA. Installation is explicit and will not
+overwrite an existing local or inherited `core.hooksPath`; resolve any reported
+conflict yourself. `pnpm hooks:uninstall` removes only the repository-owned
+local setting. `git push --no-verify` is an emergency bypass, not validation
+evidence, and the release workflow always rebuilds and validates independently.
 
 Use the narrowest relevant package test while iterating. Before opening a pull
 request, run `pnpm validate`. Changes to release policy, public SDK artifacts,

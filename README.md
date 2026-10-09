@@ -53,13 +53,16 @@ under `.wrangler/`.
 | Routine changes outside the Cloudflare adapter | `pnpm test:quick` | Repository checks and every package test except `@unicas/service-cloudflare` |
 | One package | `pnpm --filter <package> test` | The selected package only |
 | All package tests | `pnpm test:packages` | Every package test, without repository checks |
-| Before delivery | `pnpm validate` | Canonical branch/PR/`main` gate: repository policy, package tests except the slow Cloudflare adapter suite, build, and typecheck |
+| Before delivery | `pnpm validate` | Canonical local and `main` pre-push gate: repository policy, package tests except the slow Cloudflare adapter suite, build, and typecheck |
 | Before release | `pnpm validate:release` | Strict superset with the Cloudflare adapter and release-policy suites, SDK artifacts, browser coverage, deployment dry-runs, and release planner checks |
 
 Use `pnpm validate` for changes to `packages/service-cloudflare`, shared test
-orchestration, or repository-wide behavior. Local delivery and ordinary CI run
-the same command. The complete trigger and trust-boundary matrix is documented
-in [`docs/validation-and-release-workflows.md`](docs/validation-and-release-workflows.md).
+orchestration, or repository-wide behavior. Local delivery and the
+repository-managed hook for updates targeting `main` run the same command.
+Ordinary branch, pull-request, and `main` pushes do not start full hosted
+validation; release candidates and explicit preflight do. The complete trigger
+and trust-boundary matrix is documented in
+[`docs/validation-and-release-workflows.md`](docs/validation-and-release-workflows.md).
 
 Use Docker when a host Node.js environment is not available:
 

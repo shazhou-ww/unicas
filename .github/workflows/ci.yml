@@ -3,8 +3,7 @@ name: CI
 on:
   push:
     branches:
-      - "**"
-  pull_request:
+      - release
   workflow_dispatch:
 
 concurrency:
@@ -55,17 +54,9 @@ jobs:
           git fetch --no-tags origin main:refs/remotes/origin/main
           node scripts/verify-release-revision.mjs "$GITHUB_SHA" origin/main
 
-      - name: Run standard validation
-        if: github.ref != 'refs/heads/release' && github.event_name != 'workflow_dispatch'
-        run: pnpm validate
-
       - name: Run release validation
         if: github.ref == 'refs/heads/release' || github.event_name == 'workflow_dispatch'
         run: pnpm validate:release
-
-      - name: Check published Silvermoon idea state
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: pnpm check:ideas:remote
 
   deploy-production:
     name: Deploy production

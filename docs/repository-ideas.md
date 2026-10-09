@@ -75,9 +75,10 @@ pnpm check:ideas:commit
 pnpm check:ideas:remote
 ```
 
-`pnpm check:ideas` validates the complete worktree candidate. CI validates the
-checked-out commit during normal validation and separately checks refreshed
-primary history after a push to `main`.
+`pnpm check:ideas` validates the complete worktree candidate. Before committing,
+validate the staged snapshot; after synchronizing to primary, run
+`pnpm check:ideas:remote` explicitly against refreshed primary history.
+Ordinary `main` pushes do not start hosted validation.
 
 ## Documentation boundary
 
