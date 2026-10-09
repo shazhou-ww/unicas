@@ -4,13 +4,27 @@ Optional browser implementation of `CasNodeCache`. The HTTP client remains
 platform-neutral and has no dependency on this package. No server or application
 manifest types are imported; the `space-client` dependency is type-only in source.
 
+## When to use this package
+
+Use this package in an authenticated browser session to avoid repeatedly
+downloading immutable node metadata and complete node content. Do not use it as
+an authorization decision, mutable catalog, offline file system, or server
+cache.
+
+## Install
+
 ```sh
-npm install @unicas/space-browser-cache@beta
+npm install @unicas/space-client @unicas/space-browser-cache
 ```
+
+## Cache authenticated node reads
 
 ```ts
 import { createSpaceCasClient } from "@unicas/space-client";
-import { createBrowserCasNodeCache, clearBrowserCasNodeCaches } from "@unicas/space-browser-cache";
+import {
+  clearBrowserCasNodeCaches,
+  createBrowserCasNodeCache,
+} from "@unicas/space-browser-cache";
 
 const principal = JSON.stringify([identity.identityIssuer, identity.subject]);
 const cache = createBrowserCasNodeCache({
@@ -19,12 +33,29 @@ const cache = createBrowserCasNodeCache({
   maxMemoryBytes: 8 * 1024 * 1024,
   maxEntryBytes: 4 * 1024 * 1024,
 });
-const cas = createSpaceCasClient({ baseUrl: casBaseUrl, appId, spaceId, getToken, cache });
+const cas = createSpaceCasClient({
+  baseUrl: casBaseUrl,
+  appId,
+  spaceId,
+  getToken,
+  cache,
+});
+
+const metadata = await cas.readMetadata(hash);
+const content = await cas.readContent(hash);
+
+// A full content read is cached only after the stream is completely consumed.
+const bytes = new Uint8Array(await new Response(content).arrayBuffer());
 
 // At logout, stop new reads before clearing every endpoint for this principal.
 await clearBrowserCasNodeCaches({ principal });
 cache.close();
 ```
+
+`readMetadata` and complete `readContent` calls participate in this cache.
+Range misses pass through without being stored. `readNode` remains a combined
+one-request network operation and does not use the separate metadata/content
+cache hooks.
 
 ## Contract
 
