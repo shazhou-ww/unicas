@@ -9,14 +9,8 @@ import {
   CapabilityAlgorithm,
   CapabilityAuthenticationError,
   CapabilityAuthorizationError,
-  SpaceCapabilityVersion,
-  parseSpaceCapabilityPermission,
-  spaceGcExecutePermission,
-  spaceNodeLeasePermission,
-  spaceNodeReadPermission,
-  spaceRootRefsReadPermission,
-  spaceRootRefsUpdatePermission,
-  spaceUsageReadPermission,
+  SpaceCapabilityClaimsSchema,
+  spaceOperationPolicyFor,
   validateRefDomainClaim,
   type AppSpaceRoute,
 } from "@unicas/space-protocol";
@@ -312,21 +306,7 @@ export class AppSpaceCapabilityVerifier {
 }
 
 export function appSpacePermissionFor(route: AppSpaceRoute): string {
-  switch (route.operation) {
-    case "readContent":
-    case "readMetadata":
-      return spaceNodeReadPermission();
-    case "lease":
-      return spaceNodeLeasePermission();
-    case "listRootRefs":
-      return spaceRootRefsReadPermission();
-    case "updateRootRefs":
-      return spaceRootRefsUpdatePermission();
-    case "usage":
-      return spaceUsageReadPermission();
-    case "gc":
-      return spaceGcExecutePermission();
-  }
+  return spaceOperationPolicyFor(route.operation).permission;
 }
 
 interface VerifiedAppSpacePayload {
@@ -345,43 +325,20 @@ interface CachedAppAuthority {
   readonly fetchedAt: number;
 }
 
-function normalizeAppSpacePayload(payload: {
-  ver?: unknown;
-  iat?: unknown;
-  sub?: unknown;
-  jti?: unknown;
-  spaceId?: unknown;
-  permissions?: unknown;
-  iss?: unknown;
-  refDomain?: unknown;
-}): Omit<VerifiedAppSpacePayload, "appId" | "kid"> {
-  if (payload.ver !== SpaceCapabilityVersion) {
-    throw new CapabilityAuthenticationError(
-      "invalid_token",
-      `CAS capability version is invalid (expected ${SpaceCapabilityVersion})`,
-    );
-  }
-  if (
-    typeof payload.sub !== "string" || payload.sub.length === 0
-    || typeof payload.jti !== "string" || payload.jti.length === 0
-    || typeof payload.spaceId !== "string" || payload.spaceId.length === 0
-    || typeof payload.iss !== "string"
-    || !Array.isArray(payload.permissions)
-    || payload.permissions.some((permission) => typeof permission !== "string")
-    || payload.permissions.some((permission) => parseSpaceCapabilityPermission(permission) === null)
-  ) {
+function normalizeAppSpacePayload(
+  payload: unknown,
+): Omit<VerifiedAppSpacePayload, "appId" | "kid"> {
+  const result = SpaceCapabilityClaimsSchema.safeParse(payload);
+  if (!result.success) {
     throw new CapabilityAuthenticationError("invalid_token", "CAS capability claims are invalid");
   }
-  const refDomain = payload.refDomain;
-  if (refDomain !== undefined && typeof refDomain !== "string") {
-    throw new CapabilityAuthenticationError("invalid_token", "CAS capability refDomain is invalid");
-  }
+  const claims = result.data;
   return {
-    subject: payload.sub,
-    jti: payload.jti,
-    spaceId: payload.spaceId,
-    permissions: payload.permissions as readonly string[],
-    issuer: payload.iss,
-    ...(typeof refDomain === "string" ? { refDomain } : {}),
+    subject: claims.sub,
+    jti: claims.jti,
+    spaceId: claims.spaceId,
+    permissions: claims.permissions,
+    issuer: claims.iss,
+    ...(claims.refDomain === undefined ? {} : { refDomain: claims.refDomain }),
   };
 }

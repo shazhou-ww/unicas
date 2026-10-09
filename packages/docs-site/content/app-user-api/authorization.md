@@ -36,6 +36,15 @@ boundary.
 | `permissions` | Array containing exact `cas:{resource}:{action}` operation strings. |
 | `refDomain` | Optional for non-Root-Ref operations; required and validated for Root Ref list/update. |
 
+The generated OpenAPI publishes this shape as
+`components.schemas.SpaceCapabilityClaims`. The bearer security scheme's
+`x-unicas-capability` extension references that schema, and each operation's
+`x-unicas-authorization` extension names its exact permission and required
+claims. Root Ref operations additionally link `refDomain` to
+`components.schemas.SpaceRefDomainClaim`. The global security requirement
+deliberately retains an empty array:
+these permission strings are signed capability claims, not OAuth scopes.
+
 The protected header uses algorithm `ES256` and token type
 `unidocs-cap+jwt`.
 
@@ -221,6 +230,9 @@ fall back to administrator credentials or another App.
 | `unknown_issuer` | `401` | The issuer does not resolve to an App authority. |
 | `registry_unavailable` | `401` | Authority data cannot be obtained within the hard-stale bound. |
 | `unsupported_algorithm` | `403` | The protected header does not use the supported algorithm. |
+| `APP_SUSPENDED` | `403` | The issuer-derived App is suspended. |
+| `resource_scope_mismatch` | `403` | The App, Space, or required Root Ref domain does not match. |
+| `insufficient_permission` | `403` | The exact operation permission is absent. |
 
 Authority metadata is cached for 30 seconds by default. If refresh fails, known
 authority may be served within a 60-second hard-stale bound while emitting

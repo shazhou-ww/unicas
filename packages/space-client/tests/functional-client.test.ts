@@ -60,6 +60,46 @@ describe("functional Space CAS client", () => {
     expect(error).toMatchObject({ status: 404 });
   });
 
+  it("serializes byte ranges and exposes stable error codes", async () => {
+    const requests: Request[] = [];
+    const hash = "a".repeat(64);
+    const client = createSpaceCasClient({
+      baseUrl: "https://cas.test/",
+      appId: "app-1",
+      spaceId: "space-1",
+      getToken: async () => "token",
+      fetcher: {
+        async fetch(input, init) {
+          const request = input instanceof Request ? input : new Request(input, init);
+          requests.push(request);
+          if (requests.length === 1) {
+            return new Response("2345", { status: 206 });
+          }
+          return Response.json(
+            { error: "INVALID_REQUEST", message: "Range is not satisfiable" },
+            {
+              status: 416,
+              headers: { "Content-Range": "bytes */10" },
+            },
+          );
+        },
+      },
+    });
+
+    const empty = await client.readContent(hash, { offset: 0, length: 0 });
+    await expect(new Response(empty).arrayBuffer()).resolves.toHaveProperty("byteLength", 0);
+    expect(requests).toHaveLength(0);
+
+    const partial = await client.readContent(hash, { offset: 2, length: 4 });
+    await expect(new Response(partial).text()).resolves.toBe("2345");
+    expect(requests[0].headers.get("Range")).toBe("bytes=2-5");
+
+    const error = await client.readContent(hash, { offset: 10 }).catch(value => value);
+    expect(error).toBeInstanceOf(CasClientError);
+    expect(error).toMatchObject({ status: 416, code: "INVALID_REQUEST" });
+    expect(requests[1].headers.get("Range")).toBe("bytes=10-");
+  });
+
   it("reads immutable metadata and content in one authorized request", async () => {
     const requests: Request[] = [];
     const hash = "a".repeat(64);
