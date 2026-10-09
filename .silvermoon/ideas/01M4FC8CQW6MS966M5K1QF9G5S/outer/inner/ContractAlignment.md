@@ -65,5 +65,5 @@ workspace path scan 5 秒测试发生资源竞争型 timeout，未出现 asserti
 admin-webui 而在 Windows 删除同一 `dist` 时得到 `EPERM`；串行拓扑构建通过，
 未修改无关 timeout 或 build script。
 
-实现交付 commit 在 validated candidate commit 生成后补记；本记录未执行 npm
-publish、dist-tag 修改或 production deployment。
+实现交付 commit：`837255ffd626be41635f45345e20957d8371fe20`。本记录
+未执行 npm publish、dist-tag 修改或 production deployment。
