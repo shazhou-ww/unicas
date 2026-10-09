@@ -2,3 +2,4 @@ version: 1
 id: 01M4FAAS6MKF9K1E80MXCHKB9R
 alias: sdk-open-source-readiness
 approvedRevision: 4c206b400a3025f0f244302861cec068c18613f1
+implementationAcceptedRevision: 4981699cfc370a03df4274c130a4cba4219f52a4
