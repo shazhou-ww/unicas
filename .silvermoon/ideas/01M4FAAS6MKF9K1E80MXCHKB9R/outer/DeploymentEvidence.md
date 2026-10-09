@@ -334,3 +334,93 @@ package 也没有收到写命令。因此本轮重试没有完成任何 deprecat
 trusted publishing 仅支持 `npm publish`，不能作为 `npm deprecate` 的 owner
 authentication；仓库和 GitHub environments 也没有 npm token secret，故不能
 在不引入新长期 credential 或绕过身份验证的前提下自动完成 D-S03。
+
+## Legacy deprecation 完成
+
+维护者随后明确确认 legacy deprecation 仍属于本次 Deployment，并要求打开
+npm 官方授权页面。执行
+`npm login --registry=https://registry.npmjs.org --auth-type=web` 后，维护者在
+浏览器中直接完成身份确认；CLI 报告登录成功，`npm whoami` 返回
+`shazhou.ww`。Agent 没有读取、接收或记录 password、OTP、token 或恢复信息。
+
+写入前门禁再次证明：
+
+- clean worktree 的 `HEAD` 与 refreshed `origin/main` 都是
+  `1584aa06072a9bfb2f0caedf70c0eeb90a1d1e1b`；
+- 迁移 URL 返回 200；
+- 三个 package 都只有 `0.1.0`，`latest` 都是 `0.1.0`，deprecation 都为空。
+
+首次在非交互进程执行第一个 exact command 时，npm 返回 `EOTP`，没有 registry
+write。随后在可见的独立 PowerShell console 中运行每个 exact
+`npm deprecate`；维护者只在 npm 自己的交互界面完成 2FA。每个 command exit
+code 都是 0，并且在继续下一个 package 前匿名读取 exact version、逐字比对
+完整消息：
+
+| Package | Versions | `latest` | Anonymous `deprecated` |
+| --- | --- | --- | --- |
+| `@unicas/tenant-client` | `0.1.0` | `0.1.0` | `Retired Tenant API; use @unicas/space-client. Migration: https://docs.unicas.work/app-user-api/sdk/` |
+| `@unicas/tenant-blob-client` | `0.1.0` | `0.1.0` | `Retired Tenant API; use @unicas/space-blob-client. Migration: https://docs.unicas.work/app-user-api/sdk/` |
+| `@unicas/tenant-protocol` | `0.1.0` | `0.1.0` | `Retired Tenant API; use @unicas/space-protocol. Migration: https://docs.unicas.work/app-user-api/sdk/` |
+
+没有 unpublish、dist-tag 移动、新 version、替代空包或扩大 version range。
+完成所有 registry 写入与匿名复验后运行 `npm logout`；随后 `npm whoami` 再次
+失败，证明本次短期 owner session 已撤销。本地或 GitHub 没有保留新的长期 npm
+credential。
+
+## 最终未发布候选验证
+
+在 D-AC01 至 D-AC03 均通过后，从 exact primary
+`1584aa06072a9bfb2f0caedf70c0eeb90a1d1e1b` 运行：
+
+`pnpm --workspace-concurrency=1 validate:release`
+
+首次执行只有
+`tests/stack-tenant-retirement.test.mjs` 的既有 5 秒 transient timeout，其他
+165 项通过。没有放宽 timeout；精确单测复跑 3/3 通过，随后完整串行 validation
+重跑成功。成功运行覆盖 repository/Idea 检查、build、typecheck、package
+tests、`check:release`、declaration consumers、Node quickstart、
+Chromium/Firefox/WebKit smoke、deterministic artifacts、Worker dry-run 和所有
+deployment dry-run。
+
+最终 read-only planner：
+
+`node scripts/prepare-npm-release.mjs --candidate --tag npm/app-user-sdk/v0.1.2 --commit 1584aa06072a9bfb2f0caedf70c0eeb90a1d1e1b --output <session-artifact>/sdk-release-plan.json`
+
+成功绑定 exact `HEAD == origin/main`。六包 version、order、bytes、integrity 和
+tarball 与 `sdk/release-manifest.json` 逐项相等，值与上方 candidate table
+完全相同；file allowlist、exports 与 exact internal `0.1.2` dependencies 由
+`check:release` 验证。临时 `.sdk-release` tarballs 已删除，worktree 保持
+clean。该 plan 只证明未发布候选可复现，不授权 publication。
+
+## 最终独立验收
+
+最终匿名 npm 读取证明：
+
+- 六个 SDK package 的 `latest` 都是 `0.1.1`，均不存在 `0.1.2`；
+- 三个 legacy package 仍各自只有 `0.1.0`，`latest` 未移动，deprecation 与
+  D-S03 精确相等。
+
+最终 GitHub 只读验证证明：
+
+- description、homepage、八个 topics 与 D-S02 精确一致；
+- community health 是 100%；
+- `Production` environment 仍有 `main`、`release` policies、required
+  reviewer `shazhou-ww` 和 `prevent_self_review: true`；
+- `npm/app-user-sdk/v0.1.2` tag 与同名 Release 不存在；
+- `publish-npm.yml` 没有 `0.1.2` run，仍只有既有 `0.1.0-beta.1` 和 `0.1.1`
+  成功 run。
+
+最终匿名 HTTP 验证证明 docs root、SDK landing、quickstart、compatibility、
+SDK reference、versioning、changelog、troubleshooting、SUPPORT 和 SECURITY
+全部返回 200。公开 artifact manifest 仍有 31 pages，source revision 是
+`52a2088e0c4275f59438feb2e176ba238ced12f7`，其 Inner World tree 精确等于已
+接受的 `implementationRevision`
+`f2c8a798a8661757f944982ad3bd78e776c52dc4`。根/公开 changelog 都继续使用
+`0.1.2 - Unreleased`/candidate，没有日期化的 `0.1.2` 发布声明。
+
+因此本次实际外部写入只有已审查的 GitHub metadata、docs-only deployment 和
+三个 exact legacy deprecation。没有 package publication、tag、Release、
+dist-tag write、`0.1.2` npm version、service/Spaces/product-site deployment
+或长期 npm credential。D-S01 至 D-S07 与 D-AC01 至 D-AC07 的可观察结果均已
+满足，可以同步本 evidence 后对重新观察的 exact `deploymentRevision` 应用
+维护者已给出的 conditional acceptance。
