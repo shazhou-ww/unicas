@@ -1,0 +1,44 @@
+name: Feature request
+description: Propose a new capability or compatibility commitment
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the user or maintainer need without prescribing a solution.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: What observable result would solve the problem?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - App-user SDK
+        - Space data plane
+        - Administrator plane
+        - Documentation
+        - Deployment or operations
+        - Other repository tooling
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues for this request.
+          required: true
+        - label: This request contains no secrets or private data.
+          required: true

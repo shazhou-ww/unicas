@@ -1,0 +1,39 @@
+name: Integration support
+description: Ask a public question about a supported UniCAS integration
+title: "[Support]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Support is best-effort and public. Use synthetic identifiers and
+        redacted output. Vulnerabilities must use the private advisory form.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Integration goal
+      description: What are you trying to build or verify?
+    validations:
+      required: true
+  - type: textarea
+    id: attempted
+    attributes:
+      label: What you tried
+      description: Include the relevant documentation and a minimal synthetic example.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Package, runtime, TypeScript, browser, or service versions.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety checks
+      options:
+        - label: This question is suitable for a public issue.
+          required: true
+        - label: This question contains no credentials, private data, or vulnerability details.
+          required: true

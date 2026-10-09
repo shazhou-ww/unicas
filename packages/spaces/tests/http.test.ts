@@ -18,7 +18,7 @@ const session: AuthenticatedSession = {
     displayName: "Ada",
     provider: "google",
     appId: "app-a",
-    spaceId: "space-a",
+    spaceId: "/space-a",
     refDomain: "spaces",
   },
   csrfTokenHash: "digest",

@@ -2,7 +2,7 @@
   "info": {
     "title": "UniCAS Space API",
     "version": "1.0.0",
-    "description": "App-scoped Space API for immutable content-addressed nodes, leases, usage accounting, garbage collection, and atomic Root Ref commits.\n\nEvery request uses a version 1 JWT capability on the version 1 HTTP API. The registered issuer establishes App authority; the token's signed `spaceId` must match the route and its exact operation permission must authorize the request.\n\nPrincipal identity and Profile metadata are independent of Space ownership and authorization."
+    "description": "App-scoped Space API for immutable content-addressed nodes, leases, usage accounting, garbage collection, and atomic Root Ref commits.\n\nEvery request uses a version 2 JWT capability for the shared CAS v1 audience. The registered issuer establishes App authority; one signed grant must select query `spaceId` and contain the operation's exact permission.\n\nPrincipal identity and Profile metadata are independent of Space ownership and authorization."
   },
   "servers": [
     {
@@ -35,13 +35,136 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT",
-        "description": "Version 1 Space capability. Issuer authority and signed spaceId must match the request path, and the permission set must contain the operation's exact CAS authority."
+        "description": "Version 2 Space capability for the shared CAS v1 audience. The verified issuer authority must match query appId, and one signed grant must both select query spaceId and contain the operation's exact CAS permission.",
+        "x-unicas-capability": {
+          "version": 2,
+          "claimsSchema": "#/components/schemas/SpaceCapabilityClaims",
+          "permissions": [
+            "cas:nodes:read",
+            "cas:nodes:lease",
+            "cas:root-refs:read",
+            "cas:root-refs:update",
+            "cas:usage:read",
+            "cas:gc:execute"
+          ],
+          "oauthScopes": false
+        }
+      }
+    },
+    "schemas": {
+      "SpaceCapabilityClaims": {
+        "readOnly": true,
+        "type": "object",
+        "properties": {
+          "ver": {
+            "type": "number",
+            "const": 2
+          },
+          "iss": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sub": {
+            "type": "string",
+            "minLength": 1
+          },
+          "aud": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "readOnly": true,
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            ]
+          },
+          "iat": {
+            "type": "number"
+          },
+          "nbf": {
+            "type": "number"
+          },
+          "exp": {
+            "type": "number"
+          },
+          "jti": {
+            "type": "string",
+            "minLength": 1
+          },
+          "grants": {
+            "readOnly": true,
+            "minItems": 1,
+            "maxItems": 32,
+            "type": "array",
+            "items": {
+              "readOnly": true,
+              "type": "object",
+              "properties": {
+                "selector": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 258,
+                  "description": "Exact, terminal segment-prefix, or terminal recursive-prefix Space selector."
+                },
+                "permissions": {
+                  "readOnly": true,
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "cas:nodes:read",
+                      "cas:nodes:lease",
+                      "cas:root-refs:read",
+                      "cas:root-refs:update",
+                      "cas:usage:read",
+                      "cas:gc:execute"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "selector",
+                "permissions"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "refDomain": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ver",
+          "iss",
+          "sub",
+          "aud",
+          "iat",
+          "nbf",
+          "exp",
+          "jti",
+          "grants"
+        ],
+        "additionalProperties": {}
+      },
+      "SpaceRefDomainClaim": {
+        "type": "string",
+        "maxLength": 64,
+        "pattern": "^[a-z][a-z0-9]*(?::[a-z0-9]+)*$",
+        "description": "Root Ref business namespace required by Root Ref operations."
       }
     }
   },
   "openapi": "3.1.1",
   "paths": {
-    "/v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/content": {
+    "/v1/cas/nodes/{hash}": {
       "get": {
         "operationId": "readContent",
         "summary": "Read immutable node content",
@@ -51,26 +174,6 @@
         ],
         "parameters": [
           {
-            "name": "appId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "description": "App that establishes issuer authority and storage isolation."
-            }
-          },
-          {
-            "name": "spaceId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Space authorized by the capability for this request."
-            }
-          },
-          {
             "name": "hash",
             "in": "path",
             "required": true,
@@ -79,12 +182,138 @@
               "pattern": "^[0-9a-f]{64}$",
               "description": "Lowercase SHA-256 content digest."
             }
+          },
+          {
+            "name": "appId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "App that establishes issuer authority and storage isolation."
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "spaceId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 256,
+              "pattern": "^\\/[A-Za-z0-9_-]+(?:\\/[A-Za-z0-9_-]+)*$",
+              "description": "Space authorized by the capability for this request."
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "Range",
+            "in": "header",
+            "schema": {
+              "type": "string",
+              "pattern": "^bytes=(?:[0-9]+-[0-9]*|-[0-9]+)$",
+              "description": "One RFC 9110 byte range: bounded, open-ended, or suffix."
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {}
+            "description": "Complete node content",
+            "headers": {
+              "Accept-Ranges": {
+                "schema": {
+                  "const": "bytes"
+                },
+                "required": true
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "string",
+                  "pattern": "^(?:0|[1-9][0-9]*)$",
+                  "description": "Decimal response body length in bytes."
+                },
+                "required": true
+              },
+              "Content-Type": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "required": true
+              },
+              "X-CAS-Refs": {
+                "schema": {
+                  "type": "string",
+                  "maxLength": 16639,
+                  "pattern": "^(?:[0-9a-f]{64}(?:,[0-9a-f]{64})*)?$",
+                  "description": "Ordered comma-separated child node digests, or an empty string."
+                },
+                "required": true
+              }
+            },
+            "content": {
+              "application/vnd.unidocs.cas-node.v1": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/vnd.unidocs.cas-node.v1",
+                  "contentEncoding": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Partial node content",
+            "headers": {
+              "Accept-Ranges": {
+                "schema": {
+                  "const": "bytes"
+                },
+                "required": true
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "string",
+                  "pattern": "^(?:0|[1-9][0-9]*)$",
+                  "description": "Decimal response body length in bytes."
+                },
+                "required": true
+              },
+              "Content-Type": {
+                "schema": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "required": true
+              },
+              "X-CAS-Refs": {
+                "schema": {
+                  "type": "string",
+                  "maxLength": 16639,
+                  "pattern": "^(?:[0-9a-f]{64}(?:,[0-9a-f]{64})*)?$",
+                  "description": "Ordered comma-separated child node digests, or an empty string."
+                },
+                "required": true
+              },
+              "Content-Range": {
+                "schema": {
+                  "type": "string",
+                  "pattern": "^bytes [0-9]+-[0-9]+/[0-9]+$",
+                  "description": "Selected inclusive byte range and complete content length."
+                },
+                "required": true
+              }
+            },
+            "content": {
+              "application/vnd.unidocs.cas-node.v1": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/vnd.unidocs.cas-node.v1",
+                  "contentEncoding": "binary"
+                }
+              }
+            }
           },
           "400": {
             "description": "400",
@@ -96,7 +325,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "INVALID_REQUEST"
+                        "INVALID_REQUEST",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -120,7 +350,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "UNAUTHORIZED"
+                        "missing_token",
+                        "invalid_token",
+                        "unknown_issuer",
+                        "registry_unavailable"
                       ]
                     },
                     "message": {
@@ -144,7 +377,12 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "FORBIDDEN"
+                        "insufficient_permission",
+                        "resource_scope_mismatch",
+                        "unsupported_algorithm",
+                        "registry_unavailable",
+                        "APP_SUSPENDED",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -168,7 +406,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "NOT_FOUND"
+                        "NODE_NOT_FOUND"
                       ]
                     },
                     "message": {
@@ -192,7 +430,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "CONFLICT"
+                        "NODE_CONFLICT",
+                        "NODE_NOT_READY",
+                        "NEGATIVE_AGGREGATE",
+                        "IDEMPOTENCY_CONFLICT"
                       ]
                     },
                     "message": {
@@ -230,6 +471,36 @@
               }
             }
           },
+          "416": {
+            "description": "Range Not Satisfiable",
+            "headers": {
+              "Content-Range": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "pattern": "^bytes \\*/[0-9]+$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "const": "INVALID_REQUEST"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
           "429": {
             "description": "429",
             "content": {
@@ -240,7 +511,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "RESOURCE_EXHAUSTED"
+                        "CAS_UPLOAD_LIMIT"
                       ]
                     },
                     "message": {
@@ -264,6 +535,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
+                        "STORAGE_ERROR",
+                        "ROOT_REF_BUSY",
                         "SERVICE_UNAVAILABLE"
                       ]
                     },
@@ -278,10 +551,17 @@
               }
             }
           }
+        },
+        "x-unicas-authorization": {
+          "capabilityVersion": 2,
+          "requiredPermission": "cas:nodes:read",
+          "requiredClaims": [
+            "grants"
+          ]
         }
       }
     },
-    "/v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/metadata": {
+    "/v1/cas/nodes/{hash}/metadata": {
       "get": {
         "operationId": "readMetadata",
         "summary": "Read node metadata",
@@ -291,26 +571,6 @@
         ],
         "parameters": [
           {
-            "name": "appId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "description": "App that establishes issuer authority and storage isolation."
-            }
-          },
-          {
-            "name": "spaceId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Space authorized by the capability for this request."
-            }
-          },
-          {
             "name": "hash",
             "in": "path",
             "required": true,
@@ -319,6 +579,31 @@
               "pattern": "^[0-9a-f]{64}$",
               "description": "Lowercase SHA-256 content digest."
             }
+          },
+          {
+            "name": "appId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "App that establishes issuer authority and storage isolation."
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "spaceId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 256,
+              "pattern": "^\\/[A-Za-z0-9_-]+(?:\\/[A-Za-z0-9_-]+)*$",
+              "description": "Space authorized by the capability for this request."
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
           }
         ],
         "responses": {
@@ -423,7 +708,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "INVALID_REQUEST"
+                        "INVALID_REQUEST",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -447,7 +733,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "UNAUTHORIZED"
+                        "missing_token",
+                        "invalid_token",
+                        "unknown_issuer",
+                        "registry_unavailable"
                       ]
                     },
                     "message": {
@@ -471,7 +760,12 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "FORBIDDEN"
+                        "insufficient_permission",
+                        "resource_scope_mismatch",
+                        "unsupported_algorithm",
+                        "registry_unavailable",
+                        "APP_SUSPENDED",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -495,7 +789,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "NOT_FOUND"
+                        "NODE_NOT_FOUND"
                       ]
                     },
                     "message": {
@@ -519,7 +813,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "CONFLICT"
+                        "NODE_CONFLICT",
+                        "NODE_NOT_READY",
+                        "NEGATIVE_AGGREGATE",
+                        "IDEMPOTENCY_CONFLICT"
                       ]
                     },
                     "message": {
@@ -567,7 +864,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "RESOURCE_EXHAUSTED"
+                        "CAS_UPLOAD_LIMIT"
                       ]
                     },
                     "message": {
@@ -591,6 +888,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
+                        "STORAGE_ERROR",
+                        "ROOT_REF_BUSY",
                         "SERVICE_UNAVAILABLE"
                       ]
                     },
@@ -605,10 +904,17 @@
               }
             }
           }
+        },
+        "x-unicas-authorization": {
+          "capabilityVersion": 2,
+          "requiredPermission": "cas:nodes:read",
+          "requiredClaims": [
+            "grants"
+          ]
         }
       }
     },
-    "/v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/lease": {
+    "/v1/cas/nodes/{hash}/lease": {
       "post": {
         "operationId": "leaseNode",
         "summary": "Lease a node",
@@ -618,26 +924,6 @@
         ],
         "parameters": [
           {
-            "name": "appId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "description": "App that establishes issuer authority and storage isolation."
-            }
-          },
-          {
-            "name": "spaceId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Space authorized by the capability for this request."
-            }
-          },
-          {
             "name": "hash",
             "in": "path",
             "required": true,
@@ -646,6 +932,31 @@
               "pattern": "^[0-9a-f]{64}$",
               "description": "Lowercase SHA-256 content digest."
             }
+          },
+          {
+            "name": "appId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "App that establishes issuer authority and storage isolation."
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
+          },
+          {
+            "name": "spaceId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 256,
+              "pattern": "^\\/[A-Za-z0-9_-]+(?:\\/[A-Za-z0-9_-]+)*$",
+              "description": "Space authorized by the capability for this request."
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
           }
         ],
         "requestBody": {
@@ -887,7 +1198,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "INVALID_REQUEST"
+                        "INVALID_REQUEST",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -911,7 +1223,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "UNAUTHORIZED"
+                        "missing_token",
+                        "invalid_token",
+                        "unknown_issuer",
+                        "registry_unavailable"
                       ]
                     },
                     "message": {
@@ -935,7 +1250,12 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "FORBIDDEN"
+                        "insufficient_permission",
+                        "resource_scope_mismatch",
+                        "unsupported_algorithm",
+                        "registry_unavailable",
+                        "APP_SUSPENDED",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -959,7 +1279,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "NOT_FOUND"
+                        "NODE_NOT_FOUND"
                       ]
                     },
                     "message": {
@@ -983,7 +1303,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "CONFLICT"
+                        "NODE_CONFLICT",
+                        "NODE_NOT_READY",
+                        "NEGATIVE_AGGREGATE",
+                        "IDEMPOTENCY_CONFLICT"
                       ]
                     },
                     "message": {
@@ -1031,7 +1354,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "RESOURCE_EXHAUSTED"
+                        "CAS_UPLOAD_LIMIT"
                       ]
                     },
                     "message": {
@@ -1055,6 +1378,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
+                        "STORAGE_ERROR",
+                        "ROOT_REF_BUSY",
                         "SERVICE_UNAVAILABLE"
                       ]
                     },
@@ -1069,10 +1394,17 @@
               }
             }
           }
+        },
+        "x-unicas-authorization": {
+          "capabilityVersion": 2,
+          "requiredPermission": "cas:nodes:lease",
+          "requiredClaims": [
+            "grants"
+          ]
         }
       }
     },
-    "/v1/apps/{appId}/spaces/{spaceId}/cas/usage": {
+    "/v1/cas/usage": {
       "get": {
         "operationId": "getUsage",
         "summary": "Read Space CAS usage",
@@ -1083,23 +1415,28 @@
         "parameters": [
           {
             "name": "appId",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "string",
               "minLength": 1,
               "description": "App that establishes issuer authority and storage isolation."
-            }
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
           },
           {
             "name": "spaceId",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "string",
-              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^\\/[A-Za-z0-9_-]+(?:\\/[A-Za-z0-9_-]+)*$",
               "description": "Space authorized by the capability for this request."
-            }
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
           }
         ],
         "responses": {
@@ -1170,7 +1507,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "INVALID_REQUEST"
+                        "INVALID_REQUEST",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -1194,7 +1532,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "UNAUTHORIZED"
+                        "missing_token",
+                        "invalid_token",
+                        "unknown_issuer",
+                        "registry_unavailable"
                       ]
                     },
                     "message": {
@@ -1218,7 +1559,12 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "FORBIDDEN"
+                        "insufficient_permission",
+                        "resource_scope_mismatch",
+                        "unsupported_algorithm",
+                        "registry_unavailable",
+                        "APP_SUSPENDED",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -1242,7 +1588,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "NOT_FOUND"
+                        "NODE_NOT_FOUND"
                       ]
                     },
                     "message": {
@@ -1266,7 +1612,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "CONFLICT"
+                        "NODE_CONFLICT",
+                        "NODE_NOT_READY",
+                        "NEGATIVE_AGGREGATE",
+                        "IDEMPOTENCY_CONFLICT"
                       ]
                     },
                     "message": {
@@ -1314,7 +1663,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "RESOURCE_EXHAUSTED"
+                        "CAS_UPLOAD_LIMIT"
                       ]
                     },
                     "message": {
@@ -1338,6 +1687,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
+                        "STORAGE_ERROR",
+                        "ROOT_REF_BUSY",
                         "SERVICE_UNAVAILABLE"
                       ]
                     },
@@ -1352,10 +1703,17 @@
               }
             }
           }
+        },
+        "x-unicas-authorization": {
+          "capabilityVersion": 2,
+          "requiredPermission": "cas:usage:read",
+          "requiredClaims": [
+            "grants"
+          ]
         }
       }
     },
-    "/v1/apps/{appId}/spaces/{spaceId}/cas/gc": {
+    "/v1/cas/gc": {
       "post": {
         "operationId": "runGc",
         "summary": "Run Space garbage collection",
@@ -1366,23 +1724,28 @@
         "parameters": [
           {
             "name": "appId",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "string",
               "minLength": 1,
               "description": "App that establishes issuer authority and storage isolation."
-            }
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
           },
           {
             "name": "spaceId",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "string",
-              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^\\/[A-Za-z0-9_-]+(?:\\/[A-Za-z0-9_-]+)*$",
               "description": "Space authorized by the capability for this request."
-            }
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
           }
         ],
         "requestBody": {
@@ -1448,7 +1811,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "INVALID_REQUEST"
+                        "INVALID_REQUEST",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -1472,7 +1836,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "UNAUTHORIZED"
+                        "missing_token",
+                        "invalid_token",
+                        "unknown_issuer",
+                        "registry_unavailable"
                       ]
                     },
                     "message": {
@@ -1496,7 +1863,12 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "FORBIDDEN"
+                        "insufficient_permission",
+                        "resource_scope_mismatch",
+                        "unsupported_algorithm",
+                        "registry_unavailable",
+                        "APP_SUSPENDED",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -1520,7 +1892,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "NOT_FOUND"
+                        "NODE_NOT_FOUND"
                       ]
                     },
                     "message": {
@@ -1544,7 +1916,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "CONFLICT"
+                        "NODE_CONFLICT",
+                        "NODE_NOT_READY",
+                        "NEGATIVE_AGGREGATE",
+                        "IDEMPOTENCY_CONFLICT"
                       ]
                     },
                     "message": {
@@ -1592,7 +1967,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "RESOURCE_EXHAUSTED"
+                        "CAS_UPLOAD_LIMIT"
                       ]
                     },
                     "message": {
@@ -1616,6 +1991,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
+                        "STORAGE_ERROR",
+                        "ROOT_REF_BUSY",
                         "SERVICE_UNAVAILABLE"
                       ]
                     },
@@ -1630,10 +2007,17 @@
               }
             }
           }
+        },
+        "x-unicas-authorization": {
+          "capabilityVersion": 2,
+          "requiredPermission": "cas:gc:execute",
+          "requiredClaims": [
+            "grants"
+          ]
         }
       }
     },
-    "/v1/apps/{appId}/spaces/{spaceId}/root-refs": {
+    "/v1/cas/root-refs": {
       "get": {
         "operationId": "listRootRefs",
         "summary": "List Space Root Ref balances",
@@ -1644,27 +2028,33 @@
         "parameters": [
           {
             "name": "appId",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "string",
               "minLength": 1,
               "description": "App that establishes issuer authority and storage isolation."
-            }
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
           },
           {
             "name": "spaceId",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "string",
-              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^\\/[A-Za-z0-9_-]+(?:\\/[A-Za-z0-9_-]+)*$",
               "description": "Space authorized by the capability for this request."
-            }
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
           },
           {
             "name": "limit",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "integer",
               "minimum": 1,
@@ -1676,6 +2066,7 @@
           {
             "name": "cursor",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string",
               "minLength": 1
@@ -1760,7 +2151,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "INVALID_REQUEST"
+                        "INVALID_REQUEST",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -1784,7 +2176,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "UNAUTHORIZED"
+                        "missing_token",
+                        "invalid_token",
+                        "unknown_issuer",
+                        "registry_unavailable"
                       ]
                     },
                     "message": {
@@ -1808,7 +2203,12 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "FORBIDDEN"
+                        "insufficient_permission",
+                        "resource_scope_mismatch",
+                        "unsupported_algorithm",
+                        "registry_unavailable",
+                        "APP_SUSPENDED",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -1832,7 +2232,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "NOT_FOUND"
+                        "NODE_NOT_FOUND"
                       ]
                     },
                     "message": {
@@ -1856,7 +2256,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "CONFLICT"
+                        "NODE_CONFLICT",
+                        "NODE_NOT_READY",
+                        "NEGATIVE_AGGREGATE",
+                        "IDEMPOTENCY_CONFLICT"
                       ]
                     },
                     "message": {
@@ -1904,7 +2307,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "RESOURCE_EXHAUSTED"
+                        "CAS_UPLOAD_LIMIT"
                       ]
                     },
                     "message": {
@@ -1928,6 +2331,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
+                        "STORAGE_ERROR",
+                        "ROOT_REF_BUSY",
                         "SERVICE_UNAVAILABLE"
                       ]
                     },
@@ -1942,6 +2347,17 @@
               }
             }
           }
+        },
+        "x-unicas-authorization": {
+          "capabilityVersion": 2,
+          "requiredPermission": "cas:root-refs:read",
+          "requiredClaims": [
+            "grants",
+            "refDomain"
+          ],
+          "claimSchemas": {
+            "refDomain": "#/components/schemas/SpaceRefDomainClaim"
+          }
         }
       },
       "post": {
@@ -1954,23 +2370,28 @@
         "parameters": [
           {
             "name": "appId",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "string",
               "minLength": 1,
               "description": "App that establishes issuer authority and storage isolation."
-            }
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
           },
           {
             "name": "spaceId",
-            "in": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "string",
-              "minLength": 1,
+              "maxLength": 256,
+              "pattern": "^\\/[A-Za-z0-9_-]+(?:\\/[A-Za-z0-9_-]+)*$",
               "description": "Space authorized by the capability for this request."
-            }
+            },
+            "allowEmptyValue": true,
+            "allowReserved": true
           }
         ],
         "requestBody": {
@@ -1984,7 +2405,7 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 256,
-                    "description": "Stable idempotency identity for this commit."
+                    "description": "Stable caller-generated idempotency identity. Retrying the same requestId with the same changes returns the original result."
                   },
                   "changes": {
                     "type": "object",
@@ -2055,7 +2476,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "INVALID_REQUEST"
+                        "INVALID_REQUEST",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -2079,7 +2501,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "UNAUTHORIZED"
+                        "missing_token",
+                        "invalid_token",
+                        "unknown_issuer",
+                        "registry_unavailable"
                       ]
                     },
                     "message": {
@@ -2103,7 +2528,12 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "FORBIDDEN"
+                        "insufficient_permission",
+                        "resource_scope_mismatch",
+                        "unsupported_algorithm",
+                        "registry_unavailable",
+                        "APP_SUSPENDED",
+                        "ROOT_REF_INVALID"
                       ]
                     },
                     "message": {
@@ -2127,7 +2557,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "NOT_FOUND"
+                        "NODE_NOT_FOUND"
                       ]
                     },
                     "message": {
@@ -2151,7 +2581,10 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "CONFLICT"
+                        "NODE_CONFLICT",
+                        "NODE_NOT_READY",
+                        "NEGATIVE_AGGREGATE",
+                        "IDEMPOTENCY_CONFLICT"
                       ]
                     },
                     "message": {
@@ -2199,7 +2632,7 @@
                     "error": {
                       "type": "string",
                       "enum": [
-                        "RESOURCE_EXHAUSTED"
+                        "CAS_UPLOAD_LIMIT"
                       ]
                     },
                     "message": {
@@ -2223,6 +2656,8 @@
                     "error": {
                       "type": "string",
                       "enum": [
+                        "STORAGE_ERROR",
+                        "ROOT_REF_BUSY",
                         "SERVICE_UNAVAILABLE"
                       ]
                     },
@@ -2236,6 +2671,17 @@
                 }
               }
             }
+          }
+        },
+        "x-unicas-authorization": {
+          "capabilityVersion": 2,
+          "requiredPermission": "cas:root-refs:update",
+          "requiredClaims": [
+            "grants",
+            "refDomain"
+          ],
+          "claimSchemas": {
+            "refDomain": "#/components/schemas/SpaceRefDomainClaim"
           }
         }
       }

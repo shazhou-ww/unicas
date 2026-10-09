@@ -1,5 +1,5 @@
 /**
- * `createCasBlobClient` — the blob layer above the node-level tenant client.
+ * `createCasBlobClient` — the blob layer above the node-level Space client.
  *
  * Large content is chunked into fixed-size chunk nodes plus a bounded
  * fan-out blob-index tree; every stored node is automatically leased and the

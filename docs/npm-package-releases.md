@@ -30,7 +30,9 @@ Space capability claim version, and product maturity.
 runtime, dependency, order, version, dist-tag, and tag-prefix contract.
 [`sdk/release-manifest.json`](../sdk/release-manifest.json) records deterministic
 archive filenames, SRI SHA-512 integrity, byte sizes, exact file inventories,
-packed exports, transformed dependencies, and publication order.
+packed exports, transformed dependencies, compatibility evidence, and
+publication order. [`sdk/api/`](../sdk/api/) stores the reviewed TypeScript
+declaration baseline.
 
 Prepare or refresh evidence with:
 
@@ -48,10 +50,13 @@ pnpm check:npm-release
 The artifact check cleans and rebuilds only the public packages, regenerates
 and checks App/Space OpenAPI, packs twice, compares archives, validates each
 packed manifest and file allowlist, installs only those archives outside the
-workspace, compiles against shipped declarations, runs Node blob/file checks,
-and runs a real-Chrome IndexedDB consumer check. Before hashing or retaining
-an archive, it normalizes the advisory gzip OS header to the Linux publication
-runner value so Windows and Linux produce byte-identical tarballs.
+workspace, compiles package README and SDK documentation snippets against
+shipped declarations, runs the public Node quickstart and blob/file checks, and
+runs the public IndexedDB browser quickstart in Chromium, Firefox, and WebKit.
+It also compares generated declarations with the committed API baseline.
+Before hashing or retaining an archive, it normalizes the advisory gzip OS
+header to the Linux publication runner value so Windows and Linux produce
+byte-identical tarballs.
 
 Tarballs are temporary. Never commit or manually patch them.
 
@@ -66,7 +71,7 @@ npm/app-user-sdk/v<version>
 For example:
 
 ```text
-npm/app-user-sdk/v0.1.1
+npm/app-user-sdk/v0.1.2
 ```
 
 Only [`.github/workflows/publish-npm.yml`](../.github/workflows/publish-npm.yml)
@@ -77,7 +82,7 @@ The workflow has one `npm` environment-protected job. After approval it performs
 one checkout, install, deterministic six-package build, exact unified-version
 and primary-reachability check, and full registry preflight before any write.
 It then rechecks only the next package's immediate registry state and publishes
-in dependency order with public access, the reviewed `beta` tag, npm trusted
+in dependency order with public access, the reviewed dist-tag, npm trusted
 publishing, and provenance. Finally it verifies the complete release through
 the external registry consumer and provenance path.
 
@@ -125,8 +130,9 @@ exports, dependencies, the reviewed dist-tag, SLSA repository/workflow/tag/
 commit/run provenance, and bootstrap deprecation. Stable releases additionally
 run `pnpm verify:npm-release -- --expect-latest`.
 It then installs only the registry packages into a temporary no-token consumer,
-typechecks shipped declarations, runs the Node and real-Chrome smoke checks, and
-audits npm registry signatures and attestations.
+typechecks shipped declarations and documented snippets, runs the Node and
+Chromium/Firefox/WebKit consumer checks, and audits npm registry signatures and
+attestations.
 
 The activation task must verify npm permits those trusted-publisher records
 before the first package version exists. If package settings are unavailable

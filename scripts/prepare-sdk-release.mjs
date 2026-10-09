@@ -16,13 +16,16 @@ import {
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium } from "@playwright/test";
+import { chromium, firefox, webkit } from "@playwright/test";
 import { stringify as stringifyYaml } from "yaml";
+import { syncSdkApiBaseline } from "./sdk-api-baseline.mjs";
+import { writeSdkSnippetFixtures } from "./sdk-readiness.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const MATRIX_PATH = join(ROOT, "sdk", "package-matrix.json");
 const RELEASE_MANIFEST_PATH = join(ROOT, "sdk", "release-manifest.json");
 const CONSUMER_FIXTURE = join(ROOT, "tests", "fixtures", "sdk-consumer");
+const SDK_EXAMPLES = join(ROOT, "examples", "app-user-sdk");
 const PNPM = resolvePnpmCommand();
 const TAR = process.platform === "win32" ? "tar.exe" : "tar";
 
@@ -265,6 +268,8 @@ async function verifyInstalledPackages(matrix, consumerDirectory) {
 async function createConsumer(matrix, artifacts, temporaryRoot) {
   const consumerDirectory = join(temporaryRoot, "consumer");
   await cp(CONSUMER_FIXTURE, consumerDirectory, { recursive: true });
+  await cp(SDK_EXAMPLES, join(consumerDirectory, "examples"), { recursive: true });
+  await writeSdkSnippetFixtures(ROOT, matrix, join(consumerDirectory, "snippets"));
   const dependencies = {};
   const overrides = {};
   for (const artifact of artifacts) {
@@ -280,8 +285,8 @@ async function createConsumer(matrix, artifacts, temporaryRoot) {
     dependencies,
     devDependencies: {
       "@types/node": "24.13.3",
-      esbuild: "0.28.2",
-      typescript: "5.9.3",
+      esbuild: matrix.compatibility.esbuild,
+      typescript: matrix.compatibility.typescript,
     },
   }));
   await writeFile(
@@ -301,20 +306,25 @@ async function createConsumer(matrix, artifacts, temporaryRoot) {
     "--outfile=out/node-smoke.mjs",
   ], { cwd: consumerDirectory, stdio: "inherit" });
   run(process.execPath, [join(consumerDirectory, "out", "node-smoke.mjs")], { stdio: "inherit" });
+  runPnpm([
+    "exec", "esbuild", "examples/node-quickstart.ts", "--bundle", "--platform=node", "--format=esm",
+    "--outfile=out/node-quickstart.mjs",
+  ], { cwd: consumerDirectory, stdio: "inherit" });
+  run(process.execPath, [join(consumerDirectory, "out", "node-quickstart.mjs")], { stdio: "inherit" });
 
   await mkdir(join(consumerDirectory, "site"), { recursive: true });
   runPnpm([
-    "exec", "esbuild", "browser-smoke.ts", "--bundle", "--platform=browser", "--format=esm",
+    "exec", "esbuild", "examples/browser-quickstart.ts", "--bundle", "--platform=browser", "--format=esm",
     "--outfile=site/app.js",
   ], { cwd: consumerDirectory, stdio: "inherit" });
   await writeFile(
     join(consumerDirectory, "site", "index.html"),
     "<!doctype html><html><body><script type=\"module\" src=\"/app.js\"></script></body></html>\n",
   );
-  await runBrowserSmoke(join(consumerDirectory, "site"));
+  await runBrowserSmoke(join(consumerDirectory, "site"), matrix.compatibility.browserEngines);
 }
 
-async function runBrowserSmoke(siteDirectory) {
+async function runBrowserSmoke(siteDirectory, browserEngines) {
   const server = createServer(async (request, response) => {
     const path = request.url === "/app.js" ? "app.js" : "index.html";
     try {
@@ -332,23 +342,31 @@ async function runBrowserSmoke(siteDirectory) {
   });
   const address = server.address();
   assert(address && typeof address === "object", "browser smoke server has no address");
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const browserTypes = { chromium, firefox, webkit };
   try {
-    const page = await browser.newPage();
-    const errors = [];
-    page.on("pageerror", (error) => errors.push(error.message));
-    page.on("console", (message) => {
-      if (message.type() === "error") errors.push(message.text());
-    });
-    await page.goto(`http://127.0.0.1:${address.port}/`, { waitUntil: "load" });
-    await page.waitForFunction(() => document.body.dataset.result !== undefined, null, { timeout: 20_000 });
-    const result = await page.locator("body").getAttribute("data-result");
-    const text = await page.locator("body").innerText();
-    assert(result === "pass", `browser consumer failed: ${text}`);
-    assert(errors.length === 0, `browser consumer console errors: ${errors.join("; ")}`);
-    console.log(text);
+    for (const name of browserEngines) {
+      const browserType = browserTypes[name];
+      assert(browserType !== undefined, `unsupported browser engine in package matrix: ${name}`);
+      const browser = await browserType.launch({ headless: true });
+      try {
+        const page = await browser.newPage();
+        const errors = [];
+        page.on("pageerror", (error) => errors.push(error.message));
+        page.on("console", (message) => {
+          if (message.type() === "error") errors.push(message.text());
+        });
+        await page.goto(`http://127.0.0.1:${address.port}/`, { waitUntil: "load" });
+        await page.waitForFunction(() => document.body.dataset.result !== undefined, null, { timeout: 20_000 });
+        const result = await page.locator("body").getAttribute("data-result");
+        const text = await page.locator("body").innerText();
+        assert(result === "pass", `${name} browser consumer failed: ${text}`);
+        assert(errors.length === 0, `${name} browser consumer console errors: ${errors.join("; ")}`);
+        console.log(`${name}: ${text}`);
+      } finally {
+        await browser.close();
+      }
+    }
   } finally {
-    await browser.close();
     await new Promise((resolvePromise) => server.close(resolvePromise));
   }
 }
@@ -368,6 +386,7 @@ async function main() {
   console.log(`sdk: temporary release root ${temporaryRoot}`);
   try {
     await buildPackages(matrix);
+    await syncSdkApiBaseline(ROOT, matrix, options.mode);
     const firstRound = await packRound(matrix, join(temporaryRoot, "round-a"));
     const secondRound = await packRound(matrix, join(temporaryRoot, "round-b"));
     const rootLicense = await readFile(join(ROOT, "LICENSE"));
@@ -388,6 +407,7 @@ async function main() {
       version: matrix.version,
       distTag: matrix.distTag,
       tag: `${matrix.tagPrefix}${matrix.version}`,
+      compatibility: matrix.compatibility,
       packages: packageEvidence,
     };
     const candidate = canonicalJson(releaseManifest);

@@ -1,0 +1,19 @@
+# Default review ownership
+* @shazhou-ww
+
+# Public App-user SDK and release evidence
+/packages/codec/ @shazhou-ww
+/packages/space-protocol/ @shazhou-ww
+/packages/space-client/ @shazhou-ww
+/packages/space-blob-client/ @shazhou-ww
+/packages/space-browser-cache/ @shazhou-ww
+/packages/space-file-client/ @shazhou-ww
+/sdk/ @shazhou-ww
+/scripts/prepare-sdk-release.mjs @shazhou-ww
+/scripts/prepare-npm-release.mjs @shazhou-ww
+/scripts/verify-npm-release.mjs @shazhou-ww
+/.github/workflows/publish-npm.yml @shazhou-ww
+
+# Security and community policy
+/SECURITY.md @shazhou-ww
+/.github/ @shazhou-ww

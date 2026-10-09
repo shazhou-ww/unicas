@@ -52,10 +52,10 @@ export type UniCasServiceRoute =
   | { readonly plane: "app-admin"; readonly route: AppAdminRoute };
 
 export function matchUniCasServiceRoute(request: Request): UniCasServiceRoute | null {
-  const pathname = new URL(request.url).pathname;
-  const spaceRoute = matchAppSpaceRoute(request.method, pathname);
+  const url = new URL(request.url);
+  const spaceRoute = matchAppSpaceRoute(request.method, url.toString());
   if (spaceRoute) return { plane: "space", route: spaceRoute };
-  const appAdminRoute = matchAppAdminRoute(request.method, pathname);
+  const appAdminRoute = matchAppAdminRoute(request.method, url.pathname);
   if (appAdminRoute) return { plane: "app-admin", route: appAdminRoute };
   return null;
 }
@@ -143,7 +143,12 @@ async function dispatchDataRequest(
     }
     headers["X-CAS-Ref-Domain"] = refDomain;
     if (route.operation === "listRootRefs") {
-      const query = new URL(request.url).search;
+      const publicParams = new URL(request.url).searchParams;
+      const params = new URLSearchParams();
+      for (const name of ["limit", "cursor"]) {
+        for (const value of publicParams.getAll(name)) params.append(name, value);
+      }
+      const query = params.size === 0 ? "" : `?${params}`;
       return platform.spaceActors.fetch(actorKey, new Request(
         `https://space.internal/rootRefs${query}`,
         { headers },

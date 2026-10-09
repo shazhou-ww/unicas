@@ -1,6 +1,6 @@
 {
   "name": "@unicas/space-client",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Cloud-neutral HTTP client for the UniCAS App/Space v1 data plane",
   "license": "MIT",
   "sideEffects": false,
@@ -12,7 +12,15 @@
   "bugs": {
     "url": "https://github.com/shazhou-ww/unicas/issues"
   },
-  "homepage": "https://docs.unicas.work/app-user-api/",
+  "homepage": "https://docs.unicas.work/app-user-api/sdk/#space-client",
+  "keywords": [
+    "unicas",
+    "content-addressed-storage",
+    "cas",
+    "http-client",
+    "typescript",
+    "esm"
+  ],
   "engines": {
     "node": ">=24"
   },

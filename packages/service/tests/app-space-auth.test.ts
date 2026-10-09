@@ -21,7 +21,7 @@ import {
 const ISSUER = "https://issuer.example";
 const AUDIENCE = "unicas-cas";
 const APP = "cas_app_a";
-const SPACE = "space-1";
+const SPACE = "/spaces/space-1";
 const APP_ROUTE = {
   operation: "readContent" as const,
   appId: APP,
@@ -86,6 +86,10 @@ function request(token: string): Request {
   });
 }
 
+function grant(permissions: readonly string[], selector = SPACE) {
+  return { selector, permissions };
+}
+
 describe("AppSpaceCapabilityVerifier", () => {
   test("denies every Space operation for a suspended App", async () => {
     const { now, privateKey, appResolver } = await fixture();
@@ -97,15 +101,14 @@ describe("AppSpaceCapabilityVerifier", () => {
     });
     const token = await issue(privateKey, now, {
       ver: SpaceCapabilityVersion,
-      spaceId: SPACE,
-      permissions: [
+      grants: [grant([
         spaceNodeReadPermission(),
         spaceNodeLeasePermission(),
         spaceRootRefsReadPermission(),
         spaceRootRefsUpdatePermission(),
         spaceUsageReadPermission(),
         spaceGcExecutePermission(),
-      ],
+      ])],
       refDomain: "doc",
     });
     const routes: AppSpaceRoute[] = [
@@ -135,8 +138,7 @@ describe("AppSpaceCapabilityVerifier", () => {
     });
     const token = await issue(privateKey, now, {
       ver: SpaceCapabilityVersion,
-      spaceId: SPACE,
-      permissions: [spaceNodeReadPermission()],
+      grants: [grant([spaceNodeReadPermission()])],
     });
     await expect(verifier.verify(request(token), APP_ROUTE)).resolves.toBeDefined();
     authority = { ...authority, appStatus: "suspended" };
@@ -160,8 +162,7 @@ describe("AppSpaceCapabilityVerifier", () => {
     };
     const token = await issue(privateKey, now, {
       ver: SpaceCapabilityVersion,
-      spaceId: SPACE,
-      permissions: [spaceNodeReadPermission()],
+      grants: [grant([spaceNodeReadPermission()])],
     });
     const refreshed = new AppSpaceCapabilityVerifier({ repository, now: () => currentTime });
     const stale = new AppSpaceCapabilityVerifier({ repository, now: () => currentTime });
@@ -193,8 +194,7 @@ describe("AppSpaceCapabilityVerifier", () => {
     });
     const token = await issue(privateKey, now, {
       ver: SpaceCapabilityVersion,
-      spaceId: SPACE,
-      permissions: [spaceNodeReadPermission()],
+      grants: [grant([spaceNodeReadPermission()])],
     });
     await expect(verifier.verify(request(token), APP_ROUTE)).resolves.toBeDefined();
     authority = { ...authority, appStatus: "suspended" };
@@ -215,8 +215,7 @@ describe("AppSpaceCapabilityVerifier", () => {
     });
     const token = await issue(privateKey, now, {
       ver: SpaceCapabilityVersion,
-      spaceId: SPACE,
-      permissions: [spaceNodeReadPermission()],
+      grants: [grant([spaceNodeReadPermission()])],
     });
 
     await expect(verifier.verify(request(token), APP_ROUTE)).resolves.toMatchObject({
@@ -227,13 +226,72 @@ describe("AppSpaceCapabilityVerifier", () => {
     });
     await expect(verifier.verify(request(token), { ...APP_ROUTE, appId: "other-app" }))
       .rejects.toMatchObject({ status: 403, code: "resource_scope_mismatch" });
-    await expect(verifier.verify(request(token), { ...APP_ROUTE, spaceId: "other-space" }))
+    await expect(verifier.verify(request(token), { ...APP_ROUTE, spaceId: "/spaces/other-space" }))
       .rejects.toMatchObject({ status: 403, code: "resource_scope_mismatch" });
     await expect(verifier.verify(request(token), {
       operation: "gc",
       appId: APP,
       spaceId: SPACE,
     })).rejects.toMatchObject({ status: 403, code: "insufficient_permission" });
+  });
+
+  test("evaluates exact, non-recursive suffix, and recursive grants without permission leakage", async () => {
+    const { now, privateKey, appResolver } = await fixture();
+    const verifier = new AppSpaceCapabilityVerifier({ repository: appResolver, now: () => now });
+    const token = await issue(privateKey, now, {
+      ver: SpaceCapabilityVersion,
+      grants: [
+        grant([spaceNodeLeasePermission()]),
+        grant([spaceNodeReadPermission()], "/shared/report-*"),
+        grant([spaceNodeReadPermission()], "/archive/**"),
+      ],
+    });
+    const authorized = request(token);
+    const hash = "d".repeat(64);
+
+    await expect(verifier.verify(authorized, {
+      operation: "lease",
+      appId: APP,
+      spaceId: SPACE,
+      hash,
+    })).resolves.toMatchObject({ permissions: [spaceNodeLeasePermission()] });
+    await expect(verifier.verify(authorized, {
+      operation: "readContent",
+      appId: APP,
+      spaceId: "/shared/report-2026",
+      hash,
+    })).resolves.toBeDefined();
+    await expect(verifier.verify(authorized, {
+      operation: "readMetadata",
+      appId: APP,
+      spaceId: "/archive/2026/q4",
+      hash,
+    })).resolves.toBeDefined();
+    await expect(verifier.verify(authorized, {
+      operation: "lease",
+      appId: APP,
+      spaceId: "/shared/report-2026",
+      hash,
+    })).rejects.toMatchObject({ status: 403, code: "insufficient_permission" });
+    await expect(verifier.verify(authorized, {
+      operation: "readContent",
+      appId: APP,
+      spaceId: "/shared/report-2026/draft",
+      hash,
+    })).rejects.toMatchObject({ status: 403, code: "resource_scope_mismatch" });
+  });
+
+  test.each([
+    { grants: [] },
+    { grants: [{ selector: "not-absolute", permissions: [spaceNodeReadPermission()] }] },
+    { grants: [{ selector: SPACE, permissions: [] }] },
+    { grants: [{ selector: SPACE, permissions: ["cas:unknown"] }] },
+  ])("rejects malformed capability grants %#", async ({ grants }) => {
+    const { now, privateKey, appResolver } = await fixture();
+    const verifier = new AppSpaceCapabilityVerifier({ repository: appResolver, now: () => now });
+    const token = await issue(privateKey, now, { ver: SpaceCapabilityVersion, grants });
+    await expect(verifier.verify(request(token), APP_ROUTE))
+      .rejects.toMatchObject({ status: 401, code: "invalid_token" });
   });
 
   test("enforces the exact Space permission for every operation", async () => {
@@ -257,8 +315,7 @@ describe("AppSpaceCapabilityVerifier", () => {
     for (const entry of cases) {
       const token = await issue(privateKey, now, {
         ver: SpaceCapabilityVersion,
-        spaceId: SPACE,
-        permissions: [entry.permission],
+        grants: [grant([entry.permission])],
         ...(entry.refDomain === undefined ? {} : { refDomain: entry.refDomain }),
       });
       await expect(verifier.verify(request(token), entry.route)).resolves.toBeDefined();
@@ -320,8 +377,7 @@ describe("AppSpaceCapabilityVerifier", () => {
     for (const entry of cases) {
       const token = await issue(privateKey, now, {
         ver: SpaceCapabilityVersion,
-        spaceId: SPACE,
-        permissions: [entry.permission],
+        grants: [grant([entry.permission])],
         ...(entry.refDomain === undefined ? {} : { refDomain: entry.refDomain }),
       });
       await expect(verifier.verify(request(token), entry.allowed)).resolves.toBeDefined();
@@ -348,8 +404,7 @@ describe("AppSpaceCapabilityVerifier", () => {
       for (const refDomain of [undefined, "Bad Domain", "_reserved"]) {
         const token = await issue(privateKey, now, {
           ver: SpaceCapabilityVersion,
-          spaceId: SPACE,
-          permissions: [entry.permission],
+          grants: [grant([entry.permission])],
           ...(refDomain === undefined ? {} : { refDomain }),
         });
         await expect(verifier.verify(request(token), entry.route))
@@ -358,13 +413,12 @@ describe("AppSpaceCapabilityVerifier", () => {
     }
   });
 
-  test.each([2, 3])("rejects prototype Space capability version %s", async (version) => {
+  test.each([1, 3])("rejects unsupported Space capability version %s", async (version) => {
     const { now, privateKey, appResolver } = await fixture();
     const verifier = new AppSpaceCapabilityVerifier({ repository: appResolver, now: () => now });
     const token = await issue(privateKey, now, {
       ver: version,
-      spaceId: SPACE,
-      permissions: [spaceNodeReadPermission()],
+      grants: [grant([spaceNodeReadPermission()])],
     });
     await expect(verifier.verify(request(token), APP_ROUTE))
       .rejects.toMatchObject({ status: 401, code: "invalid_token" });
@@ -375,8 +429,7 @@ describe("AppSpaceCapabilityVerifier", () => {
     const verifier = new AppSpaceCapabilityVerifier({ repository: appResolver, now: () => now });
     const token = await issue(privateKey, now, {
       ver: SpaceCapabilityVersion,
-      spaceId: SPACE,
-      permissions: [`spaces:${SPACE}:cas:read`],
+      grants: [grant([`spaces:${SPACE}:cas:read`])],
     });
     await expect(verifier.verify(request(token), APP_ROUTE))
       .rejects.toMatchObject({ status: 401, code: "invalid_token" });
@@ -400,8 +453,7 @@ describe("AppSpaceCapabilityVerifier", () => {
     const verifier = new AppSpaceCapabilityVerifier({ repository: appResolver, now: () => now });
     const token = await issue(privateKey, now, {
       ver: SpaceCapabilityVersion,
-      spaceId: SPACE,
-      permissions: [`tenants:${SPACE}:cas:read`],
+      grants: [grant([`tenants:${SPACE}:cas:read`])],
     });
     await expect(verifier.verify(request(token), APP_ROUTE))
       .rejects.toMatchObject({ status: 401, code: "invalid_token" });

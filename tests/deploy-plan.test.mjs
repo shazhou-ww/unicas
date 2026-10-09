@@ -54,6 +54,10 @@ const RECOVERY_WORKFLOW = readFileSync(
   join(ROOT, ".github/workflows/recover-spaces.yml"),
   "utf8",
 );
+const DOCS_WORKFLOW = readFileSync(
+  join(ROOT, ".github/workflows/deploy-docs.yml"),
+  "utf8",
+);
 const DEPLOYMENT_GUIDE = readFileSync(
   join(ROOT, "packages/docs-site/content/deployment-and-local-configuration.md"),
   "utf8",
@@ -407,11 +411,10 @@ describe("standalone deployment plan", () => {
     expect(job).not.toMatch(/^\s+run: pnpm deploy:docs\r?$/m);
   });
 
-  test("uses the canonical standard and strict-superset release validations", () => {
+  test("keeps validation authoritative at release and explicit preflight boundaries", () => {
     const job = validationJob();
-    expect(job).toContain("run: pnpm validate");
     expect(job).toContain("run: pnpm validate:release");
-    expect(job).toContain("github.ref != 'refs/heads/release'");
+    expect(job).not.toMatch(/^\s+run: pnpm validate\r?$/mu);
     expect(job).toContain("github.ref == 'refs/heads/release'");
     expect(job).toContain("github.event_name == 'workflow_dispatch'");
     expect(job).toContain(
@@ -434,10 +437,7 @@ describe("standalone deployment plan", () => {
     expect(ROOT_PACKAGE.scripts["validate:release"]).toContain("pnpm sdk:artifacts");
     expect(ROOT_PACKAGE.scripts["validate:release"]).toContain("test:browser");
     expect(ROOT_PACKAGE.scripts["validate:release"]).toContain("wrangler deploy --dry-run");
-    expect(CI_WORKFLOW).toContain(
-      "if: github.event_name == 'push' && github.ref == 'refs/heads/main'",
-    );
-    expect(CI_WORKFLOW).toContain("run: pnpm check:ideas:remote");
+    expect(CI_WORKFLOW).not.toContain("run: pnpm check:ideas:remote");
     expect(CI_WORKFLOW).toContain("DOCS_SOURCE_REVISION: ${{ github.sha }}");
   });
 
@@ -551,9 +551,72 @@ describe("standalone deployment plan", () => {
     expect(job).toContain("if: ${{ always() && inputs.action == 'principals' }}");
   });
 
-  test("does not run validation for tag pushes", () => {
+  test("isolates documentation deployment behind exact-primary Production review", () => {
+    const workflow = DOCS_WORKFLOW;
+    const checkout = workflow.indexOf("- name: Check out requested revision");
+    const verify = workflow.indexOf("- name: Verify exact authoritative primary revision");
+    const install = workflow.indexOf("- name: Install dependencies");
+    const deploy = workflow.indexOf("- name: Deploy documentation");
+    const smoke = workflow.indexOf("- name: Verify documentation routes and source revision");
+
+    expect(workflow).toMatch(/on:\r?\n\s+workflow_dispatch:/u);
+    expect(workflow).not.toMatch(/\n\s+push:/u);
+    expect(workflow).not.toMatch(/\n\s+pull_request:/u);
+    expect(workflow).toContain("description: Full lowercase commit SHA equal to current main");
+    expect(workflow).toContain('[[ "$REVISION" =~ ^[0-9a-f]{40}$ ]]');
+    expect(checkout).toBeGreaterThan(-1);
+    expect(verify).toBeGreaterThan(checkout);
+    expect(install).toBeGreaterThan(verify);
+    expect(workflow).toContain('test "$(git rev-parse HEAD)" = "$REVISION"');
+    expect(workflow).toContain("git fetch --no-tags origin main:refs/remotes/origin/main");
+    expect(workflow).toContain('test "$(git rev-parse origin/main)" = "$REVISION"');
+    expect(workflow).not.toContain("git merge-base --is-ancestor");
+
+    expect(workflow).toContain("environment: Production");
+    expect(workflow.match(/contents: read/gu)).toHaveLength(2);
+    expect(workflow).not.toContain("id-token:");
+    expect(workflow).toContain("group: unicas-production");
+    expect(workflow).toContain("queue: max");
+    expect(workflow).toContain("cancel-in-progress: false");
+    expect(workflow).toContain("persist-credentials: false");
+
+    expect(workflow).toContain("pnpm check:ideas:commit");
+    expect(workflow).toContain("pnpm --filter @unicas/docs-site test");
+    expect(workflow).toContain("pnpm --filter @unicas/docs-site typecheck");
+    expect(workflow).toContain("pnpm --filter @unicas/docs-site test:browser");
+    expect(workflow).toContain("run: pnpm deploy:docs:plan");
+    expect(workflow).toContain("run: pnpm deploy:docs");
+    expect(deploy).toBeGreaterThan(install);
+    expect(smoke).toBeGreaterThan(deploy);
+    expect(workflow.match(/^\s+CLOUDFLARE_API_TOKEN:/gmu)).toHaveLength(1);
+    expect(workflow).toContain("DOCS_SOURCE_REVISION: ${{ inputs.revision }}");
+    expect(workflow).toContain("https://docs.unicas.work/artifact-manifest.json");
+    for (const path of [
+      "/app-user-api/sdk/",
+      "/app-user-api/quickstart/",
+      "/app-user-api/compatibility/",
+      "/app-user-api/sdk-reference/",
+      "/app-user-api/versioning/",
+      "/app-user-api/changelog/",
+      "/app-user-api/troubleshooting/",
+    ]) expect(workflow).toContain(`https://docs.unicas.work${path}`);
+
+    for (const forbidden of [
+      "pnpm deploy:production",
+      "pnpm deploy:spaces",
+      "pnpm deploy:site",
+      "npm publish",
+      "git tag",
+      "git push",
+    ]) expect(workflow).not.toContain(forbidden);
+  });
+
+  test("runs validation only for release pushes and manual preflight", () => {
     const triggers = workflowTriggers();
-    expect(triggers).toMatch(/push:\r?\n\s+branches:\r?\n\s+- "\*\*"/);
+    expect(triggers).toMatch(/push:\r?\n\s+branches:\r?\n\s+- release/);
+    expect(triggers).toContain("workflow_dispatch:");
+    expect(triggers).not.toContain("pull_request:");
+    expect(triggers).not.toContain('      - "**"');
     expect(triggers).not.toContain("tags:");
   });
 
@@ -1085,7 +1148,7 @@ describe("standalone deployment plan", () => {
         stack_id: stackId,
         mode: "external",
         issuer: "https://unicas.work/deploy-smoke",
-        audience: `https://api.unicas.work/v1/apps/${stackId}`,
+        audience: "https://api.unicas.work/v1/cas/",
         metadata_url: "https://unicas.work/.well-known/oauth-authorization-server/deploy-smoke",
         metadata_type: "oauth",
         authorization_endpoint: "https://unicas.work/deploy-smoke/authorize",
@@ -1207,7 +1270,7 @@ describe("standalone deployment plan", () => {
         stack_id: "cas_smoke",
         mode: "external",
         issuer: "https://unicas.work/deploy-smoke",
-        audience: "https://api.unicas.work/v1/apps/cas_smoke",
+        audience: "https://api.unicas.work/v1/cas/",
         metadata_url: "https://unicas.work/.well-known/oauth-authorization-server/deploy-smoke",
         metadata_type: "oauth",
         authorization_endpoint: "https://unicas.work/deploy-smoke/authorize",
@@ -1257,7 +1320,7 @@ describe("standalone deployment plan", () => {
       });
       expect(database.prepare("SELECT issuer, audience, status FROM cas_app_oauth_issuers").get()).toEqual({
         issuer: "https://unicas.work/deploy-smoke",
-        audience: "https://api.unicas.work/v1/apps/cas_smoke",
+        audience: "https://api.unicas.work/v1/cas/",
         status: "active",
       });
       expect(database.prepare("SELECT COUNT(*) AS count FROM cas_platform_audit_events").get()).toEqual({ count: 2 });

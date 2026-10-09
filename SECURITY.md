@@ -20,4 +20,26 @@ fix and disclosure plan are ready.
 
 ## Supported versions
 
-Until the first tagged release, only the latest commit on `main` is supported.
+| Version | Support |
+| --- | --- |
+| Latest `0.1.x` App-user SDK patch | Supported |
+| Earlier `0.1.x` patches | Upgrade required before a fix is prepared |
+| `0.1.0-beta.1` and older prereleases | Not supported |
+| Latest `main` service revision | Evaluated for unreleased service defects |
+
+Package support is limited to the runtime and toolchain matrix documented at
+<https://docs.unicas.work/app-user-api/compatibility/>. Retired Stack/Tenant
+clients and APIs are not supported.
+
+## Response and disclosure
+
+Maintenance is best-effort rather than an SLA. The maintainers target an
+acknowledgement within three business days and an initial assessment within
+seven business days. Complex reports, upstream coordination, or maintainer
+availability may require more time.
+
+Please keep the report private until maintainers agree on a disclosure plan.
+When a supported release is affected, the project will prepare a reviewed fix,
+record security impact in the App-user SDK changelog or service release notes,
+and use the existing immutable release and provenance process. Published
+versions are never silently replaced.

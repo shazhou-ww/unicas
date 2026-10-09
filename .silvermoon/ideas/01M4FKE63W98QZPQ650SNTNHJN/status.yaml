@@ -1,0 +1,6 @@
+version: 1
+id: 01M4FKE63W98QZPQ650SNTNHJN
+alias: release-gated-ci
+approvedRevision: 50d31809775730ea684075a49e15d25a961728bd
+implementationAcceptedRevision: f1e4991876155c55e2515b575a5617de2a89f5fb
+deploymentAcceptedRevision: 5ed4990e33f2d9c6fa450ecd15c46ab7b3a7300f

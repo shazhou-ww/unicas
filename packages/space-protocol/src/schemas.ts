@@ -1,3 +1,4 @@
+import { JSON_SCHEMA_INPUT_REGISTRY } from "@orpc/zod/zod4";
 import { z } from "zod";
 import type {
   AppId,
@@ -19,13 +20,19 @@ import type {
   Space,
   SpaceId,
 } from "./types.js";
+import {
+  SPACE_ID_MAX_LENGTH,
+  SPACE_ID_PATTERN,
+} from "./space-id.js";
 
 export const AppIdSchema: z.ZodType<AppId> = z.string().min(1)
   .describe("Opaque UniCAS-generated App identifier.")
   .meta({ id: "AppId" });
 
-export const SpaceIdSchema: z.ZodType<SpaceId> = z.string().min(1)
-  .describe("App-scoped logical data ownership and authorization identifier.")
+export const SpaceIdSchema: z.ZodType<SpaceId> = z.string()
+  .max(SPACE_ID_MAX_LENGTH)
+  .regex(SPACE_ID_PATTERN)
+  .describe("Canonical slash-prefixed App-scoped data ownership and authorization path.")
   .meta({ id: "SpaceId" });
 
 export const SpaceSchema: z.ZodType<Space> = z.object({
@@ -35,7 +42,7 @@ export const SpaceSchema: z.ZodType<Space> = z.object({
 
 export const CasHashSchema: z.ZodType<CasHash> = z.string()
   .regex(/^[0-9a-f]{64}$/, "Expected a lowercase SHA-256 digest")
-  .describe("Lowercase hexadecimal SHA-256 digest of the canonical node bytes. The digest is the immutable node identity within a tenant.")
+  .describe("Lowercase hexadecimal SHA-256 digest of the canonical node bytes. The digest is the immutable node identity within a Space.")
   .meta({ id: "CasHash" });
 
 const TimestampSchema = z.number().int().nonnegative()
@@ -97,15 +104,49 @@ export const CasReferencesSchema: z.ZodType<CasReferences> =
     .describe("Reference counts keyed by child node digest.")
     .meta({ id: "CasReferences" });
 
+export const CAS_MAX_REQUEST_ID_LENGTH = 256;
+export const CAS_MAX_ROOT_REF_CHANGES = 1_000;
+export const CAS_MAX_ROOT_REF_DELTA = 1_000_000;
+
 export const CasRefChangesSchema: z.ZodType<CasRefChanges> =
   z.record(CasHashSchema, z.number().int()).readonly()
+    .refine(
+      (changes) => {
+        const deltas = Object.values(changes);
+        return deltas.length >= 1
+          && deltas.length <= CAS_MAX_ROOT_REF_CHANGES
+          && deltas.every(
+            delta => Number.isSafeInteger(delta)
+              && delta !== 0
+              && Math.abs(delta) <= CAS_MAX_ROOT_REF_DELTA,
+          );
+      },
+      `Expected 1 to ${CAS_MAX_ROOT_REF_CHANGES} non-zero safe-integer deltas with an absolute value no greater than ${CAS_MAX_ROOT_REF_DELTA}`,
+    )
     .describe("Signed, non-zero Root Ref deltas keyed by node digest. Positive values acquire references; negative values release them.")
     .meta({ id: "CasRefChanges" });
 
+JSON_SCHEMA_INPUT_REGISTRY.add(CasRefChangesSchema, {
+  type: "object",
+  minProperties: 1,
+  maxProperties: CAS_MAX_ROOT_REF_CHANGES,
+  propertyNames: {
+    type: "string",
+    pattern: "^[0-9a-f]{64}$",
+  },
+  additionalProperties: {
+    type: "integer",
+    minimum: -CAS_MAX_ROOT_REF_DELTA,
+    maximum: CAS_MAX_ROOT_REF_DELTA,
+    not: { const: 0 },
+  },
+  description: "One to 1,000 non-zero signed Root Ref deltas keyed by lowercase SHA-256 digest.",
+});
+
 export const CasRootRefUpdateSchema: z.ZodType<CasRootRefUpdate> = z.object({
-  requestId: z.string().min(1)
+  requestId: z.string().min(1).max(CAS_MAX_REQUEST_ID_LENGTH)
     .describe("Stable caller-generated idempotency identity. Retrying the same requestId with the same changes returns the original result."),
-  changes: CasRefChangesSchema.describe("Complete atomic set of Root Ref balance changes for this commit."),
+  changes: CasRefChangesSchema,
 }).readonly().meta({ id: "CasRootRefUpdate" });
 
 export const CasRootRefBalanceSchema: z.ZodType<CasRootRefBalance> = z.object({
@@ -121,7 +162,7 @@ export const CasRootRefsPageSchema: z.ZodType<CasRootRefsPage> = z.object({
 }).readonly().meta({ id: "CasRootRefsPage" });
 
 export const CasUsageSchema: z.ZodType<CasUsage> = z.object({
-  nodeCount: z.number().int().nonnegative().describe("Total node metadata rows owned by the tenant."),
+  nodeCount: z.number().int().nonnegative().describe("Total node metadata rows owned by the Space."),
   readyContentBytes: z.number().int().nonnegative().describe("Logical bytes of nodes whose canonical content is ready."),
   readyStoredBytes: z.number().int().nonnegative().describe("Physical stored bytes attributed to ready node content."),
   reservedBytes: z.number().int().nonnegative().describe("Bytes reserved by incomplete uploads."),

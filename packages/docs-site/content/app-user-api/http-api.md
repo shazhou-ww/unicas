@@ -9,10 +9,11 @@ the [interactive Scalar API reference](/app-user-api/reference/).
 
 Base origin: `https://api.unicas.work`
 
-Every route is scoped by both `appId` and `spaceId`:
+Every route uses the unified CAS v1 base and is scoped by required query
+`appId` and `spaceId`:
 
 ```text
-/v1/apps/{appId}/spaces/{spaceId}/...
+/v1/cas/...?appId={appId}&spaceId={spaceId}
 ```
 
 Send a Space capability through the HTTP bearer authentication scheme:
@@ -21,13 +22,21 @@ Send a Space capability through the HTTP bearer authentication scheme:
 Authorization: Bearer CAPABILITY
 ```
 
-The HTTP API and Space capability claim both use family-local version `1`: the signed
-`spaceId` must match the route and `permissions` must contain the operation's
-exact authority.
+The HTTP path version is `v1`; the independent Space capability version is
+`2`. At least one signed grant must both select the query Space and contain the
+operation's exact authority. Production tokens use the shared CAS v1 audience
+`https://api.unicas.work/v1/cas/`; the verified issuer, not the shared
+audience, determines the owning App.
 
-`appId` and `spaceId` are non-empty strings. A node `hash` is exactly 64
-lowercase hexadecimal characters. JSON requests use `application/json`.
-Canonical node bytes use `application/vnd.unidocs.cas-node.v1`.
+`appId` is a required non-empty opaque identifier. The service compares it to
+the App authority resolved from the verified issuer; it never grants authority
+by trusting the query value. `spaceId` is a case-sensitive canonical path of at
+most 256 characters: it begins with `/`, has non-empty segments, and each
+segment contains only ASCII letters, digits, `_`, or `-`. Send both values
+through a URL query encoder; `/users/u_123` is normally serialized as
+`spaceId=%2Fusers%2Fu_123`. A node `hash` is exactly 64 lowercase hexadecimal
+characters. JSON requests use `application/json`. Canonical node bytes use
+`application/vnd.unidocs.cas-node.v1`.
 
 The generated OpenAPI declares the bearer JWT security scheme globally rather
 than modeling `Authorization` as an ordinary operation header.
@@ -36,13 +45,13 @@ than modeling `Authorization` as an ordinary operation header.
 
 | Client operation | Method and path | Authority | Success |
 | --- | --- | --- | --- |
-| `readContent` | `GET /v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/content` | `cas:nodes:read` | Streamed canonical bytes |
-| `readMetadata` | `GET /v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/metadata` | `cas:nodes:read` | Metadata and retention state |
-| `leaseNode` | `POST /v1/apps/{appId}/spaces/{spaceId}/cas/nodes/{hash}/lease` | `cas:nodes:lease` | Ready lease or direct-upload instructions |
-| `usage` | `GET /v1/apps/{appId}/spaces/{spaceId}/cas/usage` | `cas:usage:read` | Space accounting |
-| `gc` | `POST /v1/apps/{appId}/spaces/{spaceId}/cas/gc` | `cas:gc:execute` | Bounded collection result |
-| `listRootRefs` | `GET /v1/apps/{appId}/spaces/{spaceId}/root-refs` | `cas:root-refs:read` + `refDomain` | Revision-stable page |
-| `updateRootRefs` | `POST /v1/apps/{appId}/spaces/{spaceId}/root-refs` | `cas:root-refs:update` + `refDomain` | Atomic commit result |
+| `readContent` | `GET /v1/cas/nodes/{hash}?appId={appId}&spaceId={spaceId}` | `cas:nodes:read` | Streamed canonical bytes |
+| `readMetadata` | `GET /v1/cas/nodes/{hash}/metadata?appId={appId}&spaceId={spaceId}` | `cas:nodes:read` | Metadata and retention state |
+| `leaseNode` | `POST /v1/cas/nodes/{hash}/lease?appId={appId}&spaceId={spaceId}` | `cas:nodes:lease` | Ready lease or direct-upload instructions |
+| `usage` | `GET /v1/cas/usage?appId={appId}&spaceId={spaceId}` | `cas:usage:read` | Space accounting |
+| `gc` | `POST /v1/cas/gc?appId={appId}&spaceId={spaceId}` | `cas:gc:execute` | Bounded collection result |
+| `listRootRefs` | `GET /v1/cas/root-refs?appId={appId}&spaceId={spaceId}` | `cas:root-refs:read` + `refDomain` | Revision-stable page |
+| `updateRootRefs` | `POST /v1/cas/root-refs?appId={appId}&spaceId={spaceId}` | `cas:root-refs:update` + `refDomain` | Atomic commit result |
 
 There are no other public v1 Space operations in the current generated
 OpenAPI.
@@ -50,7 +59,7 @@ OpenAPI.
 ## Read node content
 
 ```http
-GET /v1/apps/APP_ID/spaces/SPACE_ID/cas/nodes/HASH/content
+GET /v1/cas/nodes/HASH?appId=APP_ID&spaceId=%2Fusers%2Fu_123
 Authorization: Bearer CAPABILITY
 Range: bytes=0-1023
 ```
@@ -96,7 +105,7 @@ honor cancellation.
 ## Read node metadata
 
 ```http
-GET /v1/apps/APP_ID/spaces/SPACE_ID/cas/nodes/HASH/metadata
+GET /v1/cas/nodes/HASH/metadata?appId=APP_ID&spaceId=%2Fusers%2Fu_123
 Authorization: Bearer CAPABILITY
 ```
 
@@ -126,7 +135,7 @@ and may use configured metadata caching.
 ## Lease or upload a node
 
 ```http
-POST /v1/apps/APP_ID/spaces/SPACE_ID/cas/nodes/HASH/lease
+POST /v1/cas/nodes/HASH/lease?appId=APP_ID&spaceId=%2Fusers%2Fu_123
 Authorization: Bearer CAPABILITY
 content-type: application/json
 
@@ -181,7 +190,7 @@ retry the same lease after active upload work has drained.
 ## Get Space usage
 
 ```http
-GET /v1/apps/APP_ID/spaces/SPACE_ID/cas/usage
+GET /v1/cas/usage?appId=APP_ID&spaceId=%2Fusers%2Fu_123
 Authorization: Bearer CAPABILITY
 ```
 
@@ -205,7 +214,7 @@ values may change concurrently.
 ## Run bounded garbage collection
 
 ```http
-POST /v1/apps/APP_ID/spaces/SPACE_ID/cas/gc
+POST /v1/cas/gc?appId=APP_ID&spaceId=%2Fusers%2Fu_123
 Authorization: Bearer CAPABILITY
 Content-Type: application/json
 
@@ -237,7 +246,7 @@ client retry is defined.
 ## List Root Refs
 
 ```http
-GET /v1/apps/APP_ID/spaces/SPACE_ID/root-refs?limit=100&cursor=CURSOR
+GET /v1/cas/root-refs?appId=APP_ID&spaceId=%2Fusers%2Fu_123&limit=100&cursor=CURSOR
 Authorization: Bearer CAPABILITY
 ```
 
@@ -245,6 +254,8 @@ Query:
 
 | Name | Constraint |
 | --- | --- |
+| `appId` | Required App target; must match the verified issuer authority |
+| `spaceId` | Required canonical Space ID |
 | `limit` | Optional integer from 1 through 200 |
 | `cursor` | Optional non-empty opaque string |
 
@@ -272,7 +283,7 @@ same capability domain. Pages are revision-stable.
 ## Atomically update Root Refs
 
 ```http
-POST /v1/apps/APP_ID/spaces/SPACE_ID/root-refs
+POST /v1/cas/root-refs?appId=APP_ID&spaceId=%2Fusers%2Fu_123
 Authorization: Bearer CAPABILITY
 Content-Type: application/json
 
@@ -319,44 +330,52 @@ The shared contract and generated OpenAPI document:
 }
 ```
 
-Only `error` is required by OpenAPI. The shared operation error map is:
+Only `error` is required by OpenAPI. Stable public values are:
 
-| Status | Contract error |
+| Status | Stable `error` values |
 | --- | --- |
-| `400` | `INVALID_REQUEST` |
-| `401` | `UNAUTHORIZED` |
-| `403` | `FORBIDDEN` |
-| `404` | `NOT_FOUND` |
-| `409` | `CONFLICT` |
+| `400` | `INVALID_REQUEST`, `ROOT_REF_INVALID` |
+| `401` | `missing_token`, `invalid_token`, `unknown_issuer`, `registry_unavailable` |
+| `403` | `insufficient_permission`, `resource_scope_mismatch`, `unsupported_algorithm`, `registry_unavailable`, `APP_SUSPENDED`, `ROOT_REF_INVALID` |
+| `404` | `NODE_NOT_FOUND` |
+| `409` | `NODE_CONFLICT`, `NODE_NOT_READY`, `NEGATIVE_AGGREGATE`, `IDEMPOTENCY_CONFLICT` |
 | `413` | `PAYLOAD_TOO_LARGE` |
-| `429` | `RESOURCE_EXHAUSTED` |
-| `503` | `SERVICE_UNAVAILABLE` |
+| `416` | `INVALID_REQUEST` for an invalid or unsatisfiable `readContent` range |
+| `429` | `CAS_UPLOAD_LIMIT` |
+| `503` | `STORAGE_ERROR`, `ROOT_REF_BUSY`, `SERVICE_UNAVAILABLE` |
 
-The service returns more specific stable authorization codes such as
-`missing_token`, `invalid_token`, `unknown_issuer`, `registry_unavailable`,
-`unsupported_algorithm`, `APP_SUSPENDED`, `resource_scope_mismatch`, and
-`insufficient_permission`. Upload and Root Ref validation likewise use specific
-codes described above. Callers should branch on the stable `error` code and
-treat `message` as optional diagnostic text.
+Callers should branch on the stable `error` value and treat `message` as
+optional safe diagnostic text. `CasClientError.code` preserves `error` when a
+JSON envelope is present.
 
-## Contract gaps
+Lease results also have typed `rejection.code` values:
+`NODE_TOO_LARGE`, `NODE_DIGEST_MISMATCH`, `INVALID_CANONICAL_NODE`, and
+`NODE_CONFLICT`. These are successful lease-state responses, not error
+envelopes.
 
-The current sources have known representational gaps:
+## Contract alignment
 
-1. The TypeScript contract models `readContent` as
-   `ReadableStream<Uint8Array>` using the canonical media type, while its
-   generated OpenAPI `200` response has empty `content`.
-2. Runtime and the public client support byte ranges, but the TypeScript
-   operation inputs and generated OpenAPI do not declare `Range`, `206`, `416`,
-   or response headers.
-3. OpenAPI declares a bearer JWT scheme and says the Space and permission must
-   match, but capability claims and per-operation permissions are descriptive,
-   not machine-modeled OpenAPI scopes.
-4. Runtime validation is intentionally stricter in several workflows, including
-   inline upload length, Root Ref canonicalization and bounds, and specific
-   error codes.
+The TypeScript contract and generated OpenAPI now describe the existing runtime
+behavior without changing it:
 
-Integrators must not infer new routes or fields from these gaps. The
+1. `readContent` declares the canonical binary media type, optional `Range`,
+   `200`, `206`, `416`, and all public response headers.
+2. `components.schemas.SpaceCapabilityClaims` describes the signed JWT claims.
+   `x-unicas-capability` links that schema and explicitly states that
+   permissions are not OAuth scopes.
+3. Every public operation has `x-unicas-authorization` with its exact
+   permission and required signed claims; Root Ref operations also link the
+   `SpaceRefDomainClaim` constraint.
+4. Root Ref request limits and stable error values come from shared
+   protocol-owned constants used by the runtime or checked by focused tests.
+
+The normative upload contract is the lease request, its typed state/rejection
+response, and the exact direct-upload method, URL, and headers returned by the
+service. Temporary object keys, upload generations, presigner credentials,
+repository retries, physical offsets, cache refresh telemetry, and storage log
+details are implementation diagnostics. They are intentionally absent from the
+public contract and must not be inferred as routes, fields, or recovery APIs.
+
+The
 [generated OpenAPI](../../../space-protocol/openapi/app-space-v1.openapi.json)
-remains the operation inventory, and runtime-only behavior above is supported
-by service tests.
+remains the complete public operation inventory.

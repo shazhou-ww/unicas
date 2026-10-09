@@ -4,6 +4,7 @@ import {
   CapabilityAlgorithm,
   CapabilityTokenType,
   SpaceCapabilityVersion,
+  parseSpaceSelector,
   spaceGcExecutePermission,
   spaceNodeLeasePermission,
   spaceNodeReadPermission,
@@ -44,6 +45,10 @@ export async function issueSpaceCapability(
   }
   if (access.includes("manage")) permissions.push(spaceUsageReadPermission(), spaceGcExecutePermission());
   if (permissions.length === 0) throw new TypeError("At least one Space access permission is required");
+  const selector = parseSpaceSelector(principal.spaceId);
+  if (!selector || selector.kind !== "exact") {
+    throw new TypeError("Principal spaceId must be a canonical exact Space ID");
+  }
 
   let importedKey = keyCache.get(config.privateKeyPem);
   if (!importedKey) {
@@ -53,8 +58,7 @@ export async function issueSpaceCapability(
   const privateKey = await importedKey;
   return new SignJWT({
     ver: SpaceCapabilityVersion,
-    spaceId: principal.spaceId,
-    permissions,
+    grants: [{ selector: selector.selector, permissions }],
     refDomain: principal.refDomain,
   })
     .setProtectedHeader({ alg: CapabilityAlgorithm, kid: config.keyId, typ: CapabilityTokenType })

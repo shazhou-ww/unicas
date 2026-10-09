@@ -3,7 +3,7 @@
  *
  * Usage: node scripts/cas-app-space-smoke.mjs [baseUrl]
  * Required: UNICAS_SMOKE_APP_ID/ISSUER/AUDIENCE/KID/KEY_FILE.
- * Optional: UNICAS_SMOKE_SPACE_ID (defaults to deploy-smoke).
+ * Optional: UNICAS_SMOKE_SPACE_ID (defaults to /deploy-smoke).
  */
 
 import { readFile } from "node:fs/promises";
@@ -22,6 +22,7 @@ import {
   CapabilityAlgorithm,
   CapabilityTokenType,
   SpaceCapabilityVersion,
+  appSpaceRoutes,
   spaceGcExecutePermission,
   spaceNodeLeasePermission,
   spaceNodeReadPermission,
@@ -39,7 +40,7 @@ const ISSUER = requiredEnv("UNICAS_SMOKE_ISSUER");
 const AUDIENCE = requiredEnv("UNICAS_SMOKE_AUDIENCE");
 const KID = requiredEnv("UNICAS_SMOKE_KID");
 const KEY_FILE = requiredEnv("UNICAS_SMOKE_KEY_FILE");
-const SPACE_ID = process.env.UNICAS_SMOKE_SPACE_ID ?? "deploy-smoke";
+const SPACE_ID = process.env.UNICAS_SMOKE_SPACE_ID ?? "/deploy-smoke";
 const ISOLATION_SPACE_ID = `${SPACE_ID}-isolation`;
 const KEY_DIR = join(import.meta.dirname, "..", ".wrangler", "cas-deploy");
 const NODE_CONTENT_TYPE = "application/vnd.unidocs.cas-node.v1";
@@ -97,15 +98,17 @@ async function main() {
   };
   const issueSpace = (spaceId, refDomain) => sign({
     ver: SpaceCapabilityVersion,
-    spaceId,
-    permissions: [
-      spaceNodeReadPermission(),
-      spaceNodeLeasePermission(),
-      spaceRootRefsReadPermission(),
-      spaceRootRefsUpdatePermission(),
-      spaceUsageReadPermission(),
-      spaceGcExecutePermission(),
-    ],
+    grants: [{
+      selector: spaceId,
+      permissions: [
+        spaceNodeReadPermission(),
+        spaceNodeLeasePermission(),
+        spaceRootRefsReadPermission(),
+        spaceRootRefsUpdatePermission(),
+        spaceUsageReadPermission(),
+        spaceGcExecutePermission(),
+      ],
+    }],
     ...(refDomain === undefined ? {} : { refDomain }),
   });
   const token = await issueSpace(SPACE_ID, "doc");
@@ -178,44 +181,50 @@ async function main() {
       `GC keeps current leased nodes (deleted ${gc.deleted} stale nodes)`,
     );
 
-    const prefix = `/v1/apps/${encodeURIComponent(APP_ID)}/spaces/${encodeURIComponent(SPACE_ID)}`;
+    const usageUrl = `${BASE}${appSpaceRoutes.usage({ appId: APP_ID, spaceId: SPACE_ID })}`;
     const prototypeUrl = new URL([
       "v2",
-      "apps",
-      encodeURIComponent(APP_ID),
-      "spaces",
-      encodeURIComponent(SPACE_ID),
       "cas",
       "usage",
     ].join("/"), `${BASE}/`);
+    prototypeUrl.searchParams.set("appId", APP_ID);
+    prototypeUrl.searchParams.set("spaceId", SPACE_ID);
     let response = await fetch(
       prototypeUrl,
       { redirect: "manual" },
     );
     assert(response.status === 404, `prototype App/Space v2 route -> ${response.status} (404)`);
-    for (const version of [2, 3]) {
+    for (const version of [1, 3]) {
       const prototypeToken = await sign({
         ver: version,
-        spaceId: SPACE_ID,
-        permissions: [spaceUsageReadPermission()],
+        grants: [{
+          selector: SPACE_ID,
+          permissions: [spaceUsageReadPermission()],
+        }],
       });
-      response = await fetch(`${BASE}${prefix}/cas/usage`, {
+      response = await fetch(usageUrl, {
         headers: { Authorization: `Bearer ${prototypeToken}` },
       });
       await assertInvalidToken(response, `prototype Space claim v${version}`);
     }
     const broadPermissionToken = await sign({
       ver: SpaceCapabilityVersion,
-      spaceId: SPACE_ID,
-      permissions: [`spaces:${SPACE_ID}:cas:read`],
+      grants: [{
+        selector: SPACE_ID,
+        permissions: [`spaces:${SPACE_ID}:cas:read`],
+      }],
     });
-    response = await fetch(`${BASE}${prefix}/cas/usage`, {
+    response = await fetch(usageUrl, {
       headers: { Authorization: `Bearer ${broadPermissionToken}` },
     });
     await assertInvalidToken(response, "broad prototype Space permission");
 
     const isolationToken = await issueSpace(ISOLATION_SPACE_ID);
-    response = await fetch(`${BASE}${prefix}/cas/nodes/${parent.hash}/content`, {
+    response = await fetch(`${BASE}${appSpaceRoutes.readContent({
+      appId: APP_ID,
+      spaceId: SPACE_ID,
+      hash: parent.hash,
+    })}`, {
       headers: { Authorization: `Bearer ${isolationToken}` },
     });
     assert(response.status === 403, `cross-Space read -> ${response.status} (403)`);
@@ -232,7 +241,7 @@ async function main() {
       tenantId: SPACE_ID,
       permissions: [`tenants:${SPACE_ID}:cas:manage`],
     });
-    response = await fetch(`${BASE}${prefix}/cas/usage`, {
+    response = await fetch(usageUrl, {
       headers: { Authorization: `Bearer ${retiredToken}` },
     });
     assert(response.status === 401, `retired Tenant claim on App/Space v1 route -> ${response.status} (401)`);
