@@ -19,12 +19,23 @@ npm install @unicas/space-client @unicas/space-browser-cache
 
 ## Cache authenticated node reads
 
+<!-- sdk-snippet: space-browser-cache -->
 ```ts
 import { createSpaceCasClient } from "@unicas/space-client";
 import {
   clearBrowserCasNodeCaches,
   createBrowserCasNodeCache,
 } from "@unicas/space-browser-cache";
+
+declare const identity: {
+  readonly identityIssuer: string;
+  readonly subject: string;
+};
+declare const casBaseUrl: string;
+declare const appId: string;
+declare const spaceId: string;
+declare const hash: string;
+declare const getToken: () => Promise<string>;
 
 const principal = JSON.stringify([identity.identityIssuer, identity.subject]);
 const cache = createBrowserCasNodeCache({
@@ -111,3 +122,19 @@ Principal-wide clearing.
 pnpm --filter @unicas/space-browser-cache test
 pnpm --filter @unicas/space-browser-cache typecheck
 ```
+
+The package is browser-only and ESM-only. Supported engines and required Web
+APIs are listed in the
+[compatibility matrix](https://docs.unicas.work/app-user-api/compatibility/).
+Only the package-root export is public.
+
+## Documentation and support
+
+- [SDK package guide](https://docs.unicas.work/app-user-api/sdk/)
+- [Browser quickstart](https://docs.unicas.work/app-user-api/quickstart/#browser-cache-quickstart)
+- [Compatibility](https://docs.unicas.work/app-user-api/compatibility/)
+- [TypeScript API reference](https://docs.unicas.work/app-user-api/sdk-reference/)
+- [Versioning](https://docs.unicas.work/app-user-api/versioning/)
+- [Changelog](https://docs.unicas.work/app-user-api/changelog/)
+- [Support](https://github.com/shazhou-ww/unicas/blob/main/SUPPORT.md)
+- [Security](https://github.com/shazhou-ww/unicas/blob/main/SECURITY.md)

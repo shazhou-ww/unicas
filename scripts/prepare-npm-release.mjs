@@ -50,6 +50,11 @@ export function validatePackageSet(matrix, releaseManifest, manifests) {
   assert(releaseManifest.version === matrix.version, "release manifest version differs from matrix");
   assert(releaseManifest.distTag === matrix.distTag, "release manifest dist-tag differs from matrix");
   assert(releaseManifest.tag === `${matrix.tagPrefix}${matrix.version}`, "release manifest tag differs from matrix");
+  assert(
+    JSON.stringify(canonicalize(releaseManifest.compatibility))
+      === JSON.stringify(canonicalize(matrix.compatibility)),
+    "release manifest compatibility differs from matrix",
+  );
   assert(manifests.length === matrix.packages.length, "public package manifest count differs from matrix");
 
   const manifestByName = new Map(manifests.map((manifest) => [manifest.name, manifest]));
@@ -120,6 +125,7 @@ export function buildReleasePlan({ tag, commit, matrix, releaseManifest, manifes
     commit,
     version,
     distTag: matrix.distTag,
+    compatibility: matrix.compatibility,
     packages: [...matrix.packages]
       .sort((left, right) => left.order - right.order)
       .map((entry) => {
@@ -240,6 +246,7 @@ async function main() {
       commit,
       version: matrix.version,
       distTag: matrix.distTag,
+      compatibility: matrix.compatibility,
       packages: [buildPackagePlanEntry({
         entry,
         version: matrix.version,

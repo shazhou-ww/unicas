@@ -2,10 +2,20 @@
 
 Canonical node encoding and validation for the UniCAS App/Space data plane.
 
+## When to use this package
+
+Use the codec when code needs to create, hash, parse, stream, or validate
+canonical node bytes without performing HTTP operations. Blob indexes belong
+to `@unicas/space-blob-client`; Space routes and capability types belong to
+`@unicas/space-protocol`.
+
+## Install
+
 ```sh
-npm install @unicas/codec@beta
+npm install @unicas/codec
 ```
 
+<!-- sdk-snippet: codec -->
 ```ts
 import {
   computeNodeDigest,
@@ -29,8 +39,19 @@ const canonical = concatenateNodeBytes(
 console.log(hashToHex(digest), parseNodeBytes(canonical).contentType);
 ```
 
-The package is ESM-only and supports Node.js 24+ and modern browsers with Web
-Crypto, Web Streams, and encoding APIs. It contains no HTTP client or platform
-adapter.
+The package is ESM-only. It supports Node.js 24+ and the browser engines and
+Web APIs in the
+[compatibility matrix](https://docs.unicas.work/app-user-api/compatibility/).
+It contains no HTTP client or platform adapter. Only the package-root export is
+public.
 
 Package semver is independent from the canonical node wire version.
+
+## Documentation and support
+
+- [SDK package guide](https://docs.unicas.work/app-user-api/sdk/)
+- [TypeScript API reference](https://docs.unicas.work/app-user-api/sdk-reference/)
+- [Versioning](https://docs.unicas.work/app-user-api/versioning/)
+- [Changelog](https://docs.unicas.work/app-user-api/changelog/)
+- [Support](https://github.com/shazhou-ww/unicas/blob/main/SUPPORT.md)
+- [Security](https://github.com/shazhou-ww/unicas/blob/main/SECURITY.md)

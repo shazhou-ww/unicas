@@ -50,6 +50,13 @@ describe("documentation static site", () => {
     expect(PAGE_INVENTORY.map(({ route }) => route)).toEqual([
       "/",
       "/app-user-api/",
+      "/app-user-api/sdk/",
+      "/app-user-api/quickstart/",
+      "/app-user-api/compatibility/",
+      "/app-user-api/versioning/",
+      "/app-user-api/sdk-reference/",
+      "/app-user-api/troubleshooting/",
+      "/app-user-api/changelog/",
       "/app-user-api/scenarios/",
       "/app-user-api/http-api/",
       "/app-user-api/authorization/",

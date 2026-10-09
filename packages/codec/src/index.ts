@@ -1,5 +1,5 @@
 /**
- * @unicas/codec — Wire-format encodings for the CAS tenant data plane.
+ * @unicas/codec — Wire-format encodings for the App/Space data plane.
  *
  * Pure encoding, no I/O, no platform binding, no HTTP contracts. Split out of
  * `@unicas/space-protocol` (2026-08-29) so the encoding layer can be

@@ -28,6 +28,15 @@ describe("App-user SDK release matrix", () => {
       version: "0.1.2",
       distTag: "latest",
       tagPrefix: "npm/app-user-sdk/v",
+      compatibility: {
+        moduleFormat: "esm",
+        node: ">=24",
+        typescriptRange: ">=5.9 <6",
+        typescript: "5.9.3",
+        esbuild: "0.28.2",
+        playwright: "1.55.1",
+        browserEngines: ["chromium", "firefox", "webkit"],
+      },
     });
     expect(matrix.packages).toHaveLength(6);
     expect(packageNames.size).toBe(matrix.packages.length);
@@ -46,14 +55,17 @@ describe("App-user SDK release matrix", () => {
       expect(manifest.type).toBe("module");
       expect(manifest.license).toBe("MIT");
       expect(manifest.sideEffects).toBe(false);
-      expect(manifest.engines).toEqual({ node: ">=24" });
+      expect(manifest.engines).toEqual({ node: matrix.compatibility.node });
       expect(manifest.repository).toEqual({
         type: "git",
         url: "git+https://github.com/shazhou-ww/unicas.git",
         directory: entry.directory,
       });
       expect(manifest.bugs).toEqual({ url: "https://github.com/shazhou-ww/unicas/issues" });
-      expect(manifest.homepage).toBe("https://docs.unicas.work/app-user-api/");
+      expect(manifest.homepage).toBe(
+        `https://docs.unicas.work/app-user-api/sdk/#${entry.name.slice("@unicas/".length)}`,
+      );
+      expect(manifest.keywords).toEqual(expect.arrayContaining(["unicas", "typescript", "esm"]));
       expect(manifest.publishConfig?.access).toBe("public");
       expect(manifest.publishConfig?.tag).toBeUndefined();
       expect(manifest.main).toBe("./src/index.ts");

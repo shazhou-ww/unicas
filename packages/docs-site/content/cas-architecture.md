@@ -351,35 +351,28 @@ capabilities cannot write that domain.
 
 ## 10. Space client TypeScript API
 
+<!-- sdk-snippet: cas-architecture-space-client -->
 ```ts
-export interface SpaceCasClient {
-  readMetadata(hash: CasHash): Promise<CasNodeMetadata>;
-  readContent(
-    hash: CasHash,
-    range?: { offset: number; length?: number },
-  ): Promise<ReadableStream<Uint8Array>>;
-  leaseNode(
-    hash: CasHash,
-    source?: CasNodeSource,
-    options?: CasLeaseOptions,
-  ): Promise<CasLeaseResult>;
-  updateRootRefs(update: CasRootRefUpdate): Promise<CasRootRefsResult>;
-  usage(): Promise<CasUsage>;
-  gc(options?: CasGcOptions): Promise<CasGcResult>;
-}
+import type {
+  SpaceCasClient,
+  SpaceNodeLeaseOptions,
+} from "@unicas/space-client";
 
-export interface CasUsage {
-  readonly nodeCount: number;
-  readonly readyContentBytes: number;
-  readonly notReadyNodeCount: number;
-  readonly leasedNodeCount: number;
-}
+declare const cas: SpaceCasClient;
+declare const hash: string;
 
-export interface CasGcResult {
-  readonly examined: number;
-  readonly deleted: number;
-  readonly reclaimedContentBytes: number;
-}
+await cas.readNode(hash);
+await cas.readMetadata(hash);
+await cas.readContent(hash, { offset: 0, length: 1024 });
+
+const leaseOptions: SpaceNodeLeaseOptions = {
+  durationMs: 60_000,
+  signal: null,
+};
+await cas.leaseNode(hash, leaseOptions);
+await cas.listRootRefs({ limit: 100 });
+await cas.usage();
+await cas.gc({ maxNodes: 100 });
 ```
 
 A `SpaceCasClient` is created with one `(appId, spaceId)`, an asynchronous
@@ -387,9 +380,12 @@ token provider, and an optional immutable-node cache strategy. Individual
 methods cannot select another App or Space. No compatibility client translates
 retired Stack/Tenant routes or credentials.
 
-`leaseNode()` is the only lease operation. With a canonical node source it
-ensures the node is ready and leases it; without a source it leases an already
-ready node. The latter rejects missing or not-ready nodes.
+`leaseNode()` is the only lease operation. It returns the current lease state
+and, when an upload is required, direct `PUT` instructions. The thin transport
+does not create canonical bytes or perform that upload. Use the blob client for
+the complete store/retain workflow. `readNode`, `updateRootRefs`, and the
+remaining operations are listed in the reviewed
+[TypeScript API reference](app-user-api/sdk-reference.md).
 
 Blob chunk size and index fanout are local client implementation choices,
 bounded by protocol defaults. They are not sent as trusted lease parameters;

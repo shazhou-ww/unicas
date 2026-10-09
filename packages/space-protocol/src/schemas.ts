@@ -35,7 +35,7 @@ export const SpaceSchema: z.ZodType<Space> = z.object({
 
 export const CasHashSchema: z.ZodType<CasHash> = z.string()
   .regex(/^[0-9a-f]{64}$/, "Expected a lowercase SHA-256 digest")
-  .describe("Lowercase hexadecimal SHA-256 digest of the canonical node bytes. The digest is the immutable node identity within a tenant.")
+  .describe("Lowercase hexadecimal SHA-256 digest of the canonical node bytes. The digest is the immutable node identity within a Space.")
   .meta({ id: "CasHash" });
 
 const TimestampSchema = z.number().int().nonnegative()
@@ -121,7 +121,7 @@ export const CasRootRefsPageSchema: z.ZodType<CasRootRefsPage> = z.object({
 }).readonly().meta({ id: "CasRootRefsPage" });
 
 export const CasUsageSchema: z.ZodType<CasUsage> = z.object({
-  nodeCount: z.number().int().nonnegative().describe("Total node metadata rows owned by the tenant."),
+  nodeCount: z.number().int().nonnegative().describe("Total node metadata rows owned by the Space."),
   readyContentBytes: z.number().int().nonnegative().describe("Logical bytes of nodes whose canonical content is ready."),
   readyStoredBytes: z.number().int().nonnegative().describe("Physical stored bytes attributed to ready node content."),
   reservedBytes: z.number().int().nonnegative().describe("Bytes reserved by incomplete uploads."),

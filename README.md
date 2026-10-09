@@ -9,6 +9,26 @@ and administrator console.
 - File App: <https://spaces.unicas.work>
 - Documentation: <https://docs.unicas.work>
 
+## App-user SDK
+
+UniCAS publishes one unified-version, ESM-only App-user SDK for the App/Space
+v1 data plane:
+
+| Package | Choose it for |
+| --- | --- |
+| `@unicas/codec` | Canonical node encoding, hashing, and validation |
+| `@unicas/space-protocol` | App/Space contracts, schemas, capability vocabulary, and OpenAPI |
+| `@unicas/space-client` | Thin Space-bound HTTP operations |
+| `@unicas/space-blob-client` | Chunked blobs, random access, and retain/release |
+| `@unicas/space-browser-cache` | Authenticated browser caching for immutable reads |
+| `@unicas/space-file-client` | App-owned file catalogs and committed working trees |
+
+Start with the [SDK package guide](https://docs.unicas.work/app-user-api/sdk/),
+then run the
+[packed-artifact quickstarts](https://docs.unicas.work/app-user-api/quickstart/).
+Compatibility, versioning, TypeScript API, troubleshooting, changelog, support,
+and security links are indexed from the SDK guide.
+
 ## Requirements
 
 - Node.js 24 or newer

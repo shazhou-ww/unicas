@@ -10,14 +10,16 @@ CAS nodes plus atomic Root Refs without exposing administrator credentials.
 ## Reading path
 
 1. Read this page for the actors, trust boundaries, and ownership split.
-2. Follow [Scenarios and sequences](scenarios.md) for complete request flows.
-3. Explore the [interactive API reference](/app-user-api/reference/) for
+2. Use the [App-user SDK guide](sdk.md) to select a package.
+3. Run the [packed-artifact quickstarts](quickstart.md).
+4. Follow [Scenarios and sequences](scenarios.md) for complete request flows.
+5. Explore the [interactive API reference](/app-user-api/reference/) for
   OpenAPI schemas, examples, and client snippets.
-4. Use [HTTP operation reference](http-api.md) for runtime behavior and known
+6. Use [HTTP operation reference](http-api.md) for runtime behavior and known
   contract gaps across all seven public operations.
-5. Use [Capability authorization](authorization.md) for claims, permissions,
+7. Use [Capability authorization](authorization.md) for claims, permissions,
   denial behavior, and least-privilege examples.
-6. Use [Prototype v2 migration](migration-v2-to-v1.md) when updating an
+8. Use [Prototype v2 migration](migration-v2-to-v1.md) when updating an
   existing pre-release integration.
 
 Machine-readable sources remain authoritative:
@@ -173,8 +175,10 @@ npm install @unicas/space-client
 ```
 
 The browser cache is browser-only. The other packages support Node.js 24+ and
-modern browsers with the documented Web APIs. Package semver, HTTP path `v1`,
-capability claim version `1`, and product maturity are independent. Every
+the tested browser engines and Web APIs in the
+[compatibility matrix](compatibility.md). Shipped declarations are checked
+with TypeScript 5.9. Package semver, HTTP path `v1`, capability claim version
+`1`, and product maturity are independent. Every
 package in one SDK release uses the same exact version; package-root imports
 are public, and `@unicas/space-protocol/openapi.json` is the only public
 subpath.

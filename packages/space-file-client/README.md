@@ -25,8 +25,26 @@ The catalog is a small persistence port. A typical adapter scopes every
 operation to the authenticated Principal and enforces `revision` as an
 optimistic concurrency check:
 
+<!-- sdk-snippet: space-file-client -->
 ```ts
 import type { SpaceFileRootCatalog } from "@unicas/space-file-client";
+
+declare const principalId: string;
+declare const rootRepository: {
+  list(principal: string): ReturnType<SpaceFileRootCatalog["list"]>;
+  create(
+    principal: string,
+    input: Parameters<SpaceFileRootCatalog["create"]>[0],
+  ): ReturnType<SpaceFileRootCatalog["create"]>;
+  compareAndSwap(
+    principal: string,
+    input: Parameters<SpaceFileRootCatalog["update"]>[0],
+  ): ReturnType<SpaceFileRootCatalog["update"]>;
+  deleteIfRevision(
+    principal: string,
+    input: Parameters<SpaceFileRootCatalog["delete"]>[0],
+  ): ReturnType<SpaceFileRootCatalog["delete"]>;
+};
 
 const catalog: SpaceFileRootCatalog = {
   list: () => rootRepository.list(principalId),
@@ -43,9 +61,14 @@ email address or display name as the stable Principal key.
 
 ## Create a file system and commit a working tree
 
+<!-- sdk-snippet: space-file-client -->
 ```ts
 import { createSpaceCasClient } from "@unicas/space-client";
 import { createSpaceFileSystem } from "@unicas/space-file-client";
+
+declare const appId: string;
+declare const spaceId: string;
+declare const getToken: () => Promise<string>;
 
 const cas = createSpaceCasClient({
   baseUrl: "https://api.unicas.work",
@@ -78,8 +101,10 @@ manifest. `discard()` restores the last committed in-memory snapshot.
 
 ## Reopen, edit, or delete a root
 
+<!-- sdk-snippet: space-file-client -->
 ```ts
 const [saved] = await files.listRoots();
+if (saved === undefined) throw new Error("expected a saved root");
 const reopened = await files.openRoot(saved);
 
 await reopened.move("/notes/today.txt", "/today.txt");
@@ -98,8 +123,18 @@ with the App-selected `refDomain`. The App remains responsible for user
 authentication, Principal-to-Space mapping, catalog authorization, retries,
 and conflict presentation.
 
-The package is ESM-only and supports Node.js 24+ and modern browsers with Blob,
-Web Streams, Web Crypto, and encoding APIs. Only the package-root export is
-public. See the
-[App-user integration guide](https://docs.unicas.work/app-user-api/) for the
-surrounding trust and retention model.
+The package is ESM-only. It supports Node.js 24+ and the browser engines and
+Blob/Web Streams/Web Crypto/encoding APIs in the
+[compatibility matrix](https://docs.unicas.work/app-user-api/compatibility/).
+Only the package-root export is public.
+
+## Documentation and support
+
+- [SDK package guide](https://docs.unicas.work/app-user-api/sdk/)
+- [Quickstarts and host responsibilities](https://docs.unicas.work/app-user-api/quickstart/)
+- [Compatibility](https://docs.unicas.work/app-user-api/compatibility/)
+- [TypeScript API reference](https://docs.unicas.work/app-user-api/sdk-reference/)
+- [Versioning](https://docs.unicas.work/app-user-api/versioning/)
+- [Changelog](https://docs.unicas.work/app-user-api/changelog/)
+- [Support](https://github.com/shazhou-ww/unicas/blob/main/SUPPORT.md)
+- [Security](https://github.com/shazhou-ww/unicas/blob/main/SECURITY.md)

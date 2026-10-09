@@ -21,9 +21,16 @@ npm install @unicas/space-client @unicas/space-blob-client
 
 ## Create the clients
 
+<!-- sdk-snippet: space-blob-client -->
 ```ts
 import { createSpaceCasClient } from "@unicas/space-client";
 import { createCasBlobClient } from "@unicas/space-blob-client";
+
+declare const appId: string;
+declare const spaceId: string;
+declare const getToken: () => Promise<string>;
+declare const requestId: string;
+declare const releaseRequestId: string;
 
 const cas = createSpaceCasClient({
   baseUrl: "https://api.unicas.work",
@@ -43,6 +50,7 @@ writes, `cas:nodes:read` for reads, and `cas:root-refs:update` plus a
 `storeBlob` accepts a `Blob` or `ReadableStream<Uint8Array>`. Supplying `size`
 validates the number of consumed source bytes.
 
+<!-- sdk-snippet: space-blob-client -->
 ```ts
 const source = new Blob(["hello from UniCAS"], { type: "text/plain" });
 const stored = await blobs.storeBlob(source, {
@@ -63,6 +71,8 @@ Keep `requestId` stable for this exact retain transition. The capability's
 
 ## Read all or part of a blob
 
+<!-- sdk-snippet: space-blob-client -->
+```ts
 const handle = await blobs.openBlob(stored.hash);
 const firstKilobyte = await handle.readBytes({ offset: 0, length: 1024 });
 const completeBlob = await new Response(handle.read()).blob();
@@ -77,6 +87,7 @@ an explicitly bounded range that should be materialized in memory.
 After the App removes its durable reference, decrement the corresponding
 UniCAS Root Ref with a new stable idempotency key:
 
+<!-- sdk-snippet: space-blob-client -->
 ```ts
 await blobs.release({
   requestId: releaseRequestId,
@@ -89,8 +100,18 @@ or negative atomic Root Ref changes. Do not release a blob that business state
 still references. Space accounting and bounded GC remain available through
 `blobs.unicasClient.usage()` and `blobs.unicasClient.gc()`.
 
-The package is ESM-only and supports Node.js 24+ and modern browsers with Blob,
-Fetch, Web Streams, and Web Crypto APIs. Only the package-root export is
-public. See the
-[App-user integration guide](https://docs.unicas.work/app-user-api/) for
-capability issuance and Root Ref lifecycle.
+The package is ESM-only. It supports Node.js 24+ and the browser engines and
+Blob/Fetch/Web Streams/Web Crypto APIs in the
+[compatibility matrix](https://docs.unicas.work/app-user-api/compatibility/).
+Only the package-root export is public.
+
+## Documentation and support
+
+- [SDK package guide](https://docs.unicas.work/app-user-api/sdk/)
+- [Quickstarts and host responsibilities](https://docs.unicas.work/app-user-api/quickstart/)
+- [Compatibility](https://docs.unicas.work/app-user-api/compatibility/)
+- [TypeScript API reference](https://docs.unicas.work/app-user-api/sdk-reference/)
+- [Versioning](https://docs.unicas.work/app-user-api/versioning/)
+- [Changelog](https://docs.unicas.work/app-user-api/changelog/)
+- [Support](https://github.com/shazhou-ww/unicas/blob/main/SUPPORT.md)
+- [Security](https://github.com/shazhou-ww/unicas/blob/main/SECURITY.md)

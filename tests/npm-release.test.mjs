@@ -78,6 +78,7 @@ describe("App-user SDK npm release planner", () => {
       releaseKey: "app-user-sdk",
       version: "0.1.2",
       distTag: "latest",
+      compatibility: matrix.compatibility,
       commit: "a".repeat(40),
     });
     expect(plan.packages.map(({ name }) => name)).toEqual(matrix.packages.map(({ name }) => name));
@@ -218,6 +219,10 @@ describe("App-user SDK npm release planner", () => {
       ...releaseManifest,
       version: "0.1.3",
     }, manifests)).toThrow("version differs");
+    expect(() => validatePackageSet(matrix, {
+      ...releaseManifest,
+      compatibility: { ...releaseManifest.compatibility, browserEngines: ["chromium"] },
+    }, manifests)).toThrow("compatibility differs");
   });
 
   test("requires the checked-out tag target to be reachable from primary", () => {

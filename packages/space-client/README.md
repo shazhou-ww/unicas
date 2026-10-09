@@ -26,8 +26,16 @@ npm install @unicas/space-client
 
 ## Create a Space-bound client
 
+<!-- sdk-snippet: space-client -->
 ```ts
 import { createSpaceCasClient } from "@unicas/space-client";
+
+declare const appId: string;
+declare const spaceId: string;
+declare const hash: string;
+declare const previousHash: string;
+declare const nextHash: string;
+declare const getToken: () => Promise<string>;
 
 const cas = createSpaceCasClient({
   baseUrl: "https://api.unicas.work",
@@ -47,6 +55,7 @@ administrator credential in browser code.
 Use `readNode` when both immutable metadata and the complete content are needed.
 It obtains both with one authorized content request.
 
+<!-- sdk-snippet: space-client -->
 ```ts
 const controller = new AbortController();
 const node = await cas.readNode(hash, { signal: controller.signal });
@@ -58,6 +67,7 @@ const bytes = new Uint8Array(await new Response(node.content).arrayBuffer());
 Use `readMetadata` when only metadata is needed, or request a logical content
 range with `readContent`:
 
+<!-- sdk-snippet: space-client -->
 ```ts
 const metadata = await cas.readMetadata(hash);
 const firstKilobyte = await cas.readContent(hash, {
@@ -74,6 +84,7 @@ const preview = new Uint8Array(
 Root Ref capabilities also carry the App-selected `refDomain`. Page through the
 current domain with `listRootRefs`:
 
+<!-- sdk-snippet: space-client -->
 ```ts
 let cursor: string | undefined;
 
@@ -89,6 +100,7 @@ do {
 Commit a business transition as one atomic change map. Reuse the same
 `requestId` and exact payload after an uncertain response.
 
+<!-- sdk-snippet: space-client -->
 ```ts
 await cas.updateRootRefs({
   requestId: crypto.randomUUID(),
@@ -119,6 +131,7 @@ for a raw-node helper, or use the blob/file clients for complete workflows.
 
 ## Errors, retries, and cancellation
 
+<!-- sdk-snippet: space-client -->
 ```ts
 import { CasClientError } from "@unicas/space-client";
 
@@ -138,8 +151,19 @@ a bounded App-owned policy, and keep the same idempotency key and payload for
 an uncertain Root Ref update. Read, list, lease, usage, and GC operations
 accept `AbortSignal` through their documented arguments.
 
-The package is ESM-only and supports Node.js 24+ and modern browsers with Fetch
-and Web Streams. Only the package-root export is public. See the
-[App-user integration guide](https://docs.unicas.work/app-user-api/) and
-[HTTP operation reference](https://docs.unicas.work/app-user-api/http-api/)
-for capability and wire behavior.
+The package is ESM-only. It supports Node.js 24+ and the browser engines and
+Fetch/Web Streams APIs in the
+[compatibility matrix](https://docs.unicas.work/app-user-api/compatibility/).
+Only the package-root export is public.
+
+## Documentation and support
+
+- [SDK package guide](https://docs.unicas.work/app-user-api/sdk/)
+- [Quickstarts](https://docs.unicas.work/app-user-api/quickstart/)
+- [Compatibility](https://docs.unicas.work/app-user-api/compatibility/)
+- [HTTP operation reference](https://docs.unicas.work/app-user-api/http-api/)
+- [TypeScript API reference](https://docs.unicas.work/app-user-api/sdk-reference/)
+- [Versioning](https://docs.unicas.work/app-user-api/versioning/)
+- [Changelog](https://docs.unicas.work/app-user-api/changelog/)
+- [Support](https://github.com/shazhou-ww/unicas/blob/main/SUPPORT.md)
+- [Security](https://github.com/shazhou-ww/unicas/blob/main/SECURITY.md)
