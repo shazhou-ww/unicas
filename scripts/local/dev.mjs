@@ -2,8 +2,8 @@ import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { LogLevel } from "miniflare";
-import { applyForwardedLocalArgs } from "../../../scripts/forward-local-args.mjs";
-import { runLocalCompose } from "../../../scripts/run-local-compose.mjs";
+import { applyForwardedLocalArgs } from "./forward-local-args.mjs";
+import { runLocalCompose } from "./run-local-compose.mjs";
 import { startLocalUnicasRuntime } from "./runtime.mjs";
 
 applyForwardedLocalArgs();
@@ -17,7 +17,7 @@ if (dockerIndex !== -1) {
   process.exit(0);
 }
 
-const root = join(fileURLToPath(new URL(".", import.meta.url)), "../../..");
+const root = join(fileURLToPath(new URL(".", import.meta.url)), "../..");
 const host = process.env.UNICAS_LOCAL_HOST ?? "127.0.0.1";
 const adminOrigin = process.env.UNICAS_ADMIN_ORIGIN ?? "http://localhost:4070";
 const runtime = await startLocalUnicasRuntime({

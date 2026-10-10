@@ -95,7 +95,7 @@ clients and must allow only their explicit origins, methods, and headers.
 Generate the App signing fixture outside source control:
 
 ```powershell
-pnpm keys:local -- --output .wrangler/spaces/signing-key.json `
+pnpm local:keys -- --output .wrangler/spaces/signing-key.json `
   --issuer https://spaces.unicas.work `
   --kid spaces-YYYY-MM
 ```

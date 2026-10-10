@@ -5,7 +5,7 @@
 - Treat [`.agents/`](.agents/README.md) as the only supported canonical root
   for Agent skills and reusable instructions. Do not add or require
   provider-specific projections.
-- Before changing any file under `packages/**` or `stacks/unicas/**`, load and
+- Before changing any file under `packages/**` or `release/**`, load and
   follow the
   [`unicas-package-boundaries` skill](.agents/skills/unicas-package-boundaries/SKILL.md).
 
@@ -47,8 +47,9 @@ requests remain idea-free unless the user opts into this lifecycle.
 
 - Treat `unicas.shazhou.work` and its Cloudflare resources as a frozen legacy
   environment unless a task explicitly says otherwise.
-- Use `pnpm deploy:plan` or direct Wrangler `--dry-run` for deployment review.
-  `pnpm deploy` intentionally refuses implicit production deployment.
+- Use the relevant `pnpm release:<unit>:plan` command or direct Wrangler
+  `--dry-run` for deployment review. No implicit production deployment command
+  exists.
 
 ## Validation
 

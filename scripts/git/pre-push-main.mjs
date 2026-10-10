@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const ROOT = fileURLToPath(new URL("..", import.meta.url));
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const MAIN_REF = "refs/heads/main";
 const OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/iu;
 const ZERO_OBJECT_ID = /^0+$/u;

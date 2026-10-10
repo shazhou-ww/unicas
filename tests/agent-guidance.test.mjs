@@ -208,7 +208,7 @@ describe("canonical Agent guidance", () => {
     expect(brokenLinks).toEqual([]);
   });
 
-  test("routes package and stack edits through the complete boundary skill", () => {
+  test("routes package and release edits through the complete boundary skill", () => {
     const agentsGuide = readFileSync(AGENTS_GUIDE, "utf8");
     const boundarySkill = readFileSync(
       join(SKILLS_DIR, "unicas-package-boundaries", "SKILL.md"),
@@ -216,7 +216,7 @@ describe("canonical Agent guidance", () => {
     );
 
     expect(agentsGuide).toContain(
-      "Before changing any file under `packages/**` or `stacks/unicas/**`, load and",
+      "Before changing any file under `packages/**` or `release/**`, load and",
     );
     expect(agentsGuide).toContain(
       ".agents/skills/unicas-package-boundaries/SKILL.md",

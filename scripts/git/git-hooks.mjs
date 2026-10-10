@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const ROOT = fileURLToPath(new URL("..", import.meta.url));
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const HOOKS_PATH = ".githooks";
 const PRE_PUSH_PATH = join(HOOKS_PATH, "pre-push");
 
@@ -157,7 +157,7 @@ if (invokedUrl === import.meta.url) {
       printStatus(status);
       if (status.state !== "installed") process.exitCode = 1;
     } else {
-      throw new Error("usage: node scripts/git-hooks.mjs <install|uninstall|status>");
+      throw new Error("usage: node scripts/git/git-hooks.mjs <install|uninstall|status>");
     }
   } catch (error) {
     console.error(`[git-hooks] ${error instanceof Error ? error.message : String(error)}`);

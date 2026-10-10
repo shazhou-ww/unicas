@@ -11,4 +11,4 @@ COPY . .
 RUN pnpm install --frozen-lockfile --registry=https://packagefeedproxy.microsoft.io/npm/
 
 ENV UNICAS_LOCAL_HOST=0.0.0.0
-CMD ["pnpm", "dev"]
+CMD ["pnpm", "local:dev"]

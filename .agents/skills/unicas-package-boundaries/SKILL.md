@@ -1,12 +1,12 @@
 ---
 name: unicas-package-boundaries
-description: "Mandatory before editing any file under packages/** or stacks/unicas/**. Preserve UniCAS package ownership, access-plane separation, dependency direction, portability, and server deployment boundaries."
+description: "Mandatory before editing any file under packages/** or release/**. Preserve UniCAS package ownership, access-plane separation, dependency direction, portability, and server deployment boundaries."
 ---
 
 # UniCAS package boundaries
 
 Load and follow this skill before changing any file under `packages/**` or
-`stacks/unicas/**`. UniCAS is an independently deployable middleware. Keep
+`release/**`. UniCAS is an independently deployable middleware. Keep
 `packages/` free of runtime dependencies on `@unidocs/*` packages.
 
 Read [the package inventory](../../../packages/README.md) before changing

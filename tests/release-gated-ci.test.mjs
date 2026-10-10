@@ -14,11 +14,11 @@ import {
   hooksStatus,
   installHooks,
   uninstallHooks,
-} from "../scripts/git-hooks.mjs";
+} from "../scripts/git/git-hooks.mjs";
 import {
   parsePrePushInput,
   runMainPrePush,
-} from "../scripts/pre-push-main.mjs";
+} from "../scripts/git/pre-push-main.mjs";
 
 const ROOT = join(import.meta.dirname, "..");
 const ZERO_OBJECT_ID = "0".repeat(40);

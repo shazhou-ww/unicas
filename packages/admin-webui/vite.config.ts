@@ -8,7 +8,7 @@ import type { UserConfig as VitestUserConfig } from "vitest/config";
  * The admin console is served under `/admin/` on the CAS service domain;
  * the BFF owns `/admin/me`, `/admin/stacks/...` and the OIDC routes. In dev,
  * Vite serves the SPA and proxies every other `/admin` path (API + OIDC) to
- * the local BFF Worker (see stacks/unicas/local).
+ * the local BFF Worker (see scripts/local).
  */
 const config: UserConfig & { test: VitestUserConfig["test"] } = {
   base: "/admin/",

@@ -1,8 +1,8 @@
 services:
   unicas:
     build:
-      context: ../../..
-      dockerfile: stacks/unicas/local/Dockerfile
+      context: ../..
+      dockerfile: scripts/local/Dockerfile
     init: true
     environment:
       UNICAS_LOCAL_ARGS_JSON: ${UNICAS_LOCAL_ARGS_JSON:-[]}

@@ -11,7 +11,7 @@ import {
   Miniflare,
 } from "miniflare";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const COMPATIBILITY_DATE = "2025-08-17";
 const SESSION_KEY = createHash("sha256").update("unicas local development session key").digest("base64url");
 
@@ -77,7 +77,7 @@ export async function startLocalUnicasRuntime({
       ["node:*"],
     ),
     bundle(
-      join(ROOT, "stacks", "unicas", "local", "mock-oidc-worker.mjs"),
+      join(ROOT, "scripts", "local", "mock-oidc-worker.mjs"),
       join(bundleDir, "mock-oidc.js"),
     ),
   ]);

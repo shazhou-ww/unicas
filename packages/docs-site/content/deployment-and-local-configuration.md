@@ -16,7 +16,7 @@ Never commit tokens, private keys, `.dev.vars`, `.env`, or `.wrangler/`.
 Run the host runtime:
 
 ```powershell
-pnpm dev
+pnpm local:dev
 ```
 
 It starts:
@@ -29,7 +29,7 @@ It starts:
 | Mock OIDC discovery | `http://127.0.0.1:8793/.well-known/openid-configuration` |
 
 Host-mode Miniflare state persists under `.wrangler/miniflare`. Stop the environment
-with Ctrl+C; restarting `pnpm dev` reuses that state.
+with Ctrl+C; restarting `pnpm local:dev` reuses that state.
 
 Vite proxies Space and discovery routes to the direct edge so
 the local browser topology matches production's single public origin.
@@ -59,13 +59,13 @@ Other local settings:
 Run the same environment in Docker when host Node.js is unavailable:
 
 ```powershell
-pnpm dev --docker
+pnpm local:dev --docker
 ```
 
 Compose forwards `UNICAS_ADMIN_ORIGIN` and the three OIDC variables above. It
 publishes ports 4070, 8793, and 8794 and stores `.wrangler` state in the named Docker
 volume `unicas-state`; it does not bind-mount the checkout's `.wrangler/`
-directory. `docker compose -f stacks/unicas/local/compose.yaml down` preserves
+directory. `docker compose -f scripts/local/compose.yaml down` preserves
 that volume, so the next start reuses state.
 
 ### Disposable capability fixture
@@ -74,7 +74,7 @@ Generate a local ES256 issuer fixture only when a test or non-production App
 needs one:
 
 ```powershell
-pnpm keys:local
+pnpm local:keys
 ```
 
 The default output is `.wrangler/capability/local.json`, created with exclusive

@@ -39,10 +39,10 @@ and security links are indexed from the SDK guide.
 ```powershell
 pnpm install
 pnpm validate
-pnpm dev
+pnpm local:dev
 ```
 
-`pnpm dev` starts the Cloudflare Worker locally, a mock OIDC provider, and the
+`pnpm local:dev` starts the Cloudflare Worker locally, a mock OIDC provider, and the
 administrator console at <http://localhost:4070/admin/>. Local state is stored
 under `.wrangler/`.
 
@@ -67,7 +67,7 @@ and trust-boundary matrix is documented in
 Use Docker when a host Node.js environment is not available:
 
 ```powershell
-pnpm dev --docker
+pnpm local:dev --docker
 ```
 
 ## Deployment
