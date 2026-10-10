@@ -30,9 +30,9 @@
     "node": ">=24"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.30.0",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "@unicas/admin-protocol": "workspace:*",
-    "zod": "^4.0.0",
+    "zod": "^4.6.5",
     "@unicas/admin-client": "workspace:*",
     "@unicas/control-auth": "workspace:*"
   },
