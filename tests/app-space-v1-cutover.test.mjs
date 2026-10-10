@@ -3,7 +3,7 @@ import { extname, join, relative } from "node:path";
 import { describe, expect, test } from "vitest";
 
 const ROOT = join(import.meta.dirname, "..");
-const SCAN_ROOTS = ["packages", "docs", "scripts", "stacks"];
+const SCAN_ROOTS = ["packages", "docs", "release", "scripts"];
 const INCLUDED_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".mjs", ".json", ".jsonc", ".md"]);
 const EXCLUDED_DIRECTORIES = new Set(["dist", "node_modules", "tests", ".wrangler"]);
 const FORBIDDEN_PUBLIC_ARTIFACTS = [
