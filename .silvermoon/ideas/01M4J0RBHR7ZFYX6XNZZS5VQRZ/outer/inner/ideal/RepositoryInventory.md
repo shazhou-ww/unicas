@@ -2,110 +2,110 @@
 
 ## 快照
 
-- Repository commit：`d81253cdba2a1c6bc49370881e173b7858854329`
-- 盘点日期：`2026-10-10`
-- 方法：只读检查 tracked 顶层路径、workspace manifest、package scripts、
-  workflow、部署配置、测试、文档引用和相关 Git 历史，不修改 repository
-  deliverable。
+- Repository baseline commit：`d81253cdba2a1c6bc49370881e173b7858854329`
+- 盘点与讨论日期：`2026-10-10`
+- 方法：只读检查 tracked paths、workspace manifests、package scripts、workflow、
+  deployment config、tests、docs references 和相关 Git history，并逐项确认目标
+  ownership。
 
-本盘点只对所检查的快照进行分类。它是 Ideal World 的证据，不是对保留资产
-永远不会过时的永久判断。
+本盘点只对所检查快照及当前达成的目录共识负责，不是对保留资产永远不会过时的
+永久判断。
 
-## 目录职责
+## 历史观察
 
-| 路径 | 当前职责 | Cleanup 含义 |
+- `stacks/unicas/` 由 commit `a0e7eecaa3a755628568d2cb5e9acdd05afa5ede`
+  在 `2026-08-27` 以 “standardize dev and deploy workflows” 引入。
+- Standalone repository extraction 发生在 commit
+  `e82d372915ce83b868625457a22647f26941cca7`（`2026-09-14`）。
+- 抽取前后 `stacks/` 都只有 `unicas` 一个 child。该层级曾是刻意设计，但在
+  standalone repository 中不再区分 sibling stack。
+- 当前 maintained repository 中有 25 个文件直接引用 `stacks/unicas`；路径迁移
+  必须同步 package scripts、workflow、tests、docs、configs 与 Agent guidance。
+
+## 当前目录职责与结论
+
+| 当前路径 | 实际职责 | 结论 |
 | --- | --- | --- |
-| `packages/` | 16 个 workspace package，包括私有第一方 `spaces` App；package ownership 与依赖方向已有 guard | 不能只因表面重叠就合并、拆分、重命名或删除 |
-| `stacks/unicas/` | 本地编排、Cloudflare 部署顺序、产品站点资产和 Spaces 部署组合 | 只有同步更新全部部署与测试消费者后才能调整路径 |
-| `scripts/` | 跨 package 的本地开发、Git hook、SDK、release、smoke 与验证工具 | 具有 package、CI、测试或部署消费者的活跃工具不是删除候选 |
-| `tests/` | Repository 级架构、release、部署与 retirement guard | 历史名称可能代表刻意保留的负向约束，不等于陈旧代码 |
-| `sdk/` | App-user SDK package matrix、确定性 release manifest 和已评审 API baseline | 生成或声明式 release 证据；仅凭可重建性不足以删除 |
-| `examples/app-user-sdk/` | Packed artifact 外部消费者验证和公开 quickstart | Release 输入与文档目标，不是重复源码 |
-| `docs/` | 已接受的 repository 架构、运维、release 和 workflow 共识 | 公开或运维引用必须检查外部、rollback 与保留风险 |
-| `.agents/` | Canonical Agent skills 与 repository reusable instructions | 不进入 provider-specific 或便利性 cleanup |
-| `.silvermoon/` | Repository-owned idea contract、证据、ledger 与 lifecycle history | 不进入普通 cleanup 删除 |
+| `sdk/` | App-user SDK unified release matrix、release manifest、reviewed API baseline | 内容保留并迁入 `release/app-user-sdk/`；删除空旧 root |
+| `stacks/unicas/deploy/*.mjs` | Service production plan/deploy/smoke/cutover/secret/tracing orchestration | 迁入 `release/service/` 或 `release/shared/` |
+| `stacks/unicas/deploy/migrations/tenant/` | App-scoped Space storage schema baseline | SQL 原样迁入 `packages/service-cloudflare/migrations/app-space/` |
+| `stacks/unicas/spaces/*.mjs` | Spaces deployment orchestration 与 generated config | 迁入 `release/spaces/` |
+| `stacks/unicas/spaces/{wrangler.jsonc,migrations/}` | `@unicas/spaces` deployment config 与 schema | 迁入 `packages/spaces/` package root |
+| `stacks/unicas/site/` | Product apex assets-only Worker source 与 config | 迁入新的 private `packages/site/` |
+| `stacks/unicas/local/` | Local compose、mock OIDC 与 runtime | 连同根 local helpers 迁入 `scripts/local/` |
+| 根 `scripts/` release files | SDK/npm/release revision/tagging helpers | 迁入对应 `release/` unit |
+| 根 `scripts/` Git files | Hook install/status 与 pre-push gate | 迁入 `scripts/git/` |
+| `packages/spaces/scripts/` | Bootstrap、preflight、issuer proof、production smoke | 迁入 `release/spaces/`；package 保留实现与 build tooling |
+| `examples/app-user-sdk/` | 用户 quickstarts、docs targets、packed/registry consumer programs | 保留原位 |
 
-## 候选分类
+## 应删除的旧资产
 
-### 应迁移
+### `stacks/unicas/README.md`
 
-#### `stacks/unicas/deploy/migrations/tenant/`
+该文件只解释旧 stack container 的职责和 commands。目标结构不再存在
+`stacks/unicas/`；仍有效的 package ownership、release entry 和 local workflow
+内容将分别进入 root/package docs 与 `release/README.md`。完成内容核对后删除，
+不保留历史路径副本。
 
-- 当前消费者：
-  `packages/service-cloudflare/wrangler.toml` 将该目录配置为 `CAS_DB`
-  migration source。
-- 验证消费者：
-  `packages/service-cloudflare/tests/schema.test.ts` 读取
-  `0001_baseline.sql`，证明空数据库应用、幂等性和 schema 行为。
-- 当前所有权：
-  `packages/service-cloudflare/src/schema.ts` 将其描述为 App-scoped Space
-  storage schema，并导出 `APP_SPACE_SCHEMA_MIGRATIONS`。
-- 历史：
-  baseline 仍在活跃维护；最近的 commit 修复了 D1 parser 兼容性并支持当前
-  Spaces 行为。
-- 结论：
-  SQL 是活跃资产，不能删除。`tenant` 目录段是 legacy 命名债务，应原子
-  重命名为 `app-space`。
+### 旧 root commands
+
+旧 `dev`、`deploy:*`、`spaces:*`、`sdk:*` 和相关 release aliases 是 repository
+interface entries，不是文件。所有 repository-owned callers 原子迁移后移除，
+不保留 deprecated wrappers。
+
+### 移动后的空目录
+
+`sdk/`、`stacks/`、`packages/spaces/scripts/` 及移动后为空的旧 script directories
+只在内容全部迁移、tracked references 为零后删除。
 
 ## 保留
 
-### `stacks/unicas/deploy/cut-over-app-space-v1-issuers.mjs`
+### `examples/app-user-sdk/`
 
-- Release workflow 与 focused tests 仍引用它。
-- 它在 `2026-10-09` 为当前 multi-Space capability grants 更新。
-- 它同时编码幂等的 current-state handling 与历史 cutover。
-- 结论：活跃部署与恢复入口；保留。
+- `prepare-sdk-release.mjs` 与 `verify-npm-release.mjs` 会将其复制到 clean temporary
+  consumer，安装 packed/registry packages 后编译并运行 Node/browser quickstarts。
+- 当前 public docs 直接链接这些完整 executable sources。
+- 结论：面向使用者的 executable examples；不归 docs 或 release 所有。
 
-### `docs/managed-issuer-retirement.md`
+### SDK release evidence
 
-- 部署 README 与 docs-site completeness tests 仍引用它。
-- 它保留 approval、rollback、D1 cleanup 与 key revocation 边界。
-- 结论：已接受的运维与 rollback 记录；保留。
+- `package-matrix.json` 定义六个 packages 的统一版本、发布顺序与兼容 toolchain。
+- `release-manifest.json` 固化 packed files、dependencies、integrity 与 order。
+- `api/*.d.ts` 与 manifest 是 committed public API review baseline。
+- 结论：全部保留并迁入 `release/app-user-sdk/`；不得按“可生成”理由删除。
 
-### 根 `scripts/*.mjs`
+### Operational cutover 与 retirement assets
 
-- 已按 basename 核查 14 个 tracked scripts 的 repository 消费者。
-- 每个 script 都有 package script、workflow、test、部署入口或 maintained
-  module 消费者。
-- 该目录混合多类职责，但所有文件都仍活跃。
-- 结论：本 idea 中原位保留；未来分组方案需要独立的精确路径计划和收益证据。
+Issuer cutover、managed issuer retirement 和 release recovery 内容仍由 workflow、
+tests 或 rollback procedures 消费。它们迁移或保留，但不因历史名称而删除。
 
-### `sdk/` 与 `examples/app-user-sdk/`
+### `.agents/` 与 `.silvermoon/`
 
-- SDK API declarations、package matrix 和 release manifest 被 SDK readiness
-  与 release checks 消费。
-- Examples 会被复制到干净的 packed-artifact consumer tests，并由当前文档链接。
-- 结论：release baseline 与验证输入；保留。
+Canonical Agent guidance 与 idea lifecycle history 不进入普通 cleanup 删除。
+Path guidance 会随 target layout 更新，但 history 不重写。
 
-## 排除
+## Package ownership 证据
 
-### `.silvermoon/ideas/**`
+- `@unicas/service-cloudflare` 已拥有 service Worker implementation、Wrangler config
+  和 D1/R2 adapters；App-scoped Space migration 属于该 Cloudflare adapter。
+- `@unicas/spaces` 是独立部署的 private first-party App；其 Wrangler config、
+  migrations 和 Wrangler tool dependency 应由 package 自己拥有。
+- Product apex 是独立 assets-only Worker。它具备独立 origin、config、tests 和
+  release lifecycle，因此成为 private `@unicas/site` package；不并入
+  `@unicas/docs-site`。
+- `@unicas/docs-site` 继续只拥有 `docs.unicas.work` 内容、renderer、tests 与
+  config。
 
-`legacy-repoledger` 等历史名称位于保留的 idea history 中。这些文件是 lifecycle
-和审计记录，不是过时源码。
+## Release 与 tooling 边界
 
-### 冻结的 legacy 环境
+- `release/`：发布 contract、evidence、plan/deploy/smoke/cutover/bootstrap scripts。
+- `scripts/git/`：repository hook management 与 pre-push validation。
+- `scripts/local/`：local runtime orchestration 及其私有 Docker/compose inputs。
+- `packages/**`：product/package source、package-root deployment config、
+  migrations、build/test tooling。
+- `examples/`：面向使用者且可执行的 repository examples。
 
-`unicas.shazhou.work` 及其 Cloudflare 资源不属于本 cleanup。本盘点中的任何
-观察都不授权修改或删除它们。
+## 冻结环境
 
-## 当前删除结果
-
-本快照中没有 inspected tracked file 满足已批准的删除标准。这是预期的
-证据驱动结果。Implementation 不得为了让 cleanup 包含文件删除而换入未经证明的
-删除项。
-
-## 首批候选
-
-Implementation candidate 仅限：
-
-1. 使用 Git rename 将
-   `stacks/unicas/deploy/migrations/tenant/0001_baseline.sql` 移到
-   `stacks/unicas/deploy/migrations/app-space/0001_baseline.sql`；
-2. 更新 Wrangler migration directory 与 schema test 的读取路径；
-3. 证明 SQL 内容不变；
-4. 运行现有 schema migration 和最窄相关 repository/package checks；
-5. 记录旧目录和 maintained references 已不存在。
-
-本批次不包含 compatibility copy、symlink、新的专用回归 guard、production
-migration 或 deployment。
+`unicas.shazhou.work` 及其 Cloudflare resources 不属于本 cleanup。本盘点中的
+任何观察都不授权修改、部署或删除它们。
