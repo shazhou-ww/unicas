@@ -2,17 +2,24 @@
 
 ## 设计目标
 
-这份设计定义 `@unicas/space-client` 的目标公开 surface。它让一个 App 用户
-会话共享 capability 状态，并继续把每次 CAS 操作绑定到一个明确 Space。
+`@unicas/space-client` 只提供一个与 App 用户会话同生命周期的 CAS client。
+调用方在每次操作中显式传入目标 `spaceId`，SDK 统一管理 capability 与 cache：
 
-设计采用兼容性优先的增量路径：
+```ts
+const cas = createAppCasClient({
+  baseUrl: "https://api.unicas.work",
+  appId,
+  capabilityProvider,
+  cache,
+});
 
-- 新增 `createAppCasClient` 和相关类型，不改变现有 HTTP route、capability
-  version 或 CAS 操作语义。
-- `AppCasClient.forSpace(...)` 返回现有 `SpaceCasClient`，因此
-  `@unicas/space-blob-client`、`@unicas/space-file-client` 和调用方已有的
-  Space-oriented 组合方式可以直接复用。
-- `createSpaceCasClient` 保持当前签名和行为，在首个版本中不弃用。
+const privateNode = await cas.readNode("/users/alice", privateHash);
+const sharedNode = await cas.readNode("/shared/templates", templateHash);
+```
+
+公开 API 不提供 `forSpace`、`SpaceCasClient`、authorization profile 或
+`refDomain` 参数。高层 blob/file workflow 可以绑定一个 Space，以保证一次
+workflow 不混用 Space，但它们共享同一个 App client，不拥有独立认证状态。
 
 ## 目标公开 TypeScript surface
 
@@ -27,11 +34,50 @@ export function createAppCasClient(
 ): AppCasClient;
 
 export interface AppCasClient {
-  forSpace(
+  readNode(
     spaceId: string,
-    options?: AppSpaceClientOptions,
-  ): SpaceCasClient;
-  close(): void;
+    hash: CasHash,
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<CasNode>;
+
+  readMetadata(
+    spaceId: string,
+    hash: CasHash,
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<CasNodeMetadata>;
+
+  readContent(
+    spaceId: string,
+    hash: CasHash,
+    range?: CasNodeRange,
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<ReadableStream<Uint8Array>>;
+
+  leaseNode(
+    spaceId: string,
+    hash: CasHash,
+    options?: SpaceNodeLeaseOptions,
+  ): Promise<SpaceNodeLeaseResult>;
+
+  listRootRefs(
+    spaceId: string,
+    options?: CasListRootRefsOptions,
+  ): Promise<CasRootRefsPage>;
+
+  updateRootRefs(
+    spaceId: string,
+    update: CasRootRefUpdate,
+  ): Promise<CasRootRefsResult>;
+
+  usage(
+    spaceId: string,
+    signal?: AbortSignal,
+  ): Promise<CasUsage>;
+
+  gc(
+    spaceId: string,
+    options?: CasGcOptions,
+  ): Promise<CasGcResult>;
 }
 
 export interface AppCasClientConfig {
@@ -42,57 +88,21 @@ export interface AppCasClientConfig {
   readonly cache?: CasNodeCache;
 }
 
-export interface AppSpaceClientOptions {
-  readonly authorizationProfile?: SpaceAuthorizationProfile;
-}
-
-export type SpaceAuthorizationProfile =
-  | {
-      readonly id: string;
-      readonly kind: "content";
-    }
-  | {
-      readonly id: string;
-      readonly kind: "root-refs";
-      readonly refDomain: string;
-    }
-  | {
-      readonly id: string;
-      readonly kind: "management";
-    };
-
-export const DEFAULT_SPACE_AUTHORIZATION_PROFILE: Readonly<{
-  readonly id: "content";
-  readonly kind: "content";
-}>;
-
 export interface SpaceCapabilityProvider {
   acquire(
-    request: SpaceCapabilityAcquireRequest,
+    requirement: SpaceCapabilityRequirement,
   ): Promise<ProvidedSpaceCapability>;
-}
-
-export interface SpaceCapabilityAcquireRequest {
-  readonly profile: SpaceAuthorizationProfile;
-  readonly requirements: readonly SpaceCapabilityRequirement[];
-  readonly reason:
-    | "missing"
-    | "expiring"
-    | "requirement-miss"
-    | "server-rejected";
-  readonly current: SpaceCapabilityMetadata | null;
-  readonly rejection?: {
-    readonly status: number;
-    readonly code?: string;
-  };
-  readonly signal?: AbortSignal;
 }
 
 export interface SpaceCapabilityRequirement {
   readonly appId: string;
   readonly spaceId: string;
   readonly permission: SpaceCapabilityPermissionKind;
-  readonly refDomain?: string;
+  readonly reason:
+    | "missing"
+    | "expiring"
+    | "requirement-miss"
+    | "server-rejected";
 }
 
 export interface ProvidedSpaceCapability {
@@ -114,8 +124,6 @@ export interface SpaceCapabilityGrantMetadata {
 }
 
 export type CasCapabilityErrorCode =
-  | "CLIENT_CLOSED"
-  | "PROFILE_MISMATCH"
   | "PROVIDER_FAILED"
   | "INVALID_CAPABILITY_METADATA"
   | "UNSATISFIED_CAPABILITY_REQUIREMENT";
@@ -126,177 +134,226 @@ export class CasCapabilityError extends Error {
 }
 ```
 
-这里的声明描述公开契约，不要求实现把全部类型放在同一个源码文件。生成的
-API baseline 必须呈现等价的 package-root exports。
+这里的声明描述 public contract，不要求实现把全部类型放在同一个源码文件。
+生成的 package-root declarations 与 API baseline 必须呈现等价 surface。
 
-## App client 与 scoped view
+`AppCasClient` 没有 `close()` 或 `forSpace()`。App 在登录会话结束时丢弃 client
+与 provider；client 不持久化 token，也不声称远程撤销 token。
 
-`createAppCasClient` 创建一个与 App 用户会话同生命周期的对象。它拥有：
+## 操作与 requirement
 
-- 一个 `appId` 和 data-plane `baseUrl`；
-- 一个 provider；
-- 按 authorization profile 隔离的当前 capability、刷新状态和拒绝状态；
-- 所有 Space view 共用的 fetcher 与 node cache。
+每次调用先验证 canonical `spaceId`，再生成一个精确 requirement：
 
-`forSpace(spaceId, options)` 首先验证 canonical Space ID，然后返回冻结的
-`SpaceCasClient` view。view 只保存 Space 与 profile 描述，所有 token 获取、
-替换和并发协调都委托给 App client。多次创建同一 Space view 不承诺对象 identity，
-但必须共享相同 App client 状态。
+| 操作 | permission |
+| --- | --- |
+| `readNode`、`readMetadata`、`readContent` | `cas:nodes:read` |
+| `leaseNode` | `cas:nodes:lease` |
+| `listRootRefs` | `cas:root-refs:read` |
+| `updateRootRefs` | `cas:root-refs:update` |
+| `usage` | `cas:usage:read` |
+| `gc` | `cas:gc:execute` |
 
-默认 profile 是 `content`。profile 的用途是隔离不同授权上下文，而不是授予
-权限：
+requirement 只包含 App、目标 Space、精确 permission 和 acquisition reason。
+调用方不提供 selector、profile、token key 或 `refDomain`。
 
-- `content` 用于 node read/lease；
-- `root-refs` 用于 node 操作以及一个明确 `refDomain` 下的 Root Ref 操作；
-- `management` 用于 usage 和 GC。
-
-调用 profile 不支持的操作时，SDK 在联系 provider 或发送 HTTP 请求前抛出
-`CasCapabilityError`，code 为 `PROFILE_MISMATCH`。profile 本身不得扩大 selector
-或 permission；每次操作仍生成一个精确 requirement。
-
-`close()` 丢弃内存中的 capability 引用、阻止新的 provider/HTTP 操作，并让之后
-的 view 调用以 `CLIENT_CLOSED` 失败。已经发出的 HTTP 请求继续服从调用方传入的
-`AbortSignal`；`close()` 不伪装成远程 token 撤销。
-
-## Requirement 与 provider
-
-每个公开操作在发送请求前映射为一个 requirement：
-
-| 操作 | permission | profile |
-| --- | --- | --- |
-| `readNode`、`readMetadata`、`readContent` | `cas:nodes:read` | `content` 或 `root-refs` |
-| `leaseNode` | `cas:nodes:lease` | `content` 或 `root-refs` |
-| `listRootRefs` | `cas:root-refs:read` | `root-refs`，并带 `refDomain` |
-| `updateRootRefs` | `cas:root-refs:update` | `root-refs`，并带 `refDomain` |
-| `usage` | `cas:usage:read` | `management` |
-| `gc` | `cas:gc:execute` | `management` |
-
-provider 接收 SDK 已形成的精确 requirements，并负责通过 App 自己的登录会话、
-token endpoint 或其他适配器取得 capability。provider 可以返回覆盖更广业务
-场景的一个 token，例如：
+provider 负责通过 App 自己的登录会话、token endpoint 或其他适配器取得
+capability。它可以返回覆盖更广场景的一个 token，例如同时包含：
 
 - `/users/alice` 的 node read/lease 与 Root Ref 权限；
-- `/shared/**` 的 node read；
-- token-global `refDomain: "documents"`。
+- `/shared/**` 的 node read。
 
-SDK 不要求 provider 为每个 requirement 单独获取 token，也不要求调用方维护
-token-to-Space 映射。provider 返回的 metadata 必须是 token 的规范化描述；
-SDK 不再解析 JWT。metadata 只参与本地选择、刷新和诊断，不能证明 bearer token
-真实拥有对应权限。
+SDK 不要求 provider 为每个 requirement 单独签发 token，也不要求业务调用方
+维护 token-to-Space 映射。
+
+## Metadata 与授权边界
+
+provider 返回 bearer token 与该 token 的规范化 metadata。SDK 不解析 JWT；
+provider adapter 可以从受信 token endpoint response 或其他发行结果构造 metadata。
+
+metadata 只用于本地选择、刷新和错误诊断，不能证明 bearer token 真实拥有权限。
+服务端继续验证签名、issuer、audience、App、Space selector、permission 与当前
+协议要求的其他 claims。
 
 SDK 必须复制、验证并冻结 provider 结果：
 
 - `bearerToken` 非空；
 - `version` 为 `2`；
-- `notBefore`、`expiresAt` 是有效 Unix 秒值且时间窗口可用；
-- grant 数量、selector 和 permission 满足协议约束；
-- Root Ref requirement 的 `refDomain` 精确相等；
-- 同一个 grant 同时满足目标 Space selector 和 operation permission。
+- `notBefore` 与 `expiresAt` 是有效 Unix 秒值，时间窗口可用；
+- grant 数量、selector 与 permission 满足协议约束；
+- 同一个 grant 同时匹配目标 Space 和 operation permission；
+- Root Ref capability 在当前协议下包含一个有效 `refDomain`。
 
 metadata 无效或不能满足触发 acquisition 的 requirement 时，不发送 HTTP 请求，
-不回退旧 token，也不尝试其他历史 token。
+不回退旧 token，也不尝试其他历史 token。provider failure 由
+`CasCapabilityError` 的 `PROVIDER_FAILED` code 与 `cause` 显式保留。
+错误 message、日志和 telemetry 不得包含 bearer token、完整 metadata 或 provider
+响应体。
 
-provider error 由 `CasCapabilityError` 的 `PROVIDER_FAILED` code 和 `cause`
-显式保留。SDK 的错误 message、日志或 telemetry 不得包含 bearer token、完整
-metadata 或 provider 响应体。
+## 自动 credential class
 
-## Token 槽位、刷新与并发
+公开 API 不存在 authorization profile。SDK 只在内部从 permission 推导三个固定
+credential class：
 
-每个 `profile.id` 只有一个 current token 槽位。相同 id 再次出现时必须与首次
-注册的 profile kind 和 `refDomain` 完全一致，否则以 `PROFILE_MISMATCH` 失败。
+- content：node read 与 lease；
+- root-refs：Root Ref read 与 update；
+- management：usage 与 GC。
+
+每个 class 至多指向一个 current capability；同一个 immutable capability record
+可以被多个 class 共享。acquisition 成功时，SDK 原子替换请求 class 的 current
+record，并可以让它满足的其他 class 指向同一 record。任何 class 都不能积累历史
+token，因此这不是可遍历或随机尝试的 token pool。
+
+Root Ref 的 `refDomain` 只存在于 provider metadata 与内部 root-refs class：
+
+- 第一个有效 Root Ref capability 固定该 App client 会话的 domain；
+- 后续 Root Ref acquisition 必须返回同一 domain；
+- domain 改变以 `INVALID_CAPABILITY_METADATA` 显式失败；
+- `readNode` 等普通操作不接收或推导 domain；
+- 调用方无法通过 CAS 方法选择、覆盖或观察 domain。
+
+彻底删除服务端 `refDomain` 由独立 idea `remove-root-ref-domain`
+(`01M4HVP9ARZYN3M9A5HHCES65R`) 管理。该 idea 完成后，上述内部 pinning 可以删除，
+而本文件定义的 App client 方法签名不需要再次变化。
+
+## 刷新与并发
 
 SDK 在以下情况调用 provider：
 
-- 槽位为空；
-- token 已进入协议 clock-skew 窗口，reason 为 `expiring`；
-- current metadata 不满足 requirement，reason 为 `requirement-miss`；
-- 前一请求被服务端拒绝且允许受控刷新，reason 为 `server-rejected`。
+- credential class 没有 current capability；
+- current capability 已进入协议 clock-skew 窗口；
+- current metadata 不满足本次 requirement；
+- 前一个 request 被服务端拒绝并使 current capability 失效。
 
-同一 profile 同时只能有一个 acquisition。等待者在 acquisition 完成后重新检查
-自己的 requirement；若结果仍不满足，SDK 可以把尚未满足的并发 requirements
-合并到下一次 provider 请求，但不得保存任意历史 token 池或随机试 token。
+同一 credential class 同时只能有一个 acquisition。等待者在 acquisition 完成后
+重新检查自己的 requirement；若结果仍不满足，SDK 可以为尚未满足的 requirement
+启动下一次 acquisition，但不得拼接多个 token 或 grant 来满足一次请求。
 
-成功 acquisition 原子替换 current token。已经取得旧 token 快照并发出的请求
-可以完成，但后续请求只观察新 token。provider 自己拥有 OAuth refresh token
-或登录 session；这些材料不传给 App client。
+成功 acquisition 原子替换 current capability。已经取得旧 token snapshot 并发出
+的 HTTP request 可以完成，后续 request 只观察替换后的状态。OAuth refresh token
+或登录 session 由 provider 自己持有，不传给 App client。
 
 ## 服务端拒绝与自动重试
 
-所有操作都可以在首次发送前完成必要 acquisition。发送后的自动重试严格限制为：
+首次发送前，所有操作都可以完成必要 acquisition。发送后的自动重试严格限制为：
 
 - 仅 `readNode`、`readMetadata`、`readContent`、`listRootRefs` 和 `usage`；
 - 仅服务端返回 `401` 且稳定 code 为 `invalid_token`；
-- 标记当前槽位已拒绝，调用 provider 一次，再用相同参数重试一次；
+- 使引用该 capability 的内部 class 失效，调用 provider 一次，再以相同参数重试
+  一次；
 - 第二次失败原样抛出 `CasClientError`，不得继续循环。
 
 以下情况绝不自动重放：
 
 - `leaseNode`、`updateRootRefs`、`gc`；
 - 任意 `403`；
-- 网络异常、超时、取消和无法解析的响应；
+- 网络异常、超时、取消与无法解析的响应；
 - 其他 `401` code。
 
-服务端拒绝会让 current token 不再用于后续新请求。不能自动重试的操作把原始
-`CasClientError` 交给调用方；下一次独立操作再通过 provider 获取 capability。
-即使 `updateRootRefs` 有 `requestId`，SDK 也不替调用方判断业务事务是否应重放。
+稳定的 `insufficient_permission` 或 `resource_scope_mismatch` 可以使相关内部 class
+失效，但当前操作仍原样抛出 `CasClientError`。下一次独立调用再通过 provider
+acquire；SDK 不在同一次 `403` 后试探其他 token。
 
-## 缓存与上层 SDK 组合
+即使 `updateRootRefs` 带 `requestId`，SDK 也不替调用方判断业务事务是否应重放。
 
-App client 接受现有 `CasNodeCache`。所有 view 共享它，cache key 继续是
-`version + appId + spaceId + hash`。profile、token 和 selector 不改变缓存身份，
-也不能让相同 hash 跨 Space 命中。
+## Cache 与高层 SDK
 
-由于 view 继续实现 `SpaceCasClient`，上层调用保持现有形状：
+App client 接受现有 `CasNodeCache`。cache key 继续是
+`version + appId + spaceId + hash`；token、selector 与内部 credential class
+不改变 cache identity，也不能让相同 hash 跨 Space 命中。
+
+blob/file workflow 天然要求一次操作树留在同一 Space，因此它们可以保存
+`spaceId`，但不能保存 Space-level auth client：
 
 ```ts
-const app = createAppCasClient({
+export interface CasBlobClientConfig extends CasBlobClientOptions {
+  readonly client: AppCasClient;
+  readonly spaceId: string;
+}
+
+export function createCasBlobClient(
+  config: CasBlobClientConfig,
+): CasBlobClient;
+
+export interface SpaceFileSystemOptions {
+  readonly client: AppCasClient;
+  readonly spaceId: string;
+  readonly catalog: SpaceFileRootCatalog;
+  readonly blobOptions?: CasBlobClientOptions;
+  readonly createId?: () => string;
+  readonly createRequestId?: () => string;
+}
+```
+
+`CasBlobClient.unicasClient` 改为 `AppCasClient`，并增加只读 `spaceId`。node-content
+helpers 同样接收 `AppCasClient + spaceId`。file client 将这两个值传给 blob
+client。browser cache 的 versioned App/Space key 保持不变。
+
+调用示例：
+
+```ts
+const cas = createAppCasClient({
   baseUrl: "https://api.unicas.work",
   appId,
   capabilityProvider,
   cache,
 });
 
-const documentsProfile = {
-  id: "documents",
-  kind: "root-refs",
-  refDomain: "documents",
-} as const;
-
-const privateCas = app.forSpace("/users/alice", {
-  authorizationProfile: documentsProfile,
-});
-
-const sharedCas = app.forSpace("/shared/templates", {
-  authorizationProfile: documentsProfile,
-});
-
 const files = createSpaceFileSystem({
-  cas: privateCas,
+  client: cas,
+  spaceId: "/users/alice",
   catalog,
 });
-const sharedBlobs = createCasBlobClient(sharedCas);
+
+const sharedBlobs = createCasBlobClient({
+  client: cas,
+  spaceId: "/shared/templates",
+});
 
 await files.listRoots();
 await sharedBlobs.openBlob(templateHash);
-
-app.close();
 ```
 
-第一次 acquisition 可以返回同时覆盖私有精确 selector 和 `/shared/**` 的 token。
-之后两个 view 通过同一 profile 槽位复用它；调用方不保存或选择 bearer token。
+两个 workflow 共享 App client 的 capability 与 cache 状态；业务代码不创建
+Space CAS client，也不保存 bearer token。
 
-## 兼容与迁移
+## Breaking migration
 
-首个实现版本采取 additive API change：
+这个设计以替代 Space-level client 为目标，不保留第二套长期 surface：
 
-- `createSpaceCasClient(config)`、`SpaceCasClientConfig.getToken` 和所有现有操作保持
-  原样，当前 consumer 不需要迁移；
-- `createSpaceCasClient` 不在首个版本标记 deprecated；
-- 单 Space、测试替身和已经由外部系统管理 token 的场景可以继续使用旧 factory；
-- 新的多 Space App 用户流程和文档示例优先使用 `createAppCasClient`；
-- 后续若要弃用或移除旧 factory，必须另行更新 Ideal、版本判断、迁移文档、
-  changelog、API baseline 和 packed consumer 证据。
+- 在下一次 pre-1.0 minor 中新增 `createAppCasClient` 与 `AppCasClient`；
+- 同一版本移除 `createSpaceCasClient`、`SpaceCasClient` 与
+  `SpaceCasClientConfig`；
+- CAS 方法调用把 `spaceId` 移到第一个参数；
+- blob/file configs 改为接收 `client + spaceId`；
+- package name、App/Space v1 HTTP routes、capability version 2 与 cache key
+  version保持不变。
 
-Implementation 必须更新 package-root declarations、API baseline、README、文档站、
-quickstart、版本说明、changelog、packed Node/browser consumer 和第一方 Spaces
-App，并用类型与运行时测试证明旧 factory 未回归。
+迁移前后对应关系：
+
+```ts
+// 旧 API
+const cas = createSpaceCasClient({
+  baseUrl,
+  appId,
+  spaceId,
+  getToken,
+});
+await cas.readMetadata(hash);
+
+// 新 API
+const cas = createAppCasClient({
+  baseUrl,
+  appId,
+  capabilityProvider,
+});
+await cas.readMetadata(spaceId, hash);
+```
+
+`getToken()` 不能作为无 metadata 的隐式兼容入口，因为它无法让 SDK 安全判断
+selector、permission、expiry 或 Root Ref domain。迁移指南必须展示如何把 App
+现有 token endpoint 适配为 `SpaceCapabilityProvider`。
+
+Implementation 必须同步更新六个 App-user SDK packages 的版本判断、package-root
+declarations、API baseline、README、文档站、quickstart、changelog、packed
+Node/browser consumers、第一方 Spaces App 和所有测试替身。发布候选必须证明
+旧 Space client exports 已消失，且同一个 App client 能安全访问私有与共享 Space。
