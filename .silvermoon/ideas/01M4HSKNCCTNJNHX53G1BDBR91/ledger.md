@@ -23,15 +23,15 @@
 
 ### Deployment steps
 
-- [ ] **D-S01:** 固定 no-write Deployment 边界
-- [ ] **D-S02:** 证明 accepted candidate 位于 primary
-- [ ] **D-S03:** 生成只读 npm candidate plan
-- [ ] **D-S04:** 审查第一方与文档 dry-run
-- [ ] **D-S05:** 记录外部 no-write 证据
+- [x] **D-S01:** 固定 no-write Deployment 边界
+- [x] **D-S02:** 证明 accepted candidate 位于 primary
+- [x] **D-S03:** 生成只读 npm candidate plan
+- [x] **D-S04:** 审查第一方与文档 dry-run
+- [x] **D-S05:** 记录外部 no-write 证据
 
 ### Deployment acceptance criteria
 
-- [ ] **D-AC01:** Accepted implementation 可从 primary 追溯
-- [ ] **D-AC02:** 0.2.0 candidate plan 完整且无 registry 冲突
-- [ ] **D-AC03:** Spaces 与 docs deployment plan 可执行
-- [ ] **D-AC04:** 外部 publication 与 production 保持不变
+- [x] **D-AC01:** Accepted implementation 可从 primary 追溯
+- [x] **D-AC02:** 0.2.0 candidate plan 完整且无 registry 冲突
+- [x] **D-AC03:** Spaces 与 docs deployment plan 可执行
+- [x] **D-AC04:** 外部 publication 与 production 保持不变
