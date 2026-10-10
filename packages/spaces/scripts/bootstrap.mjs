@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { importPKCS8, SignJWT } from "jose";
-import { createSpaceCasClient } from "@unicas/space-client";
+import { createAppCasClient } from "@unicas/space-client";
 import { createSpaceFileSystem } from "@unicas/space-file-client";
 import {
   CapabilityAlgorithm,
@@ -178,14 +178,36 @@ export async function bootstrapSpacesPrincipal(config, execute = executeD1) {
     .setExpirationTime(issuedAt + 300)
     .setJti(crypto.randomUUID())
     .sign(privateKey);
-  const cas = createSpaceCasClient({
+  const cas = createAppCasClient({
     baseUrl: config.unicasBaseUrl,
     appId: config.appId,
-    spaceId: config.spaceId,
-    getToken: async () => token,
+    capabilityProvider: {
+      acquire: async () => ({
+        bearerToken: token,
+        metadata: {
+          version: SpaceCapabilityVersion,
+          expiresAt: issuedAt + 300,
+          grants: [{
+            selector: config.spaceId,
+            permissions: [
+              spaceNodeReadPermission(),
+              spaceNodeLeasePermission(),
+              spaceRootRefsReadPermission(),
+              spaceRootRefsUpdatePermission(),
+            ],
+          }],
+          refDomain: config.refDomain,
+        },
+      }),
+    },
   });
   const catalog = memoryCatalog();
-  const files = createSpaceFileSystem({ cas, catalog, blobOptions: { chunkBytes: 1024 * 1024 } });
+  const files = createSpaceFileSystem({
+    client: cas,
+    spaceId: config.spaceId,
+    catalog,
+    blobOptions: { chunkBytes: 1024 * 1024 },
+  });
   const root = await files.createRoot("Files");
   try {
     await execute(config, bootstrapInsertSql(config, root.info, Date.now()));

@@ -1,4 +1,4 @@
-# Single-Space capability to Space grants migration
+# Space grants and App-level client migration
 
 The pre-release App/Space contract now uses canonical path-like Space IDs,
 query-scoped HTTP resources, and capability grants. This is one clean cutover:
@@ -27,8 +27,32 @@ there is no route alias, token compatibility mode, or translation period.
 7. Deploy the service and every maintained client or App consumer from the
    same accepted repository revision.
 
-SDK method names and client configuration keys do not change. The value passed
-as `spaceId` does change to the canonical form.
+## SDK 0.2 client cutover
+
+The `0.2.0` SDK removes the Space-bound `SpaceCasClient`,
+`SpaceCasClientConfig`, `SpaceCasNodeCacheKey`, and
+`createSpaceCasClient` exports. There are no compatibility aliases.
+
+1. Replace `createSpaceCasClient({ baseUrl, appId, spaceId, getToken })` with
+   `createAppCasClient({ baseUrl, appId, capabilityProvider })`.
+2. Implement `SpaceCapabilityProvider.acquire(requirement)`. Return the opaque
+   `bearerToken` and trusted metadata for that token: version 2, Unix-second
+   expiry (and optional not-before), grants, and `refDomain` when Root Ref
+   permissions are present. The SDK does not parse the token; the service still
+   performs authoritative authorization.
+3. Pass the target Space ID as the first argument to every CAS operation, for
+   example `client.readMetadata(spaceId, hash)` and
+   `client.updateRootRefs(spaceId, update)`.
+4. Replace `createCasBlobClient(client, options)` with
+   `createCasBlobClient({ client, spaceId, ...options })`.
+5. Replace `createSpaceFileSystem({ cas, catalog, ...options })` with
+   `createSpaceFileSystem({ client, spaceId, catalog, ...options })`.
+6. Share one App client across Space-specific workflows rather than creating a
+   client or credential lifecycle per Space. There is no `forSpace()` API.
+
+The client may reacquire and replay one safe read after `401 invalid_token`.
+It never automatically replays leases, Root Ref updates, GC, `403` responses,
+or network failures.
 
 ## Optional multi-Space grants
 

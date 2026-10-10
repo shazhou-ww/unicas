@@ -66,31 +66,11 @@ export interface CasNodeCacheStrategy<Key extends { readonly hash: CasHash }> {
   ): Promise<ReadableStream<Uint8Array>>;
 }
 
-export interface CasClientOperations {
-  readNode(hash: CasHash, options?: { readonly signal?: AbortSignal }): Promise<CasNode>;
-  readMetadata(hash: CasHash, options?: { readonly signal?: AbortSignal }): Promise<CasNodeMetadata>;
-  readContent(
-    hash: CasHash,
-    range?: CasNodeRange,
-    options?: { readonly signal?: AbortSignal },
-  ): Promise<ReadableStream<Uint8Array>>;
-  updateRootRefs(update: CasRootRefUpdate): Promise<CasRootRefsResult>;
-  listRootRefs(options?: CasListRootRefsOptions): Promise<CasRootRefsPage>;
-  usage(signal?: AbortSignal): Promise<CasUsage>;
-  gc(options?: CasGcOptions): Promise<CasGcResult>;
-}
-
-export interface CasClientConfigBase<Key extends { readonly hash: CasHash }> {
-  readonly baseUrl: string;
-  readonly getToken: () => Promise<string>;
-  readonly fetcher?: HttpFetcher;
-  readonly cache?: CasNodeCacheStrategy<Key>;
-}
-
 export type {
   CasGcResult,
   CasHash,
   CasLeaseResult,
+  CasNode,
   CasNodeMetadata,
   CasRootRefUpdate,
   CasRootRefsPage,

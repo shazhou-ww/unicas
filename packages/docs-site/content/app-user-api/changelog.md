@@ -2,7 +2,24 @@
 
 All six public App-user SDK packages share each version.
 
-## 0.1.2 - Unreleased
+## 0.2.0 - Unreleased
+
+- Replaces the Space-bound client with `AppCasClient` and
+  `createAppCasClient`; every CAS operation receives `spaceId` first.
+- Replaces `getToken` with a metadata-aware capability provider and bounded
+  internal credential lifecycle.
+- Reacquires and replays one safe read after `401 invalid_token`; mutations,
+  `403` responses, and network failures are not automatically replayed.
+- Migrates blob/file workflows, browser cache composition, first-party Spaces,
+  examples, packed consumers, and documentation to a shared App client plus
+  explicit Space.
+- Removes `SpaceCasClient`, `SpaceCasClientConfig`,
+  `SpaceCasNodeCacheKey`, and `createSpaceCasClient` without compatibility
+  aliases.
+
+This is a breaking candidate entry, not a publication record.
+
+## 0.1.2 - Unreleased (superseded)
 
 - Replaces single-Space capability claims with `ver: 2` selector-bound grants,
   canonical slash-based Space IDs, unified `/v1/cas` routes with query
@@ -16,7 +33,7 @@ All six public App-user SDK packages share each version.
 - Replaces beta installation and vague browser wording with stable installation
   and an executable support matrix.
 
-This is a candidate entry, not a publication or deprecation record.
+This candidate was not published and is superseded by `0.2.0`.
 
 ## 0.1.1 - 2026-10-08
 

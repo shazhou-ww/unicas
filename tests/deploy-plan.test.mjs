@@ -1077,7 +1077,7 @@ describe("standalone deployment plan", () => {
     expect(wrapper).toContain("cas-app-space-smoke.mjs");
     expect(appSpaceSmoke).toContain("SpaceCapabilityVersion");
     expect(appSpaceSmoke).not.toContain("space-protocol/dist/v1.js");
-    expect(appSpaceSmoke).toContain("createSpaceCasClient");
+    expect(appSpaceSmoke).toContain("createAppCasClient");
     expect(appSpaceSmoke).toContain("GC keeps current leased nodes");
     expect(appSpaceSmoke).not.toContain("gc.deleted === 0");
     expect(appSpaceSmoke).toContain("cross-Space read");

@@ -25,7 +25,7 @@ describe("App-user SDK release matrix", () => {
     expect(matrix).toMatchObject({
       schemaVersion: 1,
       releaseKey: "app-user-sdk",
-      version: "0.1.2",
+      version: "0.2.0",
       distTag: "latest",
       tagPrefix: "npm/app-user-sdk/v",
       compatibility: {

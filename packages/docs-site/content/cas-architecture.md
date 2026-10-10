@@ -356,31 +356,33 @@ capabilities cannot write that domain.
 <!-- sdk-snippet: cas-architecture-space-client -->
 ```ts
 import type {
-  SpaceCasClient,
+  AppCasClient,
   SpaceNodeLeaseOptions,
 } from "@unicas/space-client";
 
-declare const cas: SpaceCasClient;
+declare const cas: AppCasClient;
+declare const spaceId: string;
 declare const hash: string;
 
-await cas.readNode(hash);
-await cas.readMetadata(hash);
-await cas.readContent(hash, { offset: 0, length: 1024 });
+await cas.readNode(spaceId, hash);
+await cas.readMetadata(spaceId, hash);
+await cas.readContent(spaceId, hash, { offset: 0, length: 1024 });
 
 const leaseOptions: SpaceNodeLeaseOptions = {
   durationMs: 60_000,
   signal: null,
 };
-await cas.leaseNode(hash, leaseOptions);
-await cas.listRootRefs({ limit: 100 });
-await cas.usage();
-await cas.gc({ maxNodes: 100 });
+await cas.leaseNode(spaceId, hash, leaseOptions);
+await cas.listRootRefs(spaceId, { limit: 100 });
+await cas.usage(spaceId);
+await cas.gc(spaceId, { maxNodes: 100 });
 ```
 
-A `SpaceCasClient` is created with one `(appId, spaceId)`, an asynchronous
-token provider, and an optional immutable-node cache strategy. Individual
-methods cannot select another App or Space. No compatibility client translates
-retired Stack/Tenant routes or credentials.
+An `AppCasClient` is created with one `appId`, an asynchronous capability
+provider, and an optional immutable-node cache strategy. Every method receives
+the target `spaceId`; one client can therefore serve several Spaces while
+keeping the App fixed. No compatibility client translates the removed
+Space-bound API, retired Stack/Tenant routes, or credentials.
 
 `leaseNode()` is the only lease operation. It returns the current lease state
 and, when an upload is required, direct `PUT` instructions. The thin transport

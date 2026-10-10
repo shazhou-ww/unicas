@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import type { SpaceCasClient } from "@unicas/space-client";
+import type { AppCasClient } from "@unicas/space-client";
 import type {
   SpaceFileRoot,
   SpaceFileRootInfo,
@@ -13,6 +13,8 @@ import {
   createLeaseEvidenceClient,
   normalizeAbsolutePath,
 } from "../src/file-service.js";
+
+const SPACE_ID = "/space-a";
 
 function fixture(options: {
   readonly revision?: number;
@@ -89,10 +91,11 @@ function fixture(options: {
       items: options.retained === false ? [] : [{ hash: "manifest-next", refCount: 1 }],
       nextCursor: null,
     })),
-  } as unknown as SpaceCasClient;
+  } as unknown as AppCasClient;
   return {
     service: new SpacesFileService(
       cas,
+      SPACE_ID,
       fileSystem,
       10,
       undefined,
@@ -201,20 +204,21 @@ describe("SpacesFileService", () => {
   test("reports aggregate lease evidence without exposing node identities", async () => {
     const leases = new Map<string, number>();
     const baseCas = {
-      leaseNode: vi.fn(async (hash: string) => {
+      leaseNode: vi.fn(async (spaceId: string, hash: string) => {
+        expect(spaceId).toBe(SPACE_ID);
         const attempt = (leases.get(hash) ?? 0) + 1;
         leases.set(hash, attempt);
         return attempt === 1
           ? { hash, state: "awaiting_upload" as const, upload: { method: "PUT" as const, url: "https://upload.test", expiresAt: 1, headers: {} } }
           : { hash, state: "ready" as const, leaseStartedAt: 1, leaseExpiresAt: 2 };
       }),
-    } as unknown as SpaceCasClient;
-    const { cas, evidence } = createLeaseEvidenceClient(baseCas);
+    } as unknown as AppCasClient;
+    const { client, evidence } = createLeaseEvidenceClient(baseCas);
     const mark = evidence.mark();
-    await cas.leaseNode("node-a");
-    await cas.leaseNode("node-a");
-    await cas.leaseNode("node-b");
-    await cas.leaseNode("node-b");
+    await client.leaseNode(SPACE_ID, "node-a");
+    await client.leaseNode(SPACE_ID, "node-a");
+    await client.leaseNode(SPACE_ID, "node-b");
+    await client.leaseNode(SPACE_ID, "node-b");
 
     expect(evidence.summarize(mark)).toEqual({
       leaseRequests: 4,
@@ -225,8 +229,8 @@ describe("SpacesFileService", () => {
     expect(JSON.stringify(evidence.summarize(mark))).not.toContain("node-a");
 
     const reuseMark = evidence.mark();
-    await cas.leaseNode("node-a");
-    await cas.leaseNode("node-b");
+    await client.leaseNode(SPACE_ID, "node-a");
+    await client.leaseNode(SPACE_ID, "node-b");
     expect(evidence.summarize(reuseMark)).toEqual({
       leaseRequests: 2,
       nodeCount: 2,
@@ -262,13 +266,20 @@ describe("SpacesFileService", () => {
       completePendingRelease: vi.fn(),
     };
     vi.mocked(cas.updateRootRefs).mockResolvedValue({ success: true, idempotent: false, revision: 4 });
-    const service = new SpacesFileService(cas, fileSystem, 10, undefined, catalog);
+    const service = new SpacesFileService(
+      cas,
+      SPACE_ID,
+      fileSystem,
+      10,
+      undefined,
+      catalog,
+    );
 
     await service.ensureSmokeRoot();
     await service.releaseSmokeRoot("run-a");
 
     expect(fileSystem.createRoot).toHaveBeenCalledWith("Release smoke");
-    expect(cas.updateRootRefs).toHaveBeenCalledWith({
+    expect(cas.updateRootRefs).toHaveBeenCalledWith(SPACE_ID, {
       requestId: "spaces-smoke:run-a:release-root",
       changes: { "smoke-manifest": -1 },
     });
@@ -288,7 +299,7 @@ describe("SpacesFileService", () => {
         oldRefCount = 0;
         return { success: true, revision: 2 };
       }),
-    } as unknown as SpaceCasClient;
+    } as unknown as AppCasClient;
     const completePendingRelease = vi.fn();
     const catalog = {
       list: vi.fn(async () => []),
@@ -308,10 +319,17 @@ describe("SpacesFileService", () => {
       openRoot: vi.fn(),
       deleteRoot: vi.fn(),
     } as unknown as SpaceFileSystem;
-    const service = new SpacesFileService(cas, fileSystem, 10, undefined, catalog);
+    const service = new SpacesFileService(
+      cas,
+      SPACE_ID,
+      fileSystem,
+      10,
+      undefined,
+      catalog,
+    );
 
     await expect(service.reconcilePendingReleases()).resolves.toBe(1);
-    expect(cas.updateRootRefs).toHaveBeenCalledWith({
+    expect(cas.updateRootRefs).toHaveBeenCalledWith(SPACE_ID, {
       requestId: "spaces-root:root-a:revision:4:release",
       changes: { "manifest-old": -1 },
     });
@@ -327,7 +345,7 @@ describe("SpacesFileService", () => {
         nextCursor: "more",
       })),
       updateRootRefs: vi.fn(),
-    } as unknown as SpaceCasClient;
+    } as unknown as AppCasClient;
     const completePendingRelease = vi.fn();
     const catalog = {
       list: vi.fn(async () => []),
@@ -347,7 +365,14 @@ describe("SpacesFileService", () => {
       openRoot: vi.fn(),
       deleteRoot: vi.fn(),
     } as unknown as SpaceFileSystem;
-    const service = new SpacesFileService(cas, fileSystem, 10, undefined, catalog);
+    const service = new SpacesFileService(
+      cas,
+      SPACE_ID,
+      fileSystem,
+      10,
+      undefined,
+      catalog,
+    );
 
     await expect(service.reconcilePendingReleases()).rejects.toMatchObject({
       code: "root_release_pending",

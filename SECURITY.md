@@ -22,6 +22,7 @@ fix and disclosure plan are ready.
 
 | Version | Support |
 | --- | --- |
+| Unreleased `0.2.0` App-user SDK candidate | Evaluated from the `main` source revision |
 | Latest `0.1.x` App-user SDK patch | Supported |
 | Earlier `0.1.x` patches | Upgrade required before a fix is prepared |
 | `0.1.0-beta.1` and older prereleases | Not supported |

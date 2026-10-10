@@ -53,12 +53,12 @@ describe("App-user SDK npm release planner", () => {
   });
 
   test("accepts only the canonical unified-version tag", () => {
-    expect(releaseVersionFromTag("npm/app-user-sdk/v0.1.2", matrix)).toBe("0.1.2");
+    expect(releaseVersionFromTag("npm/app-user-sdk/v0.2.0", matrix)).toBe("0.2.0");
     for (const tag of [
-      "npm/app-user-sdk/0.1.2",
-      "npm/codec/v0.1.2",
+      "npm/app-user-sdk/0.2.0",
+      "npm/codec/v0.2.0",
       "npm/app-user-sdk/v0.1.0",
-      "npm/app-user-sdk/vv0.1.2",
+      "npm/app-user-sdk/vv0.2.0",
       "npm/app-user-sdk/v01.2.0",
     ]) {
       expect(() => releaseVersionFromTag(tag, matrix), tag).toThrow();
@@ -76,7 +76,7 @@ describe("App-user SDK npm release planner", () => {
     });
     expect(plan).toMatchObject({
       releaseKey: "app-user-sdk",
-      version: "0.1.2",
+      version: "0.2.0",
       distTag: "latest",
       compatibility: matrix.compatibility,
       commit: "a".repeat(40),

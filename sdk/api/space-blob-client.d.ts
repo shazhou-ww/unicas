@@ -8,6 +8,6 @@
 export { createCasBlobClient, } from "./blob-client.js";
 export { leaseNodeContent, storeNodeContent, } from "./node-content.js";
 export { CasClientError } from "@unicas/space-client";
-export type { CasBlobClient, CasBlobClientOptions, CasBlobHandle, CasBlobRef, CasBlobRetentionUpdate, CasBlobSource, CasBlobWriteOptions, } from "./types.js";
+export type { CasBlobClient, CasBlobClientConfig, CasBlobClientOptions, CasBlobHandle, CasBlobRef, CasBlobRetentionUpdate, CasBlobSource, CasBlobWriteOptions, } from "./types.js";
 export { BlobChunkBytes, BlobChunkContentType, BlobIndexContentType, BlobIndexFanout, decodeBlobIndex, encodeBlobIndex, validateBlobIndex, } from "./blob-index.js";
 export type { CasBlobIndexV1 } from "./blob-index.js";

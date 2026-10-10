@@ -71,7 +71,7 @@ npm/app-user-sdk/v<version>
 For example:
 
 ```text
-npm/app-user-sdk/v0.1.2
+npm/app-user-sdk/v0.2.0
 ```
 
 Only [`.github/workflows/publish-npm.yml`](../.github/workflows/publish-npm.yml)

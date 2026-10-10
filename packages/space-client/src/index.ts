@@ -1,6 +1,9 @@
-/** Functional, Space-bound CAS client. */
+/** Functional App-level CAS client for explicit multi-Space operations. */
 
 export type {
+  AppCasClient,
+  AppCasClientConfig,
+  AppCasNodeCacheKey,
   CasGcOptions,
   CasGcResult,
   CasHash,
@@ -8,11 +11,15 @@ export type {
   CasLeaseOptions,
   CasLeaseResult,
   CasListRootRefsOptions,
+  CasNode,
   CasNodeCache,
   CasNodeCacheKey,
-  SpaceCasClient,
-  SpaceCasClientConfig,
-  SpaceCasNodeCacheKey,
+  ProvidedSpaceCapability,
+  SpaceCapabilityAcquireReason,
+  SpaceCapabilityGrantMetadata,
+  SpaceCapabilityMetadata,
+  SpaceCapabilityProvider,
+  SpaceCapabilityRequirement,
   SpaceNodeLeaseOptions,
   CasNodeRange,
   CasNodeSource,
@@ -32,7 +39,11 @@ export type {
 } from "@unicas/space-protocol";
 
 export {
-  createSpaceCasClient,
+  createAppCasClient,
   DEFAULT_SPACE_NODE_LEASE_OPTIONS,
 } from "./client.js";
-export { CasClientError } from "./errors.js";
+export {
+  CasCapabilityError,
+  CasClientError,
+} from "./errors.js";
+export type { CasCapabilityErrorCode } from "./errors.js";

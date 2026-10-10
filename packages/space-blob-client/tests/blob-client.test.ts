@@ -1,8 +1,8 @@
 /**
  * Functional blob-layer tests: `createCasBlobClient` over an in-memory
- * `SpaceCasClient` (no HTTP, no transport). Covers deterministic chunk-tree
+ * `AppCasClient` (no HTTP, no transport). Covers deterministic chunk-tree
  * store, handle-shaped reads (whole / ranged / bounded), retention operations,
- * and access to the underlying tenant client.
+ * and access to the underlying App client.
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -12,6 +12,7 @@ import {
   sha256,
 } from "@unicas/codec";
 import type {
+  AppCasClient,
   CasGcOptions,
   CasGcResult,
   CasNodeMetadata,
@@ -20,21 +21,31 @@ import type {
   CasRootRefsResult,
   CasUsage,
   HttpFetcher,
-  SpaceCasClient,
   SpaceNodeLeaseOptions,
   SpaceNodeLeaseResult,
 } from "@unicas/space-client";
 import { createCasBlobClient, storeNodeContent } from "../src/index.js";
 
-class MemoryCas implements SpaceCasClient, HttpFetcher {
+const SPACE_ID = "/space-1";
+
+class MemoryCas implements AppCasClient, HttpFetcher {
   readonly nodes = new Map<string, { content: Uint8Array; contentType: string; refs: string[] }>();
   readonly uploads = new Map<string, Uint8Array>();
   readonly rootRefUpdates: CasRootRefUpdate[] = [];
   gcCalls: { maxNodes?: number }[] = [];
 
-  leaseNode(hash: string): Promise<SpaceNodeLeaseResult>;
-  leaseNode(hash: string, options: SpaceNodeLeaseOptions): Promise<SpaceNodeLeaseResult>;
-  async leaseNode(hash: string, _options?: SpaceNodeLeaseOptions): Promise<SpaceNodeLeaseResult> {
+  leaseNode(spaceId: string, hash: string): Promise<SpaceNodeLeaseResult>;
+  leaseNode(
+    spaceId: string,
+    hash: string,
+    options: SpaceNodeLeaseOptions,
+  ): Promise<SpaceNodeLeaseResult>;
+  async leaseNode(
+    spaceId: string,
+    hash: string,
+    _options?: SpaceNodeLeaseOptions,
+  ): Promise<SpaceNodeLeaseResult> {
+    expect(spaceId).toBe(SPACE_ID);
     if (this.nodes.has(hash)) {
       return { hash, state: "ready", leaseStartedAt: 0, leaseExpiresAt: Date.now() + 60_000 };
     }
@@ -68,24 +79,27 @@ class MemoryCas implements SpaceCasClient, HttpFetcher {
     return new Response(null, { status: 200 });
   }
 
-  async readMetadata(hash: string): Promise<CasNodeMetadata> {
+  async readMetadata(spaceId: string, hash: string): Promise<CasNodeMetadata> {
+    expect(spaceId).toBe(SPACE_ID);
     const node = this.nodes.get(hash);
     if (node === undefined) throw new Error(`node not found: ${hash}`);
     return { hash, size: node.content.length, contentType: node.contentType, refs: node.refs };
   }
 
-  async readNode(hash: string) {
+  async readNode(spaceId: string, hash: string) {
     return {
-      metadata: await this.readMetadata(hash),
-      content: await this.readContent(hash),
+      metadata: await this.readMetadata(spaceId, hash),
+      content: await this.readContent(spaceId, hash),
     };
   }
 
   async readContent(
+    spaceId: string,
     hash: string,
     range?: CasNodeRange,
     _options?: { readonly signal?: AbortSignal },
   ): Promise<ReadableStream<Uint8Array>> {
+    expect(spaceId).toBe(SPACE_ID);
     const node = this.nodes.get(hash);
     if (node === undefined) throw new Error(`node not found: ${hash}`);
     const content = range === undefined
@@ -94,12 +108,21 @@ class MemoryCas implements SpaceCasClient, HttpFetcher {
     return streamBytes(content);
   }
 
-  async updateRootRefs(update: CasRootRefUpdate): Promise<CasRootRefsResult> {
+  async updateRootRefs(
+    spaceId: string,
+    update: CasRootRefUpdate,
+  ): Promise<CasRootRefsResult> {
+    expect(spaceId).toBe(SPACE_ID);
     this.rootRefUpdates.push(update);
     return { success: true, revision: this.rootRefUpdates.length };
   }
 
-  async usage(): Promise<CasUsage> {
+  async listRootRefs() {
+    return { refDomain: "test", revision: 0, items: [], nextCursor: null };
+  }
+
+  async usage(spaceId: string): Promise<CasUsage> {
+    expect(spaceId).toBe(SPACE_ID);
     return {
       nodeCount: this.nodes.size,
       readyContentBytes: [...this.nodes.values()].reduce((total, node) => total + node.content.length, 0),
@@ -110,7 +133,8 @@ class MemoryCas implements SpaceCasClient, HttpFetcher {
     };
   }
 
-  async gc(options?: CasGcOptions): Promise<CasGcResult> {
+  async gc(spaceId: string, options?: CasGcOptions): Promise<CasGcResult> {
+    expect(spaceId).toBe(SPACE_ID);
     this.gcCalls.push(options ?? {});
     return { examined: this.nodes.size, deleted: 0, reclaimedContentBytes: 0 };
   }
@@ -121,7 +145,13 @@ describe("functional blob client", () => {
     const cas = new MemoryCas();
     const leaseNode = vi.spyOn(cas, "leaseNode");
     const chunkBytes = 4;
-    const blobs = createCasBlobClient(cas, { chunkBytes, indexFanout: 2, uploadFetcher: cas });
+    const blobs = createCasBlobClient({
+      client: cas,
+      spaceId: SPACE_ID,
+      chunkBytes,
+      indexFanout: 2,
+      uploadFetcher: cas,
+    });
     const bytes = Uint8Array.from([
       0x61, 0x61, 0x61, 0x61,
       0x62, 0x62, 0x62, 0x62,
@@ -137,10 +167,11 @@ describe("functional blob client", () => {
     });
     expect(leaseNode).toHaveBeenCalledTimes(cas.nodes.size * 2);
     expect(leaseNode).toHaveBeenCalledWith(
+      SPACE_ID,
       expect.any(String),
       { durationMs: 30 * 60 * 1000, signal: null },
     );
-    expect(leaseNode.mock.calls.every(call => call[1]?.durationMs === 30 * 60 * 1000)).toBe(true);
+    expect(leaseNode.mock.calls.every(call => call[2]?.durationMs === 30 * 60 * 1000)).toBe(true);
     const handle = await blobs.openBlob(ref.hash);
     expect(handle.ref).toEqual(ref);
     const opened = new Uint8Array(await new Response(handle.read()).arrayBuffer());
@@ -154,14 +185,21 @@ describe("functional blob client", () => {
     const bounded = await handle.readBytes({ offset: chunkBytes - 2, length: 4 });
     expect(bounded).toEqual(ranged);
     expect(blobs.unicasClient).toBe(cas);
-    await expect(blobs.unicasClient.usage()).resolves.toBeDefined();
-    await expect(blobs.unicasClient.gc({ maxNodes: 25 })).resolves.toBeDefined();
+    expect(blobs.spaceId).toBe(SPACE_ID);
+    await expect(blobs.unicasClient.usage(SPACE_ID)).resolves.toBeDefined();
+    await expect(blobs.unicasClient.gc(SPACE_ID, { maxNodes: 25 })).resolves.toBeDefined();
     expect(progress).toHaveBeenLastCalledWith(bytes.length);
   }, 20_000);
 
   it("resolves single-node metadata when opening a blob", async () => {
     const cas = new MemoryCas();
-    const blobs = createCasBlobClient(cas, { chunkBytes: 1024, indexFanout: 2, uploadFetcher: cas });
+    const blobs = createCasBlobClient({
+      client: cas,
+      spaceId: SPACE_ID,
+      chunkBytes: 1024,
+      indexFanout: 2,
+      uploadFetcher: cas,
+    });
     const bytes = new TextEncoder().encode("small");
     const ref = await blobs.storeBlob(streamOf(bytes, 3), {
       contentType: "text/plain",
@@ -172,18 +210,31 @@ describe("functional blob client", () => {
     expect((await blobs.openBlob(ref.hash)).ref).toEqual(ref);
   });
 
-  it("separates batch retain and release while exposing the tenant client", async () => {
+  it("separates batch retain and release while exposing the App client", async () => {
     const cas = new MemoryCas();
-    const blobs = createCasBlobClient(cas, { uploadFetcher: cas });
+    const blobs = createCasBlobClient({
+      client: cas,
+      spaceId: SPACE_ID,
+      uploadFetcher: cas,
+    });
     const bytes = new TextEncoder().encode("abc");
-    const hash = await storeNodeContent(cas, bytes, "text/plain", [], undefined, cas);
+    const hash = await storeNodeContent(
+      cas,
+      SPACE_ID,
+      bytes,
+      "text/plain",
+      [],
+      undefined,
+      cas,
+    );
 
-    await expect(blobs.unicasClient.leaseNode(hash)).resolves.toMatchObject({ hash, state: "ready" });
+    await expect(blobs.unicasClient.leaseNode(SPACE_ID, hash))
+      .resolves.toMatchObject({ hash, state: "ready" });
     await expect(blobs.retain({ requestId: "retain-1", references: { [hash]: 2 } }))
       .resolves.toMatchObject({ success: true, revision: 1 });
     await expect(blobs.release({ requestId: "release-1", references: { [hash]: 1 } }))
       .resolves.toMatchObject({ success: true, revision: 2 });
-    await expect(blobs.unicasClient.gc({ maxNodes: 25 })).resolves.toBeDefined();
+    await expect(blobs.unicasClient.gc(SPACE_ID, { maxNodes: 25 })).resolves.toBeDefined();
     expect(cas.rootRefUpdates).toEqual([
       { requestId: "retain-1", changes: { [hash]: 2 } },
       { requestId: "release-1", changes: { [hash]: -1 } },
@@ -191,9 +242,13 @@ describe("functional blob client", () => {
     expect(cas.gcCalls).toEqual([{ maxNodes: 25 }]);
   });
 
-  it("rejects non-positive retention counts before calling the tenant client", async () => {
+  it("rejects non-positive retention counts before calling the App client", async () => {
     const cas = new MemoryCas();
-    const blobs = createCasBlobClient(cas, { uploadFetcher: cas });
+    const blobs = createCasBlobClient({
+      client: cas,
+      spaceId: SPACE_ID,
+      uploadFetcher: cas,
+    });
 
     await expect(blobs.retain({ requestId: "invalid", references: { bad: 0 } }))
       .rejects.toThrow("positive safe integer");

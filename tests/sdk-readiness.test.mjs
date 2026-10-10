@@ -120,7 +120,7 @@ describe("App-user SDK open-source readiness", () => {
     expect(versioning).toContain("patch release is backward compatible");
     expect(versioning).toContain("breaking TypeScript API");
     const changelog = read("CHANGELOG.md");
-    for (const version of ["0.1.0-beta.1", "0.1.1", "0.1.2"]) {
+    for (const version of ["0.1.0-beta.1", "0.1.1", "0.1.2", "0.2.0"]) {
       expect(changelog).toContain(`## ${version}`);
     }
     const api = readJson("sdk/api/manifest.json");

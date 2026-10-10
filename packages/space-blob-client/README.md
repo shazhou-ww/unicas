@@ -26,27 +26,33 @@ npm install @unicas/space-client @unicas/space-blob-client
 
 <!-- sdk-snippet: space-blob-client -->
 ```ts
-import { createSpaceCasClient } from "@unicas/space-client";
+import {
+  createAppCasClient,
+  type SpaceCapabilityProvider,
+} from "@unicas/space-client";
 import { createCasBlobClient } from "@unicas/space-blob-client";
 
 declare const appId: string;
 declare const spaceId: string;
-declare const getToken: () => Promise<string>;
+declare const capabilityProvider: SpaceCapabilityProvider;
 declare const requestId: string;
 declare const releaseRequestId: string;
 
-const cas = createSpaceCasClient({
+const cas = createAppCasClient({
   baseUrl: "https://api.unicas.work",
   appId,
-  spaceId,
-  getToken,
+  capabilityProvider,
 });
-const blobs = createCasBlobClient(cas);
+const blobs = createCasBlobClient({
+  client: cas,
+  spaceId,
+});
 ```
 
-The capability returned by `getToken` normally needs `cas:nodes:lease` for
-writes, `cas:nodes:read` for reads, and `cas:root-refs:update` plus a
-`refDomain` for retain/release operations.
+The capability provider normally supplies `cas:nodes:lease` for writes,
+`cas:nodes:read` for reads, and `cas:root-refs:update` plus a `refDomain` for
+retain/release operations. Multiple blob clients may share the same App client
+while each workflow retains its explicit `spaceId`.
 
 ## Store and retain a blob
 
@@ -101,7 +107,8 @@ await blobs.release({
 `retain` and `release` accept positive counts and translate them into positive
 or negative atomic Root Ref changes. Do not release a blob that business state
 still references. Space accounting and bounded GC remain available through
-`blobs.unicasClient.usage()` and `blobs.unicasClient.gc()`.
+`blobs.unicasClient.usage(blobs.spaceId)` and
+`blobs.unicasClient.gc(blobs.spaceId)`.
 
 The package is ESM-only. It supports Node.js 24+ and the browser engines and
 Blob/Fetch/Web Streams/Web Crypto APIs in the

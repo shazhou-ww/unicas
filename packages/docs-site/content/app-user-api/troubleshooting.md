@@ -13,7 +13,19 @@ Verify Node.js 24+ and TypeScript 5.9+ before diagnosing declaration errors.
 Obtain a fresh short-lived Space capability through the App's authenticated
 flow. Check the exact App, Space, audience, permission, and `refDomain`.
 Administrator sessions and credentials do not authorize App-user Space calls.
-The client never broadens permissions or silently refreshes authority.
+The client never broadens permissions. It may ask the configured provider for
+a replacement after `401 invalid_token`, but the provider must still return
+metadata satisfying the exact requested Space and permission.
+
+## Capability provider errors
+
+`CasCapabilityError` distinguishes `PROVIDER_FAILED`,
+`INVALID_CAPABILITY_METADATA`, and
+`UNSATISFIED_CAPABILITY_REQUIREMENT`. Confirm that provider metadata uses
+Unix seconds, remains outside the protocol clock-skew window, contains one
+grant whose selector and permission both match the requirement, and includes
+`refDomain` for Root Ref operations. Metadata is an App-provided description
+of the opaque token, not a substitute for server authorization.
 
 ## A blob disappears after upload
 
@@ -41,10 +53,12 @@ A cache hit is not an authorization decision.
 
 ## Retry behavior
 
-The SDK does not automatically retry. Use a bounded App-owned retry policy for
-transient failures. Reuse the same request ID and exact payload after an
-uncertain Root Ref update; do not reuse an idempotency key for another state
-transition.
+After `401 invalid_token`, the SDK reacquires and replays at most once for
+`readNode`, `readMetadata`, `readContent`, `listRootRefs`, and `usage`. It does
+not automatically replay `leaseNode`, `updateRootRefs`, `gc`, `403` responses,
+or network failures. Use a bounded App-owned policy for any further retry.
+Reuse the same request ID and exact payload after an uncertain Root Ref update;
+do not reuse an idempotency key for another state transition.
 
 For a reproducible public question, follow
 [SUPPORT.md](https://github.com/shazhou-ww/unicas/blob/main/SUPPORT.md).

@@ -97,8 +97,8 @@ packages/                           @unicas org
     │     经 @unicas/admin-client 取 admin-protocol 类型；不含任何服务端代码
     ├── space-client/     @unicas/space-client       Space 数据面 · 传输层
     │     纯 HTTP 封装，每个路由一个函数（readMetadata/readContent/
-    │     leaseNode/updateRootRefs/usage/gc）；`createSpaceCasClient` 绑定
-    │     App/Space；无编码、无业务封装，仅组装层使用
+    │     leaseNode/updateRootRefs/usage/gc）；`createAppCasClient` 绑定 App，
+    │     每个操作显式接收 Space；无编码、无业务封装，仅组装层使用
     ├── space-blob-client/@unicas/space-blob-client  Space 数据面 · 业务面
     │     业务方唯一入口：storeBlob / openBlob(含元数据的句柄式随机读) /
     │     retain / release；底层能力统一经 unicasClient 访问
@@ -145,11 +145,12 @@ space-protocol OpenAPI 导出 ← docs-site（仅构建时读取，不形成运�
 - **codec 是最底层**：无 workspace 依赖，仅外部 `cborg`；`space-protocol`
   不 re-export codec 符号（强制迁移，2026-08-29 决策）。
 - **space-client 是纯函数传输层**：与 HTTP 路由一一对应。factory 绑定
-  `appId`/`spaceId`，只组装 JWT 与公共传输参数，无编码、无业务抽象、无对象模式
-  （`node()` 已移除）。
+  `appId` 与 capability provider，每个方法以 `spaceId` 为首个参数；client
+  只管理有限 capability 生命周期并组装公共传输参数，无编码、无业务抽象、
+  无 `forSpace()` 或 `node()` 对象模式。
 - **业务方只用 space-blob-client**：其接口覆盖完整数据面
   （blob 写/随机读 + 节点元数据/续租/root-refs + usage/gc），应用栈不再直接
-  依赖 space-client；当前业务层只接收 `SpaceCasClient`。
+  依赖 space-client；业务 workflow 接收共享 `AppCasClient` 与显式 `spaceId`。
 - 契约层：`space-protocol` 持有数据面共享类型；`admin-protocol` 仅通过允许的
   单向依赖复用 App/Space identity 类型，反向依赖禁止。
 - `service` 同时依赖 Space/admin protocol，统一 App/Space 与 Admin HTTP surface；

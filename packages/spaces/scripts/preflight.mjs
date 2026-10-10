@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { importPKCS8, SignJWT } from "jose";
-import { createSpaceCasClient } from "@unicas/space-client";
+import { createAppCasClient } from "@unicas/space-client";
 import {
   CapabilityAlgorithm,
   CapabilityTokenType,
@@ -83,13 +83,25 @@ export async function runSpacesPreflight(environment = process.env, execute = ex
     .setExpirationTime(issuedAt + 300)
     .setJti(crypto.randomUUID())
     .sign(privateKey);
-  const client = createSpaceCasClient({
+  const client = createAppCasClient({
     baseUrl: environment.SPACES_UNICAS_BASE_URL ?? "https://api.unicas.work",
     appId: mapping.appId,
-    spaceId: mapping.spaceId,
-    getToken: async () => token,
+    capabilityProvider: {
+      acquire: async () => ({
+        bearerToken: token,
+        metadata: {
+          version: SpaceCapabilityVersion,
+          expiresAt: issuedAt + 300,
+          grants: [{
+            selector: selector.selector,
+            permissions: [spaceRootRefsReadPermission()],
+          }],
+          refDomain: mapping.refDomain,
+        },
+      }),
+    },
   });
-  await client.listRootRefs({ limit: 1 });
+  await client.listRootRefs(mapping.spaceId, { limit: 1 });
   return { status: "ready" };
 }
 

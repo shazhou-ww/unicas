@@ -124,9 +124,10 @@ so the later WebUI reuses the same store:
   comment in space-client is updated to state that `range === undefined`
   means a full read (populate) and a present range means a partial read (serve
   or bypass); the policy lives in the cache implementation.
-- **Blob layer**: `createCasBlobClient(cas, options)` is cache-agnostic and
-  takes the tenant client as injected; its normal path reads child nodes in
-  full, so blob reads populate the node cache automatically.
+- **Blob layer**: `createCasBlobClient({ client, spaceId, ...options })` is
+  cache-agnostic and takes the App client plus explicit Space as injected; its
+  normal path reads child nodes in full, so blob reads populate the node cache
+  automatically.
 - **Permissions**: tenant directories 0700, `session.json` 0600; cached
   content may be sensitive and inherits the current user's permissions.
 

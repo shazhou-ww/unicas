@@ -66,20 +66,22 @@ email address or display name as the stable Principal key.
 
 <!-- sdk-snippet: space-file-client -->
 ```ts
-import { createSpaceCasClient } from "@unicas/space-client";
+import {
+  createAppCasClient,
+  type SpaceCapabilityProvider,
+} from "@unicas/space-client";
 import { createSpaceFileSystem } from "@unicas/space-file-client";
 
 declare const appId: string;
 declare const spaceId: string;
-declare const getToken: () => Promise<string>;
+declare const capabilityProvider: SpaceCapabilityProvider;
 
-const cas = createSpaceCasClient({
+const cas = createAppCasClient({
   baseUrl: "https://api.unicas.work",
   appId,
-  spaceId,
-  getToken,
+  capabilityProvider,
 });
-const files = createSpaceFileSystem({ cas, catalog });
+const files = createSpaceFileSystem({ client: cas, spaceId, catalog });
 const root = await files.createRoot("Documents");
 
 await root.mkdir("/notes");

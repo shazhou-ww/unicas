@@ -8,13 +8,13 @@ import {
   type SpaceFileSystem,
 } from "@unicas/space-file-client";
 import type {
-  SpaceCasClient,
+  AppCasClient,
   SpaceNodeLeaseOptions,
   SpaceNodeLeaseResult,
 } from "@unicas/space-client";
 import type { D1Database } from "@cloudflare/workers-types";
 import {
-  createPrincipalCasClient,
+  createPrincipalAppCasClient,
   type CapabilityConfig,
   type SpaceAccess,
 } from "./capability.js";
@@ -82,7 +82,8 @@ interface ReconciliationCatalog extends SpaceFileRootCatalog {
 }
 
 export class SpacesFileService {
-  readonly #cas: SpaceCasClient;
+  readonly #client: AppCasClient;
+  readonly #spaceId: string;
   readonly #fileSystem: SpaceFileSystem;
   readonly #maximumUploadBytes: number;
   readonly #leaseEvidence: LeaseEvidenceTracker | undefined;
@@ -91,7 +92,8 @@ export class SpacesFileService {
   #rootSnapshot: readonly SpaceFileRootInfo[] | undefined;
 
   constructor(
-    cas: SpaceCasClient,
+    client: AppCasClient,
+    spaceId: string,
     fileSystem: SpaceFileSystem,
     maximumUploadBytes = DefaultMaximumUploadBytes,
     leaseEvidence?: LeaseEvidenceTracker,
@@ -102,7 +104,8 @@ export class SpacesFileService {
     if (!Number.isSafeInteger(maximumUploadBytes) || maximumUploadBytes <= 0 || maximumUploadBytes > MaximumUploadBytes) {
       throw new RangeError(`maximumUploadBytes must be between 1 and ${MaximumUploadBytes}`);
     }
-    this.#cas = cas;
+    this.#client = client;
+    this.#spaceId = spaceId;
     this.#fileSystem = fileSystem;
     this.#maximumUploadBytes = maximumUploadBytes;
     this.#leaseEvidence = leaseEvidence;
@@ -233,7 +236,7 @@ export class SpacesFileService {
       throw new FileServiceError("root_not_provisioned", 503, "The smoke Principal has multiple file roots");
     }
     const root = roots[0];
-    const released = await this.#cas.updateRootRefs({
+    const released = await this.#client.updateRootRefs(this.#spaceId, {
       requestId: `spaces-smoke:${runId}:release-root`,
       changes: { [root.manifestHash]: -1 },
     });
@@ -253,7 +256,7 @@ export class SpacesFileService {
     for (const release of pending) {
       try {
         if (await this.#rootRefCount(release.manifestHash) > 0) {
-          const result = await this.#cas.updateRootRefs({
+          const result = await this.#client.updateRootRefs(this.#spaceId, {
             requestId: release.requestId,
             changes: { [release.manifestHash]: -1 },
           });
@@ -332,7 +335,10 @@ export class SpacesFileService {
   async #rootRefCount(manifestHash: string): Promise<number> {
     let cursor: string | undefined;
     for (let pageNumber = 0; pageNumber < 10; pageNumber += 1) {
-      const page = await this.#cas.listRootRefs({ limit: 100, ...(cursor ? { cursor } : {}) });
+      const page = await this.#client.listRootRefs(this.#spaceId, {
+        limit: 100,
+        ...(cursor ? { cursor } : {}),
+      });
       const reference = page.items.find((item) => item.hash === manifestHash);
       if (reference) return reference.refCount;
       if (!page.nextCursor) return 0;
@@ -356,16 +362,17 @@ export async function createSpacesFileService(input: {
   readonly timing?: SpacesTimingSink;
   readonly rootSnapshot?: readonly SpaceFileRootInfo[];
 }): Promise<SpacesFileService> {
-  const baseCas = await createPrincipalCasClient(
+  const baseClient = createPrincipalAppCasClient(
     input.capability,
     input.principal,
     input.access ?? ["read", "write"],
     input.fetcher,
   );
-  const { cas, evidence } = createLeaseEvidenceClient(baseCas);
+  const { client, evidence } = createLeaseEvidenceClient(baseClient);
   const catalog = new D1FileRootCatalog(input.db, input.principal.principalId);
-  return new SpacesFileService(cas, createSpaceFileSystem({
-    cas,
+  return new SpacesFileService(client, input.principal.spaceId, createSpaceFileSystem({
+    client,
+    spaceId: input.principal.spaceId,
     catalog,
     blobOptions: {
       chunkBytes: SpacesBlobChunkBytes,
@@ -374,30 +381,40 @@ export async function createSpacesFileService(input: {
   }), input.maximumUploadBytes, evidence, catalog, input.timing, input.rootSnapshot);
 }
 
-export function createLeaseEvidenceClient(baseCas: SpaceCasClient): {
-  readonly cas: SpaceCasClient;
+export function createLeaseEvidenceClient(baseClient: AppCasClient): {
+  readonly client: AppCasClient;
   readonly evidence: LeaseEvidenceTracker;
 } {
   const events: { readonly hash: string; readonly state: SpaceNodeLeaseResult["state"] }[] = [];
-  const leaseNode = async (
+  function leaseNode(
+    spaceId: string,
+    hash: string,
+  ): Promise<SpaceNodeLeaseResult>;
+  function leaseNode(
+    spaceId: string,
+    hash: string,
+    options: SpaceNodeLeaseOptions,
+  ): Promise<SpaceNodeLeaseResult>;
+  async function leaseNode(
+    spaceId: string,
     hash: string,
     options?: SpaceNodeLeaseOptions,
-  ): Promise<SpaceNodeLeaseResult> => {
+  ): Promise<SpaceNodeLeaseResult> {
     const result = options === undefined
-      ? await baseCas.leaseNode(hash)
-      : await baseCas.leaseNode(hash, options);
+      ? await baseClient.leaseNode(spaceId, hash)
+      : await baseClient.leaseNode(spaceId, hash, options);
     events.push({ hash, state: result.state });
     return result;
-  };
-  const cas = Object.freeze({
-    readNode: baseCas.readNode,
-    readMetadata: baseCas.readMetadata,
-    readContent: baseCas.readContent,
-    leaseNode: leaseNode as SpaceCasClient["leaseNode"],
-    updateRootRefs: baseCas.updateRootRefs,
-    listRootRefs: baseCas.listRootRefs,
-    usage: baseCas.usage,
-    gc: baseCas.gc,
+  }
+  const client: AppCasClient = Object.freeze({
+    readNode: baseClient.readNode,
+    readMetadata: baseClient.readMetadata,
+    readContent: baseClient.readContent,
+    leaseNode,
+    updateRootRefs: baseClient.updateRootRefs,
+    listRootRefs: baseClient.listRootRefs,
+    usage: baseClient.usage,
+    gc: baseClient.gc,
   });
   const evidence: LeaseEvidenceTracker = Object.freeze({
     mark: () => events.length,
@@ -416,7 +433,7 @@ export function createLeaseEvidenceClient(baseCas: SpaceCasClient): {
       };
     },
   });
-  return { cas, evidence };
+  return { client, evidence };
 }
 
 export function normalizeAbsolutePath(path: string, allowRoot: boolean): string {

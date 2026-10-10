@@ -17,7 +17,7 @@ import {
   hashToHex,
   hexToHash,
 } from "../packages/codec/dist/index.js";
-import { createSpaceCasClient } from "../packages/space-client/dist/index.js";
+import { createAppCasClient } from "../packages/space-client/dist/index.js";
 import {
   CapabilityAlgorithm,
   CapabilityTokenType,
@@ -111,12 +111,33 @@ async function main() {
     }],
     ...(refDomain === undefined ? {} : { refDomain }),
   });
-  const token = await issueSpace(SPACE_ID, "doc");
-  const client = createSpaceCasClient({
+  const client = createAppCasClient({
     baseUrl: BASE,
     appId: APP_ID,
-    spaceId: SPACE_ID,
-    getToken: async () => token,
+    capabilityProvider: {
+      async acquire(requirement) {
+        const issuedAt = Math.floor(Date.now() / 1000);
+        return {
+          bearerToken: await sign({
+            ver: SpaceCapabilityVersion,
+            grants: [{
+              selector: requirement.spaceId,
+              permissions: [requirement.permission],
+            }],
+            refDomain: "doc",
+          }),
+          metadata: {
+            version: SpaceCapabilityVersion,
+            expiresAt: issuedAt + 300,
+            grants: [{
+              selector: requirement.spaceId,
+              permissions: [requirement.permission],
+            }],
+            refDomain: "doc",
+          },
+        };
+      },
+    },
   });
 
   console.log(`smoke base: ${BASE}`);
@@ -129,34 +150,36 @@ async function main() {
   }
 
   const child = await nodeOf(`space-smoke-child:${RUN}`);
-  const childLease = await uploadNode(client, child);
+  const childLease = await uploadNode(client, SPACE_ID, child);
   assert(childLease.state === "ready", "lease child");
 
   const parent = await nodeOf(`space-smoke-parent:${RUN}`, [child.hash]);
-  const parentLease = await uploadNode(client, parent);
+  const parentLease = await uploadNode(client, SPACE_ID, parent);
   assert(parentLease.state === "ready", "lease parent");
 
-  const content = new Uint8Array(await new Response(await client.readContent(parent.hash)).arrayBuffer());
+  const content = new Uint8Array(
+    await new Response(await client.readContent(SPACE_ID, parent.hash)).arrayBuffer(),
+  );
   assert(content.join(",") === parent.contentBytes.join(","), "read content matches");
-  const metadata = await client.readMetadata(parent.hash);
+  const metadata = await client.readMetadata(SPACE_ID, parent.hash);
   assert(metadata.hash === parent.hash && metadata.refs[0] === child.hash, "metadata preserves child reference");
 
   let smokeFailure;
   try {
-    const firstRootUpdate = await client.updateRootRefs({
+    const firstRootUpdate = await client.updateRootRefs(SPACE_ID, {
       requestId: `${RUN}:roots:1`,
       changes: { [parent.hash]: 1 },
     });
     assert(firstRootUpdate.success === true && typeof firstRootUpdate.revision === "number", "Root Ref update succeeds");
-    const retry = await client.updateRootRefs({
+    const retry = await client.updateRootRefs(SPACE_ID, {
       requestId: `${RUN}:roots:1`,
       changes: { [parent.hash]: 1 },
     });
     assert(retry.idempotent === true && retry.revision === firstRootUpdate.revision, "Root Ref retry is idempotent");
-    const roots = await client.listRootRefs({ limit: 100 });
+    const roots = await client.listRootRefs(SPACE_ID, { limit: 100 });
     assert(roots.items.some((item) => item.hash === parent.hash && item.refCount > 0), "Root Ref list contains parent");
 
-    const replacement = await client.updateRootRefs({
+    const replacement = await client.updateRootRefs(SPACE_ID, {
       requestId: `${RUN}:roots:replace`,
       changes: { [parent.hash]: -1, [child.hash]: 1 },
     });
@@ -164,18 +187,18 @@ async function main() {
       replacement.success === true && replacement.revision > firstRootUpdate.revision,
       "mixed-sign Root Ref replacement succeeds atomically",
     );
-    const replacedRoots = await client.listRootRefs({ limit: 100 });
+    const replacedRoots = await client.listRootRefs(SPACE_ID, { limit: 100 });
     assert(
       replacedRoots.items.some((item) => item.hash === child.hash && item.refCount > 0)
         && !replacedRoots.items.some((item) => item.hash === parent.hash && item.refCount > 0),
       "mixed-sign Root Ref replacement updates the projection",
     );
 
-    const usage = await client.usage();
+    const usage = await client.usage(SPACE_ID);
     assert(usage.nodeCount >= 2, `Space usage nodeCount -> ${usage.nodeCount}`);
-    const gc = await client.gc({ maxNodes: 100 });
-    const retainedParent = await client.readMetadata(parent.hash);
-    const retainedChild = await client.readMetadata(child.hash);
+    const gc = await client.gc(SPACE_ID, { maxNodes: 100 });
+    const retainedParent = await client.readMetadata(SPACE_ID, parent.hash);
+    const retainedChild = await client.readMetadata(SPACE_ID, child.hash);
     assert(
       retainedParent.hash === parent.hash && retainedChild.hash === child.hash,
       `GC keeps current leased nodes (deleted ${gc.deleted} stale nodes)`,
@@ -228,13 +251,10 @@ async function main() {
       headers: { Authorization: `Bearer ${isolationToken}` },
     });
     assert(response.status === 403, `cross-Space read -> ${response.status} (403)`);
-    const isolationClient = createSpaceCasClient({
-      baseUrl: BASE,
-      appId: APP_ID,
-      spaceId: ISOLATION_SPACE_ID,
-      getToken: async () => isolationToken,
-    });
-    assert((await isolationClient.usage()).nodeCount === 0, "isolation Space remains empty");
+    assert(
+      (await client.usage(ISOLATION_SPACE_ID)).nodeCount === 0,
+      "isolation Space remains empty",
+    );
 
     const retiredToken = await sign({
       ver: SpaceCapabilityVersion,
@@ -254,12 +274,12 @@ async function main() {
     throw error;
   } finally {
     try {
-      const roots = await client.listRootRefs({ limit: 100 });
+      const roots = await client.listRootRefs(SPACE_ID, { limit: 100 });
       const changes = Object.fromEntries(roots.items
         .filter((item) => (item.hash === parent.hash || item.hash === child.hash) && item.refCount > 0)
         .map((item) => [item.hash, -item.refCount]));
       if (Object.keys(changes).length > 0) {
-        const cleanup = await client.updateRootRefs({
+        const cleanup = await client.updateRootRefs(SPACE_ID, {
           requestId: `${RUN}:roots:cleanup`,
           changes,
         });
@@ -273,8 +293,8 @@ async function main() {
   console.log("\nAPP/SPACE SMOKE PASS");
 }
 
-async function uploadNode(client, node) {
-  let result = await client.leaseNode(node.hash);
+async function uploadNode(client, spaceId, node) {
+  let result = await client.leaseNode(spaceId, node.hash);
   if (result.state === "ready") return result;
   if (result.state === "validated_awaiting_children") {
     throw new Error(`Node upload is waiting for children: ${result.childHashes.join(", ")}`);
@@ -287,7 +307,7 @@ async function uploadNode(client, node) {
   if (!uploaded.ok && uploaded.status !== 412) {
     throw new Error(`Direct node upload failed: ${uploaded.status} ${uploaded.statusText}`);
   }
-  result = await client.leaseNode(node.hash);
+  result = await client.leaseNode(spaceId, node.hash);
   if (result.state === "awaiting_replacement_upload") {
     throw new Error(`${result.rejection.code}: ${result.rejection.message}`);
   }

@@ -1,12 +1,15 @@
 import { encodeHeader } from "@unicas/codec";
-import { appSpaceRoutes } from "@unicas/space-protocol";
-import { createSpaceCasClient } from "@unicas/space-client";
+import { appSpaceRoutes, parseSpaceSelector } from "@unicas/space-protocol";
+import { createAppCasClient } from "@unicas/space-client";
 import { createCasBlobClient } from "@unicas/space-blob-client";
 import { createSpaceFileSystem, type SpaceFileRootCatalog } from "@unicas/space-file-client";
 import { createBrowserCasNodeCache } from "@unicas/space-browser-cache";
 
 async function main(): Promise<void> {
   const hash = "a".repeat(64);
+  const spaceId = "/space-1";
+  const selector = parseSpaceSelector(spaceId);
+  if (!selector) throw new Error("fixture Space ID is invalid");
   const cache = createBrowserCasNodeCache({
     namespace: { endpoint: "https://api.example", principal: "issuer:subject" },
     databaseName: `sdk-consumer-${crypto.randomUUID()}`,
@@ -24,11 +27,22 @@ async function main(): Promise<void> {
   });
   if (loads !== 1) throw new Error(`IndexedDB cache loaded ${loads} times`);
 
-  const cas = createSpaceCasClient({
+  const cas = createAppCasClient({
     baseUrl: "https://api.example",
     appId: "app-1",
-    spaceId: "/space-1",
-    getToken: async () => "capability",
+    capabilityProvider: {
+      async acquire(requirement) {
+        return {
+          bearerToken: "capability",
+          metadata: {
+            version: 2,
+            expiresAt: Math.floor(Date.now() / 1000) + 300,
+            grants: [{ selector: selector.selector, permissions: [requirement.permission] }],
+            refDomain: "docs",
+          },
+        };
+      },
+    },
     cache,
     fetcher: { fetch: async () => Response.json({ error: "NOT_CALLED" }, { status: 500 }) },
   });
@@ -43,8 +57,12 @@ async function main(): Promise<void> {
   if (!appSpaceRoutes.usage({ appId: "app-1", spaceId: "/space-1" }).startsWith("/v1/cas/")) {
     throw new Error("protocol route unavailable");
   }
-  if (typeof createCasBlobClient(cas).storeBlob !== "function") throw new Error("blob client unavailable");
-  if (typeof createSpaceFileSystem({ cas, catalog }).createRoot !== "function") throw new Error("file client unavailable");
+  if (typeof createCasBlobClient({ client: cas, spaceId }).storeBlob !== "function") {
+    throw new Error("blob client unavailable");
+  }
+  if (typeof createSpaceFileSystem({ client: cas, spaceId, catalog }).createRoot !== "function") {
+    throw new Error("file client unavailable");
+  }
 
   await cache.clear();
   cache.close();

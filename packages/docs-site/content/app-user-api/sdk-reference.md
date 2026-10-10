@@ -33,13 +33,19 @@ generated declarations with the committed
 
 ## `@unicas/space-client`
 
-- `createSpaceCasClient(config)` creates one `SpaceCasClient`.
+- `createAppCasClient(config)` creates one `AppCasClient`; every operation
+  accepts `spaceId` first.
 - Operations: `readNode`, `readMetadata`, `readContent`, `leaseNode`,
   `listRootRefs`, `updateRootRefs`, `usage`, and `gc`.
-- Configuration and result types include fetcher, cache, range, node source,
-  lease, Root Ref, usage, and GC contracts.
+- `SpaceCapabilityProvider.acquire(requirement)` returns an opaque bearer token
+  and trusted `SpaceCapabilityMetadata`; requirement types expose App, Space,
+  exact permission, and acquisition reason.
+- Configuration and result types include provider, fetcher, cache, range, node
+  source, lease, Root Ref, usage, and GC contracts.
 - `CasClientError` preserves the non-success HTTP status and stable response
   error code when present.
+- `CasCapabilityError` exposes stable provider/metadata/requirement error
+  codes.
 
 ## `@unicas/space-blob-client`
 

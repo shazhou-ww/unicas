@@ -9,7 +9,7 @@ six focused npm packages. Install only the layers your App owns.
 | --- | --- | --- |
 | Canonical node bytes and digests | `@unicas/codec` | Pure encoding and validation; no HTTP |
 | App/Space v1 contracts and capability vocabulary | `@unicas/space-protocol` | Types, schemas, routes, and OpenAPI |
-| Direct node, Root Ref, usage, or GC operations | `@unicas/space-client` | Thin Space-bound HTTP transport |
+| Direct node, Root Ref, usage, or GC operations | `@unicas/space-client` | Thin App-level HTTP transport with explicit Space arguments |
 | Chunked blobs, random access, and retain/release | `@unicas/space-blob-client` | Blob workflow above the transport |
 | Immutable node cache in an authenticated browser | `@unicas/space-browser-cache` | Bounded memory and IndexedDB cache |
 | Named file roots and committed working trees | `@unicas/space-file-client` | File workflow plus an App-owned catalog port |
@@ -39,9 +39,10 @@ schemas, capability vocabulary, and the only public subpath export:
 
 ## Space client
 
-`@unicas/space-client` binds one App and Space to a token provider and exposes
-one thin operation for each public Space route. It does not upload direct PUT
-bodies or model blobs and files.
+`@unicas/space-client` binds one App to a capability provider and accepts a
+Space ID on every operation. One client can serve several Spaces without
+exposing credential pooling or a `forSpace()` API. It does not upload direct
+PUT bodies or model blobs and files.
 
 ## Space blob client
 

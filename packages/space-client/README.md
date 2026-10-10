@@ -3,8 +3,9 @@
 [![npm version](https://img.shields.io/npm/v/%40unicas%2Fspace-client?label=npm)](https://www.npmjs.com/package/%40unicas%2Fspace-client)
 [![MIT license](https://img.shields.io/npm/l/%40unicas%2Fspace-client)](https://github.com/shazhou-ww/unicas/blob/main/LICENSE)
 
-Thin HTTP transport for the UniCAS App/Space v1 data plane. A client binds one
-App and Space and requests a current capability before every HTTP operation.
+Thin HTTP transport for the UniCAS App/Space v1 data plane. One client binds an
+App, accepts the target Space on every operation, and obtains least-privileged
+capabilities through an App-owned provider.
 
 ## When to use this package
 
@@ -27,31 +28,38 @@ For ordinary application content, prefer the layer that owns the workflow:
 npm install @unicas/space-client
 ```
 
-## Create a Space-bound client
+## Create an App-level client
 
 <!-- sdk-snippet: space-client -->
 ```ts
-import { createSpaceCasClient } from "@unicas/space-client";
+import {
+  createAppCasClient,
+  type SpaceCapabilityProvider,
+} from "@unicas/space-client";
 
 declare const appId: string;
 declare const spaceId: string;
 declare const hash: string;
 declare const previousHash: string;
 declare const nextHash: string;
-declare const getToken: () => Promise<string>;
+declare const capabilityProvider: SpaceCapabilityProvider;
 
-const cas = createSpaceCasClient({
+const cas = createAppCasClient({
   baseUrl: "https://api.unicas.work",
   appId,
-  spaceId,
-  getToken,
+  capabilityProvider,
 });
 ```
 
-`getToken` returns a currently valid Space capability for this App and Space.
-The capability must contain the exact permission for each operation. Refresh it
-through the App's authenticated flow; never put an App signing key or
-administrator credential in browser code.
+The provider receives the requested `appId`, `spaceId`, exact permission, and
+acquisition reason. It returns an opaque bearer token plus trusted metadata
+describing that token's version, expiry, grants, and optional Root Ref domain.
+The SDK does not parse JWTs and the service remains the authorization
+authority. Obtain capabilities through the App's authenticated flow; never put
+an App signing key or administrator credential in browser code.
+
+Keep one `AppCasClient` for the App and pass the target `spaceId` directly to
+each operation. There is no Space-bound client or `forSpace()` wrapper.
 
 ## Read immutable node content
 
@@ -61,7 +69,9 @@ It obtains both with one authorized content request.
 <!-- sdk-snippet: space-client -->
 ```ts
 const controller = new AbortController();
-const node = await cas.readNode(hash, { signal: controller.signal });
+const node = await cas.readNode(spaceId, hash, {
+  signal: controller.signal,
+});
 
 console.log(node.metadata.size, node.metadata.contentType, node.metadata.refs);
 const bytes = new Uint8Array(await new Response(node.content).arrayBuffer());
@@ -72,8 +82,8 @@ range with `readContent`:
 
 <!-- sdk-snippet: space-client -->
 ```ts
-const metadata = await cas.readMetadata(hash);
-const firstKilobyte = await cas.readContent(hash, {
+const metadata = await cas.readMetadata(spaceId, hash);
+const firstKilobyte = await cas.readContent(spaceId, hash, {
   offset: 0,
   length: Math.min(1024, metadata.size),
 });
@@ -92,7 +102,7 @@ current domain with `listRootRefs`:
 let cursor: string | undefined;
 
 do {
-  const page = await cas.listRootRefs({ limit: 100, cursor });
+  const page = await cas.listRootRefs(spaceId, { limit: 100, cursor });
   for (const item of page.items) {
     console.log(item.hash, item.refCount);
   }
@@ -105,7 +115,7 @@ Commit a business transition as one atomic change map. Reuse the same
 
 <!-- sdk-snippet: space-client -->
 ```ts
-await cas.updateRootRefs({
+await cas.updateRootRefs(spaceId, {
   requestId: crypto.randomUUID(),
   changes: {
     [previousHash]: -1,
@@ -116,7 +126,7 @@ await cas.updateRootRefs({
 
 ## Lease raw nodes
 
-`leaseNode(hash)` makes one JSON lease request. A non-ready result may contain
+`leaseNode(spaceId, hash)` makes one JSON lease request. A non-ready result may contain
 direct `PUT` instructions, but this package does not create canonical bytes or
 perform that upload. Use `storeNodeContent` from `@unicas/space-blob-client`
 for a raw-node helper, or use the blob/file clients for complete workflows.
@@ -125,24 +135,30 @@ for a raw-node helper, or use the blob/file clients for complete workflows.
 
 | Operations | Capability permission | Purpose |
 | --- | --- | --- |
-| `readNode`, `readMetadata`, `readContent` | `cas:nodes:read` | Read immutable node data |
-| `leaseNode` | `cas:nodes:lease` | Acquire or renew a node lease and negotiate direct upload |
-| `listRootRefs` | `cas:root-refs:read` + `refDomain` | Inspect one Root Ref domain |
-| `updateRootRefs` | `cas:root-refs:update` + `refDomain` | Atomically retain or release roots |
-| `usage` | `cas:usage:read` | Read current Space accounting |
-| `gc` | `cas:gc:execute` | Run one bounded garbage-collection pass |
+| `readNode(spaceId, ...)`, `readMetadata(spaceId, ...)`, `readContent(spaceId, ...)` | `cas:nodes:read` | Read immutable node data |
+| `leaseNode(spaceId, ...)` | `cas:nodes:lease` | Acquire or renew a node lease and negotiate direct upload |
+| `listRootRefs(spaceId, ...)` | `cas:root-refs:read` + `refDomain` | Inspect one Root Ref domain |
+| `updateRootRefs(spaceId, ...)` | `cas:root-refs:update` + `refDomain` | Atomically retain or release roots |
+| `usage(spaceId, ...)` | `cas:usage:read` | Read current Space accounting |
+| `gc(spaceId, ...)` | `cas:gc:execute` | Run one bounded garbage-collection pass |
 
 ## Errors, retries, and cancellation
 
 <!-- sdk-snippet: space-client -->
 ```ts
-import { CasClientError } from "@unicas/space-client";
+import {
+  CasCapabilityError,
+  CasClientError,
+} from "@unicas/space-client";
 
 try {
-  await cas.readMetadata(hash);
+  await cas.readMetadata(spaceId, hash);
 } catch (error) {
   if (error instanceof CasClientError) {
     console.error(error.status, error.code, error.message);
+  }
+  if (error instanceof CasCapabilityError) {
+    console.error(error.code, error.message);
   }
   throw error;
 }
@@ -152,11 +168,17 @@ try {
 response envelope's stable `error` value when the server returned one; branch
 on `code`, not the optional diagnostic text in `message`.
 
-The client preserves non-success HTTP status in `CasClientError`. It does not
-automatically retry or broaden permissions. Retry only transient failures with
-a bounded App-owned policy, and keep the same idempotency key and payload for
-an uncertain Root Ref update. Read, list, lease, usage, and GC operations
-accept `AbortSignal` through their documented arguments.
+`CasCapabilityError` reports provider failures, invalid provider metadata, and
+metadata that does not satisfy the exact operation requirement. The client
+keeps at most one current credential in each fixed internal class and
+coalesces concurrent acquisition for that class.
+
+After `401 invalid_token`, the client may reacquire and replay exactly once for
+`readNode`, `readMetadata`, `readContent`, `listRootRefs`, and `usage`.
+Mutations (`leaseNode`, `updateRootRefs`, and `gc`), `403` responses, and
+network failures are never automatically replayed. Keep the same idempotency
+key and payload when the App decides to retry an uncertain Root Ref update.
+Operations accept `AbortSignal` through their documented arguments.
 
 The package is ESM-only. It supports Node.js 24+ and the browser engines and
 Fetch/Web Streams APIs in the

@@ -10,7 +10,7 @@ import type {
   CasNodeRange,
   CasRootRefsResult,
   HttpFetcher,
-  SpaceCasClient,
+  AppCasClient,
 } from "@unicas/space-client";
 
 /** Blob identity + resolved metadata. */
@@ -40,6 +40,11 @@ export interface CasBlobClientOptions {
   readonly uploadFetcher?: HttpFetcher;
 }
 
+export interface CasBlobClientConfig extends CasBlobClientOptions {
+  readonly client: AppCasClient;
+  readonly spaceId: string;
+}
+
 /** Positive blob reference counts to retain or release as one business batch. */
 export interface CasBlobRetentionUpdate {
   readonly requestId: string;
@@ -61,7 +66,8 @@ export interface CasBlobHandle {
 /** Complete Space data-plane CAS client surface for business users. */
 export interface CasBlobClient {
   /** Escape hatch for node-level transport operations and Space management. */
-  readonly unicasClient: SpaceCasClient;
+  readonly unicasClient: AppCasClient;
+  readonly spaceId: string;
   /**
    * Write a blob, chunking it into CAS nodes behind a blob-index tree.
    * Every written node is automatically leased. Call `retain` after the

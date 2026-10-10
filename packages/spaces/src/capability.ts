@@ -1,17 +1,16 @@
 import { importPKCS8, SignJWT } from "jose";
-import { createSpaceCasClient, type SpaceCasClient } from "@unicas/space-client";
+import {
+  createAppCasClient,
+  type AppCasClient,
+  type ProvidedSpaceCapability,
+} from "@unicas/space-client";
 import {
   CapabilityAlgorithm,
   CapabilityTokenType,
   SpaceCapabilityVersion,
+  SpaceOperationPolicies,
   parseSpaceSelector,
-  spaceGcExecutePermission,
-  spaceNodeLeasePermission,
-  spaceNodeReadPermission,
-  spaceRootRefsReadPermission,
-  spaceRootRefsUpdatePermission,
-  spaceUsageReadPermission,
-  type SpaceCapabilityPermission,
+  type SpaceCapabilityPermissionKind,
 } from "@unicas/space-protocol";
 import type { PrincipalContext } from "./repository.js";
 
@@ -33,18 +32,22 @@ export async function issueSpaceCapability(
   access: readonly SpaceAccess[],
   now: () => number = () => Date.now(),
 ): Promise<string> {
+  return (await issueSpaceCapabilityWithMetadata(
+    config,
+    principal,
+    access,
+    now,
+  )).bearerToken;
+}
+
+async function issueSpaceCapabilityWithMetadata(
+  config: CapabilityConfig,
+  principal: PrincipalContext,
+  access: readonly SpaceAccess[],
+  now: () => number = () => Date.now(),
+): Promise<ProvidedSpaceCapability> {
   const issuedAt = Math.floor(now() / 1000);
-  const permissions: SpaceCapabilityPermission[] = [];
-  if (access.includes("read")) permissions.push(spaceNodeReadPermission());
-  if (access.includes("write")) {
-    permissions.push(
-      spaceNodeLeasePermission(),
-      spaceRootRefsReadPermission(),
-      spaceRootRefsUpdatePermission(),
-    );
-  }
-  if (access.includes("manage")) permissions.push(spaceUsageReadPermission(), spaceGcExecutePermission());
-  if (permissions.length === 0) throw new TypeError("At least one Space access permission is required");
+  const permissions = permissionsForAccess(access);
   const selector = parseSpaceSelector(principal.spaceId);
   if (!selector || selector.kind !== "exact") {
     throw new TypeError("Principal spaceId must be a canonical exact Space ID");
@@ -56,7 +59,7 @@ export async function issueSpaceCapability(
     keyCache.set(config.privateKeyPem, importedKey);
   }
   const privateKey = await importedKey;
-  return new SignJWT({
+  const bearerToken = await new SignJWT({
     ver: SpaceCapabilityVersion,
     grants: [{ selector: selector.selector, permissions }],
     refDomain: principal.refDomain,
@@ -70,20 +73,67 @@ export async function issueSpaceCapability(
     .setExpirationTime(issuedAt + 300)
     .setJti(crypto.randomUUID())
     .sign(privateKey);
+  return {
+    bearerToken,
+    metadata: {
+      version: SpaceCapabilityVersion,
+      notBefore: issuedAt,
+      expiresAt: issuedAt + 300,
+      grants: [{ selector: selector.selector, permissions }],
+      refDomain: principal.refDomain,
+    },
+  };
 }
 
-export async function createPrincipalCasClient(
+export function createPrincipalAppCasClient(
   config: CapabilityConfig,
   principal: PrincipalContext,
   access: readonly SpaceAccess[],
   fetcher?: { fetch(input: string | Request, init?: RequestInit): Promise<Response> },
-): Promise<SpaceCasClient> {
-  const capability = await issueSpaceCapability(config, principal, access);
-  return createSpaceCasClient({
+): AppCasClient {
+  const permissions = permissionsForAccess(access);
+  return createAppCasClient({
     baseUrl: config.unicasBaseUrl,
     appId: principal.appId,
-    spaceId: principal.spaceId,
-    getToken: async () => capability,
+    capabilityProvider: {
+      async acquire(requirement) {
+        if (requirement.appId !== principal.appId || requirement.spaceId !== principal.spaceId) {
+          throw new TypeError("Principal capability requirement is outside its App/Space");
+        }
+        if (!permissions.includes(requirement.permission)) {
+          throw new TypeError(
+            `Principal access does not allow ${requirement.permission}`,
+          );
+        }
+        return issueSpaceCapabilityWithMetadata(config, principal, access);
+      },
+    },
     ...(fetcher ? { fetcher } : {}),
   });
+}
+
+function permissionsForAccess(
+  access: readonly SpaceAccess[],
+): readonly SpaceCapabilityPermissionKind[] {
+  const permissions: SpaceCapabilityPermissionKind[] = [];
+  if (access.includes("read")) {
+    permissions.push(SpaceOperationPolicies.readContent.permission);
+  }
+  if (access.includes("write")) {
+    permissions.push(
+      SpaceOperationPolicies.lease.permission,
+      SpaceOperationPolicies.listRootRefs.permission,
+      SpaceOperationPolicies.updateRootRefs.permission,
+    );
+  }
+  if (access.includes("manage")) {
+    permissions.push(
+      SpaceOperationPolicies.usage.permission,
+      SpaceOperationPolicies.gc.permission,
+    );
+  }
+  if (permissions.length === 0) {
+    throw new TypeError("At least one Space access permission is required");
+  }
+  return Object.freeze([...new Set(permissions)]);
 }
