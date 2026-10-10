@@ -56,7 +56,7 @@
     "@unicas/space-file-client": "workspace:*",
     "@unicas/space-protocol": "workspace:*",
     "esbuild": "^0.28.2",
-    "jose": "^6.2.10",
+    "jose": "^6.2.12",
     "miniflare": "5.20260811.1-alpha",
     "rimraf": "^6.1.3",
     "semver": "7.8.5",

@@ -44,9 +44,9 @@
   },
   "dependencies": {
     "@unicas/space-protocol": "workspace:*",
-    "@orpc/contract": "1.15.0",
-    "@orpc/openapi": "1.15.0",
-    "@orpc/zod": "1.15.0",
-    "zod": "^4.4.3"
+    "@orpc/contract": "1.15.4",
+    "@orpc/openapi": "1.15.4",
+    "@orpc/zod": "1.15.4",
+    "zod": "^4.6.5"
   }
 }
