@@ -26,10 +26,10 @@
     "clean": "rimraf --glob dist \"*.tsbuildinfo\""
   },
   "devDependencies": {
-    "@types/node": "^24.13.3",
-    "tsx": "^4.23.13",
-    "typescript": "^5.9.0",
-    "vitest": "^3.2.0"
+    "@types/node": "^26.6.4",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
   },
   "publishConfig": {
     "main": "./dist/index.js",
