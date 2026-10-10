@@ -117,15 +117,20 @@ App-user API 已采用 capability version 2：一个短期 token 可以通过多
 - idea-specific 设计、计划和证据保留在本 idea；只有被接受的稳定共识才进入
   `docs/`。
 
-## 待解决问题
+## 已确定的 API 方向
 
-- token provider 应返回 bearer token 加已规范化的 capability metadata，还是由
-  SDK 解析 JWT claims 形成仅用于路由的非权威 metadata？Implementation 必须
-  选择一个不把本地解析误当成授权验证、且不会要求调用方重复 selector 匹配的
-  契约。
-- 现有 `createSpaceCasClient` 应长期保留为 App client 的 convenience wrapper，
-  还是经过一个有版本和迁移证据的周期后弃用？选择必须同时考虑公开 API 简洁性
-  与现有 SDK consumer 的迁移成本。
-- 当服务端因 token 过期、撤销或 scope 变化拒绝请求时，哪些无副作用操作可以在
-  一次受控刷新后自动重试，哪些写操作必须把结果交还调用方？不得在实施前用统一
-  的宽泛重试策略替代逐操作决定。
+公开类型、provider 契约、刷新并发、重试边界和兼容策略由同世界的
+[API 设计](./ApiDesign.md)定义：
+
+- 新增 App-level factory；`forSpace(...)` 返回现有 `SpaceCasClient` 形状的
+  轻量 view，因此 blob、file 和 cache 上层可以继续复用既有组合方式。
+- provider 返回 bearer token 与已规范化的非权威 capability metadata。SDK
+  验证和匹配 metadata 以选择凭据，但不自行解析 JWT，也不把 metadata 当作
+  授权证明；服务端仍执行全部授权校验。
+- `createSpaceCasClient` 在首个版本中保持签名、行为和非弃用状态，作为单 Space
+  compatibility/convenience 入口。多 Space 文档与新代码优先使用 App-level
+  factory，后续移除必须另经版本与迁移决策。
+- 只有 `readNode`、`readMetadata`、`readContent`、`listRootRefs` 和 `usage`
+  可以在服务端以 `401 invalid_token` 拒绝后执行至多一次受控刷新与原样重试。
+  `leaseNode`、`updateRootRefs` 和 `gc` 不自动重放；`403`、网络失败和其他
+  非成功响应也不触发自动重试。
