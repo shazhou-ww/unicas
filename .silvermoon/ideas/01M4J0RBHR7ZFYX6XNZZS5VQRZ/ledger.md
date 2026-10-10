@@ -22,17 +22,17 @@
 
 ### Deployment steps
 
-- [ ] **D-S01:** 发布并固定 Deployment contract
-- [ ] **D-S02:** 读取 authoritative remote repository
-- [ ] **D-S03:** 验证 remote commands 与 workflow consumers
-- [ ] **D-S04:** 核对 publication 没有生产副作用
-- [ ] **D-S05:** 发布 Deployment evidence
-- [ ] **D-S06:** 失败时停止而不是扩大授权
+- [x] **D-S01:** 发布并固定 Deployment contract
+- [x] **D-S02:** 读取 authoritative remote repository
+- [x] **D-S03:** 验证 remote commands 与 workflow consumers
+- [x] **D-S04:** 核对 publication 没有生产副作用
+- [x] **D-S05:** 发布 Deployment evidence
+- [x] **D-S06:** 失败时停止而不是扩大授权
 
 ### Deployment acceptance criteria
 
-- [ ] **D-AC01:** Accepted implementation 可从 authoritative primary 到达
-- [ ] **D-AC02:** Remote tree 与 approved ownership layout 一致
-- [ ] **D-AC03:** Remote commands 与 workflows 使用新 ownership
-- [ ] **D-AC04:** Repository publication 没有产品部署副作用
-- [ ] **D-AC05:** 外部证据可追溯且可恢复
+- [x] **D-AC01:** Accepted implementation 可从 authoritative primary 到达
+- [x] **D-AC02:** Remote tree 与 approved ownership layout 一致
+- [x] **D-AC03:** Remote commands 与 workflows 使用新 ownership
+- [x] **D-AC04:** Repository publication 没有产品部署副作用
+- [x] **D-AC05:** 外部证据可追溯且可恢复
