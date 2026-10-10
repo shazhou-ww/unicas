@@ -1,84 +1,128 @@
-# 清理 UniCAS repository 并整理目录结构
+# 清理 UniCAS repository 并修正首批目录命名债务
 
 ## 意图
 
-系统识别并安全删除 repository 中已经失去用途的文件，整理不再清晰或不再符合
-当前职责边界的目录结构，使维护者更容易定位代码、文档、工具与部署资产，同时
-保持已接受的产品行为、公开契约和构建发布能力。
+为 repository cleanup 建立可重复、可审查的分级证据标准，并完成当前快照中唯一
+已经证实、可以原子修正的目录结构问题：将仍使用退役 Tenant 术语的 App-scoped
+Space 数据库迁移目录改为当前 App/Space 词汇。
+
+本 idea 不以删除数量作为成功指标。当前调查没有发现满足删除门槛的 tracked
+文件，因此“本批次不删除文件”是证据驱动的有效结果，而不是未完成状态。
 
 ## 背景
 
 UniCAS repository 经历了协议演进、包重命名、部署切换、SDK 发布和 Agent
-workflow 建设。随着旧路径、迁移期资产和阶段性辅助文件累积，repository 可能
-存在已经没有有效消费者的文件、重复入口，或不能准确表达当前所有权与依赖方向
-的目录布局。
+workflow 建设。文件名或历史年龄不能单独证明资产已经过时；运行时、部署、
+公开文档、生成 baseline、fixture、审计记录和 lifecycle history 具有不同的
+消费者与保留要求。
 
-本 idea 先建立可核验的现状清单、删除标准和目标目录方案，再决定具体改动。
-当前创建动作只记录 cleanup 的目标与讨论边界，不预先认定任何文件过时，也不
-预先选择目录迁移方案。详细范围、优先级、兼容策略和分批方式由本 idea 的独立
-session 在 Ideal World 阶段讨论并形成可评审契约。
+当前只读盘点确认：
+
+- `packages/` 表达 workspace package 与实现所有权；
+- `stacks/unicas/` 表达本地编排、Cloudflare 部署顺序及部署资产；
+- 根 `scripts/` 与 `tests/` 表达跨 package 工具和 repository guard；
+- `sdk/` 与 `examples/app-user-sdk/` 是发布验证输入，不是无主的历史副本；
+- `.agents/` 与 `.silvermoon/` 分别是 canonical Agent guidance 与 lifecycle
+  记录。
+
+盘点没有找到可直接删除的文件，但确认
+`stacks/unicas/deploy/migrations/tenant/` 仍使用已经退出当前产品词汇的目录名。
+该目录保存 App-scoped Space storage schema，源码已经使用
+`APP_SPACE_SCHEMA_MIGRATIONS`，因此本地路径应与当前职责一致。
+
+详细证据与候选分类记录在同世界的
+[`RepositoryInventory.md`](./RepositoryInventory.md)。
 
 ## 期望结果
 
-- repository 中每个计划删除的文件都有可审查的无消费者证据、替代路径或明确
-  的历史阶段终止依据；不以文件名、年龄或主观整洁度作为唯一删除理由。
-- 目标目录结构清楚表达稳定职责、package ownership、运行时边界、公开与内部
-  资产边界，以及文档、测试、脚本、部署和 Agent workflow 的归属。
-- 移动或合并路径后，所有 imports、workspace 配置、脚本、CI、文档链接、
-  package exports、发布清单和部署入口同步更新，不遗留静默失效的旧引用。
-- cleanup 保持现有 App-user、administrator、service、Spaces、SDK、Silvermoon
-  和部署行为，除非某项行为变化在本 idea 中被明确列出、证明并单独接受。
-- 改动以可验证、可回顾的批次推进；每一批都能通过最窄相关检查，并在 repository
-  级验证中证明没有破坏 package boundary、公开 API、构建、测试或发布路径。
-- cleanup 后留下简洁的结构说明和必要约定，使后续贡献者知道新文件应放在哪里，
-  并降低同类旧资产再次累积的概率。
+- repository 具有分级删除标准，能够区分运行时/部署/公开文档与可重建
+  baseline/fixture 的不同证明要求。
+- 当前候选清单明确记录每个调查对象的消费者、历史状态、不确定性和
+  “删除、迁移、保留或排除”结论。
+- `stacks/unicas/deploy/migrations/tenant/0001_baseline.sql` 通过 Git rename
+  原子迁移为
+  `stacks/unicas/deploy/migrations/app-space/0001_baseline.sql`，SQL 内容、
+  文件名和迁移编号保持不变。
+- Wrangler `migrations_dir` 与现有 schema migration 测试在同一提交切换到
+  `app-space`，repository 内不保留旧目录、兼容副本或符号链接。
+- cleanup 不改变 App/Space 行为、公开 API、package exports、数据库 schema、
+  Cloudflare binding、线上数据库名称或 ID、表名、部署顺序和生产资源。
+- 本批次完成后可以独立验收；未来 cleanup 候选必须基于新的精确证据与范围，
+  不自动扩展本 idea。
+
+## 分级删除标准
+
+### 运行时、部署与公开文档资产
+
+只有同时满足以下条件时才可删除：
+
+1. 静态 imports、配置、workspace graph、CI、脚本、测试、文档和发布路径中
+   没有消费者；
+2. package scripts、exports、workflow、部署配置或人工运维说明中没有声明入口；
+3. Git 历史和对应 lifecycle/运维证据证明阶段性职责已经结束；
+4. 动态加载、外部调用、rollback、审计和保留风险已经被明确关闭。
+
+任一条件无法证明时，结论必须是保留或继续调查。
+
+### 生成物、baseline 与 fixture
+
+只有同时证明存在权威来源与确定性重建方式、现有消费者已迁移或被替代、相关
+验证仍能覆盖原用途，并且该资产不是 review baseline、release evidence 或兼容
+契约时才可删除。仅有“可以重新生成”不足以证明可删除。
+
+### lifecycle、审计与政策资产
+
+Silvermoon history、批准与验收证据、许可证、安全政策、审计记录及仍受保留
+规则约束的资产不进入普通 cleanup 删除候选。
 
 ## 范围
 
 ### 范围内
 
-- 盘点 tracked 文件、顶层目录、workspace package、脚本、测试 fixture、文档、
-  配置、生成物来源和部署资产的当前用途与消费者。
-- 定义“可删除”“应迁移”“应合并”“应保留”的证据标准，并形成候选清单。
-- 讨论并确定目标目录结构、命名、所有权、依赖方向和分批迁移顺序。
-- 删除经证明不再使用的旧文件，并整理经批准的文件夹与路径。
-- 更新所有受影响的代码引用、配置、CI、文档、生成流程、release artifact、
-  ownership 规则和开发者入口。
-- 添加或调整能够证明删除安全、路径完整和结构约束持续有效的自动化检查。
+- 维护同世界的 repository 职责地图、证据标准和当前候选分类。
+- 原子重命名 App-scoped Space migration 目录：
+  `tenant` → `app-space`。
+- 更新 `packages/service-cloudflare/wrangler.toml` 的 `migrations_dir`。
+- 更新 `packages/service-cloudflare/tests/schema.test.ts` 中读取 baseline migration
+  的路径。
+- 运行现有 schema migration 测试与最窄相关 repository/package 检查，并记录
+  旧目录和旧引用零匹配证据。
 
 ### 范围外
 
-- 仅为了配合 cleanup 而新增产品功能、改变业务语义或重新设计公开协议。
-- 未经证据支持的大规模删除、按文件年龄清理，或为了得到整齐目录而改写正常
-  Git 历史。
-- 删除 Silvermoon idea history、审计证据、许可证、安全政策或仍受保留规则
-  约束的记录。
-- 隐式改变生产资源、发布 npm 包、执行生产部署，或修改冻结的
-  `unicas.shazhou.work` legacy 环境。
-- 在目标模型尚未明确批准前实施广泛的 package 合并、拆分或依赖方向反转。
+- 删除任何当前 tracked 文件；当前没有候选达到分级删除门槛。
+- 重组根 `scripts/`，或移动其他活跃 package、SDK、example、test、docs、
+  Agent guidance 和 Silvermoon history。
+- 新增仅用于禁止旧 migration 路径的永久回归测试；现有配置读取与 schema
+  migration 测试继续提供行为证明。
+- 重命名 `CAS_DB` binding、线上数据库 `unicas-tenant`、数据库 ID、表名、
+  migration 文件名或编号。
+- 改变产品功能、业务语义、公开协议、package boundary 或依赖方向。
+- 修改或部署冻结的 `unicas.shazhou.work` legacy 环境，执行生产部署、D1
+  migration、npm 发布或其他外部副作用。
 
 ## 约束
 
-- 在删除或移动前，通过 imports、配置、workspace graph、CI、文档、发布和部署
-  路径交叉验证消费者；动态加载或外部调用无法由静态搜索证明不存在时，必须
-  记录不确定性并选择保留或增加验证。
-- 保持 `.agents/` 为 Agent skills 与 reusable instructions 的唯一 canonical
-  root，并遵循 Silvermoon 固定 idea 布局与 lifecycle。
-- 任何涉及 `packages/**` 或 `stacks/unicas/**` 的方案和实施都必须遵循 UniCAS
-  package boundary、access-plane separation、依赖方向和部署边界。
-- 保留公开 package-root exports、版本与兼容策略；路径调整若影响外部消费者，
-  必须有显式迁移和版本判断，不能以“内部 cleanup”掩盖 breaking change。
-- 不提交生成依赖目录、临时输出、凭据、token、私钥、客户数据或本地环境状态。
-- 使用普通 Git rename/delete 和非 force 同步，保留并发工作，不 reset、重写
-  或清理未知改动。
-- 先完成并批准 Ideal World 的 inventory 方法、目标结构和范围，再编写
-  Implementation 契约或批量改动 repository。
+- 在实施前必须先获得对本 Ideal World 精确 revision 的明确批准。
+- 涉及 `packages/**` 与 `stacks/unicas/**` 的方案和实施必须遵循 UniCAS package
+  boundary、access-plane separation、依赖方向和部署边界。
+- 路径切换必须在一个 repository candidate 中完成，不保留双写来源、旧目录、
+  compatibility copy 或 symlink。
+- migration SQL 内容、迁移顺序与运行时行为必须保持不变；若 rename 之外出现
+  schema diff，本 idea 必须返回 preparing 重新评审。
+- 不确定性默认保留，不通过降低证据门槛来制造删除项。
+- 使用普通 Git rename 和非 force 同步，保留并发工作，不 reset、重写或清理
+  未知改动。
 
-## 待解决问题
+## 完成边界
 
-- 哪些目录或文件最值得优先调查，哪些历史或兼容资产必须明确排除？
-- 使用什么证据门槛判定文件已经没有 repository 内部或外部消费者？
-- 目标顶层目录和 workspace/package 布局应如何表达当前产品与部署边界？
-- cleanup 应拆成哪些可独立验证和回滚的批次，是否需要先添加结构或引用检查？
-- 对移动路径保留多长兼容期；哪些内部路径可以一次性切换，哪些公开入口需要
-  deprecation 或迁移说明？
+本 idea 在以下结果全部可验证后完成 repository implementation：
+
+- 分级删除标准与当前 inventory 成为已批准 Ideal World 的一部分；
+- `tenant` migration 目录原子迁移到 `app-space`，全部已知 repository 引用同步；
+- baseline SQL 内容不变，现有 schema migration 行为与相关 repository 检查通过；
+- 证据确认旧路径不再存在或被当前维护资产引用；
+- 没有生产、发布、资源或公开契约变化。
+
+根 `scripts/` 分组、更多目录重组或未来发现的删除候选不阻塞本 idea，也不得在
+未修订 Ideal World 的情况下并入本批次。
