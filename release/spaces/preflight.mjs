@@ -11,7 +11,7 @@ import {
 } from "@unicas/space-protocol";
 import { executeD1 } from "./bootstrap.mjs";
 
-const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const CONFIG = resolve(ROOT, ".wrangler/spaces/wrangler.production.json");
 
 export function smokePreflightQuery(principalId) {

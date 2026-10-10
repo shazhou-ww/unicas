@@ -25,7 +25,7 @@ function declarationName(packageName) {
 
 export async function syncSdkApiBaseline(root, matrix, mode) {
   if (mode !== "write" && mode !== "check") throw new Error(`unknown API baseline mode: ${mode}`);
-  const apiDirectory = join(root, "sdk", "api");
+  const apiDirectory = join(root, "release", "app-user-sdk", "api");
   await mkdir(apiDirectory, { recursive: true });
   const packages = [];
   for (const entry of matrix.packages) {
@@ -39,13 +39,13 @@ export async function syncSdkApiBaseline(root, matrix, mode) {
     } else {
       const expected = await readFile(path, "utf8").catch(() => "");
       if (expected !== declaration) {
-        throw new Error(`${entry.name}: public API baseline differs; review the change and run pnpm sdk:prepare`);
+        throw new Error(`${entry.name}: public API baseline differs; review the change and run pnpm release:sdk:prepare`);
       }
     }
     packages.push({
       name: entry.name,
       version: matrix.version,
-      declaration: `sdk/api/${file}`,
+      declaration: `release/app-user-sdk/api/${file}`,
       sha256: createHash("sha256").update(declaration).digest("hex"),
       exports: entry.exports,
     });
@@ -60,7 +60,7 @@ export async function syncSdkApiBaseline(root, matrix, mode) {
   if (mode === "write") {
     await writeFile(manifestPath, manifest, "utf8");
   } else if (await readFile(manifestPath, "utf8").catch(() => "") !== manifest) {
-    throw new Error("sdk/api/manifest.json differs; review the API change and run pnpm sdk:prepare");
+    throw new Error("release/app-user-sdk/api/manifest.json differs; review the API change and run pnpm release:sdk:prepare");
   }
   const expectedFiles = new Set([
     "README.md",
@@ -69,7 +69,7 @@ export async function syncSdkApiBaseline(root, matrix, mode) {
   ]);
   const unexpected = (await readdir(apiDirectory)).filter((file) => !expectedFiles.has(file));
   if (unexpected.length > 0) {
-    throw new Error(`sdk/api contains unexpected files: ${unexpected.join(", ")}`);
+    throw new Error(`release/app-user-sdk/api contains unexpected files: ${unexpected.join(", ")}`);
   }
   return packages;
 }
@@ -78,8 +78,10 @@ async function main() {
   const [arg] = process.argv.slice(2);
   const mode = arg === "--write" ? "write" : arg === "--check" ? "check" : null;
   if (mode === null) throw new Error("one of --write or --check is required");
-  const root = fileURLToPath(new URL("..", import.meta.url));
-  const matrix = JSON.parse(await readFile(join(root, "sdk", "package-matrix.json"), "utf8"));
+  const root = fileURLToPath(new URL("../..", import.meta.url));
+  const matrix = JSON.parse(
+    await readFile(join(root, "release", "app-user-sdk", "package-matrix.json"), "utf8"),
+  );
   await syncSdkApiBaseline(root, matrix, mode);
   console.log(`SDK API BASELINE ${mode.toUpperCase()} PASS`);
 }

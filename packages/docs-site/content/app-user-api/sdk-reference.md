@@ -3,7 +3,7 @@
 Only the exports listed here and
 `@unicas/space-protocol/openapi.json` are public. The release gate compares the
 generated declarations with the committed
-[API baseline](https://github.com/shazhou-ww/unicas/tree/main/sdk/api).
+[API baseline](https://github.com/shazhou-ww/unicas/tree/main/release/app-user-sdk/api).
 
 ## `@unicas/codec`
 

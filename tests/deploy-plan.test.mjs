@@ -9,16 +9,16 @@ import {
   deploymentPlan,
   parseArgs,
   validateDeploymentEnvironment,
-} from "../stacks/unicas/deploy/deploy.mjs";
-import { resolveManualTracingDeployment } from "../stacks/unicas/deploy/manual-tracing.mjs";
+} from "../release/service/deploy.mjs";
+import { resolveManualTracingDeployment } from "../release/shared/manual-tracing.mjs";
 import {
   parseManualTracingSecretArgs,
   syncManualTracingSecrets,
-} from "../stacks/unicas/deploy/sync-manual-tracing-secrets.mjs";
+} from "../release/service/sync-manual-tracing-secrets.mjs";
 import {
   ensureEncryptionSecrets,
   parseSecretNames,
-} from "../stacks/unicas/deploy/ensure-encryption-secrets.mjs";
+} from "../release/service/ensure-encryption-secrets.mjs";
 import {
   bootstrapStatements,
   inventoryDigest,
@@ -28,24 +28,32 @@ import {
   SCOPED_INVENTORY_QUERIES,
   validateR2BackupFiles,
   validateResetInventory,
-} from "../stacks/unicas/deploy/reset-smoke.mjs";
+} from "../release/service/reset-smoke.mjs";
 import { CONTROL_SCHEMA_MIGRATIONS } from "../packages/service-cloudflare/src/control-schema.ts";
-import { normalizeSmokeBaseUrl } from "../scripts/smoke-target.mjs";
+import { normalizeSmokeBaseUrl } from "../release/service/smoke-target.mjs";
 import {
   fetchWorkflowCreatedAt,
   tagProductionDeployment,
-} from "../scripts/tag-production-deployment.mjs";
-import { verifyReleaseRevision } from "../scripts/verify-release-revision.mjs";
+} from "../release/shared/tag-production-deployment.mjs";
+import { verifyReleaseRevision } from "../release/shared/verify-release-revision.mjs";
 import {
   buildProductionSpacesConfig,
   writeProductionSpacesSecrets,
-} from "../stacks/unicas/spaces/deployment-config.mjs";
+} from "../release/spaces/deployment-config.mjs";
 import {
   parseSpacesDeployArgs,
   runSpacesCommand,
   spacesBootstrapEnvironment,
   spacesDeploymentPlan,
-} from "../stacks/unicas/spaces/deploy.mjs";
+} from "../release/spaces/deploy.mjs";
+import {
+  docsDeploymentPlan,
+  parseDocsDeployArgs,
+} from "../release/docs/deploy.mjs";
+import {
+  parseSiteDeployArgs,
+  siteDeploymentPlan,
+} from "../release/site/deploy.mjs";
 
 const ROOT = join(import.meta.dirname, "..");
 const CI_WORKFLOW = readFileSync(join(ROOT, ".github/workflows/ci.yml"), "utf8");
@@ -360,9 +368,9 @@ describe("standalone deployment plan", () => {
     expect(production.map((command) => command.join(" "))).toEqual([
       "pnpm --filter @unicas/spaces build",
       "pnpm --filter @unicas/spaces exec wrangler d1 migrations apply SPACES_DB --remote --config ../../.wrangler/spaces/wrangler.production.json",
-      "node packages/spaces/scripts/preflight.mjs",
+      "node release/spaces/preflight.mjs",
       "pnpm --filter @unicas/spaces exec wrangler deploy --config ../../.wrangler/spaces/wrangler.production.json --secrets-file ../../.wrangler/spaces/secrets.json",
-      "pnpm spaces:smoke --base-url https://spaces.unicas.work",
+      "pnpm release:spaces:smoke --base-url https://spaces.unicas.work",
     ]);
     expect(() => spacesDeploymentPlan({ bootstrap: true, dryRun: false, production: false }, {}))
       .toThrow("SPACES_BOOTSTRAP_DEPLOY_CONFIRM=spaces.unicas.work");
@@ -380,6 +388,73 @@ describe("standalone deployment plan", () => {
   test("throws a Spaces command failure so outer secret cleanup can run", () => {
     expect(() => runSpacesCommand(["failing-command"], () => ({ status: 7 })))
       .toThrow("Spaces deployment command failed");
+  });
+
+  test("requires explicit docs and site deployment modes", () => {
+    expect(() => parseSiteDeployArgs([])).toThrow("implicit production deployment is refused");
+    expect(siteDeploymentPlan(parseSiteDeployArgs(["--dry-run"]))).toEqual([[
+      "pnpm", "--filter", "@unicas/site", "exec", "wrangler", "deploy",
+      "--dry-run", "--config", "wrangler.jsonc",
+    ]]);
+    expect(siteDeploymentPlan(parseSiteDeployArgs(["--production"]))).toEqual([[
+      "pnpm", "--filter", "@unicas/site", "exec", "wrangler", "deploy",
+      "--config", "wrangler.jsonc",
+    ]]);
+
+    expect(() => parseDocsDeployArgs([])).toThrow("implicit production deployment is refused");
+    expect(docsDeploymentPlan(parseDocsDeployArgs(["--dry-run"]))).toEqual([
+      ["pnpm", "--filter", "@unicas/docs-site", "build"],
+      [
+        "pnpm", "--filter", "@unicas/docs-site", "exec", "wrangler", "deploy",
+        "--dry-run", "--config", "wrangler.jsonc",
+      ],
+    ]);
+  });
+
+  test("exposes only unit-scoped release commands", () => {
+    expect(ROOT_PACKAGE.scripts).toMatchObject({
+      "release:service:plan": "node release/service/deploy.mjs --dry-run",
+      "release:service:production": "node release/service/deploy.mjs --production",
+      "release:service:smoke": "node release/service/smoke.mjs",
+      "release:spaces:plan": "node release/spaces/deploy.mjs --dry-run",
+      "release:spaces:production": "node release/spaces/deploy.mjs --production",
+      "release:spaces:bootstrap-deploy": "node release/spaces/deploy.mjs --bootstrap",
+      "release:spaces:bootstrap-data": "pnpm --filter @unicas/spaces^... build && pnpm --filter @unicas/spaces build && node release/spaces/deployment-config.mjs && node release/spaces/bootstrap.mjs",
+      "release:spaces:smoke": "node release/spaces/smoke.mjs",
+      "release:spaces:issuer-proof": "node release/spaces/sign-issuer-challenge.mjs",
+      "release:site:plan": "node release/site/deploy.mjs --dry-run",
+      "release:site:production": "node release/site/deploy.mjs --production",
+      "release:docs:plan": "node release/docs/deploy.mjs --dry-run",
+      "release:docs:production": "node release/docs/deploy.mjs --production",
+      "release:sdk:prepare": "node release/app-user-sdk/prepare-sdk-release.mjs --write",
+      "release:sdk:artifacts": "node release/app-user-sdk/prepare-sdk-release.mjs --check --output-dir .sdk-release",
+      "release:sdk:check": "vitest run tests/sdk-release.test.mjs tests/sdk-readiness.test.mjs && node release/app-user-sdk/prepare-sdk-release.mjs --check",
+      "release:sdk:readiness": "vitest run tests/sdk-readiness.test.mjs",
+      "release:sdk:npm-check": "vitest run tests/npm-release.test.mjs",
+      "release:sdk:npm-verify": "node release/app-user-sdk/verify-npm-release.mjs",
+    });
+    for (const retired of [
+      "deploy",
+      "deploy:production",
+      "deploy:plan",
+      "deploy:spaces",
+      "deploy:spaces:bootstrap",
+      "deploy:spaces:plan",
+      "deploy:site",
+      "deploy:site:plan",
+      "deploy:docs",
+      "deploy:docs:plan",
+      "smoke",
+      "spaces:bootstrap",
+      "spaces:smoke",
+      "spaces:issuer-proof",
+      "sdk:prepare",
+      "sdk:artifacts",
+      "check:sdk-release",
+      "check:sdk-readiness",
+      "check:npm-release",
+      "verify:npm-release",
+    ]) expect(ROOT_PACKAGE.scripts[retired], retired).toBeUndefined();
   });
 
   test("uses disabled Google placeholders only for the one-time Spaces bootstrap", () => {
@@ -406,9 +481,9 @@ describe("standalone deployment plan", () => {
     const job = validationJob();
     expect(job).not.toContain("secrets.");
     expect(job).not.toContain("vars.");
-    expect(job).not.toContain("pnpm deploy:production");
-    expect(job).not.toMatch(/^\s+run: pnpm deploy:site\r?$/m);
-    expect(job).not.toMatch(/^\s+run: pnpm deploy:docs\r?$/m);
+    expect(job).not.toContain("pnpm release:service:production");
+    expect(job).not.toMatch(/^\s+run: pnpm release:site:production\r?$/m);
+    expect(job).not.toMatch(/^\s+run: pnpm release:docs:production\r?$/m);
   });
 
   test("keeps validation authoritative at release and explicit preflight boundaries", () => {
@@ -418,7 +493,7 @@ describe("standalone deployment plan", () => {
     expect(job).toContain("github.ref == 'refs/heads/release'");
     expect(job).toContain("github.event_name == 'workflow_dispatch'");
     expect(job).toContain(
-      "node scripts/verify-release-revision.mjs \"$GITHUB_SHA\" origin/main",
+      "node release/shared/verify-release-revision.mjs \"$GITHUB_SHA\" origin/main",
     );
     expect(job).not.toContain(
       "git merge-base --is-ancestor \"$GITHUB_SHA\" origin/main",
@@ -434,7 +509,7 @@ describe("standalone deployment plan", () => {
     expect(ROOT_PACKAGE.scripts["validate:release"]).toContain(
       "pnpm --filter @unicas/service-cloudflare test",
     );
-    expect(ROOT_PACKAGE.scripts["validate:release"]).toContain("pnpm sdk:artifacts");
+    expect(ROOT_PACKAGE.scripts["validate:release"]).toContain("pnpm release:sdk:artifacts");
     expect(ROOT_PACKAGE.scripts["validate:release"]).toContain("test:browser");
     expect(ROOT_PACKAGE.scripts["validate:release"]).toContain("wrangler deploy --dry-run");
     expect(CI_WORKFLOW).not.toContain("run: pnpm check:ideas:remote");
@@ -456,7 +531,7 @@ describe("standalone deployment plan", () => {
     expect(job).toContain("cancel-in-progress: false");
     expect(job).toContain("ref: ${{ github.sha }}");
     expect(job).toContain(
-      "node scripts/verify-release-revision.mjs \"$GITHUB_SHA\" origin/main",
+      "node release/shared/verify-release-revision.mjs \"$GITHUB_SHA\" origin/main",
     );
     expect(job).not.toContain(
       "git merge-base --is-ancestor \"$GITHUB_SHA\" origin/main",
@@ -544,10 +619,10 @@ describe("standalone deployment plan", () => {
     expect(job).toContain("inputs.revision");
     expect(job).toContain("git merge-base --is-ancestor \"$REVISION\" origin/main");
     expect(job).toContain("wrangler d1 create unicas-spaces --location enam");
-    expect(job).toContain("run: pnpm deploy:spaces:bootstrap");
+    expect(job).toContain("run: pnpm release:spaces:bootstrap-deploy");
     expect(job).toContain("inputs.action == 'principals'");
-    expect(job).toContain("pnpm spaces:bootstrap -- --mode google");
-    expect(job).toContain("pnpm spaces:bootstrap -- --mode smoke");
+    expect(job).toContain("pnpm release:spaces:bootstrap-data -- --mode google");
+    expect(job).toContain("pnpm release:spaces:bootstrap-data -- --mode smoke");
     expect(job).toContain("if: ${{ always() && inputs.action == 'principals' }}");
   });
 
@@ -584,8 +659,8 @@ describe("standalone deployment plan", () => {
     expect(workflow).toContain("pnpm --filter @unicas/docs-site test");
     expect(workflow).toContain("pnpm --filter @unicas/docs-site typecheck");
     expect(workflow).toContain("pnpm --filter @unicas/docs-site test:browser");
-    expect(workflow).toContain("run: pnpm deploy:docs:plan");
-    expect(workflow).toContain("run: pnpm deploy:docs");
+    expect(workflow).toContain("run: pnpm release:docs:plan");
+    expect(workflow).toContain("run: pnpm release:docs:production");
     expect(deploy).toBeGreaterThan(install);
     expect(smoke).toBeGreaterThan(deploy);
     expect(workflow.match(/^\s+CLOUDFLARE_API_TOKEN:/gmu)).toHaveLength(1);
@@ -602,9 +677,9 @@ describe("standalone deployment plan", () => {
     ]) expect(workflow).toContain(`https://docs.unicas.work${path}`);
 
     for (const forbidden of [
-      "pnpm deploy:production",
-      "pnpm deploy:spaces",
-      "pnpm deploy:site",
+      "pnpm release:service:production",
+      "pnpm release:spaces:production",
+      "pnpm release:site:production",
       "npm publish",
       "git tag",
       "git push",
@@ -630,7 +705,7 @@ describe("standalone deployment plan", () => {
     expect(job).toContain("contents: write");
     expect(job).toContain("ref: ${{ github.sha }}");
     expect(job).toContain("persist-credentials: true");
-    expect(job).toContain("run: node scripts/tag-production-deployment.mjs");
+    expect(job).toContain("run: node release/shared/tag-production-deployment.mjs");
     expect(job).not.toContain("secrets.");
   });
 
@@ -765,10 +840,10 @@ describe("standalone deployment plan", () => {
     const serviceStepStart = job.indexOf("- name: Deploy API and console service");
     const spacesStepStart = job.indexOf("- name: Deploy Spaces App");
     const siteStepStart = job.indexOf("- name: Deploy product site");
-    const service = job.indexOf("run: pnpm deploy:production");
-    const spaces = job.indexOf("run: pnpm deploy:spaces");
-    const site = job.indexOf("run: pnpm deploy:site");
-    const docs = job.indexOf("run: pnpm deploy:docs");
+    const service = job.indexOf("run: pnpm release:service:production");
+    const spaces = job.indexOf("run: pnpm release:spaces:production");
+    const site = job.indexOf("run: pnpm release:site:production");
+    const docs = job.indexOf("run: pnpm release:docs:production");
     expect(cutoverDeployStepStart).toBeGreaterThan(-1);
     expect(cutoverStepStart).toBeGreaterThan(cutoverDeployStepStart);
     expect(serviceStepStart).toBeGreaterThan(cutoverStepStart);
@@ -830,13 +905,13 @@ describe("standalone deployment plan", () => {
     const cutoverDeployStep = job.slice(cutoverDeployStepStart, cutoverStepStart);
     const cutoverStep = job.slice(cutoverStepStart, serviceStepStart);
     expect(cutoverDeployStep).toContain("if: vars.APP_SPACE_V1_CUTOVER_ENABLED == 'true'");
-    expect(cutoverDeployStep).toContain("node stacks/unicas/deploy/ensure-encryption-secrets.mjs");
+    expect(cutoverDeployStep).toContain("node release/service/ensure-encryption-secrets.mjs");
     expect(cutoverDeployStep).toContain("wrangler deploy");
     expect(cutoverStep).toContain("if: vars.APP_SPACE_V1_CUTOVER_ENABLED == 'true'");
     expect(cutoverStep).toContain("UNICAS_RELEASE_ADMIN_SESSION: ${{ secrets.UNICAS_RELEASE_ADMIN_SESSION }}");
     expect(cutoverStep).toContain("UNICAS_SMOKE_PRIVATE_KEY_PKCS8: ${{ secrets.UNICAS_SMOKE_PRIVATE_KEY_PKCS8 }}");
     expect(cutoverStep).toContain("SPACES_SIGNING_PRIVATE_KEY_PKCS8: ${{ secrets.SPACES_SIGNING_PRIVATE_KEY_PKCS8 }}");
-    expect(cutoverStep).toContain("run: node stacks/unicas/deploy/cut-over-app-space-v1-issuers.mjs");
+    expect(cutoverStep).toContain("run: node release/service/cut-over-app-space-v1-issuers.mjs");
     expect(job).toContain("UNICAS_SMOKE_AUDIENCE: ${{ vars.UNICAS_SMOKE_AUDIENCE }}");
     expect(job).not.toContain("format('https://api.unicas.work/stacks/{0}'");
     expect(job).not.toContain("UNICAS_SMOKE_STACK_ID");
@@ -845,7 +920,7 @@ describe("standalone deployment plan", () => {
 
   test("creates missing encryption secrets before a production deployment", () => {
     const plan = deploymentPlan({ production: true });
-    expect(plan[0]).toEqual(["node", "stacks/unicas/deploy/ensure-encryption-secrets.mjs"]);
+    expect(plan[0]).toEqual(["node", "release/service/ensure-encryption-secrets.mjs"]);
     expect(plan[1]).toEqual(["pnpm", "--filter", "@unicas/service-cloudflare", "build"]);
     expect(plan[2]).toEqual([
       "pnpm", "--filter", "@unicas/service-cloudflare", "exec", "wrangler",
@@ -903,9 +978,9 @@ describe("standalone deployment plan", () => {
 
   test("restricts the ephemeral smoke key and removes it after every outcome", () => {
     const job = productionJob();
-    const service = job.indexOf("run: pnpm deploy:production");
+    const service = job.indexOf("run: pnpm release:service:production");
     const cleanup = job.indexOf("rm -f -- .wrangler/cas-deploy/github-actions-smoke-key.pem");
-    const site = job.indexOf("run: pnpm deploy:site");
+    const site = job.indexOf("run: pnpm release:site:production");
     expect(job).toContain("UNICAS_SMOKE_PRIVATE_KEY_PKCS8: ${{ secrets.UNICAS_SMOKE_PRIVATE_KEY_PKCS8 }}");
     expect(job).toContain("install -d -m 700 .wrangler/cas-deploy");
     expect(job).toContain("chmod 600 .wrangler/cas-deploy/github-actions-smoke-key.pem");
@@ -917,7 +992,7 @@ describe("standalone deployment plan", () => {
 
   test("checks every public production origin after all deployments", () => {
     const job = productionJob();
-    const docs = job.indexOf("run: pnpm deploy:docs");
+    const docs = job.indexOf("run: pnpm release:docs:production");
     for (const target of [
       "https://api.unicas.work/health",
       "https://console.unicas.work/",
@@ -973,7 +1048,7 @@ describe("standalone deployment plan", () => {
   test("refuses an implicit production deployment before running commands", () => {
     const result = spawnSync(
       process.execPath,
-      ["stacks/unicas/deploy/deploy.mjs"],
+      ["release/service/deploy.mjs"],
       {
         cwd: ROOT,
         encoding: "utf8",
@@ -992,7 +1067,7 @@ describe("standalone deployment plan", () => {
 
     const result = spawnSync(
       process.execPath,
-      ["stacks/unicas/deploy/deploy.mjs", "--production"],
+      ["release/service/deploy.mjs", "--production"],
       {
         cwd: ROOT,
         encoding: "utf8",
@@ -1027,7 +1102,7 @@ describe("standalone deployment plan", () => {
     });
     expect(plan[0]).toEqual([
       "node",
-      "stacks/unicas/deploy/sync-manual-tracing-secrets.mjs",
+      "release/service/sync-manual-tracing-secrets.mjs",
     ]);
     const deploy = plan.find((command) => command.includes("wrangler") && command.includes("deploy"));
     expect(deploy).toEqual(expect.arrayContaining([
@@ -1057,7 +1132,7 @@ describe("standalone deployment plan", () => {
   test("dry-run prints the plan without executing external commands", () => {
     const result = spawnSync(
       process.execPath,
-      ["stacks/unicas/deploy/deploy.mjs", "--dry-run"],
+      ["release/service/deploy.mjs", "--dry-run"],
       {
         cwd: ROOT,
         encoding: "utf8",
@@ -1067,12 +1142,12 @@ describe("standalone deployment plan", () => {
 
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("wrangler deploy");
-    expect(result.stdout).toContain("stacks/unicas/deploy/smoke.mjs");
+    expect(result.stdout).toContain("release/service/smoke.mjs");
   });
 
   test("uses App/Space smoke with retirement rejection probes", () => {
-    const wrapper = readFileSync(join(ROOT, "stacks/unicas/deploy/smoke.mjs"), "utf8");
-    const appSpaceSmoke = readFileSync(join(ROOT, "scripts/cas-app-space-smoke.mjs"), "utf8");
+    const wrapper = readFileSync(join(ROOT, "release/service/smoke.mjs"), "utf8");
+    const appSpaceSmoke = readFileSync(join(ROOT, "release/service/cas-app-space-smoke.mjs"), "utf8");
     const packageJson = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
     expect(wrapper).toContain("cas-app-space-smoke.mjs");
     expect(appSpaceSmoke).toContain("SpaceCapabilityVersion");
@@ -1129,7 +1204,7 @@ describe("standalone deployment plan", () => {
 
     const result = spawnSync(
       process.execPath,
-      ["stacks/unicas/deploy/reset-smoke.mjs"],
+      ["release/service/reset-smoke.mjs"],
       { cwd: ROOT, encoding: "utf8", env: { ...process.env, PATH: "" } },
     );
     expect(result.status, result.stderr).toBe(0);

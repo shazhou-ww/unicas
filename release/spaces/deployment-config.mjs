@@ -1,9 +1,9 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveManualTracingDeployment } from "../deploy/manual-tracing.mjs";
+import { resolveManualTracingDeployment } from "../shared/manual-tracing.mjs";
 
-const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 export const SpacesTemplatePath = resolve(ROOT, "packages/spaces/wrangler.jsonc");
 export const SpacesProductionConfigPath = resolve(ROOT, ".wrangler/spaces/wrangler.production.json");
 export const SpacesProductionSecretsPath = resolve(ROOT, ".wrangler/spaces/secrets.json");

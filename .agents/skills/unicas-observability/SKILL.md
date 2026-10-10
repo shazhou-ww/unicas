@@ -115,8 +115,8 @@ pnpm --filter @unicas/service-cloudflare exec vitest run tests/observability.tes
 pnpm --filter @unicas/spaces exec vitest run --root . tests/worker.test.ts
 pnpm --filter @unicas/observability --filter @unicas/service --filter @unicas/service-cloudflare --filter @unicas/spaces typecheck
 pnpm docs:check
-pnpm deploy:plan
-pnpm deploy:spaces:plan
+pnpm release:service:plan
+pnpm release:spaces:plan
 ```
 
 Run the full Durable Object suite when changing node-validation or Root Ref

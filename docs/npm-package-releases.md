@@ -26,25 +26,25 @@ Space capability claim version, and product maturity.
 
 ## Maintained release evidence
 
-[`sdk/package-matrix.json`](../sdk/package-matrix.json) is the package identity,
+[`release/app-user-sdk/package-matrix.json`](../release/app-user-sdk/package-matrix.json) is the package identity,
 runtime, dependency, order, version, dist-tag, and tag-prefix contract.
-[`sdk/release-manifest.json`](../sdk/release-manifest.json) records deterministic
+[`release/app-user-sdk/release-manifest.json`](../release/app-user-sdk/release-manifest.json) records deterministic
 archive filenames, SRI SHA-512 integrity, byte sizes, exact file inventories,
 packed exports, transformed dependencies, compatibility evidence, and
-publication order. [`sdk/api/`](../sdk/api/) stores the reviewed TypeScript
+publication order. [`release/app-user-sdk/api/`](../release/app-user-sdk/api/) stores the reviewed TypeScript
 declaration baseline.
 
 Prepare or refresh evidence with:
 
 ```text
-pnpm sdk:prepare
+pnpm release:sdk:prepare
 ```
 
 Validate without retaining tarballs with:
 
 ```text
-pnpm check:sdk-release
-pnpm check:npm-release
+pnpm release:sdk:check
+pnpm release:sdk:npm-check
 ```
 
 The artifact check cleans and rebuilds only the public packages, regenerates
@@ -99,7 +99,7 @@ invocation. Before creating a tag:
 4. Run the read-only pre-tag planner:
 
    ```text
-   node scripts/prepare-npm-release.mjs \
+   node release/app-user-sdk/prepare-npm-release.mjs \
      --candidate \
      --tag npm/app-user-sdk/v<version> \
      --commit <full-origin-main-commit> \
@@ -122,13 +122,13 @@ After a successful workflow run and registry propagation, verify the complete
 live release with:
 
 ```text
-pnpm verify:npm-release
+pnpm release:sdk:npm-verify
 ```
 
 The command anonymously verifies exact versions, tarball SHA-512 integrity,
 exports, dependencies, the reviewed dist-tag, SLSA repository/workflow/tag/
 commit/run provenance, and bootstrap deprecation. Stable releases additionally
-run `pnpm verify:npm-release -- --expect-latest`.
+run `pnpm release:sdk:npm-verify -- --expect-latest`.
 It then installs only the registry packages into a temporary no-token consumer,
 typechecks shipped declarations and documented snippets, runs the Node and
 Chromium/Firefox/WebKit consumer checks, and audits npm registry signatures and

@@ -2,10 +2,10 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { normalizeGzipOs } from "../scripts/prepare-sdk-release.mjs";
+import { normalizeGzipOs } from "../release/app-user-sdk/prepare-sdk-release.mjs";
 
 const ROOT = join(import.meta.dirname, "..");
-const matrix = readJson("sdk/package-matrix.json");
+const matrix = readJson("release/app-user-sdk/package-matrix.json");
 const packageNames = new Set(matrix.packages.map(({ name }) => name));
 
 function readJson(path) {

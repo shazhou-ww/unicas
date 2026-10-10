@@ -3,9 +3,9 @@ import { fileURLToPath } from "node:url";
 import {
   ManualTracingSecretNames,
   resolveManualTracingDeployment,
-} from "./manual-tracing.mjs";
+} from "../shared/manual-tracing.mjs";
 
-const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const SERVICE_PACKAGE = "@unicas/service-cloudflare";
 
 export function parseManualTracingSecretArgs(argv) {

@@ -77,15 +77,15 @@ Review `packages/service-cloudflare/wrangler.toml`, configure the required
 Cloudflare secrets, and verify the active account before deploying.
 
 ```powershell
-pnpm deploy:plan
-pnpm deploy:production
-pnpm deploy:spaces:plan
-pnpm smoke
-pnpm spaces:smoke -- --base-url https://spaces.unicas.work
+pnpm release:service:plan
+pnpm release:service:production
+pnpm release:spaces:plan
+pnpm release:service:smoke
+pnpm release:spaces:smoke -- --base-url https://spaces.unicas.work
 ```
 
-`pnpm deploy` intentionally refuses to run without that explicit production
-entry point. Neither command should be used for a named Wrangler environment;
+There is no implicit root deployment command; every production entry point is
+unit-scoped and explicit. These commands should not be used for a named Wrangler environment;
 see `packages/docs-site/content/deployment-and-local-configuration.md` for
 isolated environment requirements.
 

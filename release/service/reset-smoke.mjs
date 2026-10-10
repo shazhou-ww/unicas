@@ -4,10 +4,10 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { CONTROL_SCHEMA_MIGRATIONS } from "../../../packages/service-cloudflare/src/control-schema.ts";
-import { APP_SPACE_SCHEMA_MIGRATIONS } from "../../../packages/service-cloudflare/src/schema.ts";
+import { CONTROL_SCHEMA_MIGRATIONS } from "../../packages/service-cloudflare/src/control-schema.ts";
+import { APP_SPACE_SCHEMA_MIGRATIONS } from "../../packages/service-cloudflare/src/schema.ts";
 
-const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const SERVICE_PACKAGE = "@unicas/service-cloudflare";
 const EXPECTED_STACK_NAME = "Production Smoke";
 const EXPECTED_TENANT_ID = "deploy-smoke";

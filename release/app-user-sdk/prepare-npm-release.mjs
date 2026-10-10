@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import semver from "semver";
 
-const ROOT = fileURLToPath(new URL("..", import.meta.url));
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const DEFAULT_REGISTRY = "https://registry.npmjs.org";
 
 function required(value, name) {
@@ -221,8 +221,8 @@ async function main() {
   const options = parseArgs(process.argv.slice(2));
   const tag = required(options.tag, "--tag");
   const commit = required(options.commit, "--commit");
-  const matrix = await readJson(join(ROOT, "sdk", "package-matrix.json"));
-  const releaseManifest = await readJson(join(ROOT, "sdk", "release-manifest.json"));
+  const matrix = await readJson(join(ROOT, "release", "app-user-sdk", "package-matrix.json"));
+  const releaseManifest = await readJson(join(ROOT, "release", "app-user-sdk", "release-manifest.json"));
   const manifests = await Promise.all(matrix.packages.map(({ directory }) => readJson(join(ROOT, directory, "package.json"))));
   releaseVersionFromTag(tag, matrix);
   validatePackageSet(matrix, releaseManifest, manifests);

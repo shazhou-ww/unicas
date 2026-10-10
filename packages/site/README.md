@@ -7,8 +7,8 @@ Use the repository release entrypoints for deployment review and production
 release:
 
 ```powershell
-pnpm deploy:site:plan
-pnpm deploy:site
+pnpm release:site:plan
+pnpm release:site:production
 ```
 
 The package has no service bindings, secrets, database, object storage, or

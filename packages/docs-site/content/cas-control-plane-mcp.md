@@ -213,9 +213,9 @@ pnpm --filter @unicas/service-cloudflare test
 pnpm --filter @unicas/service-cloudflare build
 pnpm --filter @unicas/service-cloudflare exec wrangler deploy --dry-run
 pnpm --filter @unicas/admin-webui test
-node stacks/unicas/deploy/mcp-oauth-smoke.mjs --provider google
-node stacks/unicas/deploy/mcp-oauth-smoke.mjs --provider microsoft
-node stacks/unicas/deploy/mcp-oauth-smoke.mjs --provider github
+node release/service/mcp-oauth-smoke.mjs --provider google
+node release/service/mcp-oauth-smoke.mjs --provider microsoft
+node release/service/mcp-oauth-smoke.mjs --provider github
 ```
 
 The release gate additionally requires a real GitHub Copilot flow through the

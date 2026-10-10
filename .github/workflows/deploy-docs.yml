@@ -76,14 +76,14 @@ jobs:
       - name: Review documentation deployment
         env:
           DOCS_SOURCE_REVISION: ${{ inputs.revision }}
-        run: pnpm deploy:docs:plan
+        run: pnpm release:docs:plan
 
       - name: Deploy documentation
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           DOCS_SOURCE_REVISION: ${{ inputs.revision }}
-        run: pnpm deploy:docs
+        run: pnpm release:docs:production
 
       - name: Verify documentation routes and source revision
         shell: bash

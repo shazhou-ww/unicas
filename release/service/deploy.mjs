@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { resolveManualTracingDeployment } from "./manual-tracing.mjs";
+import { resolveManualTracingDeployment } from "../shared/manual-tracing.mjs";
 
-const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const SERVICE_PACKAGE = "@unicas/service-cloudflare";
 const SMOKE_ENVIRONMENT_KEYS = [
   "UNICAS_SMOKE_APP_ID",
@@ -44,7 +44,7 @@ export function deploymentPlan({ dryRun = false, env, production = false, skipSm
     throw new Error("production deployment cannot skip smoke validation");
   }
   if (!dryRun && !env && !production) {
-    throw new Error("refusing implicit production deployment; run pnpm deploy:production");
+    throw new Error("refusing implicit production deployment; run pnpm release:service:production");
   }
   if (env && !skipSmoke) {
     throw new Error("--env requires --skip-smoke; run smoke separately with an explicit base URL");
@@ -60,12 +60,12 @@ export function deploymentPlan({ dryRun = false, env, production = false, skipSm
   const workerVars = Object.entries(workerVariables)
     .flatMap(([key, value]) => ["--var", `${key}:${value}`]);
   const commands = production
-    ? [["node", "stacks/unicas/deploy/ensure-encryption-secrets.mjs"]]
+    ? [["node", "release/service/ensure-encryption-secrets.mjs"]]
     : [];
   if (tracing.enabled) {
     commands.push([
       "node",
-      "stacks/unicas/deploy/sync-manual-tracing-secrets.mjs",
+      "release/service/sync-manual-tracing-secrets.mjs",
       ...envArgs,
     ]);
   }
@@ -81,7 +81,7 @@ export function deploymentPlan({ dryRun = false, env, production = false, skipSm
     commands.push(["pnpm", "--filter", "@unicas/codec", "build"]);
     commands.push(["pnpm", "--filter", "@unicas/space-protocol", "build"]);
     commands.push(["pnpm", "--filter", "@unicas/space-client", "build"]);
-    commands.push(["node", "stacks/unicas/deploy/smoke.mjs"]);
+    commands.push(["node", "release/service/smoke.mjs"]);
   }
   return commands;
 }

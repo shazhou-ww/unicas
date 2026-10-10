@@ -21,9 +21,9 @@ import { stringify as stringifyYaml } from "yaml";
 import { syncSdkApiBaseline } from "./sdk-api-baseline.mjs";
 import { writeSdkSnippetFixtures } from "./sdk-readiness.mjs";
 
-const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const MATRIX_PATH = join(ROOT, "sdk", "package-matrix.json");
-const RELEASE_MANIFEST_PATH = join(ROOT, "sdk", "release-manifest.json");
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
+const MATRIX_PATH = join(ROOT, "release", "app-user-sdk", "package-matrix.json");
+const RELEASE_MANIFEST_PATH = join(ROOT, "release", "app-user-sdk", "release-manifest.json");
 const CONSUMER_FIXTURE = join(ROOT, "tests", "fixtures", "sdk-consumer");
 const SDK_EXAMPLES = join(ROOT, "examples", "app-user-sdk");
 const PNPM = resolvePnpmCommand();
@@ -429,7 +429,7 @@ async function main() {
           actualIntegrity: integrity,
         })).filter((entry) => entry.expectedBytes !== entry.actualBytes
           || entry.expectedIntegrity !== entry.actualIntegrity);
-        throw new Error(`sdk/release-manifest.json is stale; run pnpm sdk:prepare\n${JSON.stringify(differences, null, 2)}`);
+        throw new Error(`release/app-user-sdk/release-manifest.json is stale; run pnpm release:sdk:prepare\n${JSON.stringify(differences, null, 2)}`);
       }
     }
     if (options.outputDir) await copyArtifacts(firstRound, resolve(ROOT, options.outputDir));

@@ -4,7 +4,7 @@ import {
   SpacesSmokeError,
   normalizeSpacesSmokeBaseUrl,
   runSpacesSmoke,
-} from "../scripts/smoke.mjs";
+} from "../release/spaces/smoke.mjs";
 
 describe("Spaces smoke command", () => {
   test("accepts the deploy script's base URL arguments without a pnpm separator", () => {

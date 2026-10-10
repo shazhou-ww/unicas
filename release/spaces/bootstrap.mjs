@@ -18,15 +18,15 @@ import {
   validateRefDomainClaim,
 } from "@unicas/space-protocol";
 
-const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
-const requireFromSpacesPackage = createRequire(new URL("../package.json", import.meta.url));
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
+const requireFromSpacesPackage = createRequire(new URL("../../packages/spaces/package.json", import.meta.url));
 const WRANGLER_CLI = requireFromSpacesPackage.resolve("wrangler");
 const DEFAULT_WRANGLER_CONFIG = resolve(ROOT, ".wrangler/spaces/wrangler.production.json");
 const TEMP_SQL = resolve(ROOT, ".wrangler/spaces/bootstrap.sql");
 
 export function parseBootstrapArgs(argv) {
   if (argv.length !== 2 || argv[0] !== "--mode" || (argv[1] !== "google" && argv[1] !== "smoke")) {
-    throw new Error("usage: pnpm spaces:bootstrap -- --mode <google|smoke>");
+    throw new Error("usage: pnpm release:spaces:bootstrap-data -- --mode <google|smoke>");
   }
   return { mode: argv[1] };
 }

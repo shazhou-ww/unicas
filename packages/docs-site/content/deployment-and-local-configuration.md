@@ -197,7 +197,7 @@ Deploy the lease-upload migration in this order:
 
 1. Configure the R2 signing credentials and browser CORS policy.
 2. Apply the versioned `CAS_DB` D1 migrations before publishing the service.
-   `pnpm deploy:production` performs this step after building and before
+   `pnpm release:service:production` performs this step after building and before
    `wrangler deploy`; the Worker never runs tenant DDL on a request or cron.
 3. Publish protocol and client consumers together. Clients using inline bodies
    or `X-CAS-Upload-*` headers are not compatible with the released endpoint.
@@ -251,8 +251,8 @@ bindings or credentials. Validate and deploy it separately:
 
 ```powershell
 pnpm docs:check
-pnpm deploy:docs:plan
-pnpm deploy:docs
+pnpm release:docs:plan
+pnpm release:docs:production
 ```
 
 `spaces.unicas.work` is a separately deployed full-stack App, not a route on
@@ -269,14 +269,14 @@ The accepted origin ownership model is documented in
 Print the repository-controlled deployment sequence without running it:
 
 ```powershell
-pnpm deploy:plan
+pnpm release:service:plan
 ```
 
 Build Wrangler's actual upload bundle without contacting the deployment API:
 
 ```powershell
 pnpm --filter @unicas/service-cloudflare exec wrangler deploy --dry-run
-pnpm deploy:spaces:plan
+pnpm release:spaces:plan
 ```
 
 Both dynamic Worker configs explicitly persist 5% sampled custom logs with
@@ -298,16 +298,15 @@ secret-absence evidence, and explicit approval of the exact rate. Native
 automatic tracing remains disabled even after such approval. See
 [Observability](observability.md) for the full contract and rollback.
 
-Do not run `pnpm deploy --dry-run`: pnpm can consume that argument instead of
-forwarding it, which invokes the real root deploy script. Use only
-`pnpm deploy:plan` or the direct Wrangler command above for dry runs.
+There is no implicit root `deploy` command. Use only
+`pnpm release:service:plan` or the direct Wrangler command above for dry runs.
 
 ## Deploy and smoke
 
 After the plan, bundle dry-run, tests, and typecheck pass, deploy with:
 
 ```powershell
-pnpm deploy:production
+pnpm release:service:production
 ```
 
 The explicit production command builds the Worker, applies pending `CAS_DB`
@@ -317,19 +316,18 @@ publication. The initial migration is an additive baseline for the schema
 already established by prior accepted releases; fresh databases receive the
 same complete schema. Request handling and scheduled cleanup never run
 `CREATE`, `ALTER`, `DROP`, or schema `PRAGMA` statements.
-`pnpm deploy` intentionally refuses to run. A named Wrangler environment must
-use `--skip-smoke`; otherwise the deploy command refuses to proceed because the
-default smoke target is production:
+A named Wrangler environment must use `--skip-smoke`; otherwise the deploy
+command refuses to proceed because the default smoke target is production:
 
 ```powershell
-node stacks/unicas/deploy/deploy.mjs --env staging --skip-smoke
-node stacks/unicas/deploy/smoke.mjs https://staging.example.com
+node release/service/deploy.mjs --env staging --skip-smoke
+node release/service/smoke.mjs https://staging.example.com
 ```
 
 No named environments are currently declared in `wrangler.toml`, so the example
 above is valid only after adding isolated bindings and routes.
 
-The protected release runs `pnpm deploy:spaces` after the UniCAS service smoke
+The protected release runs `pnpm release:spaces:production` after the UniCAS service smoke
 and before product or documentation promotion. It applies App-owned D1
 migrations, deploys Spaces, runs upload/commit/readback/isolation/cleanup smoke,
 and refuses an implicit or smoke-skipping production invocation.
@@ -439,7 +437,7 @@ Initial provisioning is an explicit bootstrap operation:
 1. Generate an extractable ES256 key pair offline under the gitignored
    `.wrangler/cas-deploy/` directory and choose a unique `kid`.
 2. Add only the public JWK to the product-site JWKS, validate
-   `pnpm deploy:site:plan`, and deploy the product-site Worker.
+   `pnpm release:site:plan`, and deploy the product-site Worker.
 3. Run `unicas app-oauth-issuer inspect <appId>
    https://unicas.work/deploy-smoke` through a production control-plane
    session. Sign its exact, expiring challenge as an ES256 compact JWS with
@@ -478,7 +476,7 @@ request. Let the release revision pass `validate` and stop at that environment
 approval. From a checkout of the exact release SHA:
 
 1. Preview the bounded inventory with
-   `node stacks/unicas/deploy/reset-smoke.mjs --expected-stack-id <app-id>`.
+   `node release/service/reset-smoke.mjs --expected-stack-id <app-id>`.
 2. Execute the authorized no-backup reset with `--execute`, the same App ID,
    and `--confirm DELETE-ALL-TEST-DATA-NO-BACKUP`.
 3. Require the script to report `resetVerified`, `bootstrapVerified`, and
@@ -518,10 +516,10 @@ the time each deployment job starts waiting, which can differ from workflow
 dispatch order; every job still deploys its own validated `github.sha`. The
 job deploys in this order:
 
-1. `pnpm deploy:production` for the API/console service and canonical smoke.
-2. `pnpm deploy:spaces` for the Spaces App and file smoke.
-3. `pnpm deploy:site` for `unicas.work`.
-4. `pnpm deploy:docs` for `docs.unicas.work`.
+1. `pnpm release:service:production` for the API/console service and canonical smoke.
+2. `pnpm release:spaces:production` for the Spaces App and file smoke.
+3. `pnpm release:site:production` for `unicas.work`.
+4. `pnpm release:docs:production` for `docs.unicas.work`.
 5. HTTPS checks requiring the API health JSON, the console's same-origin
    `/admin/` redirect, and identifying HTML from the product and documentation
    origins. Redirects to another host or protocol do not pass.

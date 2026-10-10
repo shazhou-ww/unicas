@@ -7,12 +7,12 @@ import {
   classifyBootstrapState,
   parseD1Rows,
   readBootstrapConfig,
-} from "../scripts/bootstrap.mjs";
-import { signIssuerChallenge } from "../scripts/sign-issuer-challenge.mjs";
+} from "../release/spaces/bootstrap.mjs";
+import { signIssuerChallenge } from "../release/spaces/sign-issuer-challenge.mjs";
 import {
   smokePreflightQuery,
   validateSmokePreflightRow,
-} from "../scripts/preflight.mjs";
+} from "../release/spaces/preflight.mjs";
 
 function environment(overrides = {}) {
   return {

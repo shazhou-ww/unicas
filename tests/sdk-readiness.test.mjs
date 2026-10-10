@@ -6,10 +6,10 @@ import {
   collectSdkSnippets,
   sdkMarkdownPaths,
   validateLocalMarkdownLinks,
-} from "../scripts/sdk-readiness.mjs";
+} from "../release/app-user-sdk/sdk-readiness.mjs";
 
 const ROOT = join(import.meta.dirname, "..");
-const matrix = readJson("sdk/package-matrix.json");
+const matrix = readJson("release/app-user-sdk/package-matrix.json");
 
 function read(path) {
   return readFileSync(join(ROOT, path), "utf8");
@@ -123,7 +123,7 @@ describe("App-user SDK open-source readiness", () => {
     for (const version of ["0.1.0-beta.1", "0.1.1", "0.1.2", "0.2.0"]) {
       expect(changelog).toContain(`## ${version}`);
     }
-    const api = readJson("sdk/api/manifest.json");
+    const api = readJson("release/app-user-sdk/api/manifest.json");
     expect(api).toMatchObject({
       schemaVersion: 1,
       releaseKey: matrix.releaseKey,

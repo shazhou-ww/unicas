@@ -18,7 +18,7 @@ function parseArgs(argv) {
     const name = argv[index];
     const value = argv[index + 1];
     if (!value || (name !== "--challenge-file" && name !== "--key-file" && name !== "--key-fixture" && name !== "--kid")) {
-      throw new Error("usage: pnpm spaces:issuer-proof -- --challenge-file <path> --key-fixture <path>");
+      throw new Error("usage: pnpm release:spaces:issuer-proof -- --challenge-file <path> --key-fixture <path>");
     }
     options[name.slice(2)] = value;
   }

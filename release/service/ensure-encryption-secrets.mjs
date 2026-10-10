@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const SERVICE_PACKAGE = "@unicas/service-cloudflare";
 export const ENCRYPTION_SECRET_NAMES = [
   "SESSION_ENCRYPTION_KEYS",

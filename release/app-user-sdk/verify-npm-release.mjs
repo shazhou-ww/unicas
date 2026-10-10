@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import { chromium, firefox, webkit } from "@playwright/test";
 import { writeSdkSnippetFixtures } from "./sdk-readiness.mjs";
 
-const ROOT = fileURLToPath(new URL("..", import.meta.url));
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const REGISTRY = "https://registry.npmjs.org";
 const CONSUMER_FIXTURE = join(ROOT, "tests", "fixtures", "sdk-consumer");
 const SDK_EXAMPLES = join(ROOT, "examples", "app-user-sdk");
@@ -328,8 +328,8 @@ export function workflowRunFromInvocationId(invocationId) {
 
 async function main() {
   const expectLatest = process.argv.slice(2).includes("--expect-latest");
-  const matrix = await readJson(join(ROOT, "sdk", "package-matrix.json"));
-  const manifest = await readJson(join(ROOT, "sdk", "release-manifest.json"));
+  const matrix = await readJson(join(ROOT, "release", "app-user-sdk", "package-matrix.json"));
+  const manifest = await readJson(join(ROOT, "release", "app-user-sdk", "release-manifest.json"));
   assert(manifest.version === matrix.version, "release manifest version differs from matrix");
   assert(manifest.distTag === matrix.distTag, "release manifest dist-tag differs from matrix");
   assert(

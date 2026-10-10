@@ -54,11 +54,11 @@ jobs:
         run: git fetch --no-tags origin main:refs/remotes/origin/main
 
       - name: Build and verify release artifacts
-        run: pnpm sdk:artifacts
+        run: pnpm release:sdk:artifacts
 
       - name: Validate immutable package set and registry preflight
         run: >-
-          node scripts/prepare-npm-release.mjs
+          node release/app-user-sdk/prepare-npm-release.mjs
           --tag "$GITHUB_REF_NAME"
           --commit "$GITHUB_SHA"
           --output "$RUNNER_TEMP/sdk-release-plan.json"
@@ -74,7 +74,7 @@ jobs:
           NODE
           dist_tag="$(node --input-type=module -e 'import { readFile } from "node:fs/promises"; const plan = JSON.parse(await readFile(process.env.RELEASE_PLAN, "utf8")); process.stdout.write(plan.distTag)')"
           while IFS= read -r package_name; do
-            node scripts/prepare-npm-release.mjs \
+            node release/app-user-sdk/prepare-npm-release.mjs \
               --tag "$GITHUB_REF_NAME" \
               --commit "$GITHUB_SHA" \
               --package "$package_name" \
@@ -108,7 +108,7 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in {1..10}; do
-            if pnpm verify:npm-release; then
+            if pnpm release:sdk:npm-verify; then
               exit 0
             fi
             if [[ "$attempt" == 10 ]]; then

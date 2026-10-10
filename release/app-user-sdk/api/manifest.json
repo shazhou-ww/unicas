@@ -1,7 +1,7 @@
 {
   "packages": [
     {
-      "declaration": "sdk/api/codec.d.ts",
+      "declaration": "release/app-user-sdk/api/codec.d.ts",
       "exports": [
         "."
       ],
@@ -10,7 +10,7 @@
       "version": "0.2.0"
     },
     {
-      "declaration": "sdk/api/space-protocol.d.ts",
+      "declaration": "release/app-user-sdk/api/space-protocol.d.ts",
       "exports": [
         ".",
         "./openapi.json"
@@ -20,7 +20,7 @@
       "version": "0.2.0"
     },
     {
-      "declaration": "sdk/api/space-client.d.ts",
+      "declaration": "release/app-user-sdk/api/space-client.d.ts",
       "exports": [
         "."
       ],
@@ -29,7 +29,7 @@
       "version": "0.2.0"
     },
     {
-      "declaration": "sdk/api/space-blob-client.d.ts",
+      "declaration": "release/app-user-sdk/api/space-blob-client.d.ts",
       "exports": [
         "."
       ],
@@ -38,7 +38,7 @@
       "version": "0.2.0"
     },
     {
-      "declaration": "sdk/api/space-browser-cache.d.ts",
+      "declaration": "release/app-user-sdk/api/space-browser-cache.d.ts",
       "exports": [
         "."
       ],
@@ -47,7 +47,7 @@
       "version": "0.2.0"
     },
     {
-      "declaration": "sdk/api/space-file-client.d.ts",
+      "declaration": "release/app-user-sdk/api/space-file-client.d.ts",
       "exports": [
         "."
       ],

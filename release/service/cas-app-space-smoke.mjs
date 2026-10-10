@@ -1,7 +1,7 @@
 /**
  * Smoke-test the deployed App/Space v1 contract through a machine API origin.
  *
- * Usage: node scripts/cas-app-space-smoke.mjs [baseUrl]
+ * Usage: node release/service/cas-app-space-smoke.mjs [baseUrl]
  * Required: UNICAS_SMOKE_APP_ID/ISSUER/AUDIENCE/KID/KEY_FILE.
  * Optional: UNICAS_SMOKE_SPACE_ID (defaults to /deploy-smoke).
  */
@@ -16,8 +16,8 @@ import {
   encodeHeader,
   hashToHex,
   hexToHash,
-} from "../packages/codec/dist/index.js";
-import { createAppCasClient } from "../packages/space-client/dist/index.js";
+} from "../../packages/codec/dist/index.js";
+import { createAppCasClient } from "../../packages/space-client/dist/index.js";
 import {
   CapabilityAlgorithm,
   CapabilityTokenType,
@@ -29,7 +29,7 @@ import {
   spaceRootRefsReadPermission,
   spaceRootRefsUpdatePermission,
   spaceUsageReadPermission,
-} from "../packages/space-protocol/dist/index.js";
+} from "../../packages/space-protocol/dist/index.js";
 
 const BASE = normalizeSmokeBaseUrl(
   process.argv[2] ?? "https://api.unicas.work",

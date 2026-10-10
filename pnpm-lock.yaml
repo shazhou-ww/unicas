@@ -17,6 +17,15 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
+      '@unicas/space-client':
+        specifier: workspace:*
+        version: link:packages/space-client
+      '@unicas/space-file-client':
+        specifier: workspace:*
+        version: link:packages/space-file-client
+      '@unicas/space-protocol':
+        specifier: workspace:*
+        version: link:packages/space-protocol
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2

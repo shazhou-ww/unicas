@@ -1,5 +1,5 @@
 import { pathToFileURL } from "node:url";
-import { signIssuerChallenge } from "../../../packages/spaces/scripts/sign-issuer-challenge.mjs";
+import { signIssuerChallenge } from "../spaces/sign-issuer-challenge.mjs";
 
 const OAUTH_ISSUER_INSPECTION_CHALLENGE_VERSION = "cas-oauth-issuer-inspection-v1";
 

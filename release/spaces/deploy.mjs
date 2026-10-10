@@ -9,8 +9,8 @@ import {
   writeProductionSpacesSecrets,
 } from "./deployment-config.mjs";
 
-const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
-const SPACES_PACKAGE_DIRECTORY = fileURLToPath(new URL("../../../packages/spaces/", import.meta.url));
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
+const SPACES_PACKAGE_DIRECTORY = fileURLToPath(new URL("../../packages/spaces/", import.meta.url));
 const TEMPLATE_CONFIG = "wrangler.jsonc";
 
 export function parseSpacesDeployArgs(argv) {
@@ -45,13 +45,13 @@ export function spacesDeploymentPlan(options, environment = process.env) {
     ["pnpm", "--filter", "@unicas/spaces", "exec", "wrangler", "d1", "migrations", "apply", "SPACES_DB", "--remote", "--config", generatedConfig],
   );
   if (options.production) {
-    commands.push(["node", "packages/spaces/scripts/preflight.mjs"]);
+    commands.push(["node", "release/spaces/preflight.mjs"]);
   }
   commands.push(
     ["pnpm", "--filter", "@unicas/spaces", "exec", "wrangler", "deploy", "--config", generatedConfig, "--secrets-file", secretsFile],
   );
   if (options.production) {
-    commands.push(["pnpm", "spaces:smoke", "--base-url", "https://spaces.unicas.work"]);
+    commands.push(["pnpm", "release:spaces:smoke", "--base-url", "https://spaces.unicas.work"]);
   }
   return commands;
 }

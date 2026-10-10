@@ -3,7 +3,7 @@ import {
   parseTraceHmacKeyRing,
   requiredTraceConfig,
   validateOtlpTraceEndpoint,
-} from "../../../packages/observability/src/trace-config.ts";
+} from "../../packages/observability/src/trace-config.ts";
 
 export const ManualTracingSecretNames = Object.freeze([
   "UNICAS_OTLP_AUTHORIZATION",

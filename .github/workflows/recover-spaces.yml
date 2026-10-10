@@ -112,7 +112,7 @@ jobs:
           SPACES_SMOKE_CREDENTIAL: ${{ secrets.SPACES_SMOKE_CREDENTIAL }}
           SPACES_SMOKE_PRINCIPAL_ID: ${{ vars.SPACES_SMOKE_PRINCIPAL_ID }}
           SPACES_UNICAS_AUDIENCE: ${{ vars.SPACES_UNICAS_AUDIENCE }}
-        run: pnpm deploy:spaces:bootstrap
+        run: pnpm release:spaces:bootstrap-deploy
 
       - name: Materialize Spaces signing key
         if: inputs.action == 'principals'
@@ -151,12 +151,12 @@ jobs:
           SPACES_BOOTSTRAP_PRINCIPAL_ID="$SPACES_USER_PRINCIPAL_ID" \
           SPACES_BOOTSTRAP_DISPLAY_NAME="$SPACES_USER_DISPLAY_NAME" \
           SPACES_BOOTSTRAP_REF_DOMAIN="spaces:files" \
-            pnpm spaces:bootstrap -- --mode google
+            pnpm release:spaces:bootstrap-data -- --mode google
           SPACES_BOOTSTRAP_SPACE_ID="$SPACES_SMOKE_SPACE_ID" \
           SPACES_BOOTSTRAP_PRINCIPAL_ID="$SPACES_SMOKE_PRINCIPAL_ID" \
           SPACES_BOOTSTRAP_DISPLAY_NAME="Release smoke" \
           SPACES_BOOTSTRAP_REF_DOMAIN="spaces:smoke" \
-            pnpm spaces:bootstrap -- --mode smoke
+            pnpm release:spaces:bootstrap-data -- --mode smoke
 
       - name: Remove Spaces bootstrap key
         if: ${{ always() && inputs.action == 'principals' }}

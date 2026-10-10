@@ -19,7 +19,7 @@ These commands require no Cloudflare credentials and do not contact production:
 ```powershell
 pnpm --filter @unicas/spaces test
 pnpm --filter @unicas/spaces typecheck
-pnpm deploy:spaces:plan
+pnpm release:spaces:plan
 ```
 
 Run the browser-only Vite UI with:
@@ -108,7 +108,7 @@ new D1 UUID, then publish only the issuer/UI bootstrap deployment:
 
 ```powershell
 $env:SPACES_BOOTSTRAP_DEPLOY_CONFIRM = "spaces.unicas.work"
-pnpm deploy:spaces:bootstrap
+pnpm release:spaces:bootstrap-deploy
 ```
 
 This explicit one-time mode applies the additive D1 migration and deploys with
@@ -139,7 +139,7 @@ $env:SPACES_BOOTSTRAP_DISPLAY_NAME = "<display-name>"
 $env:SPACES_BOOTSTRAP_GOOGLE_SUBJECT = "<stable-google-sub>"
 $env:SPACES_BOOTSTRAP_KEY_FILE = ".wrangler/spaces/signing-key.json"
 $env:SPACES_BOOTSTRAP_REF_DOMAIN = "spaces:files"
-pnpm spaces:bootstrap -- --mode google
+pnpm release:spaces:bootstrap-data -- --mode google
 ```
 
 Bootstrap the dedicated smoke Principal in its own Space. It has no social
@@ -151,7 +151,7 @@ $env:SPACES_BOOTSTRAP_SPACE_ID = "/smoke/<dedicated-smoke-space-id>"
 $env:SPACES_BOOTSTRAP_PRINCIPAL_ID = "<smoke-principal-id>"
 $env:SPACES_BOOTSTRAP_DISPLAY_NAME = "Release smoke"
 $env:SPACES_BOOTSTRAP_REF_DOMAIN = "spaces:smoke"
-pnpm spaces:bootstrap -- --mode smoke
+pnpm release:spaces:bootstrap-data -- --mode smoke
 ```
 
 Both modes are idempotent only for an exact complete match. Partial or
@@ -166,12 +166,12 @@ The protected `release` workflow runs:
 deploy UniCAS service and run canonical service smoke
 -> apply Spaces D1 migrations
 -> deploy Spaces with its ephemeral secrets file
--> run pnpm spaces:smoke -- --base-url https://spaces.unicas.work
+-> run pnpm release:spaces:smoke -- --base-url https://spaces.unicas.work
 -> deploy product and documentation sites
 -> verify origins and tag the revision
 ```
 
-Before the normal Spaces deploy, `packages/spaces/scripts/preflight.mjs`
+Before the normal Spaces deploy, `release/spaces/preflight.mjs`
 checks the remote App D1 mapping and proves the active issuer through a
 least-privileged public Root Ref read. A live unexpired run blocks deployment.
 A failed, pending, or expired run is recoverable: the newly deployed Worker

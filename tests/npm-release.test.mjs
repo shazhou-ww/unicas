@@ -9,12 +9,12 @@ import {
   validatePackageSet,
   verifyGitRelease,
   verifyReleaseCandidate,
-} from "../scripts/prepare-npm-release.mjs";
-import { workflowRunFromInvocationId } from "../scripts/verify-npm-release.mjs";
+} from "../release/app-user-sdk/prepare-npm-release.mjs";
+import { workflowRunFromInvocationId } from "../release/app-user-sdk/verify-npm-release.mjs";
 
 const ROOT = join(import.meta.dirname, "..");
-const matrix = readJson("sdk/package-matrix.json");
-const releaseManifest = readJson("sdk/release-manifest.json");
+const matrix = readJson("release/app-user-sdk/package-matrix.json");
+const releaseManifest = readJson("release/app-user-sdk/release-manifest.json");
 const manifests = matrix.packages.map(({ directory }) => readJson(`${directory}/package.json`));
 
 function readJson(path) {
@@ -300,12 +300,12 @@ describe("tag-triggered npm publication workflow", () => {
     const combined = runs.join("\n");
     const publishRun = job.steps.find(({ name }) => name === "Publish package set in dependency order").run;
     expect(combined).toContain("git fetch --no-tags origin main:refs/remotes/origin/main");
-    expect(combined).toContain("pnpm sdk:artifacts");
-    expect(combined).toContain("scripts/prepare-npm-release.mjs");
+    expect(combined).toContain("pnpm release:sdk:artifacts");
+    expect(combined).toContain("release/app-user-sdk/prepare-npm-release.mjs");
     expect(combined).toContain("--tag \"$GITHUB_REF_NAME\"");
     expect(combined).toContain("--commit \"$GITHUB_SHA\"");
     expect(combined).not.toContain("--candidate");
-    expect(combined.match(/pnpm sdk:artifacts/gu)).toHaveLength(1);
+    expect(combined.match(/pnpm release:sdk:artifacts/gu)).toHaveLength(1);
     expect(combined.match(/prepare-npm-release\.mjs/gu)).toHaveLength(2);
     expect(combined.match(/npm publish/gu)).toHaveLength(1);
     expect(combined).toContain("--access public");
@@ -318,19 +318,19 @@ describe("tag-triggered npm publication workflow", () => {
     expect(publishRun).toContain("Verified existing ${package_name}");
     expect(publishRun).toContain("Unknown release action");
     expect(publishRun.indexOf("while IFS= read -r package_name"))
-      .toBeLessThan(publishRun.indexOf("scripts/prepare-npm-release.mjs"));
-    expect(publishRun.indexOf("scripts/prepare-npm-release.mjs"))
+      .toBeLessThan(publishRun.indexOf("release/app-user-sdk/prepare-npm-release.mjs"));
+    expect(publishRun.indexOf("release/app-user-sdk/prepare-npm-release.mjs"))
       .toBeLessThan(publishRun.indexOf("npm publish"));
-    expect(source.indexOf("pnpm sdk:artifacts")).toBeLessThan(source.indexOf("npm publish"));
+    expect(source.indexOf("pnpm release:sdk:artifacts")).toBeLessThan(source.indexOf("npm publish"));
     expect(source.indexOf("prepare-npm-release.mjs")).toBeLessThan(source.indexOf("npm publish"));
-    expect(combined).toContain("pnpm verify:npm-release");
+    expect(combined).toContain("pnpm release:sdk:npm-verify");
   });
 
   test("does not place a registry-write command in local release scripts", () => {
     const localScripts = [
-      readFileSync(join(ROOT, "scripts", "prepare-sdk-release.mjs"), "utf8"),
-      readFileSync(join(ROOT, "scripts", "prepare-npm-release.mjs"), "utf8"),
-      readFileSync(join(ROOT, "scripts", "verify-npm-release.mjs"), "utf8"),
+      readFileSync(join(ROOT, "release", "app-user-sdk", "prepare-sdk-release.mjs"), "utf8"),
+      readFileSync(join(ROOT, "release", "app-user-sdk", "prepare-npm-release.mjs"), "utf8"),
+      readFileSync(join(ROOT, "release", "app-user-sdk", "verify-npm-release.mjs"), "utf8"),
     ].join("\n");
     expect(localScripts).not.toMatch(/\bnpm\s+publish\b/u);
     expect(localScripts).not.toMatch(/\bpnpm\s+publish\b/u);
