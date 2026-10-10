@@ -8,6 +8,7 @@
 /packages/space-blob-client/ @shazhou-ww
 /packages/space-browser-cache/ @shazhou-ww
 /packages/space-file-client/ @shazhou-ww
+/packages/site/ @shazhou-ww
 /sdk/ @shazhou-ww
 /scripts/prepare-sdk-release.mjs @shazhou-ww
 /scripts/prepare-npm-release.mjs @shazhou-ww

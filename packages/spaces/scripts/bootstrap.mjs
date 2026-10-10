@@ -19,8 +19,8 @@ import {
 } from "@unicas/space-protocol";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
-const requireFromServicePackage = createRequire(new URL("../../service-cloudflare/package.json", import.meta.url));
-const WRANGLER_CLI = requireFromServicePackage.resolve("wrangler");
+const requireFromSpacesPackage = createRequire(new URL("../package.json", import.meta.url));
+const WRANGLER_CLI = requireFromSpacesPackage.resolve("wrangler");
 const DEFAULT_WRANGLER_CONFIG = resolve(ROOT, ".wrangler/spaces/wrangler.production.json");
 const TEMP_SQL = resolve(ROOT, ".wrangler/spaces/bootstrap.sql");
 

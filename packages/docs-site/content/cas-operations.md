@@ -423,11 +423,11 @@ service version unsafe to restore.
 pnpm --filter @unicas/docs-site exec wrangler deployments list --config wrangler.jsonc
 pnpm --filter @unicas/docs-site exec wrangler rollback <docs-version-id> --config wrangler.jsonc --yes --message "rollback failed production release"
 
-pnpm --filter @unicas/service-cloudflare exec wrangler deployments list --config ../../stacks/unicas/site/wrangler.jsonc
-pnpm --filter @unicas/service-cloudflare exec wrangler rollback <site-version-id> --config ../../stacks/unicas/site/wrangler.jsonc --yes --message "rollback failed production release"
+pnpm --filter @unicas/site exec wrangler deployments list --config wrangler.jsonc
+pnpm --filter @unicas/site exec wrangler rollback <site-version-id> --config wrangler.jsonc --yes --message "rollback failed production release"
 
-pnpm --filter @unicas/service-cloudflare exec wrangler deployments list --config ../../.wrangler/spaces/wrangler.production.json
-pnpm --filter @unicas/service-cloudflare exec wrangler rollback <spaces-version-id> --config ../../.wrangler/spaces/wrangler.production.json --yes --message "rollback failed production release"
+pnpm --filter @unicas/spaces exec wrangler deployments list --config ../../.wrangler/spaces/wrangler.production.json
+pnpm --filter @unicas/spaces exec wrangler rollback <spaces-version-id> --config ../../.wrangler/spaces/wrangler.production.json --yes --message "rollback failed production release"
 
 pnpm --filter @unicas/service-cloudflare exec wrangler deployments list
 pnpm --filter @unicas/service-cloudflare exec wrangler rollback <service-version-id> --yes --message "rollback failed production release"
@@ -449,7 +449,7 @@ Backup (manual or scheduled; daily target):
 ```text
 wrangler d1 export unicas-control --remote --no-schema --output <cutover>/unicas-control.sql
 wrangler d1 export unicas-tenant --remote --no-schema --output <cutover>/unicas-tenant.sql
-pnpm --filter @unicas/service-cloudflare exec wrangler d1 export SPACES_DB --remote --config ../../.wrangler/spaces/wrangler.production.json --output ../../.wrangler/spaces/unicas-spaces.sql
+pnpm --filter @unicas/spaces exec wrangler d1 export SPACES_DB --remote --config ../../.wrangler/spaces/wrangler.production.json --output ../../.wrangler/spaces/unicas-spaces.sql
 ```
 
 `--remote` is mandatory (without it wrangler exports an empty local DB).

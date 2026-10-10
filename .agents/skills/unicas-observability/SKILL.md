@@ -138,7 +138,7 @@ Sources of truth:
 
 - [Observability contract](../../../packages/docs-site/content/observability.md)
 - [Deployment configuration](../../../packages/service-cloudflare/wrangler.toml)
-- [Spaces configuration](../../../stacks/unicas/spaces/wrangler.jsonc)
+- [Spaces configuration](../../../packages/spaces/wrangler.jsonc)
 - [Service instrumentation](../../../packages/service-cloudflare/src/observability.ts)
 - [Spaces instrumentation](../../../packages/spaces/src/observability.ts)
 - [Portable manual tracing](../../../packages/observability/src/manual-tracing.ts)

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { resolveManualTracingDeployment } from "../deploy/manual-tracing.mjs";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
-export const SpacesTemplatePath = resolve(ROOT, "stacks/unicas/spaces/wrangler.jsonc");
+export const SpacesTemplatePath = resolve(ROOT, "packages/spaces/wrangler.jsonc");
 export const SpacesProductionConfigPath = resolve(ROOT, ".wrangler/spaces/wrangler.production.json");
 export const SpacesProductionSecretsPath = resolve(ROOT, ".wrangler/spaces/secrets.json");
 

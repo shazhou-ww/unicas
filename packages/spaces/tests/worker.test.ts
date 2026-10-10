@@ -32,7 +32,7 @@ async function fixture() {
   }));
   await runtime.ready;
   const db = await runtime.getD1Database("SPACES_DB", "spaces-worker-test");
-  const migration = await readFile(new URL("../../../stacks/unicas/spaces/migrations/0001_initial.sql", import.meta.url), "utf8");
+  const migration = await readFile(new URL("../migrations/0001_initial.sql", import.meta.url), "utf8");
   await db.exec(migration.replace(/\r?\n/g, " "));
   await db.prepare(`
     INSERT INTO spaces_principals (principal_id, status, display_name, created_at, updated_at)

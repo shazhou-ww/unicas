@@ -42,6 +42,9 @@
       "path": "packages/service-cloudflare"
     },
     {
+      "path": "packages/site"
+    },
+    {
       "path": "packages/spaces"
     },
     {

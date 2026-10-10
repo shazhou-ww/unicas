@@ -22,7 +22,7 @@ async function fixture(now = 1_000) {
   }));
   await runtime.ready;
   const db = await runtime.getD1Database("SPACES_DB", "spaces-repository-test");
-  const migration = await readFile(new URL("../../../stacks/unicas/spaces/migrations/0001_initial.sql", import.meta.url), "utf8");
+  const migration = await readFile(new URL("../migrations/0001_initial.sql", import.meta.url), "utf8");
   await db.exec(migration.replace(/\r?\n/g, " "));
   await db.prepare(`
     INSERT INTO spaces_principals (principal_id, status, display_name, created_at, updated_at)
@@ -55,7 +55,7 @@ describe("SpacesRepository", () => {
     await runtime.ready;
     const db = await runtime.getD1Database("SPACES_DB", "spaces-migration-test");
     const initial = await readFile(
-      new URL("../../../stacks/unicas/spaces/migrations/0001_initial.sql", import.meta.url),
+      new URL("../migrations/0001_initial.sql", import.meta.url),
       "utf8",
     );
     await db.exec(initial.replace(/\r?\n/g, " "));
@@ -72,7 +72,7 @@ describe("SpacesRepository", () => {
     `).run();
 
     const canonical = await readFile(
-      new URL("../../../stacks/unicas/spaces/migrations/0002_canonical_space_ids.sql", import.meta.url),
+      new URL("../migrations/0002_canonical_space_ids.sql", import.meta.url),
       "utf8",
     );
     await db.exec(canonical.replace(/\r?\n/g, " "));

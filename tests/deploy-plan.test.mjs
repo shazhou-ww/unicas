@@ -75,7 +75,7 @@ const OBSERVABILITY_SKILL = readFileSync(
   "utf8",
 );
 const SPACES_WRANGLER_CONFIG = JSON.parse(readFileSync(
-  join(ROOT, "stacks/unicas/spaces/wrangler.jsonc"),
+  join(ROOT, "packages/spaces/wrangler.jsonc"),
   "utf8",
 ));
 const OBSERVABILITY_POLICY = {
@@ -186,7 +186,7 @@ describe("standalone deployment plan", () => {
   });
 
   test("keeps the Spaces App on its own public bindings", () => {
-    expect(SPACES_WRANGLER_CONFIG.main).toBe("../../../packages/spaces/src/worker.ts");
+    expect(SPACES_WRANGLER_CONFIG.main).toBe("./src/worker.ts");
     expect(SPACES_WRANGLER_CONFIG.placement).toEqual({ region: "aws:ap-southeast-1" });
     expect(SPACES_WRANGLER_CONFIG.routes).toEqual([
       { pattern: "spaces.unicas.work", custom_domain: true },
@@ -352,16 +352,16 @@ describe("standalone deployment plan", () => {
     expect(spacesDeploymentPlan({ dryRun: true, production: false })).toEqual([
       ["pnpm", "--filter", "@unicas/spaces", "build"],
       [
-        "pnpm", "--filter", "@unicas/service-cloudflare", "exec", "wrangler", "deploy",
-        "--dry-run", "--config", "../../stacks/unicas/spaces/wrangler.jsonc",
+        "pnpm", "--filter", "@unicas/spaces", "exec", "wrangler", "deploy",
+        "--dry-run", "--config", "wrangler.jsonc",
       ],
     ]);
     const production = spacesDeploymentPlan({ dryRun: false, production: true });
     expect(production.map((command) => command.join(" "))).toEqual([
       "pnpm --filter @unicas/spaces build",
-      "pnpm --filter @unicas/service-cloudflare exec wrangler d1 migrations apply SPACES_DB --remote --config ../../.wrangler/spaces/wrangler.production.json",
+      "pnpm --filter @unicas/spaces exec wrangler d1 migrations apply SPACES_DB --remote --config ../../.wrangler/spaces/wrangler.production.json",
       "node packages/spaces/scripts/preflight.mjs",
-      "pnpm --filter @unicas/service-cloudflare exec wrangler deploy --config ../../.wrangler/spaces/wrangler.production.json --secrets-file ../../.wrangler/spaces/secrets.json",
+      "pnpm --filter @unicas/spaces exec wrangler deploy --config ../../.wrangler/spaces/wrangler.production.json --secrets-file ../../.wrangler/spaces/secrets.json",
       "pnpm spaces:smoke --base-url https://spaces.unicas.work",
     ]);
     expect(() => spacesDeploymentPlan({ bootstrap: true, dryRun: false, production: false }, {}))
@@ -372,8 +372,8 @@ describe("standalone deployment plan", () => {
     );
     expect(bootstrap.map((command) => command.join(" "))).toEqual([
       "pnpm --filter @unicas/spaces build",
-      "pnpm --filter @unicas/service-cloudflare exec wrangler d1 migrations apply SPACES_DB --remote --config ../../.wrangler/spaces/wrangler.production.json",
-      "pnpm --filter @unicas/service-cloudflare exec wrangler deploy --config ../../.wrangler/spaces/wrangler.production.json --secrets-file ../../.wrangler/spaces/secrets.json",
+      "pnpm --filter @unicas/spaces exec wrangler d1 migrations apply SPACES_DB --remote --config ../../.wrangler/spaces/wrangler.production.json",
+      "pnpm --filter @unicas/spaces exec wrangler deploy --config ../../.wrangler/spaces/wrangler.production.json --secrets-file ../../.wrangler/spaces/secrets.json",
     ]);
   });
 
@@ -1386,8 +1386,8 @@ describe("standalone deployment plan", () => {
   test("assigns product and service origins to separate Workers", () => {
     const serviceConfig = readFileSync(join(ROOT, "packages/service-cloudflare/wrangler.toml"), "utf8");
     const normalizedServiceConfig = serviceConfig.replaceAll("\r\n", "\n");
-    const siteConfig = JSON.parse(readFileSync(join(ROOT, "stacks/unicas/site/wrangler.jsonc"), "utf8"));
-    const siteHtml = readFileSync(join(ROOT, "stacks/unicas/site/public/index.html"), "utf8");
+    const siteConfig = JSON.parse(readFileSync(join(ROOT, "packages/site/wrangler.jsonc"), "utf8"));
+    const siteHtml = readFileSync(join(ROOT, "packages/site/public/index.html"), "utf8");
     const docsConfig = JSON.parse(readFileSync(join(ROOT, "packages/docs-site/wrangler.jsonc"), "utf8"));
     expect(serviceConfig).toContain('pattern = "api.unicas.work"');
     expect(serviceConfig).toContain('pattern = "console.unicas.work"');
@@ -1424,7 +1424,7 @@ describe("standalone deployment plan", () => {
   });
 
   test("publishes a public-key-only issuer for deployment smoke", () => {
-    const site = join(ROOT, "stacks/unicas/site/public");
+    const site = join(ROOT, "packages/site/public");
     const metadata = JSON.parse(readFileSync(
       join(site, ".well-known/oauth-authorization-server/deploy-smoke"),
       "utf8",

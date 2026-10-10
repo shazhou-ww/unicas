@@ -13,4 +13,6 @@ tests/fixtures/sdk-consumer/** text eol=lf
 scripts/prepare-sdk-release.mjs text eol=lf
 scripts/prepare-npm-release.mjs text eol=lf
 .github/workflows/publish-npm.yml text eol=lf
-stacks/unicas/deploy/migrations/** text eol=lf
+packages/service-cloudflare/migrations/** text eol=lf
+packages/site/** text eol=lf
+packages/spaces/migrations/** text eol=lf

@@ -3,8 +3,8 @@
 `https://spaces.unicas.work` is a separately deployed first-party App that
 exercises UniCAS through the same public App/Space interfaces available to an
 external backend. Application code is the private `@unicas/spaces` workspace
-package. `stacks/unicas/spaces/` contains only Cloudflare deployment
-composition and the App-owned D1 migration.
+package. The package root owns its Cloudflare configuration and App-owned D1
+migrations; repository release scripts own deployment orchestration.
 
 The browser authenticates to Spaces with Google and receives only an opaque,
 host-only App session. The Spaces Worker selects the provisioned App and Space,
@@ -213,7 +213,7 @@ before retrying a release.
 Back up App-owned metadata separately from UniCAS storage:
 
 ```powershell
-pnpm --filter @unicas/service-cloudflare exec wrangler d1 export SPACES_DB `
+pnpm --filter @unicas/spaces exec wrangler d1 export SPACES_DB `
   --remote --config ../../.wrangler/spaces/wrangler.production.json `
   --output ../../.wrangler/spaces/unicas-spaces.sql
 ```

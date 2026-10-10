@@ -81,11 +81,11 @@ jobs:
         run: |
           set -euo pipefail
           list_databases() {
-            pnpm --filter @unicas/service-cloudflare exec wrangler d1 list --json
+            pnpm --filter @unicas/spaces exec wrangler d1 list --json
           }
           database_id="$(D1_JSON="$(list_databases)" node -e 'const rows=JSON.parse(process.env.D1_JSON); const row=rows.find((item)=>item.name==="unicas-spaces"); process.stdout.write(row?.uuid ?? "")')"
           if [[ -z "$database_id" ]]; then
-            pnpm --filter @unicas/service-cloudflare exec wrangler d1 create unicas-spaces --location enam
+            pnpm --filter @unicas/spaces exec wrangler d1 create unicas-spaces --location enam
             database_id="$(D1_JSON="$(list_databases)" node -e 'const rows=JSON.parse(process.env.D1_JSON); const row=rows.find((item)=>item.name==="unicas-spaces"); process.stdout.write(row?.uuid ?? "")')"
           fi
           if [[ ! "$database_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then

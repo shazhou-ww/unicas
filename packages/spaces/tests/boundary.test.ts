@@ -4,10 +4,9 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 
 const packageRoot = fileURLToPath(new URL("..", import.meta.url));
-const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const wrangler = JSON.parse(readFileSync(
-  new URL("../../../stacks/unicas/spaces/wrangler.jsonc", import.meta.url),
+  new URL("../wrangler.jsonc", import.meta.url),
   "utf8",
 ));
 
@@ -38,9 +37,8 @@ describe("Spaces boundaries", () => {
     expect(wrangler.r2_buckets).toBeUndefined();
     expect(wrangler.kv_namespaces).toBeUndefined();
     expect(wrangler.durable_objects).toBeUndefined();
-    expect(relative(fileURLToPath(new URL("../../../stacks/unicas/spaces", import.meta.url)), packageRoot))
-      .not.toBe("");
-    expect(repositoryRoot).toBeTruthy();
+    expect(relative(packageRoot, fileURLToPath(new URL("../wrangler.jsonc", import.meta.url))))
+      .toBe("wrangler.jsonc");
   });
 });
 

@@ -47,7 +47,7 @@ space: [space-cli, space-webui] -> space-client -> space-protocol
 - 上图是固定的角色与依赖模型；某个 CLI/WebUI 产品尚未实现时不创建空包。
   WebUI 的服务端 BFF 属于服务端梳理范围，不改变浏览器侧的依赖方向。
 
-## 包清单（16 包）
+## 包清单（17 包）
 
 ```
 packages/                           @unicas org
@@ -87,10 +87,13 @@ packages/                           @unicas org
 │         D1/R2/KV/DO bindings、统一公网路由、credential 隔离、admin BFF/OIDC、
 │         MCP/OAuth ingress、control schema 与 D1 repository 适配
 │
-├── ■ 私有文档部署
-│   └── docs-site/         @unicas/docs-site           docs.unicas.work 静态站点
-│         私有且不发布；拥有公开文档内容、渲染器、测试、静态资源、构建产物与
-│         assets-only Wrangler 配置；仅把 space-protocol OpenAPI 导出作为构建输入
+├── ■ 私有呈现部署
+│   ├── docs-site/         @unicas/docs-site           docs.unicas.work 静态站点
+│   │     私有且不发布；拥有公开文档内容、渲染器、测试、静态资源、构建产物与
+│   │     assets-only Wrangler 配置；仅把 space-protocol OpenAPI 导出作为构建输入
+│   └── site/              @unicas/site                unicas.work product apex
+│         私有且不发布；只拥有静态源码、测试、assets-only Wrangler 配置与
+│         独立 Wrangler tooling，不含 service bindings、secrets 或 runtime code
 │
 ├── ■ client 层
     ├── admin-webui/       @unicas/admin-webui         admin 组 · 浏览器 UI（纯前端）
@@ -122,8 +125,8 @@ packages/                           @unicas org
     │
     └── ■ 私有第一方集成 App
         └── spaces/            @unicas/spaces              文件工作流与 release smoke
-          独立部署且不发布；只消费公开 Space client，部署配置与 App-owned
-          D1 migration 位于 stacks/unicas/spaces
+          独立部署且不发布；只消费公开 Space client，package root 拥有部署配置、
+          App-owned D1 migration 与独立 Wrangler tooling
 ```
 
 ## 依赖规则（分层单向，guard + boundary 测试强制）
