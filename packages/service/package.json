@@ -29,8 +29,8 @@
     "jose": "^6.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.9.0",
-    "vitest": "^3.2.0"
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
   },
   "publishConfig": {
     "main": "./dist/index.js",
