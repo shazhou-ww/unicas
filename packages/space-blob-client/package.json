@@ -62,6 +62,6 @@
   "dependencies": {
     "@unicas/codec": "workspace:*",
     "@unicas/space-client": "workspace:*",
-    "cborg": "^6.1.1"
+    "cborg": "^6.1.3"
   }
 }
