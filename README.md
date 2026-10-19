@@ -34,6 +34,38 @@ and security links are indexed from the SDK guide.
 - Node.js 24 or newer
 - pnpm 11
 
+### Preset lineage
+
+This repository adopts
+[`shazhou-ww/preset-cloudflare-fullstack`](https://github.com/shazhou-ww/preset-cloudflare-fullstack)
+on `main` as its immediate Git parent, recorded in
+[`.git-lineage.yaml`](.git-lineage.yaml). The adoption merge joins the existing
+UniCAS history to preset revision
+`48a07c6882f347f736a16f1d69b9e9922ae08111`; it does not replace product history.
+
+The inherited baseline includes Node selection, package-manager policies,
+EditorConfig, and the [Turbo task graph](turbo.json). UniCAS keeps its
+`packages/` layout, Cloudflare adapters, existing authentication, local runtime,
+and explicit `release:*` entry points instead of importing the preset's demo
+apps, Auth.js implementation, or automatic deployment workflow. Existing
+TypeScript, test, and formatting conventions remain in place rather than
+introducing a repository-wide rewrite. Turbo is pinned to `2.7.2`, available
+through the supported package proxy; the parent's newer toolchain versions are
+not prerequisites for this adoption.
+
+With git-lineage 0.2.1 or newer installed, merge future preset changes from a
+clean worktree:
+
+```powershell
+git lineage update
+pnpm install
+pnpm check
+```
+
+Updates are ordinary one-way Git merges. Review and resolve any conflicts
+without replacing UniCAS-specific configuration or enabling implicit production
+deployment. No command publishes changes back to the preset.
+
 ## Development
 
 ```powershell
@@ -45,6 +77,10 @@ pnpm local:dev
 `pnpm local:dev` starts the Cloudflare Worker locally, a mock OIDC provider, and the
 administrator console at <http://localhost:4070/admin/>. Local state is stored
 under `.wrangler/`.
+
+`pnpm check` is the preset-compatible alias for `pnpm validate`. Workspace
+builds, package tests, typechecks, and cleanup use Turbo; package-specific
+commands remain available.
 
 ### Test suites
 
