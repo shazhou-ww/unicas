@@ -26,7 +26,7 @@
     "@unicas/admin-protocol": "workspace:*",
     "@unicas/codec": "workspace:*",
     "@unicas/space-protocol": "workspace:*",
-    "jose": "^6.0.0"
+    "jose": "^6.2.12"
   },
   "devDependencies": {
     "typescript": "^5.9.0",

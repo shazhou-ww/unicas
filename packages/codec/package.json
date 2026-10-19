@@ -60,6 +60,6 @@
     }
   },
   "dependencies": {
-    "cborg": "^6.1.1"
+    "cborg": "^6.1.3"
   }
 }
