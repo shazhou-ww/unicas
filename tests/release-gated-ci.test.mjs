@@ -74,7 +74,7 @@ describe("release-gated workflow triggers", () => {
       ...Object.values(docs.jobs).map(job => job.steps),
     ]) {
       const commands = steps.flatMap(step => step.run ? [step.run] : []);
-      const install = commands.indexOf("npm install --global silvermoon@0.5.0");
+      const install = commands.indexOf("npm install --global silvermoon@0.4.0");
       const check = commands.findIndex(command => /pnpm (?:validate:release|check:ideas:commit)/u.test(command));
       expect(install).toBeGreaterThanOrEqual(0);
       expect(check).toBeGreaterThan(install);

@@ -188,3 +188,9 @@ Turbo 实际执行 protocol 的 43 tests 通过；`pnpm build` 的 16 tasks 通�
 完整 typecheck 发现此前新增文档回归测试的 Map entry 被推断为 `string[]`，
 已补充准确 tuple 类型而不改变断言；随后 `pnpm docs:check` 的 8 tests 与
 `pnpm typecheck` 的全部 27 tasks 通过。没有改变业务协议或重试实现。
+
+进一步核对 npm 发现设备开发版 `silvermoon@0.5.0` 尚未作为稳定版发布，
+不能将其当成可安装的 CI pin。已核实已发布稳定版 0.4.0 包含本项目所用的
+v2 schema 和 submit/accept 事件，CI 与文档部署改为固定全局安装 0.4.0。
+设备现有开发版不被替换，也不新增项目依赖或擅自发布 Silvermoon；
+相应安装说明不再假设稳定版具有开发中的 skill-linking 子命令。

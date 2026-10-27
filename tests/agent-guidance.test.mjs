@@ -169,8 +169,8 @@ describe("canonical Agent guidance", () => {
     }
     expect(existsSync(join(SKILLS_DIR, "silvermoon"))).toBe(false);
     const guidance = readFileSync(GUIDANCE_README, "utf8");
-    expect(guidance).toContain("npm install --global silvermoon@0.5.0");
-    expect(guidance).toContain("silvermoon-link-skill");
+    expect(guidance).toContain("npm install --global silvermoon@0.4.0");
+    expect(guidance).toContain("personal discovery link");
     expect(readFileSync(AGENTS_GUIDE, "utf8")).toContain("device-level `silvermoon` skill");
   });
 

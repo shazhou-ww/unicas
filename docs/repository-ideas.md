@@ -13,9 +13,13 @@ Install a schema-v2-capable runtime once per device, outside this repository,
 and register its canonical skill through the personal discovery link:
 
 ```sh
-npm install --global silvermoon@0.5.0
-silvermoon-link-skill
+npm install --global silvermoon@0.4.0
 ```
+
+Use the Agent host's supported installer to link the global installation's
+canonical `skills/silvermoon` directory into personal skill discovery.
+The stable runtime supports the project's v2 event schema; CI does not depend
+on the development-only 0.5.0 version or its skill-linking command.
 
 Do not install the runtime as a repository dependency or copy its skill into
 the repository. Snapshot-only CI checks install the same global runtime;
