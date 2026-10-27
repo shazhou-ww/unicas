@@ -92,6 +92,12 @@ validate the staged snapshot; after synchronizing to primary, run
 `pnpm check:ideas:remote` explicitly against refreshed primary history.
 Ordinary `main` pushes do not start hosted validation.
 
+CI explicitly normalizes its ephemeral `origin` URL to the configured canonical
+HTTPS repository including `.git`, and fetches `main` into
+`refs/remotes/origin/main` before worktree history checks. The validator matches
+named remotes by exact canonical URL; a checkout URL without `.git` is not a
+valid primary baseline even if it identifies the same GitHub repository.
+
 ## Documentation boundary
 
 Keep idea-specific plans, evidence, and continuation state in the appropriate

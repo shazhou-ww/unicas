@@ -46,6 +46,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$REVISION"
+          git remote set-url origin https://github.com/shazhou-ww/unicas.git
           git fetch --no-tags origin main:refs/remotes/origin/main
           test "$(git rev-parse origin/main)" = "$REVISION"
 

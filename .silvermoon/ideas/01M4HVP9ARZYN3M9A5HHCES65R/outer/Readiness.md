@@ -196,3 +196,8 @@ run `40530409004` 证明它要求旧的显式 sequence 字段，不能读取当�
 CI 与文档部署因此固定全局安装确已发布、匹配当前记录格式的
 `0.5.0-canary.50.g7e6b2e80af33`，不跟随移动 canary tag。
 设备现有开发版不被替换，也不新增项目依赖或擅自发布 Silvermoon。
+
+新预检 `40532829724` 已通过验证器安装和事件语法阶段，但暴露 Actions checkout
+的 origin URL 缺少 `.git`，不满足 v2 history 对 canonical named primary 的
+精确匹配。CI 与文档部署因此在检查前显式规范 origin URL 并刷新
+`refs/remotes/origin/main`，同时增加顺序回归检查；不修改用户设备的 Git remote。

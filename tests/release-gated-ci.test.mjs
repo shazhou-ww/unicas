@@ -81,6 +81,25 @@ describe("release-gated workflow triggers", () => {
     }
   });
 
+  test("prepares the exact canonical named primary before v2 history validation", () => {
+    const docs = parseYaml(
+      readFileSync(join(ROOT, ".github", "workflows", "deploy-docs.yml"), "utf8"),
+    );
+    for (const steps of [
+      ci.jobs.validate.steps,
+      ...Object.values(docs.jobs).map(job => job.steps),
+    ]) {
+      const commands = steps.flatMap(step => step.run ? [step.run] : []);
+      const prepare = commands.findIndex(command => (
+        command.includes("git remote set-url origin https://github.com/shazhou-ww/unicas.git")
+        && command.includes("git fetch --no-tags origin main:refs/remotes/origin/main")
+      ));
+      const validate = commands.findIndex(command => /pnpm (?:validate:release|check:ideas:commit)/u.test(command));
+      expect(prepare).toBeGreaterThanOrEqual(0);
+      expect(validate).toBeGreaterThan(prepare);
+    }
+  });
+
   test("retains PR dependency review and release, scheduled, and manual CodeQL", () => {
     expect(Object.keys(security.on).sort()).toEqual([
       "pull_request",

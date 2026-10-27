@@ -27,6 +27,11 @@ jobs:
       - name: Scan Git history for secrets
         run: docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/repo:ro" zricethezav/gitleaks:v8.28.0@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 git /repo --redact --no-banner
 
+      - name: Prepare canonical idea history
+        run: |
+          git remote set-url origin https://github.com/shazhou-ww/unicas.git
+          git fetch --no-tags origin main:refs/remotes/origin/main
+
       - name: Install pnpm
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
