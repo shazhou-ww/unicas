@@ -4,6 +4,8 @@
 
 重试修正版 `implementationRevision=b5d1b077bd5e` 已明确验收并同步到 primary，
 部署尚未完成。用户现已明确授权通过现有 Actions 通道发布并验证。
+按用户最新指示，先阶段性同步 primary 并暂停发布，待后续明确恢复。
+以下执行计划不表示现在继续合并 release 或操作生产。
 本地构建与打包检查通过，但没有目标环境的
 snapshot、迁移/恢复演练或在线 smoke 证据，不能提交 `submitOuter`。
 隔离合成数据演练的 `D-S04`、`D-AC04` 已完成，其余 `D-*` 未完成；
@@ -150,14 +152,14 @@ Production secrets，也不能推断 Git 推送权限等于 Actions 或 Cloudfla
 
 1. 通过正常双亲、内容与 main 一致的 promotion merge 发布到 `release`，
    观察完整 CI，并先确认 Production 审批通道可用。此时不冻结线上写入。
-2. 在 CI 通过、审批可操作之后，进入 Root Ref 短维护窗口：
+2. 在 CI 通过且 Production 审批通过之后，受保护 job 才进入 Root Ref 短维护窗口：
    先为旧 ledger 安装拒绝新写入的约束，利用旧 writer 已有的原子 D1 batch
    一并回滚 aggregate delta；只读旧请求重放不改数据。再次备份、校验冻结后的
    ledger 和 projection，保留 Time Travel 恢复书签。
 3. 建立新 schema，从当时的权威 aggregate 构建 projection，从冻结的旧表
    复制唯一请求结果并建立各 App 的 checkpoint，安装全部 archive 写保护；
    最后才写入 cutover marker。迁移绝不 UPDATE/DELETE `cas_nodes`，
-   不合并旧历史，不覆盖旧记录。校验行数、逐项一致性和约束后才批准部署。
+   不合并旧历史，不覆盖旧记录。校验行数、逐项一致性和约束后才继续 Worker 部署。
 4. 由受保护 workflow 执行 service、Spaces migration/issuer 切换和 smoke，
    随后检查各 origin、生产 tag 与 D1 一致性。已有本地演练不代替这些线上证据。
 
@@ -201,3 +203,39 @@ CI 与文档部署因此固定全局安装确已发布、匹配当前记录格�
 的 origin URL 缺少 `.git`，不满足 v2 history 对 canonical named primary 的
 精确匹配。CI 与文档部署因此在检查前显式规范 origin URL 并刷新
 `refs/remotes/origin/main`，同时增加顺序回归检查；不修改用户设备的 Git remote。
+
+数据切换不在本机提前执行。现已将固定 CAS_DB 的 runner 接入 Production job，
+放在精确修订校验后、任何 secrets 更新或 Worker 发布前，保证所有远程写入
+仍在环境审批之后。runner 默认 plan-only，首次切换复用现有离线规则，
+校验/备份/冻结/迁移/核验后最后写 marker；重复执行只读验证已完成状态。
+临时客户数据目录受限并在退出清理，provider 原始输出和下载 URL 不进入 job 日志，
+不上传客户数据 artifact。发布前与故障路径的可执行测试纳入 `pnpm check:release`；
+原离线 fixture 同时改为平台无关路径，以便在 Linux 发布 runner 中实际运行。
+
+## 阶段检查点与接续
+
+按用户要求，仅提交和同步当前阶段到 primary：
+
+- 发布 PR #65 保持 OPEN，未启用 auto-merge。已核对 `release` 仍为
+  `14739e8e45bd`，没有发布本次新版本。
+- 没有安装生产 writer fence、执行生产数据迁移、更新生产 secrets 或部署
+  Worker。此前生产操作仅为只读核对、SQL 导出和本地备份副本验证。
+- 新 runner、Production 审批后的执行接线、恢复保护测试和平台无关的离线测试
+  入口现已具备。默认 CLI 仅返回 plan；本次 checkpoint 验证中，
+  `node --check release\service\cut-over-root-refs.mjs` 与默认 plan 通过；
+  `pnpm exec vitest run tests\root-refs-cutover.test.mjs tests\root-refs-production-cutover.test.mjs tests\release-gated-ci.test.mjs`
+  共 46 tests 通过。此前子 agent 的 `pnpm check:release` 为 86 tests 通过。
+- 完整 Linux 发布预检尚未在最新修订上通过；不要将本地测试、CodeQL 或已修复
+  的旧失败当成完整 CI/部署成功。此前两次预检失败及修正原因保留在上文。
+- 临时包检查目录、依赖联接、未发布的 promotion 工作树及辅助 watch 已清理或
+  结束；原始生产备份保留于受限且 Git 忽略的位置，不提交、不上传。
+
+恢复时先获取 primary 和发布 PR 的新状态，以已配置的仓库所有者认证重新运行
+最新精确修订的完整 CI；不要切换全局默认账号、绕过 PR 检查或强制推送。
+确认保护检查全部通过后才正常合并 main 到 release，并由现有 Production
+审批启动 job 内的 cutover / 发布 / smoke。
+
+此前只读 snapshot 不是未来切换时的一致性栅栏点；runner 必须在实际执行时
+重新取得恢复书签和冻结后的 snapshot，重新核对数据，不直接使用旧备份覆盖
+当时状态。完成真实发布与验证前，D-S01 至 D-S03 及对应标准继续未完成，
+不记录 `submitOuter` 或部署验收。

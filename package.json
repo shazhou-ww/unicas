@@ -33,7 +33,7 @@
     "test:packages": "turbo run test --concurrency=1",
     "test:quick": "pnpm check:repo && turbo run test --filter=\"!@unicas/service-cloudflare\" --concurrency=1",
     "check:repo": "pnpm check:ideas && vitest run tests/agent-guidance.test.mjs tests/deploy-plan.test.mjs tests/workspace-boundaries.test.mjs tests/local-tooling.test.mjs tests/preset-lineage.test.mjs tests/openapi-drift.test.ts tests/stack-tenant-retirement.test.mjs tests/sdk-readiness.test.mjs && vitest run tests/release-gated-ci.test.mjs",
-    "check:release": "vitest run tests/app-space-v1-cutover.test.mjs tests/app-space-v1-issuer-cutover.test.mjs tests/sdk-release.test.mjs tests/npm-release.test.mjs tests/sdk-readiness.test.mjs tests/spaces-release-bootstrap.test.mjs tests/spaces-release-smoke.test.mjs",
+    "check:release": "vitest run tests/app-space-v1-cutover.test.mjs tests/app-space-v1-issuer-cutover.test.mjs tests/sdk-release.test.mjs tests/npm-release.test.mjs tests/sdk-readiness.test.mjs tests/spaces-release-bootstrap.test.mjs tests/spaces-release-smoke.test.mjs tests/root-refs-cutover.test.mjs tests/root-refs-production-cutover.test.mjs",
     "check:workspace": "vitest run tests/workspace-boundaries.test.mjs tests/deploy-plan.test.mjs tests/local-tooling.test.mjs tests/preset-lineage.test.mjs tests/stack-tenant-retirement.test.mjs",
     "check:agent-guidance": "vitest run tests/agent-guidance.test.mjs",
     "check:openapi": "vitest run tests/openapi-drift.test.ts",

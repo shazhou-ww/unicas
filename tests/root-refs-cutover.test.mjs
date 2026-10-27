@@ -31,10 +31,10 @@ describe("offline Root Ref cutover", () => {
   test("Spaces migration removes the obsolete column while preserving ownership", () => {
     const db = new DatabaseSync(":memory:");
     try {
-      db.exec(readFileSync("packages\\spaces\\migrations\\0001_initial.sql", "utf8"));
+      db.exec(readFileSync(join("packages", "spaces", "migrations", "0001_initial.sql"), "utf8"));
       db.exec("INSERT INTO spaces_principals VALUES ('principal','active','Synthetic',1,1)");
       db.exec("INSERT INTO spaces_principal_spaces VALUES ('principal','app','/one','old',1,1)");
-      db.exec(readFileSync("packages\\spaces\\migrations\\0003_remove_ref_domain.sql", "utf8"));
+      db.exec(readFileSync(join("packages", "spaces", "migrations", "0003_remove_ref_domain.sql"), "utf8"));
       expect(db.prepare("SELECT * FROM spaces_principal_spaces").get()).toEqual({
         principal_id: "principal", app_id: "app", space_id: "/one", created_at: 1, updated_at: 1,
       });
@@ -113,7 +113,7 @@ describe("offline Root Ref cutover", () => {
         ["--input", sourcePath, "--dry-run"],
         ["--input", sourcePath, "--output", targetPath],
       ]) {
-        const result = spawnSync(process.execPath, ["release\\service\\migrate-root-refs.mjs", ...args], { encoding: "utf8" });
+        const result = spawnSync(process.execPath, [join("release", "service", "migrate-root-refs.mjs"), ...args], { encoding: "utf8" });
         expect(result.status, result.stderr).toBe(0);
         expect(JSON.parse(result.stdout)).toMatchObject({ apps: 1, nodes: 1, replayRecords: 1 });
       }
@@ -124,7 +124,7 @@ describe("offline Root Ref cutover", () => {
         expect(candidate.prepare("SELECT checkpoint FROM cas_app_root_revisions").get().checkpoint).toBe(1);
       } finally { candidate.close(); }
       const replay = spawnSync(process.execPath, [
-        "release\\service\\migrate-root-refs.mjs", "--input", targetPath, "--dry-run",
+        join("release", "service", "migrate-root-refs.mjs"), "--input", targetPath, "--dry-run",
       ], { encoding: "utf8" });
       expect(replay.status).toBe(1);
       expect(replay.stderr).toContain("new Root Ref state is not empty");

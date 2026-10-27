@@ -16,16 +16,25 @@ Spaces App 须先应用 `0003_remove_ref_domain.sql`，再使用新 bootstrap/pr
 Cloudflare 的历史 DO class/binding 名保留，新的 actor key 仅含 App；
 旧 writer 必须停止，不能在两种 key 下并行写入。
 
-当前默认配置仅提供生产候选，不构成目标选择或执行授权。服务和 Spaces
-本地构建/dry-run 已通过；真实数据与恢复演练、维护窗口、保留期限和负责人
-尚未确定。准入条件、观察到的目标和预检证据见 [部署准入与预检](./Readiness.md)。
-这些条件齐备前保持本步骤未完成，不执行 remote D1 或生产发布。
+用户已授权现有 Production 通道。服务与 Spaces dry-run、隔离演练及真实 D1
+备份的只读迁移计划已通过；实际变更仍须通过原有 Production 审批。
+Root Ref 停写窗口仅在审批后的受保护 job 内开始，archive 与桥接记录保留且
+不设新 TTL。准入条件、风险与预检证据见 [部署准入与预检](./Readiness.md)。
+本步骤在完整 CI、审批和实际切换条件齐备前保持未完成。
 
 ### D-S02: 执行受控迁移并验证
 
 在获得相应发布及数据变更授权后，对目标环境执行 reconciliation、
 checkpoint、迁移和服务切换，以真实调用验证读写、审计及幂等；
 发现漂移或冲突时停止，不用成功形态的默认值继续。
+
+Production job 在验证精确 release 修订后、任何 secrets put 或 Worker 发布前，
+执行 [cutover runner](../../../../release/service/cut-over-root-refs.mjs)。
+runner 默认只输出计划，只有该受保护 job 中显式 `--production` 才执行变更；
+它复用已验证的离线校验和迁移规则，设置旧 writer 栅栏、建立恢复书签与私有
+snapshot、迁移新 projection/checkpoint/桥接，并在完整核验后最后写 marker。
+已有 marker 时只做一致性与约束核验，不覆盖新流。执行失败须明确保留或恢复
+可证明安全的 writer 状态，不直接恢复旧 snapshot 丢弃其他已接受写入。
 
 ### D-S03: 退出兼容并完成归档交接
 

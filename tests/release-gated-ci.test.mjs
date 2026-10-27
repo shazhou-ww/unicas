@@ -100,6 +100,22 @@ describe("release-gated workflow triggers", () => {
     }
   });
 
+  test("cuts over Root Ref data only inside Production before secrets and Worker deployment", () => {
+    const deployment = ci.jobs["deploy-production"];
+    expect(deployment.environment).toBe("Production");
+    const steps = deployment.steps;
+    const verify = steps.findIndex(step => step.name === "Verify protected release revision");
+    const cutover = steps.findIndex(step => step.run === "node release/service/cut-over-root-refs.mjs --production");
+    const secrets = steps.findIndex(step => step.name === "Synchronize production provider secrets");
+    expect(cutover).toBeGreaterThan(verify);
+    expect(secrets).toBeGreaterThan(cutover);
+    expect(steps[cutover].env).toEqual({
+      CLOUDFLARE_ACCOUNT_ID: "${{ vars.CLOUDFLARE_ACCOUNT_ID }}",
+      CLOUDFLARE_API_TOKEN: "${{ secrets.CLOUDFLARE_API_TOKEN }}",
+    });
+    expect(ci.jobs.validate.steps.some(step => step.run?.includes("cut-over-root-refs.mjs --production"))).toBe(false);
+  });
+
   test("retains PR dependency review and release, scheduled, and manual CodeQL", () => {
     expect(Object.keys(security.on).sort()).toEqual([
       "pull_request",
