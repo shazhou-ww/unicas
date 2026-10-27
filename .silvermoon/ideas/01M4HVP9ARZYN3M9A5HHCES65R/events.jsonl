@@ -1,3 +1,4 @@
 {"type":"setAlias","payload":{"alias":"remove-root-ref-domain"}}
 {"type":"setLanguage","payload":{"language":"zh-CN"}}
 {"type":"submitIdeal","timestamp":"2026-10-27T06:03:35.916Z","payload":{"idealRevision":"5319058e15879712717008642fafca8a27b8dd9a"}}
+{"type":"acceptIdeal","timestamp":"2026-10-27T11:57:02.179Z","payload":{"idealRevision":"5319058e15879712717008642fafca8a27b8dd9a"}}
