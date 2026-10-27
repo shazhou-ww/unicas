@@ -149,9 +149,11 @@ describe("documentation static site", () => {
       "cas-architecture.md",
       "cas-state-protection-and-gc.md",
     ];
-    const documents = new Map(await Promise.all(sources.map(async source => (
-      [source, await readFile(join(CONTENT_ROOT, source), "utf8")]
-    ))));
+    const documents = new Map(await Promise.all(sources.map(async source => {
+      /** @type {[string, string]} */
+      const entry = [source, await readFile(join(CONTENT_ROOT, source), "utf8")];
+      return entry;
+    })));
     const obsoleteContract = /\brefDomain\b|SpaceRefDomainClaim|`_legacy`|\/_internal\/root-refs|Root Ref domain|domain revision|App-domain revision|domain balance projection|Domain audit balances may expose negative/i;
     for (const [source, text] of documents) {
       expect(text, source).not.toMatch(obsoleteContract);

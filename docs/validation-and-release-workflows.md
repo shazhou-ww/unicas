@@ -21,6 +21,11 @@ validation must execute every time, and runtime-specific test inputs and
 generated source assets must not become success-shaped cache hits. No remote
 cache is configured.
 
+The task runner is pinned to Turbo 2.9.14, the first patched version for
+GHSA-hcf7-66rw-9f5r and GHSA-3qcw-2rhx-2726. This security update overrides
+the inherited preset's 2.7.2 pin without changing the task graph, serial
+execution, environment forwarding, or validation boundaries.
+
 The quick gate still excludes the slow Cloudflare adapter test suite, not its
 build. Release validation, exact-revision checks, protected environments, and
 external-write boundaries are unchanged. The preset's demo applications,

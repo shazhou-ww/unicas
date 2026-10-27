@@ -166,3 +166,25 @@ Production secrets，也不能推断 Git 推送权限等于 Actions 或 Cloudfla
 旧 ledger 和 aggregate 未被迁移改写，不能用恢复旧快照丢弃其他已接受写入。
 任何新事件出现后仅 forward-fix，不回滚到旧 writer。不可确认安全边界时
 保持停写并明确报告，不运行破坏性猜测操作。
+
+## 发布 promotion 与工具链准入
+
+已确认此前 API 权限失败来自默认 CLI 账号与仓库所有者不一致。
+本次命令通过凭据管理器中已有的所有者认证操作，不修改全局默认账号，
+不放宽 branch protection 或 Production 审批。
+
+正常直接 promotion push 被 `release` 保护规则拒绝，要求 PR 和两项状态检查；
+随后通过所有者身份创建了 [发布 PR #65](https://github.com/shazhou-ww/unicas/pull/65)。
+所有生产数据操作仍只有只读核对、备份与本地副本迁移，没有安装线上写入栅栏。
+
+PR 的 CodeQL 通过，Dependency review 检出了继承的 `turbo@2.7.2`：
+GHSA-hcf7-66rw-9f5r 与 GHSA-3qcw-2rhx-2726 均要求至少 2.9.14。
+因此仅将 root 开发工具固定到 2.9.14，并适配其 scoped 平台 binary 的锁文件
+检查；不关闭 Dependency review、不改变串行/无缓存任务语义。
+完整发布验证仍由 promotion 后的 Actions 在精确 release 修订上执行。
+
+工具升级本地验证：preset/发布规则/local tooling 合计 17 tests 通过；
+Turbo 实际执行 protocol 的 43 tests 通过；`pnpm build` 的 16 tasks 通过。
+完整 typecheck 发现此前新增文档回归测试的 Map entry 被推断为 `string[]`，
+已补充准确 tuple 类型而不改变断言；随后 `pnpm docs:check` 的 8 tests 与
+`pnpm typecheck` 的全部 27 tasks 通过。没有改变业务协议或重试实现。
