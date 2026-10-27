@@ -11,16 +11,16 @@
 
 ## Idea workflow
 
-Load and follow the
-[`silvermoon` skill](.agents/skills/silvermoon/SKILL.md)
+Load and follow the device-level `silvermoon` skill registered in the personal
+Agent discovery path
 when the user invokes `/silvermoon`, explicitly asks to create an idea, or asks
 to continue an existing Silvermoon idea. Apply the UniCAS-specific profile in
 [`docs/repository-ideas.md`](docs/repository-ideas.md). Ordinary implementation
 requests remain idea-free unless the user opts into this lifecycle.
 
-- Use `pnpm exec silvermoon create-idea --audience agent` only for explicit
+- Use `silvermoon create-idea --audience agent` only for explicit
   creation requests. Use
-  `pnpm exec silvermoon whats-next [idea] --audience agent` for navigation and
+  `silvermoon whats-next [idea] --audience agent` for navigation and
   continuation.
 - Treat the configured primary repository and branch as authoritative. Preserve
   unknown work and follow the command's ordered synchronization instructions.
@@ -57,8 +57,8 @@ requests remain idea-free unless the user opts into this lifecycle.
   checked-out history. After synchronizing a candidate to primary, run
   `pnpm check:ideas:remote` explicitly; ordinary `main` pushes do not start
   hosted validation.
-- Use `pnpm exec silvermoon whats-next [idea] --audience agent` for readiness
-  and `pnpm exec silvermoon check --staged --audience agent` for an index
+- Use `silvermoon whats-next [idea] --audience agent` for readiness
+  and `silvermoon check --staged --audience agent` for an index
   candidate.
 - Run the narrowest relevant executable test after implementation edits.
 - Before requesting acceptance, run the validation required by the current

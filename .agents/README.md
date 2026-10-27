@@ -15,12 +15,12 @@ particular, Claude discovery is not a supported repository surface.
 | --- | --- | --- |
 | `business-data-model-review` | Externally installed | `shazhou-ww/skills` |
 | `ui-change-review` | Externally installed | `shazhou-ww/skills` |
-| `silvermoon` | Packaged canonical | `node_modules/silvermoon/skills` |
+| `silvermoon` | Device-owned, not copied into this repository | Global runtime's canonical personal skill link |
 | `unicas-cli` | Repository-owned | This repository |
 | `unicas-observability` | Repository-owned | This repository |
 | `unicas-package-boundaries` | Repository-owned | This repository |
 
-Externally installed skills and the packaged canonical skill are recorded in
+Externally installed repository skills are recorded in
 [skills-lock.json](../skills-lock.json). Repository-owned skills are maintained
 directly in Git and must not be added to that lock.
 
@@ -42,15 +42,17 @@ npx skills update business-data-model-review ui-change-review --project --yes
 npx skills remove <skill-name> --yes
 ```
 
-The Silvermoon package is canonical for its bundled skill. After updating the
-dependency and lockfile, refresh only its universal copy:
+Silvermoon is installed once per device or CI host, outside this repository.
+Register its canonical skill by personal link rather than copying it:
 
 ```sh
-npx skills add ./node_modules/silvermoon/skills --skill silvermoon --agent universal --yes --copy
+npm install --global silvermoon@0.5.0
+silvermoon-link-skill
 ```
 
-Never edit `.agents/skills/silvermoon` directly. Review the dependency,
-lockfile, copied skill, and `skills-lock.json` together.
+Do not add Silvermoon to repository dependencies or `skills-lock.json`, copy
+its skill into the repository, or resolve its CLI from local `node_modules`.
+Snapshot-only CI checks need the global runtime, not a personal skill link.
 
 Repository-owned skills have no installer source. Edit and review them directly
 under `.agents/skills/`, keeping their frontmatter name equal to the directory
@@ -66,6 +68,7 @@ npx skills list --json
 ```
 
 The first command validates canonical placement, frontmatter, local links,
-ownership metadata, the Silvermoon canonical copy, and mandatory package
-routing. The second must discover exactly the skills listed in the ownership
-table from `.agents/skills/`; it must not depend on a provider projection.
+ownership metadata, Silvermoon's device boundary, and mandatory package
+routing. The second discovers the repository-owned and externally installed
+repository skills from `.agents/skills/`; the device-owned Silvermoon skill is
+discovered separately through the personal link.

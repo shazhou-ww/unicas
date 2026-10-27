@@ -65,6 +65,22 @@ describe("release-gated workflow triggers", () => {
     expect(ci.jobs["deploy-production"].needs).toBe("validate");
   });
 
+  test("installs a device-level v2 validator before idea snapshot checks", () => {
+    const docs = parseYaml(
+      readFileSync(join(ROOT, ".github", "workflows", "deploy-docs.yml"), "utf8"),
+    );
+    for (const steps of [
+      ci.jobs.validate.steps,
+      ...Object.values(docs.jobs).map(job => job.steps),
+    ]) {
+      const commands = steps.flatMap(step => step.run ? [step.run] : []);
+      const install = commands.indexOf("npm install --global silvermoon@0.5.0");
+      const check = commands.findIndex(command => /pnpm (?:validate:release|check:ideas:commit)/u.test(command));
+      expect(install).toBeGreaterThanOrEqual(0);
+      expect(check).toBeGreaterThan(install);
+    }
+  });
+
   test("retains PR dependency review and release, scheduled, and manual CodeQL", () => {
     expect(Object.keys(security.on).sort()).toEqual([
       "pull_request",

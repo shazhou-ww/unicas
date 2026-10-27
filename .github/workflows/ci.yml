@@ -41,6 +41,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install device-level idea validator
+        run: npm install --global silvermoon@0.5.0
+
       - name: Install SDK release browser engines
         if: github.ref == 'refs/heads/release' || github.event_name == 'workflow_dispatch'
         run: pnpm --filter @unicas/docs-site exec playwright install --with-deps chromium firefox webkit

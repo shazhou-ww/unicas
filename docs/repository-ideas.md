@@ -1,7 +1,7 @@
 # Repository ideas
 
-This repository uses the installed
-[`silvermoon`](/.agents/skills/silvermoon/SKILL.md), the shared
+This repository uses the device-level `silvermoon` runtime and personal skill
+link, the shared
 [Silvermoon configuration](/.silvermoon/config.yaml), and the fixed
 `.silvermoon/ideas/` layout for explicitly managed long-running outcomes.
 Ordinary implementation requests do not create an idea unless the user opts
@@ -9,16 +9,19 @@ into the lifecycle.
 
 ## Installation
 
-Silvermoon is a root development dependency. Its canonical skill is copied
-from the installed package and recorded in `skills-lock.json`:
+Install a schema-v2-capable runtime once per device, outside this repository,
+and register its canonical skill through the personal discovery link:
 
 ```sh
-npx skills add ./node_modules/silvermoon/skills --skill silvermoon --agent universal --yes --copy
+npm install --global silvermoon@0.5.0
+silvermoon-link-skill
 ```
 
-Review updates to the dependency, lockfile, installed skill, and skill lock
-together. See [Agent guidance](../.agents/README.md) for the repository-wide
-skill ownership and update policy. The repository configuration names the
+Do not install the runtime as a repository dependency or copy its skill into
+the repository. Snapshot-only CI checks install the same global runtime;
+they do not require a personal skill registration.
+See [Agent guidance](../.agents/README.md) for skill ownership.
+The repository configuration names the
 credential-free canonical HTTPS repository and `main` as the shared primary.
 
 ## Layout
@@ -30,7 +33,7 @@ Each idea uses an immutable uppercase ULID and may have one unique alias:
 |-- config.yaml
 `-- ideas/
     `-- <ULID>/
-        |-- status.yaml
+        |-- events.jsonl
         |-- ledger.md
         `-- outer/
             |-- Deployment.md
@@ -47,18 +50,21 @@ stable step and acceptance-criterion IDs as Agent-owned checkboxes.
 
 ## Workflow
 
-- Use `pnpm exec silvermoon create-idea --audience agent` only after an explicit
+- Use `silvermoon create-idea --audience agent` only after an explicit
   creation request. It creates an untracked scaffold and never records
   approval.
 - Use
-  `pnpm exec silvermoon whats-next [ULID-or-alias] --audience agent`
+  `silvermoon whats-next [ULID-or-alias] --audience agent`
   to observe readiness and obtain the next ordered action. Bare navigation
   never selects an idea.
 - Publish normal non-force commits through the repository's standard path.
   Reobserve after repository or external state changes.
-- Record `approvedRevision`, `implementationAcceptedRevision`, or
-  `deploymentAcceptedRevision` only after an explicit human decision for the
-  exact reported world revision.
+- After synchronizing a completed world to primary, use `silvermoon event append`
+  to record its exact `submitIdeal`, `submitInner`, or `submitOuter`.
+  Record the corresponding `acceptIdeal`, `acceptInner`, or `acceptOuter` only
+  after an explicit human decision for that exact submitted world revision.
+  Bind each append to the observed event digest and primary commit; never edit
+  `events.jsonl` by hand or infer decisions from submissions.
 - Keep approval and acceptance out of ledger checkboxes. Those checkboxes are
   operational memory for Agent work only.
 - Preserve concurrent work and history. Never force-push, reset, broadly clean,
@@ -70,7 +76,7 @@ Use the snapshot matching the candidate being reviewed:
 
 ```sh
 pnpm check:ideas
-pnpm exec silvermoon check --staged --audience agent
+silvermoon check --staged --audience agent
 pnpm check:ideas:commit
 pnpm check:ideas:remote
 ```
