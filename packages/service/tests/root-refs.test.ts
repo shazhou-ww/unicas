@@ -185,4 +185,23 @@ describe("Root Ref service kernel", () => {
     expect(result.changesJson).toBe(`{"${H1}":1,"${H2}":-1}`);
     expect(result.payloadHash).toMatch(/^[0-9a-f]{64}$/);
   });
+
+  test("keeps the default attempt bound and delays for explicitly undefined options", async () => {
+    const failure = new RootRefsRetryableError("store unavailable");
+    const delays: number[] = [];
+    let attempts = 0;
+    await expect(withRootRefsRetry(async () => {
+      attempts += 1;
+      if (attempts > 5) throw new Error("default attempt bound was exceeded");
+      throw failure;
+    }, {
+      maxAttempts: undefined,
+      baseDelayMs: undefined,
+      maxDelayMs: undefined,
+      jitter: false,
+      sleep: async (delay) => { delays.push(delay); },
+    })).rejects.toBe(failure);
+    expect(attempts).toBe(5);
+    expect(delays).toEqual([25, 50, 100, 200]);
+  });
 });

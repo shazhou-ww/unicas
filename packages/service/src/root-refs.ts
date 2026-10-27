@@ -348,10 +348,12 @@ export async function withRootRefsRetry<T>(
   operation: () => Promise<T>,
   options: RootRefsRetryOptions = {},
 ): Promise<T> {
-  const { maxAttempts, baseDelayMs, maxDelayMs, jitter } = {
-    ...DEFAULT_RETRY_OPTIONS,
-    ...options,
-  };
+  const {
+    maxAttempts = DEFAULT_RETRY_OPTIONS.maxAttempts,
+    baseDelayMs = DEFAULT_RETRY_OPTIONS.baseDelayMs,
+    maxDelayMs = DEFAULT_RETRY_OPTIONS.maxDelayMs,
+    jitter = DEFAULT_RETRY_OPTIONS.jitter,
+  } = options;
   const sleep = options.sleep
     ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   let attempt = 0;

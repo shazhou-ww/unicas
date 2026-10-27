@@ -132,8 +132,8 @@ try {
 
   const entry = join(directory, "probe.mjs");
   await writeFile(entry, `
-import { CasDurableObject, RootRefDomainDurableObject } from ${JSON.stringify(moduleUrl("packages/service-cloudflare/dist/worker.js"))};
-import { listAppRootRefs, listAppRootEvents, AuditReadError } from ${JSON.stringify(moduleUrl("packages/service-cloudflare/dist/audit-reads.js"))};
+import { CasDurableObject, RootRefDomainDurableObject } from ${JSON.stringify(join(root, "packages", "service-cloudflare", "dist", "worker.js"))};
+import { listAppRootRefs, listAppRootEvents, AuditReadError } from ${JSON.stringify(join(root, "packages", "service-cloudflare", "dist", "audit-reads.js"))};
 export { CasDurableObject, RootRefDomainDurableObject };
 export default { async fetch(request, env) {
   const url = new URL(request.url);
@@ -179,14 +179,17 @@ export default { async fetch(request, env) {
     }],
   }));
   const origin = (await runtime.ready).origin;
-  assert.equal(await (await fetch(`${origin}/health`)).text(), "local-ready");
+  const localFetch = (path, options = {}) => fetch(`${origin}${path}`, {
+    ...options, signal: AbortSignal.timeout(15_000),
+  });
+  assert.equal(await (await localFetch("/health")).text(), "local-ready");
   const db = await runtime.getD1Database("CAS_DB", "root-ref-rehearsal");
   await db.exec(candidateSql);
   const bucket = await runtime.getR2Bucket("CAS_R2", "root-ref-rehearsal");
   const { appCanonicalNodeKey } = await import(moduleUrl("packages/service-cloudflare/dist/do-names.js"));
   for (const space of ["/one", "/two"]) await bucket.put(appCanonicalNodeKey(app, space, hash), "synthetic");
   const update = async (spaceId, requestId, delta) => {
-    const response = await fetch(`${origin}/root-refs?spaceId=${encodeURIComponent(spaceId)}`, {
+    const response = await localFetch(`/root-refs?spaceId=${encodeURIComponent(spaceId)}`, {
       method: "POST", body: JSON.stringify({ requestId, changes: { [hash]: delta } }),
     });
     return { status: response.status, body: await response.json() };
@@ -197,39 +200,44 @@ export default { async fetch(request, env) {
   assert.deepEqual(writes.map(result => result.status), [200, 200]);
   assert.deepEqual(writes.map(result => result.body.revision).sort(), [2, 3]);
   assert.equal((await update("/two", "shared", 2)).body.idempotent, true);
-  const first = await (await fetch(`${origin}/audit/refs`)).json();
+  const first = await (await localFetch("/audit/refs")).json();
   assert.equal(first.revision, 3);
   assert.equal(first.refs.length, 1);
   assert.equal(typeof first.nextCursor, "string");
-  const next = await (await fetch(`${origin}/audit/refs?cursor=${encodeURIComponent(first.nextCursor)}`)).json();
+  const next = await (await localFetch(`/audit/refs?cursor=${encodeURIComponent(first.nextCursor)}`)).json();
   assert.equal(next.refs.length, 1);
   assert.equal(next.nextCursor, null);
   assert.equal((await update("/one", "cursor-change", 1)).body.revision, 4);
-  const stale = await fetch(`${origin}/audit/refs?cursor=${encodeURIComponent(first.nextCursor)}`);
+  const stale = await localFetch(`/audit/refs?cursor=${encodeURIComponent(first.nextCursor)}`);
   assert.equal(stale.status, 409);
   assert.equal((await stale.json()).error, "ROOT_REF_SNAPSHOT_CHANGED");
   const before = await db.prepare("SELECT space_id,root_ref_count FROM cas_nodes ORDER BY space_id").all();
   await db.exec("CREATE TRIGGER injected_failure BEFORE INSERT ON cas_app_root_events BEGIN SELECT RAISE(ABORT,'local-rehearsal'); END;");
+  const failedStarted = performance.now();
   assert.equal((await update("/one", "failed", 1)).status, 503);
+  const failedResponseMs = Math.round(performance.now() - failedStarted);
+  assert.ok(failedResponseMs < 10_000, "storage failure must return within 10 seconds");
   assert.deepEqual((await db.prepare("SELECT space_id,root_ref_count FROM cas_nodes ORDER BY space_id").all()).results, before.results);
-  const afterFailure = await (await fetch(`${origin}/audit/events`)).json();
+  const afterFailure = await (await localFetch("/audit/events")).json();
   assert.equal(afterFailure.latestRevision, 4);
   assert.equal(afterFailure.events.length, 3);
   await db.exec("DROP TRIGGER injected_failure;");
   assert.equal((await update("/one", "after-failure", 1)).body.revision, 5);
-  const events = await (await fetch(`${origin}/audit/events`)).json();
+  const events = await (await localFetch("/audit/events")).json();
   assert.deepEqual(events.events.map(event => event.revision), [2, 3, 4, 5]);
   assert.equal(events.nextAfter, 5);
+  const finalAggregate = (await db.prepare("SELECT root_ref_count FROM cas_nodes ORDER BY space_id").all()).results.map(row => row.root_ref_count);
+  assert.deepEqual(finalAggregate, [5, 5]);
   await assert.rejects(() => db.prepare("DELETE FROM cas_root_domain_events").run(), /read-only/);
   await assert.rejects(() => db.prepare("DELETE FROM cas_app_root_events").run(), /append-only/);
   assert.equal(digest(await readFile(sourcePath)), sourceDigest);
   console.log(JSON.stringify({
     outcome: "local-rehearsal-passed",
     target: "isolated-local-d1-and-workerd",
-    sourceNodes: 2, originalAggregate: [2, 3], restoredAggregate: [2, 3],
+    sourceNodes: 2, originalAggregate: [2, 3], restoredAggregate: [2, 3], finalAggregate,
     archiveWriteGuards: 12, checkpoint: 1, newRevisions: [2, 3, 4, 5],
     legacyReplay: true, crossSpaceReplay: true, cursorInvalidation: true,
-    lateBatchRollback: true, httpResponsive: true, sourceUnchanged: true,
+    lateBatchRollback: true, failedResponseMs, httpResponsive: true, sourceUnchanged: true,
     publicCapabilityValidation: "not-exercised-by-trusted-fixture-harness",
     remoteOperations: 0,
   }));

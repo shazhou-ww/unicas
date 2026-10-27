@@ -108,6 +108,28 @@ manifest、lockfile、技能注册和 CI 安装边界；最终标准 idea 检查
 实施 subagent 未修改 `ideal`、`events.jsonl`，也未 stage、commit、push 或记录
 生命周期事件；候选集成与 gate 交接由父 agent 完成。
 
+#### 部署演练发现的重试修正
+
+隔离本地 D1 与真实 HTTP/DO 故障注入发现：DO 未配置重试次数时显式传入
+`maxAttempts: undefined`，原默认值合并被覆盖，持续存储失败会无限重试。
+父 agent 新增有限失败的回归测试，先确认旧代码超过默认五次，再改为逐项
+解构默认值，保留明确配置，恢复五次上限与退避延迟。
+本地演练同时给 HTTP 请求设置 15 秒超时，并要求故障响应小于 10 秒、
+整批无副作用且后续请求恢复。该修正改变本实施修订，须重新提交精确版本验收，
+不能沿用此前的实现验收事实作为新修订已接受的证据。
+
+修正后验证：
+
+| 精确命令 | 结果 |
+| --- | --- |
+| `pnpm --filter @unicas/service exec vitest run tests\root-refs.test.ts` | 6 tests 通过；新增测试断言默认五次尝试和 `[25,50,100,200]` 退避 |
+| `pnpm --filter @unicas/service build` | 通过；供真实 worker 演练打包使用 |
+| `pnpm --filter @unicas/service --filter @unicas/service-cloudflare typecheck` | 两包通过 |
+| `pnpm --filter @unicas/service-cloudflare exec vitest run tests\root-refs.test.ts tests\do.test.ts --testTimeout=15000` | 34 tests 通过 |
+
+故障注入的本地 HTTP 演练已恢复，外层保留真实环境适用范围与结果；
+不以此次合成数据成功推断生产迁移或公网权限已验证。
+
 #### 文档语义复审（2026-10-27）
 
 父审查发现公开文档仍混有已删除模型，不能仅凭链接检查证明 I-AC01。
