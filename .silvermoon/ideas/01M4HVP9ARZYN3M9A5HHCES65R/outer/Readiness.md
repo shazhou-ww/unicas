@@ -3,7 +3,7 @@
 ## 当前结论
 
 重试修正版 `implementationRevision=b5d1b077bd5e` 已明确验收并同步到 primary，
-部署尚未完成。
+部署尚未完成。用户现已明确授权通过现有 Actions 通道发布并验证。
 本地构建与打包检查通过，但没有目标环境的
 snapshot、迁移/恢复演练或在线 smoke 证据，不能提交 `submitOuter`。
 隔离合成数据演练的 `D-S04`、`D-AC04` 已完成，其余 `D-*` 未完成；
@@ -115,10 +115,54 @@ issuer/client 与 Worker。旧 v2 claim 在过渡期仅被忽略，不改变权�
 
 这只能证明当前执行身份无法核对配置，不能据此推断 GitHub 上没有配置
 Production secrets，也不能推断 Git 推送权限等于 Actions 或 Cloudflare
-部署权限。未尝试替换凭据、绕过权限或触发 workflow。
+部署权限。没有替换凭据或绕过权限。后续尝试通过正常 API 手动 dispatch
+预检，仍收到 403，没有启动该预检 run。
 
 后续须由有权限的执行者选择并授权目标与维护窗口，通过现有安全机制注入
 发布配置或启用已配置的受保护发布通道，再完成写入栅栏、备份、保留政策
 和真实目标演练。不要将密钥、token 或客户 snapshot 粘贴到对话或提交到 Git。
 这些前置条件未满足，因此 `D-S01` 至 `D-S03` 与对应部署标准继续未完成，
 不提交 `submitOuter`，也不请求部署验收。
+
+## 已授权的生产发布执行计划（2026-10-27）
+
+用户已明确授权发布及部署验证。目标为现有 service、Spaces、产品站和文档站的
+标准 `release` / `Production` 通道；不发布 npm，不修改冻结旧环境。
+执行期间由当前 Agent 负责操作和核验，环境审核沿用仓库现有 required reviewers。
+所有 archive、旧请求桥接和备份保留，不设置新 TTL、不做清理；
+长期保留与兼容退休继续作为未完成的 D-S03，不冒充本次即时发布验证。
+
+此前无法读取 Secrets 元数据不等于无法发布。现已独立确认：
+
+- Actions run 读取可用，上次 `release` run `37912005945` 实际完成了
+  validate、Production 部署、全部 smoke/origin 检查和生产 tag。
+- `Production` 环境确有 required reviewers，且不禁止 self review；
+  标准发布先经过完整 CI 和该现有审批关口，不依赖手动 dispatch 权限。
+- 当前设备的 Cloudflare OAuth 认证包含目标账号与 `d1:write` 权限。
+  没有读取或输出 OAuth token；本机缺少 CI 注入的变量不再被当作 Actions 阻塞。
+- 生产 D1 只读检查得到 171 个 node、1 个 aggregate root、496 条旧事件与
+  496 条旧请求；projection 漂移、孤立 projection 和 requestId 碰撞均为 0。
+- 已将真实 D1 SQL 备份保存于 Git 忽略、限制访问的目录，并在本机恢复为 SQLite。
+  现有只读迁移 plan 通过：2 个 App、171 个 node、496 条可桥接请求。
+  原始记录和下载凭据不进入本契约或 Git。
+
+执行顺序：
+
+1. 通过正常双亲、内容与 main 一致的 promotion merge 发布到 `release`，
+   观察完整 CI，并先确认 Production 审批通道可用。此时不冻结线上写入。
+2. 在 CI 通过、审批可操作之后，进入 Root Ref 短维护窗口：
+   先为旧 ledger 安装拒绝新写入的约束，利用旧 writer 已有的原子 D1 batch
+   一并回滚 aggregate delta；只读旧请求重放不改数据。再次备份、校验冻结后的
+   ledger 和 projection，保留 Time Travel 恢复书签。
+3. 建立新 schema，从当时的权威 aggregate 构建 projection，从冻结的旧表
+   复制唯一请求结果并建立各 App 的 checkpoint，安装全部 archive 写保护；
+   最后才写入 cutover marker。迁移绝不 UPDATE/DELETE `cas_nodes`，
+   不合并旧历史，不覆盖旧记录。校验行数、逐项一致性和约束后才批准部署。
+4. 由受保护 workflow 执行 service、Spaces migration/issuer 切换和 smoke，
+   随后检查各 origin、生产 tag 与 D1 一致性。已有本地演练不代替这些线上证据。
+
+如果 CI 或审批权限不足，在安装写入栅栏之前停止，线上状态不变。
+栅栏后的失败只能在确认新 writer 未写入新事件时撤销本次新增状态和栅栏；
+旧 ledger 和 aggregate 未被迁移改写，不能用恢复旧快照丢弃其他已接受写入。
+任何新事件出现后仅 forward-fix，不回滚到旧 writer。不可确认安全边界时
+保持停写并明确报告，不运行破坏性猜测操作。
