@@ -212,30 +212,27 @@ CI 与文档部署因此固定全局安装确已发布、匹配当前记录格�
 不上传客户数据 artifact。发布前与故障路径的可执行测试纳入 `pnpm check:release`；
 原离线 fixture 同时改为平台无关路径，以便在 Linux 发布 runner 中实际运行。
 
-## 阶段检查点与接续
+## 阶段检查点与接续（2026-10-28）
 
-按用户要求，仅提交和同步当前阶段到 primary：
+当前阶段 runner、Production 审批后的执行接线、恢复保护测试和跨平台测试
+入口已提交 primary；本次按用户要求停止发布，不再启动新预检或合并 release。
 
-- 发布 PR #65 保持 OPEN，未启用 auto-merge。已核对 `release` 仍为
-  `14739e8e45bd`，没有发布本次新版本。
-- 没有安装生产 writer fence、执行生产数据迁移、更新生产 secrets 或部署
-  Worker。此前生产操作仅为只读核对、SQL 导出和本地备份副本验证。
-- 新 runner、Production 审批后的执行接线、恢复保护测试和平台无关的离线测试
-  入口现已具备。默认 CLI 仅返回 plan；本次 checkpoint 验证中，
-  `node --check release\service\cut-over-root-refs.mjs` 与默认 plan 通过；
-  `pnpm exec vitest run tests\root-refs-cutover.test.mjs tests\root-refs-production-cutover.test.mjs tests\release-gated-ci.test.mjs`
-  共 46 tests 通过。此前子 agent 的 `pnpm check:release` 为 86 tests 通过。
-- 完整 Linux 发布预检尚未在最新修订上通过；不要将本地测试、CodeQL 或已修复
-  的旧失败当成完整 CI/部署成功。此前两次预检失败及修正原因保留在上文。
-- 临时包检查目录、依赖联接、未发布的 promotion 工作树及辅助 watch 已清理或
-  结束；原始生产备份保留于受限且 Git 忽略的位置，不提交、不上传。
+- 发布 PR #65 保持 OPEN。最近一次成功的 release 仍为 `14739e8e45bd`；
+  没有发布本次新版本，也没有执行生产 writer fence、数据迁移或 Worker 部署。
+- 当前阶段验证：`pnpm check:release` 共 86 tests 通过；
+  `pnpm exec vitest run tests\release-gated-ci.test.mjs tests\agent-guidance.test.mjs`
+  共 17 tests 通过；`git diff --check` 通过。
+- 最新精确修订的完整 Linux `pnpm validate:release` 尚待运行，不能将此前
+  失败 run 的修复、本地测试或 CodeQL 当作完整发布验证成功。
+- 没有保留运行中的发布 watcher 或生产进程。原始生产备份保留于受限且
+  Git 忽略的位置，不提交、不上传；实际切换必须重新取得当时的冻结 snapshot。
 
-恢复时先获取 primary 和发布 PR 的新状态，以已配置的仓库所有者认证重新运行
-最新精确修订的完整 CI；不要切换全局默认账号、绕过 PR 检查或强制推送。
-确认保护检查全部通过后才正常合并 main 到 release，并由现有 Production
-审批启动 job 内的 cutover / 发布 / smoke。
+明天恢复时先获取 primary 和 PR 新状态，以已配置的仓库所有者认证运行
+最新精确修订的完整 CI；不切换全局默认账号、不放宽保护规则、不强推。
+确认保护检查和完整预检通过后，正常合并 main 到 release，并沿用 Production
+审批，在 job 内执行 cutover、发布与 smoke。runner 的真实 D1 执行/恢复边界
+仍须重点审查；遇到数据漂移或不可证明的恢复条件就停止。
 
-此前只读 snapshot 不是未来切换时的一致性栅栏点；runner 必须在实际执行时
-重新取得恢复书签和冻结后的 snapshot，重新核对数据，不直接使用旧备份覆盖
-当时状态。完成真实发布与验证前，D-S01 至 D-S03 及对应标准继续未完成，
-不记录 `submitOuter` 或部署验收。
+所有旧 ledger、备份和请求桥接继续保留，不设置新 TTL 或清理归档。
+实际发布、观察窗口及保留政策未完成，因此 D-S01 至 D-S03 和对应标准
+保持未完成，不记录 `submitOuter` 或部署验收。
