@@ -2,7 +2,8 @@
 
 ## 当前结论
 
-先前实现修订已验收；本地演练引出的重试修正须重新实现验收，部署尚未完成。
+重试修正版 `implementationRevision=b5d1b077bd5e` 已明确验收并同步到 primary，
+部署尚未完成。
 本地构建与打包检查通过，但没有目标环境的
 snapshot、迁移/恢复演练或在线 smoke 证据，不能提交 `submitOuter`。
 隔离合成数据演练的 `D-S04`、`D-AC04` 已完成，其余 `D-*` 未完成；
@@ -87,8 +88,37 @@ issuer/client 与 Worker。旧 v2 claim 在过渡期仅被忽略，不改变权�
 初次打包发现 Windows esbuild 不接受 `file:` import，已修正为绝对文件路径。
 随后真实 DO 故障请求超时，进一步定位到实现中显式 `undefined` 覆盖默认
 重试上限。该缺陷已在内层实现修复，并通过先失败后通过的回归测试和本演练
-再次验证；修订后的实现需重新走精确版本验收，不能把此结果当作已部署。
+再次验证；修订后的实现已单独完成精确版本验收，不能把此结果当作已部署。
 
 本地 HTTP harness 注入的是合成可信身份，未覆盖公网 capability 校验、
 真实生产账号、资源访问、数据量限制、维护栅栏或保留期。因此它只满足
 `D-S04` 和 `D-AC04`，不能满足目标环境的 `D-AC01` 至 `D-AC03`。
+
+## 发布执行通道检查（2026-10-27）
+
+只读调用现有 service 环境校验函数，并核对 Spaces 生产配置清单；
+没有生成生产 secrets 文件、输出密钥值或执行部署。当前进程缺少：
+
+| 单元 | 缺失名称 |
+| --- | --- |
+| service smoke | `UNICAS_SMOKE_APP_ID`、`UNICAS_SMOKE_ISSUER`、`UNICAS_SMOKE_AUDIENCE`、`UNICAS_SMOKE_KID`、`UNICAS_SMOKE_KEY_FILE` |
+| service OAuth | `OAUTH_GOOGLE_CLIENT_ID`、`OAUTH_MICROSOFT_CLIENT_ID`、`OAUTH_GITHUB_CLIENT_ID` |
+| Spaces 配置 | `SPACES_D1_DATABASE_ID`、`SPACES_GOOGLE_CLIENT_ID`、`SPACES_SIGNING_KID`、`SPACES_SIGNING_PUBLIC_JWKS`、`SPACES_SMOKE_PRINCIPAL_ID`、`SPACES_UNICAS_AUDIENCE` |
+| Spaces secrets | `SPACES_GOOGLE_CLIENT_SECRET`、`SPACES_SIGNING_PRIVATE_KEY_PKCS8`、`SPACES_SMOKE_CREDENTIAL` |
+
+同时尝试核对标准 GitHub Actions 执行通道，命令只请求名称，不读取秘密值：
+
+| 精确命令 | 结果 |
+| --- | --- |
+| `gh secret list --repo shazhou-ww/unicas --env Production --json name` | HTTP 403，当前身份无相应仓库管理权限 |
+| `gh variable list --repo shazhou-ww/unicas --json name` | HTTP 403，当前身份无相应变量读取权限 |
+
+这只能证明当前执行身份无法核对配置，不能据此推断 GitHub 上没有配置
+Production secrets，也不能推断 Git 推送权限等于 Actions 或 Cloudflare
+部署权限。未尝试替换凭据、绕过权限或触发 workflow。
+
+后续须由有权限的执行者选择并授权目标与维护窗口，通过现有安全机制注入
+发布配置或启用已配置的受保护发布通道，再完成写入栅栏、备份、保留政策
+和真实目标演练。不要将密钥、token 或客户 snapshot 粘贴到对话或提交到 Git。
+这些前置条件未满足，因此 `D-S01` 至 `D-S03` 与对应部署标准继续未完成，
+不提交 `submitOuter`，也不请求部署验收。
