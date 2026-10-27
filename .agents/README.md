@@ -46,12 +46,14 @@ Silvermoon is installed once per device or CI host, outside this repository.
 Register its canonical skill by personal link rather than copying it:
 
 ```sh
-npm install --global silvermoon@0.4.0
+npm install --global silvermoon@0.5.0-canary.50.g7e6b2e80af33
+silvermoon-link-skill
 ```
 
 Register the global installation's canonical `skills/silvermoon` directory
-through a personal discovery link, using the Agent host's supported installer.
-Do not assume the stable runtime provides a skill-linking subcommand.
+through a personal discovery link. The exact published canary is required for
+the current timestamped event grammar; older stable 0.4.0 is not compatible.
+Do not replace the CI pin with a moving canary tag or an unpublished version.
 
 Do not add Silvermoon to repository dependencies or `skills-lock.json`, copy
 its skill into the repository, or resolve its CLI from local `node_modules`.

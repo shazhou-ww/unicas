@@ -13,13 +13,15 @@ Install a schema-v2-capable runtime once per device, outside this repository,
 and register its canonical skill through the personal discovery link:
 
 ```sh
-npm install --global silvermoon@0.4.0
+npm install --global silvermoon@0.5.0-canary.50.g7e6b2e80af33
+silvermoon-link-skill
 ```
 
-Use the Agent host's supported installer to link the global installation's
-canonical `skills/silvermoon` directory into personal skill discovery.
-The stable runtime supports the project's v2 event schema; CI does not depend
-on the development-only 0.5.0 version or its skill-linking command.
+The exact published canary supports the current timestamped, sequence-optional
+event grammar. Stable 0.4.0 uses an older v2 record grammar and cannot validate
+these logs. Do not rewrite event history to accommodate an older validator or
+use a moving canary tag in CI. The linking command registers the installation's
+canonical skill in personal discovery; snapshot-only CI checks do not need it.
 
 Do not install the runtime as a repository dependency or copy its skill into
 the repository. Snapshot-only CI checks install the same global runtime;

@@ -42,7 +42,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install device-level idea validator
-        run: npm install --global silvermoon@0.4.0
+        run: npm install --global silvermoon@0.5.0-canary.50.g7e6b2e80af33
 
       - name: Install SDK release browser engines
         if: github.ref == 'refs/heads/release' || github.event_name == 'workflow_dispatch'

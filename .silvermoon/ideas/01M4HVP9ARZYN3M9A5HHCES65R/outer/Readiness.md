@@ -189,8 +189,10 @@ Turbo 实际执行 protocol 的 43 tests 通过；`pnpm build` 的 16 tasks 通�
 已补充准确 tuple 类型而不改变断言；随后 `pnpm docs:check` 的 8 tests 与
 `pnpm typecheck` 的全部 27 tasks 通过。没有改变业务协议或重试实现。
 
-进一步核对 npm 发现设备开发版 `silvermoon@0.5.0` 尚未作为稳定版发布，
-不能将其当成可安装的 CI pin。已核实已发布稳定版 0.4.0 包含本项目所用的
-v2 schema 和 submit/accept 事件，CI 与文档部署改为固定全局安装 0.4.0。
-设备现有开发版不被替换，也不新增项目依赖或擅自发布 Silvermoon；
-相应安装说明不再假设稳定版具有开发中的 skill-linking 子命令。
+进一步核对 npm 发现设备开发版 `silvermoon@0.5.0` 尚未作为稳定版发布。
+虽已发布稳定版 0.4.0 包含 v2 schema 和 submit/accept 事件，真实预检
+run `40530409004` 证明它要求旧的显式 sequence 字段，不能读取当前日志。
+不能仅凭 schema 版本号推断兼容，更不能为旧验证器重写事件历史。
+CI 与文档部署因此固定全局安装确已发布、匹配当前记录格式的
+`0.5.0-canary.50.g7e6b2e80af33`，不跟随移动 canary tag。
+设备现有开发版不被替换，也不新增项目依赖或擅自发布 Silvermoon。
