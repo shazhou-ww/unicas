@@ -16,6 +16,11 @@ Spaces App 须先应用 `0003_remove_ref_domain.sql`，再使用新 bootstrap/pr
 Cloudflare 的历史 DO class/binding 名保留，新的 actor key 仅含 App；
 旧 writer 必须停止，不能在两种 key 下并行写入。
 
+当前默认配置仅提供生产候选，不构成目标选择或执行授权。服务和 Spaces
+本地构建/dry-run 已通过；真实数据与恢复演练、维护窗口、保留期限和负责人
+尚未确定。准入条件、观察到的目标和预检证据见 [部署准入与预检](./Readiness.md)。
+这些条件齐备前保持本步骤未完成，不执行 remote D1 或生产发布。
+
 ### D-S02: 执行受控迁移并验证
 
 在获得相应发布及数据变更授权后，对目标环境执行 reconciliation、
