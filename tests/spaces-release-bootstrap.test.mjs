@@ -34,7 +34,6 @@ describe("Spaces bootstrap", () => {
     expect(google).toMatchObject({
       mode: "google",
       googleSubject: "google-subject",
-      refDomain: "spaces:files",
     });
     const smoke = readBootstrapConfig("smoke", environment({
       SPACES_BOOTSTRAP_PRINCIPAL_ID: "smoke-principal",
@@ -45,7 +44,6 @@ describe("Spaces bootstrap", () => {
       mode: "smoke",
       googleSubject: null,
       privateKeyFile: null,
-      refDomain: "spaces:smoke",
     });
     expect(bootstrapStateQuery(smoke)).toContain("NULL AS identity_owner");
   });
@@ -157,7 +155,6 @@ describe("Spaces bootstrap", () => {
       principalId: "smoke-principal",
       appId: "app-a",
       spaceId: "/smoke-space",
-      refDomain: "spaces:smoke",
     });
     expect(() => validateSmokePreflightRow({
       principal_status: "active",

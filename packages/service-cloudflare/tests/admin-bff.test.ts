@@ -2541,12 +2541,9 @@ describe("cas-admin-webui BFF", () => {
       fetch: async (input: RequestInfo | URL) => {
         const url = new URL(String(input));
         rpcCalls.push(url);
-        if (url.pathname === "/_internal/audit/domains") {
-          return Response.json({ domains: [{ stackId: "cas_app", refDomain: "doc", revision: 2 }] });
-        }
         return Response.json({
           revision: 2,
-          refs: [{ tenantId: url.searchParams.get("tenantId"), hash: "a".repeat(64), count: 1 }],
+          refs: [{ spaceId: url.searchParams.get("spaceId"), hash: "a".repeat(64), count: 1 }],
           nextCursor: null,
         });
       },
@@ -2556,19 +2553,16 @@ describe("cas-admin-webui BFF", () => {
     );
     const { cookie } = await signIn(bff, provider);
 
-    const domains = await authRequest(bff, "/admin/apps/cas_app/ref-domains", cookie);
-    expect(domains.status).toBe(200);
-    expect(await domains.json()).toEqual({ domains: [{ appId: "cas_app", refDomain: "doc", revision: 2 }] });
     const refs = await authRequest(
       bff,
-      "/admin/apps/cas_app/root-ref-domains/doc/refs?spaceId=space-1&limit=50",
+      "/admin/apps/cas_app/root-refs?spaceId=space-1&limit=50",
       cookie,
     );
     expect(refs.status).toBe(200);
     expect(await refs.json()).toMatchObject({ refs: [{ spaceId: "space-1", count: 1 }] });
-    expect(rpcCalls[1]!.searchParams.get("stackId")).toBe("cas_app");
-    expect(rpcCalls[1]!.searchParams.get("tenantId")).toBe("space-1");
-    expect(rpcCalls[1]!.searchParams.has("spaceId")).toBe(false);
+    expect(rpcCalls[0]!.searchParams.get("appId")).toBe("cas_app");
+    expect(rpcCalls[0]!.searchParams.get("spaceId")).toBe("space-1");
+    expect(rpcCalls[0]!.searchParams.has("refDomain")).toBe(false);
   });
 
   test("audit reads require App membership before touching the reader", async () => {
@@ -2594,14 +2588,14 @@ describe("cas-admin-webui BFF", () => {
     const { cookie: otherCookie } = await signInAs(bff2, provider2, "other-sub");
     const denied = await authRequest(
       bff2,
-      `/admin/apps/${stackId}/root-ref-domains/doc/refs`,
+      `/admin/apps/${stackId}/root-refs`,
       otherCookie,
     );
     expect(denied.status).toBe(403);
     expect(readerCalls).toBe(0);
   });
 
-  test("malformed refDomains are rejected before the reader; reserved domains are readable", async () => {
+  test("retired domain paths are not audit routes", async () => {
     const provider = await createMockProvider();
     const rpcPaths: string[] = [];
     const auditReader = {
@@ -2619,16 +2613,15 @@ describe("cas-admin-webui BFF", () => {
       `/admin/apps/${stackId}/root-ref-domains/Bad%20Domain/refs`,
       cookie,
     );
-    expect(malformed.status).toBe(400);
-    expect(await malformed.json()).toMatchObject({ error: "INVALID_REQUEST" });
+    expect(malformed.status).toBe(404);
 
     const reserved = await authRequest(
       bff,
       `/admin/apps/${stackId}/root-ref-domains/_legacy/refs`,
       cookie,
     );
-    expect(reserved.status).toBe(200);
-    expect(rpcPaths).toEqual(["/_internal/audit/refs"]);
+    expect(reserved.status).toBe(404);
+    expect(rpcPaths).toEqual([]);
   });
 
   test("logout clears the session", async () => {

@@ -30,13 +30,22 @@ const PNPM = resolvePnpmCommand();
 const TAR = process.platform === "win32" ? "tar.exe" : "tar";
 
 function resolvePnpmCommand() {
-  if (process.platform !== "win32") return "pnpm";
+  if (process.platform !== "win32") return { command: "pnpm", prefix: [] };
   const located = spawnSync("where.exe", ["pnpm.CMD"], { encoding: "utf8" });
   if (located.status !== 0) throw new Error("pnpm.CMD is not available on PATH");
   const shim = located.stdout.split(/\r?\n/u).find(Boolean);
-  const match = /@"([^"]+pnpm\.exe)"/iu.exec(readFileSync(shim, "utf8"));
-  if (!match) throw new Error(`cannot resolve pnpm executable from ${shim}`);
-  return resolve(match[1].replace(/^%~dp0/iu, `${dirname(shim)}${sep}`));
+  const contents = readFileSync(shim, "utf8");
+  const match = /@"([^"]+pnpm\.exe)"/iu.exec(contents);
+  if (match) return {
+    command: resolve(match[1].replace(/^%~dp0/iu, `${dirname(shim)}${sep}`)),
+    prefix: [],
+  };
+  const nodeShim = /"%~dp0\\([^"]+\.(?:c?js))"/iu.exec(contents);
+  if (nodeShim) return {
+    command: process.execPath,
+    prefix: [resolve(dirname(shim), nodeShim[1])],
+  };
+  throw new Error(`cannot resolve pnpm executable from ${shim}`);
 }
 
 function parseArgs(argv) {
@@ -76,7 +85,7 @@ function run(command, args, { cwd = ROOT, env = process.env, stdio = "pipe", enc
 }
 
 function runPnpm(args, options) {
-  return run(PNPM, args, options);
+  return run(PNPM.command, [...PNPM.prefix, ...args], options);
 }
 
 async function readJson(path) {
@@ -261,7 +270,9 @@ async function verifyInstalledPackages(matrix, consumerDirectory) {
     const [scope, name] = entry.name.split("/");
     const installed = await realpath(join(consumerDirectory, "node_modules", scope, name));
     assert(installed.startsWith(consumerRoot), `${entry.name}: resolved outside the external consumer`);
-    assert(!installed.startsWith(`${await realpath(ROOT)}${sep}`), `${entry.name}: resolved to the repository workspace`);
+    const workspacePackage = await realpath(join(ROOT, entry.directory));
+    assert(installed !== workspacePackage && !installed.startsWith(`${workspacePackage}${sep}`),
+      `${entry.name}: resolved to the repository workspace`);
   }
 }
 
@@ -294,7 +305,7 @@ async function createConsumer(matrix, artifacts, temporaryRoot) {
     stringifyYaml({ packages: ["."], overrides }, { lineWidth: 0 }),
   );
 
-  console.log("sdk: install packed artifacts outside the workspace");
+  console.log("sdk: install packed artifacts in an isolated consumer workspace");
   runPnpm(["install", "--ignore-scripts", "--no-frozen-lockfile"], { cwd: consumerDirectory, stdio: "inherit" });
   await verifyInstalledPackages(matrix, consumerDirectory);
   console.log("sdk: typecheck packed declarations");

@@ -386,7 +386,7 @@ describe("AppSpaceCapabilityVerifier", () => {
     }
   });
 
-  test("requires a valid non-reserved refDomain for both Root Ref permissions", async () => {
+  test("Root Ref permissions ignore extra legacy v2 claims", async () => {
     const { now, privateKey, appResolver } = await fixture();
     const verifier = new AppSpaceCapabilityVerifier({ repository: appResolver, now: () => now });
     const cases = [
@@ -401,14 +401,14 @@ describe("AppSpaceCapabilityVerifier", () => {
     ];
 
     for (const entry of cases) {
-      for (const refDomain of [undefined, "Bad Domain", "_reserved"]) {
+      for (const refDomain of [undefined, "Bad Domain", "_reserved", 42]) {
         const token = await issue(privateKey, now, {
           ver: SpaceCapabilityVersion,
           grants: [grant([entry.permission])],
           ...(refDomain === undefined ? {} : { refDomain }),
         });
         await expect(verifier.verify(request(token), entry.route))
-          .rejects.toMatchObject({ status: 403, code: "resource_scope_mismatch" });
+          .resolves.toMatchObject({ appId: APP, spaceId: SPACE });
       }
     }
   });

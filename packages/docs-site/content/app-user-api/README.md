@@ -56,8 +56,8 @@ cas:usage:read
 cas:gc:execute
 ```
 
-Permissions do not imply one another. Both Root Ref permissions additionally
-require a valid signed `refDomain`. Capability versions 1 and 3 and malformed
+Permissions do not imply one another. Root Ref authority uses the same
+App/Space grant boundary. Capability versions 1 and 3 and malformed
 grant shapes are rejected without a compatibility cutoff.
 
 ## Actors and trust boundaries
@@ -66,8 +66,8 @@ grant shapes are rejected without a compatibility cutoff.
 | --- | --- |
 | App user | Authenticates to the App. The user never receives an App administrator session or credential. |
 | App frontend | Presents the App experience. It requests short-lived capability delivery through an App-controlled authenticated flow and calls the Space API only with authority intentionally delegated to it. |
-| App backend or issuer | Authenticates App users, resolves the business Principal, selects allowed App and Space identifiers, chooses a `refDomain`, and signs short-lived capabilities from the App's configured issuer. |
-| UniCAS Space data plane | Verifies the bearer capability and server-side App state, enforces App, same-grant Space selector and permission, and `refDomain` boundaries, and performs CAS operations. |
+| App backend or issuer | Authenticates App users, resolves the business Principal, selects allowed App and Space identifiers, and signs short-lived capabilities from the App's configured issuer. |
+| UniCAS Space data plane | Verifies the bearer capability and server-side App state, enforces App, same-grant Space selector and permission, and performs CAS operations. |
 | App administrator | Configures the App and its external OAuth issuer through the separate administrator plane. Administrator credentials never participate in an App-user API request. |
 
 ```mermaid
@@ -93,8 +93,8 @@ identifiers, request headers, or client-side UI state.
   storage namespace.
 - **Space** is an App-scoped data isolation and usage boundary. It is not a
   synonym for a user.
-- **Root Ref domain** is a capability-selected namespace for committed Root Ref
-  balances and revision ordering.
+- **Root Ref** is a durable retention count for an App, Space, and hash.
+  New audit events share one App-global revision stream across Spaces.
 - **App administrator** configures the App through a separate control plane and
   is not an end user of the Space API by virtue of that administrator session.
 
@@ -110,7 +110,6 @@ The App, not UniCAS, owns:
 - Principal identifiers and Principal-to-Space mapping;
 - sharing, membership, and business authorization before capability issuance;
 - secure delivery and refresh of short-lived capabilities;
-- selection and lifecycle of `refDomain` values;
 - the business root catalog that maps application objects to CAS root hashes;
 - file, document, folder, manifest, and other application data formats;
 - decisions about when a Root Ref becomes authoritative or may be released;
@@ -133,7 +132,7 @@ Do not:
 - send administrator cookies, CSRF tokens, API credentials, or setup responses
   to the App frontend as Space credentials;
 - mint a capability in the browser with an administrator secret;
-- accept `appId`, `spaceId`, permissions, or `refDomain` directly from an
+- accept `appId`, `spaceId`, or permissions directly from an
   untrusted browser without App-side authorization;
 - use an administrator API as a substitute for an App-owned Space catalog.
 
@@ -148,7 +147,7 @@ architecture.
 2. Resolve an App-owned Principal and the allowed Space or Spaces.
 3. Build grants that bind each allowed selector to only the permissions
    required for the immediate workflow.
-4. Add a valid `refDomain` only when listing or updating Root Refs.
+4. Include the exact Root Ref permission only when required.
 5. Issue a short-lived capability for the configured UniCAS audience.
 6. Deliver it over the App's authenticated channel.
 7. Call

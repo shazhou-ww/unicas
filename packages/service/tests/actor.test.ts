@@ -68,7 +68,6 @@ describe("createUniCasService", () => {
         jti: "request-2",
         kid: "key-1",
         permissions: ["cas:root-refs:update"],
-        refDomain: "doc",
       }),
     });
     const response = await actor.fetch(new Request(
@@ -88,7 +87,7 @@ describe("createUniCasService", () => {
     expect(key).toBe("app%2Fa|%2Fspace%2Fb");
     expect(forwarded.headers.get("X-CAS-App-Id")).toBe("app/a");
     expect(forwarded.headers.get("X-CAS-Space-Id")).toBe("/space/b");
-    expect(forwarded.headers.get("X-CAS-Ref-Domain")).toBe("doc");
+    expect(forwarded.headers.has("X-CAS-Ref-Domain")).toBe(false);
 
     await actor.fetch(new Request(
       "https://cas.example/v1/cas/root-refs?appId=app%2Fa&spaceId=%2Fspace%2Fb&limit=10&cursor=abc&ignored=drop",
@@ -98,7 +97,7 @@ describe("createUniCasService", () => {
     expect(readKey).toBe("app%2Fa|%2Fspace%2Fb");
     expect(readForwarded.url).toBe("https://space.internal/rootRefs?limit=10&cursor=abc");
     expect(readForwarded.method).toBe("GET");
-    expect(readForwarded.headers.get("X-CAS-Ref-Domain")).toBe("doc");
+    expect(readForwarded.headers.has("X-CAS-Ref-Domain")).toBe(false);
   });
 
   test("classifies App/Space and administrator routes", () => {

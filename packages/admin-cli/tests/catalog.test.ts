@@ -65,9 +65,10 @@ describe("tool catalog", () => {
     expect(inspect?.inputSchema.safeParse({ appId: "a", issuer: "https://issuer.example" }).success).toBe(true);
     expect(inspect?.inputSchema.safeParse({ appId: "a", issuer: "https://issuer.example", extra: true }).success).toBe(false);
 
-    const spaceRefs = getToolDefinition("list_space_root_domain_refs");
-    expect(spaceRefs?.inputSchema.safeParse({ appId: "a", refDomain: "doc", spaceId: "s" }).success).toBe(true);
-    expect(spaceRefs?.inputSchema.safeParse({ stackId: "a", refDomain: "doc", tenantId: "s" }).success).toBe(false);
+    const spaceRefs = getToolDefinition("list_app_root_refs");
+    expect(spaceRefs?.inputSchema.safeParse({ appId: "a", spaceId: "s" }).success).toBe(true);
+    expect(spaceRefs?.inputSchema.safeParse({ stackId: "a", tenantId: "s" }).success).toBe(false);
+    expect(getToolDefinition("list_app_ref_domains")).toBeUndefined();
 
     const removeAppMember = getToolDefinition("remove_app_member");
     expect(removeAppMember?.inputSchema.safeParse({

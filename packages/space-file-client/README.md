@@ -124,7 +124,7 @@ revision and releases the manifest Root Ref; it does not reinterpret file
 content on the server.
 
 File workflows need node read/lease permissions and Root Ref update permission
-with the App-selected `refDomain`. The App remains responsible for user
+for the selected App/Space. The App remains responsible for user
 authentication, Principal-to-Space mapping, catalog authorization, retries,
 and conflict presentation.
 

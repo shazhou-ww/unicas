@@ -19,7 +19,6 @@ const session: AuthenticatedSession = {
     provider: "google",
     appId: "app-a",
     spaceId: "/space-a",
-    refDomain: "spaces",
   },
   csrfTokenHash: "digest",
   expiresAt: 10_000,

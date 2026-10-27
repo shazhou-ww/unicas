@@ -198,11 +198,7 @@ describe("CAS App/Space v1 OpenAPI", () => {
         },
       },
     });
-    expect(document.components?.schemas?.SpaceRefDomainClaim).toMatchObject({
-      type: "string",
-      maxLength: 64,
-      pattern: "^[a-z][a-z0-9]*(?::[a-z0-9]+)*$",
-    });
+    expect(document.components?.schemas).not.toHaveProperty("SpaceRefDomainClaim");
     expect(document.components?.securitySchemes?.spaceCapability).toHaveProperty(
       "x-unicas-capability",
       expect.objectContaining({
@@ -219,13 +215,6 @@ describe("CAS App/Space v1 OpenAPI", () => {
         capabilityVersion: 2,
         requiredPermission: policy.permission,
         requiredClaims: [...policy.requiredClaims],
-        ...(policy.requiredClaims.some(claim => claim === "refDomain")
-          ? {
-              claimSchemas: {
-                refDomain: "#/components/schemas/SpaceRefDomainClaim",
-              },
-            }
-          : {}),
       });
     }
     expect(serialized).not.toContain("stackId");

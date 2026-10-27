@@ -50,8 +50,8 @@ than modeling `Authorization` as an ordinary operation header.
 | `leaseNode` | `POST /v1/cas/nodes/{hash}/lease?appId={appId}&spaceId={spaceId}` | `cas:nodes:lease` | Ready lease or direct-upload instructions |
 | `usage` | `GET /v1/cas/usage?appId={appId}&spaceId={spaceId}` | `cas:usage:read` | Space accounting |
 | `gc` | `POST /v1/cas/gc?appId={appId}&spaceId={spaceId}` | `cas:gc:execute` | Bounded collection result |
-| `listRootRefs` | `GET /v1/cas/root-refs?appId={appId}&spaceId={spaceId}` | `cas:root-refs:read` + `refDomain` | Revision-stable page |
-| `updateRootRefs` | `POST /v1/cas/root-refs?appId={appId}&spaceId={spaceId}` | `cas:root-refs:update` + `refDomain` | Atomic commit result |
+| `listRootRefs` | `GET /v1/cas/root-refs?appId={appId}&spaceId={spaceId}` | `cas:root-refs:read` | Revision-stable page |
+| `updateRootRefs` | `POST /v1/cas/root-refs?appId={appId}&spaceId={spaceId}` | `cas:root-refs:update` | Atomic commit result |
 
 There are no other public v1 Space operations in the current generated
 OpenAPI.
@@ -263,7 +263,6 @@ Query:
 
 ```json
 {
-  "refDomain": "files:primary",
   "revision": 42,
   "items": [
     {
@@ -275,10 +274,9 @@ Query:
 }
 ```
 
-The service selects the Root Ref domain from the verified capability, never
-from query or body data. The capability must contain a valid `refDomain`.
-`nextCursor` is either a non-empty opaque string or `null`; continue with the
-same capability domain. Pages are revision-stable.
+`nextCursor` is either a non-empty opaque string or `null`, bound to the App,
+Space and current App-global revision. A stale page returns
+`409 ROOT_REF_SNAPSHOT_CHANGED`; restart from the first page.
 
 ## Atomically update Root Refs
 
@@ -310,10 +308,12 @@ entries, and bounds each delta to 1,000,000 in magnitude.
 }
 ```
 
-All deltas commit atomically within the capability's `refDomain`. A replay of
+All deltas commit atomically within the App/Space. A replay of
 the exact request returns the original revision with `idempotent: true`. Reuse
 of `requestId` with a different canonical payload returns
-`409 IDEMPOTENCY_CONFLICT`. Missing nodes, unready positive targets, negative
+`409 IDEMPOTENCY_CONFLICT`. Identity is `(appId, spaceId, requestId)`, so another
+Space can reuse the same request ID. Revisions form one App-global audit stream.
+Missing nodes, unready positive targets, negative
 aggregate balances, overflow, or an exhausted internal revision retry produce
 an error and no partial commit.
 
@@ -338,7 +338,7 @@ Only `error` is required by OpenAPI. Stable public values are:
 | `401` | `missing_token`, `invalid_token`, `unknown_issuer`, `registry_unavailable` |
 | `403` | `insufficient_permission`, `resource_scope_mismatch`, `unsupported_algorithm`, `registry_unavailable`, `APP_SUSPENDED`, `ROOT_REF_INVALID` |
 | `404` | `NODE_NOT_FOUND` |
-| `409` | `NODE_CONFLICT`, `NODE_NOT_READY`, `NEGATIVE_AGGREGATE`, `IDEMPOTENCY_CONFLICT` |
+| `409` | `NODE_CONFLICT`, `NODE_NOT_READY`, `NEGATIVE_AGGREGATE`, `IDEMPOTENCY_CONFLICT`, `ROOT_REF_SNAPSHOT_CHANGED` |
 | `413` | `PAYLOAD_TOO_LARGE` |
 | `416` | `INVALID_REQUEST` for an invalid or unsatisfiable `readContent` range |
 | `429` | `CAS_UPLOAD_LIMIT` |
@@ -364,8 +364,8 @@ behavior without changing it:
    `x-unicas-capability` links that schema and explicitly states that
    permissions are not OAuth scopes.
 3. Every public operation has `x-unicas-authorization` with its exact
-   permission and required signed claims; Root Ref operations also link the
-   `SpaceRefDomainClaim` constraint.
+   permission and required signed grants. Root Ref operations use the same
+   App authority and matching Space selector, without an additional claim.
 4. Root Ref request limits and stable error values come from shared
    protocol-owned constants used by the runtime or checked by focused tests.
 

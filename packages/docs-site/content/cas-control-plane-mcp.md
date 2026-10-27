@@ -37,7 +37,7 @@ discarded after identity verification and are never accepted by `/mcp`.
 
 | Scope | Operations |
 | --- | --- |
-| `control:read` | Account/Profile, Apps, membership, App issuers, observed refDomains, and App/Space audit reads |
+| `control:read` | Account/Profile, Apps, membership, App issuers, and App/Space audit reads |
 | `control:write` | App creation and metadata updates |
 | `control:security` | App member invitation/removal, issuer lifecycle, and managed Space capability issuance |
 
@@ -84,8 +84,7 @@ App read tools:
 - `get_current_account`
 - `list_apps`, `get_app`, `list_app_members`
 - `get_app_oauth_issuer`
-- `list_app_ref_domains`, `list_app_control_audit_events`
-- `list_space_root_domain_refs`, `list_space_root_domain_events`
+- `list_app_control_audit_events`, `list_app_root_refs`, `list_app_root_events`
 
 App write tools:
 
@@ -147,10 +146,8 @@ Member invitations are email-bound and require the email twice.
 Destructive annotations are advisory metadata; the server always
 enforces scopes, membership, ETags, confirmations, and service invariants.
 
-`list_app_ref_domains` is an audit discovery tool. It lists domains observed in
-successful Root Ref writes; domains are not pre-registered or lifecycle-managed
-through MCP. A ref domain is an event field used to filter and aggregate Root
-Ref audit data, not a separately managed App resource.
+Root Ref audit uses one App-global stream and an optional exact Space filter.
+Domain discovery and the old domain-specific tools are retired without aliases.
 
 ## Worker configuration
 

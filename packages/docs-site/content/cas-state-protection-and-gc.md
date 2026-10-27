@@ -83,9 +83,9 @@ changes which graphs the system is obligated to retain.
 
 The analogy has limits. UniDocs CAS has a counted set of roots rather than one
 canonical root selected by consensus. Root updates may also be emitted by
-independent business domains. Audit revisions are monotonic per
-`(appId, refDomain)` and span Space-bearing events inside that App. They
-do not define a consensus-like total order across domains or Apps.
+independent business workflows. Audit revisions are monotonic per App and span
+Space-bearing events inside that App. They do not define a consensus-like
+physical request order across Apps.
 
 It is therefore most precise to call Root Refs the authoritative CAS
 **retention state**. The application state described by the content remains
@@ -422,20 +422,19 @@ The dangerous implementation errors are those that break the ordering:
 
 ## 10. Audit boundary
 
-The Root Refs ledger records accepted signed deltas by
-`(appId, refDomain)`. Every event and balance row records the affected
-`spaceId`. The Space dimension identifies data ownership; the domain
-dimension identifies audit attribution. Domain projections remain audit data,
+The Root Refs ledger records accepted signed deltas by App with one revision
+stream across Spaces. Every event and balance row records the affected
+`spaceId`. The Space dimension identifies data ownership. Projections remain derived data,
 while aggregate `cas_nodes.root_ref_count` remains authoritative for
 validation, readiness, leasing, and GC.
 
 The ledger answers questions such as:
 
-- which trusted domain changed a root balance;
+- which App/Space request changed a root balance;
 - which signed deltas were accepted;
 - whether a retry was applied more than once;
-- how a domain's CAS-recorded balance was formed;
-- whether aggregate and domain projections reconcile.
+- how an App/Space CAS-recorded balance was formed;
+- whether aggregate and projections reconcile.
 
 Leases, child reference updates, and GC actions do not belong in that ledger:
 
@@ -457,30 +456,24 @@ root is released and all other protections disappear, GC may delete its DAG.
 Long-term historical content retention requires an explicit positive Root Ref
 or a separate archival policy. The audit ledger alone is not an archive.
 
-### 10.2 Domain revisions and total order
+### 10.2 App revisions and audit order
 
-Revisions are monotonic per `(appId, refDomain)` and order accepted events
-for that business domain across Spaces in the App. They are sufficient for
-App-domain balance reads, event replay, and reconciliation. Signed deltas
-from different domains commute when deriving each Space's final aggregate
-balance.
-
-Domain revisions do not establish the exact cross-domain order of all root
-transitions. If a future requirement needs to correlate the precise aggregate
-state after every accepted update with GC or another global event stream, CAS
-would need a separate App-global or App-and-Space commit sequence. That is
-not required for the current reconciliation model.
+Revisions are monotonic per App and order new accepted events across Spaces.
+They do not promise physical request-arrival order and never enter GC decisions.
+Legacy per-domain histories stay read-only and are not renumbered into a
+fabricated order. See [the cutover and replay bridge](./app-user-api/migration-root-refs.md).
 
 ## 11. Design consequences
 
 This model implies the following architectural constraints:
 
 1. Only atomic signed Root Refs deltas change authoritative retention state.
-2. Root updates validate aggregate `rootRefCount`, never an audit projection.
+2. Root updates validate authoritative aggregate `rootRefCount`; projection drift
+   fails closed and never repairs or substitutes aggregate state.
 3. GC consumes only aggregate root counts, child counts, lease state, and node
    readiness or storage state.
-4. Domain audit balances may expose negative values, while aggregate Root Refs
-   must never become negative.
+4. Current App/Space/hash projection counts match the non-negative aggregate;
+   zero projection rows are omitted.
 5. Root ownership entities are unnecessary inside CAS; business systems own
    logical reference identity and lifecycle.
 6. A mark-and-sweep replacement for child counting would still need to treat
@@ -527,10 +520,11 @@ Implementations should directly test the following properties.
 - Every newly accepted Root Refs update writes exactly one audit event in the
   same commit.
 - Every event records the affected `spaceId` and receives the next revision
-  for its `(appId, refDomain)` stream.
+  for its App-global stream.
 - Audit write failure rolls back aggregate Root Refs and idempotency state.
 - Idempotent retries append no event.
-- Root validation and GC do not read domain event or balance tables.
+- GC does not read audit event or projection tables. Updates validate aggregate
+  counts and fail closed on projection drift without modifying aggregate to repair it.
 - Audit data remains diagnostic if its read path is unavailable.
 
 ## 13. Summary

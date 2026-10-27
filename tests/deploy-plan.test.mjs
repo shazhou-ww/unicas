@@ -1301,8 +1301,8 @@ describe("standalone deployment plan", () => {
 
   test("the smoke reset bounds compound inventory queries for remote D1", () => {
     const queries = [...SCOPED_INVENTORY_QUERIES.control, ...SCOPED_INVENTORY_QUERIES.data];
-    expect(queries).toHaveLength(5);
-    expect(queries.map(query => query.match(/\bSELECT\b/g)?.length)).toEqual([4, 3, 4, 4, 1]);
+    expect(queries).toHaveLength(6);
+    expect(queries.map(query => query.match(/\bSELECT\b/g)?.length)).toEqual([4, 3, 4, 4, 4, 1]);
     const catalog = queries.join("\n");
     for (const table of [
       "cas_apps",
@@ -1310,6 +1310,10 @@ describe("standalone deployment plan", () => {
       "cas_nodes",
       "cas_direct_upload_sessions",
       "cas_space_usage",
+      "cas_app_root_refs",
+      "cas_app_root_events",
+      "cas_app_root_requests",
+      "cas_app_root_revisions",
     ]) expect(catalog).toContain(table);
   });
 

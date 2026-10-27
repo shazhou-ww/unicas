@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
 import { migrateAppSpaceSchema } from "../src/schema.js";
-import { canonicalizeRootRefsUpdate, executeDomainUpdate } from "../src/root-refs.js";
+import { canonicalizeRootRefsUpdate, executeRootRefsUpdate } from "../src/root-refs.js";
 
 vi.mock("../src/control-authority.js", () => ({
   AuthorityRepository: class { },
@@ -79,13 +79,12 @@ async function createEnv(): Promise<Env> {
     "INSERT INTO cas_nodes (app_id, space_id, hash, content_size, content_type, lease_started_at, lease_expires_at, child_ref_count, root_ref_count) VALUES (?, 'tenant-a', ?, 10, 'text/plain', 1, 1, 0, 0)",
   ).bind(STACK, H1).run();
   await bucket.put(appCanonicalNodeKey(STACK, "tenant-a", H1), new TextEncoder().encode("content"));
-  const canonical = await canonicalizeRootRefsUpdate({ requestId: "r1", changes: { [H1]: 1 }, refDomain: DOMAIN });
-  await executeDomainUpdate({
+  const canonical = await canonicalizeRootRefsUpdate({ requestId: "r1", changes: { [H1]: 1 } });
+  await executeRootRefsUpdate({
     db,
     bucket,
     appId: STACK,
     spaceId: "tenant-a",
-    refDomain: DOMAIN,
     canonical,
   });
 
@@ -111,35 +110,32 @@ function rpcRequest(path: string, key = READER_KEY): Request {
 }
 
 describe("audit-reader RPC", () => {
-  test("domains RPC lists domains observed through successful writes", async () => {
+  test("retired domains RPC is unavailable", async () => {
     const env = await createEnv();
     const response = await worker.fetch(
-      rpcRequest(`/_internal/audit/domains?stackId=${STACK}`),
+      rpcRequest(`/_internal/audit/domains?appId=${STACK}`),
       env,
     );
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      domains: [{ stackId: STACK, refDomain: DOMAIN, revision: 1 }],
-    });
+    expect(response.status).toBe(404);
   });
 
   test("refs RPC returns the current-balance page with the reader key", async () => {
     const env = await createEnv();
     const response = await worker.fetch(
-      rpcRequest(`/_internal/audit/refs?stackId=${STACK}&refDomain=${DOMAIN}`),
+      rpcRequest(`/_internal/audit/refs?appId=${STACK}`),
       env,
     );
     expect(response.status).toBe(200);
     const body = await response.json() as { revision: number; refs: unknown[]; nextCursor: unknown };
     expect(body.revision).toBe(1);
-    expect(body.refs).toEqual([{ tenantId: "tenant-a", hash: H1, count: 1 }]);
+    expect(body.refs).toEqual([{ spaceId: "tenant-a", hash: H1, count: 1 }]);
     expect(body.nextCursor).toBeNull();
   });
 
   test("events RPC returns the event log", async () => {
     const env = await createEnv();
     const response = await worker.fetch(
-      rpcRequest(`/_internal/audit/events?stackId=${STACK}&refDomain=${DOMAIN}`),
+      rpcRequest(`/_internal/audit/events?appId=${STACK}`),
       env,
     );
     expect(response.status).toBe(200);
@@ -147,21 +143,21 @@ describe("audit-reader RPC", () => {
     expect(body.latestRevision).toBe(1);
     expect(body.nextAfter).toBe(1);
     expect(body.events).toHaveLength(1);
-    expect(body.events[0]).toMatchObject({ revision: 1, tenantId: "tenant-a", requestId: "r1" });
+    expect(body.events[0]).toMatchObject({ revision: 1, spaceId: "tenant-a", requestId: "r1" });
   });
 
   test("missing or wrong reader keys fail closed", async () => {
     const env = await createEnv();
-    const noKey = await worker.fetch(rpcRequest(`/_internal/audit/refs?stackId=${STACK}&refDomain=${DOMAIN}`, ""), env);
+    const noKey = await worker.fetch(rpcRequest(`/_internal/audit/refs?appId=${STACK}`, ""), env);
     expect(noKey.status).toBe(404);
-    const wrongKey = await worker.fetch(rpcRequest(`/_internal/audit/refs?stackId=${STACK}&refDomain=${DOMAIN}`, "wrong"), env);
+    const wrongKey = await worker.fetch(rpcRequest(`/_internal/audit/refs?appId=${STACK}`, "wrong"), env);
     expect(wrongKey.status).toBe(404);
   });
 
   test("the RPC is disabled when no reader key is configured", async () => {
     const env = await createEnv();
     delete (env as { CAS_AUDIT_READER_KEY?: string }).CAS_AUDIT_READER_KEY;
-    const response = await worker.fetch(rpcRequest(`/_internal/audit/refs?stackId=${STACK}&refDomain=${DOMAIN}`), env);
+    const response = await worker.fetch(rpcRequest(`/_internal/audit/refs?appId=${STACK}`), env);
     expect(response.status).toBe(404);
   });
 
@@ -170,7 +166,7 @@ describe("audit-reader RPC", () => {
     const response = await worker.fetch(new Request("https://cas.example/admin/_audit-test", {
       method: "POST",
       headers: {
-        "X-Test-Audit-Target": `https://cas.example/_internal/audit/refs?stackId=${STACK}&refDomain=${DOMAIN}`,
+        "X-Test-Audit-Target": `https://cas.example/_internal/audit/refs?appId=${STACK}`,
         "X-Test-Audit-Reader-Key": READER_KEY,
       },
     }), env);
@@ -180,7 +176,7 @@ describe("audit-reader RPC", () => {
   test("validation errors surface with the stable audit codes", async () => {
     const env = await createEnv();
     const response = await worker.fetch(
-      rpcRequest(`/_internal/audit/refs?stackId=${STACK}&refDomain=Bad%20Domain`),
+      rpcRequest(`/_internal/audit/refs?appId=${STACK}&limit=0`),
       env,
     );
     expect(response.status).toBe(400);

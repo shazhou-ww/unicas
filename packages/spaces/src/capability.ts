@@ -62,7 +62,6 @@ async function issueSpaceCapabilityWithMetadata(
   const bearerToken = await new SignJWT({
     ver: SpaceCapabilityVersion,
     grants: [{ selector: selector.selector, permissions }],
-    refDomain: principal.refDomain,
   })
     .setProtectedHeader({ alg: CapabilityAlgorithm, kid: config.keyId, typ: CapabilityTokenType })
     .setIssuer(config.issuer)
@@ -80,7 +79,6 @@ async function issueSpaceCapabilityWithMetadata(
       notBefore: issuedAt,
       expiresAt: issuedAt + 300,
       grants: [{ selector: selector.selector, permissions }],
-      refDomain: principal.refDomain,
     },
   };
 }

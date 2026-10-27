@@ -6,7 +6,7 @@ import {
   RootRefsErrorCodes,
   RootRefsRetryableError,
   RootRefsValidationError,
-  withDomainRetry,
+  withRootRefsRetry,
   type RootRefCommitPlan,
   type RootRefRepository,
   type RootRefScope,
@@ -14,10 +14,9 @@ import {
 
 const STACK = "cas_stack_a";
 const TENANT = "tenant-1";
-const DOMAIN = "doc";
 const H1 = "a".repeat(64);
 const H2 = "b".repeat(64);
-const SCOPE = { appId: STACK, spaceId: TENANT, refDomain: DOMAIN };
+const SCOPE = { appId: STACK, spaceId: TENANT };
 
 class MemoryRootRefRepository implements RootRefRepository {
   readonly nodes = new Map<string, number>();
@@ -53,7 +52,7 @@ class MemoryRootRefRepository implements RootRefRepository {
     return hashes.find((hash) => !this.ready.has(hash)) ?? null;
   }
 
-  async readDomainState(_scope: RootRefScope) {
+  async readAppState(_scope: RootRefScope) {
     this.stateReads += 1;
     return { revision: this.revision, balances: new Map(this.balances) };
   }
@@ -85,7 +84,7 @@ class MemoryRootRefRepository implements RootRefRepository {
 }
 
 async function canonical(requestId: string, changes: Record<string, number>) {
-  return canonicalizeRootRefsUpdate({ requestId, changes, refDomain: DOMAIN });
+  return canonicalizeRootRefsUpdate({ requestId, changes });
 }
 
 async function apply(repository: MemoryRootRefRepository, requestId: string, changes: Record<string, number>) {
@@ -102,12 +101,14 @@ describe("Root Ref service kernel", () => {
     const repository = new MemoryRootRefRepository();
     repository.nodes.set(H1, 3);
     repository.nodes.set(H2, 1);
+    repository.balances.set(H1, 3);
+    repository.balances.set(H2, 1);
     repository.ready.add(H1);
 
     await expect(apply(repository, "r1", { [H2]: -1, [H1]: 1 }))
       .resolves.toEqual({ idempotent: false, revision: 1 });
     expect(repository.nodes).toEqual(new Map([[H1, 4], [H2, 0]]));
-    expect(repository.balances).toEqual(new Map([[H1, 1], [H2, -1]]));
+    expect(repository.balances).toEqual(new Map([[H1, 4]]));
     expect(repository.commits[0]).toMatchObject({
       expectedRevision: 0,
       revision: 1,
@@ -155,12 +156,13 @@ describe("Root Ref service kernel", () => {
   test("turns store failures and revision conflicts into bounded retries", async () => {
     const repository = new MemoryRootRefRepository();
     repository.nodes.set(H1, 1);
+    repository.balances.set(H1, 1);
     repository.ready.add(H1);
     repository.failRequestLookups = 1;
     repository.conflictOnce = true;
     let attempts = 0;
 
-    const result = await withDomainRetry(async () => {
+    const result = await withRootRefsRetry(async () => {
       attempts += 1;
       return apply(repository, "retry", { [H1]: 1 });
     }, { maxAttempts: 3, jitter: false, sleep: async () => undefined });
@@ -168,7 +170,7 @@ describe("Root Ref service kernel", () => {
     expect(attempts).toBe(3);
 
     repository.failCommits = 3;
-    await expect(withDomainRetry(
+    await expect(withRootRefsRetry(
       () => apply(repository, "failure", { [H1]: 1 }),
       { maxAttempts: 2, sleep: async () => undefined },
     )).rejects.toBeInstanceOf(RootRefsRetryableError);

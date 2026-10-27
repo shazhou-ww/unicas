@@ -122,7 +122,6 @@ export interface SpaceCapabilityMetadata {
   readonly notBefore?: number;
   readonly expiresAt: number;
   readonly grants: readonly SpaceCapabilityGrantMetadata[];
-  readonly refDomain?: string;
 }
 
 export interface SpaceCapabilityGrantMetadata {

@@ -96,7 +96,7 @@ async function main() {
       .setJti(crypto.randomUUID())
       .sign(privateKey);
   };
-  const issueSpace = (spaceId, refDomain) => sign({
+  const issueSpace = (spaceId) => sign({
     ver: SpaceCapabilityVersion,
     grants: [{
       selector: spaceId,
@@ -109,7 +109,6 @@ async function main() {
         spaceGcExecutePermission(),
       ],
     }],
-    ...(refDomain === undefined ? {} : { refDomain }),
   });
   const client = createAppCasClient({
     baseUrl: BASE,
@@ -124,7 +123,6 @@ async function main() {
               selector: requirement.spaceId,
               permissions: [requirement.permission],
             }],
-            refDomain: "doc",
           }),
           metadata: {
             version: SpaceCapabilityVersion,
@@ -133,7 +131,6 @@ async function main() {
               selector: requirement.spaceId,
               permissions: [requirement.permission],
             }],
-            refDomain: "doc",
           },
         };
       },

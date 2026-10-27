@@ -5,7 +5,6 @@ import {
   SpaceCapabilityVersion,
   parseSpaceSelector,
   spaceSelectorMatches,
-  validateRefDomainClaim,
   type SpaceCapabilityPermissionKind,
 } from "@unicas/space-protocol";
 import { CasCapabilityError } from "./errors.js";
@@ -45,7 +44,6 @@ export function createCapabilityManager(
 ): CapabilityManager {
   const current = new Map<CredentialClass, CapabilityRecord>();
   const acquisitions = new Map<CredentialClass, Promise<CapabilityRecord>>();
-  let rootRefDomain: string | undefined;
 
   const invalidate = (record: CapabilityRecord): void => {
     for (const credentialClass of CredentialClasses) {
@@ -73,16 +71,6 @@ export function createCapabilityManager(
       })
       .then((provided) => normalizeCapability(provided, requirement, now()))
       .then((record) => {
-        if (credentialClass === "root-refs") {
-          const domain = record.metadata.refDomain;
-          if (domain === undefined) {
-            throw invalidMetadata("Root Ref capability metadata requires refDomain");
-          }
-          if (rootRefDomain !== undefined && domain !== rootRefDomain) {
-            throw invalidMetadata("Root Ref capability metadata changed refDomain");
-          }
-          rootRefDomain = domain;
-        }
         if (superseded) invalidate(superseded);
         current.set(credentialClass, record);
         return record;
@@ -113,12 +101,6 @@ export function createCapabilityManager(
         const candidate = current.get(candidateClass);
         if (!candidate || candidate === preferred) continue;
         if (replacementReason(candidate, requirement, now()) === null) {
-          if (credentialClass === "root-refs") {
-            const domain = candidate.metadata.refDomain;
-            if (domain === undefined) continue;
-            if (rootRefDomain !== undefined && domain !== rootRefDomain) continue;
-            rootRefDomain = domain;
-          }
           current.set(credentialClass, candidate);
           return candidate;
         }
@@ -221,19 +203,11 @@ function normalizeCapability(
     });
   });
 
-  let refDomain: string | undefined;
-  if (metadata.refDomain !== undefined) {
-    const domainError = validateRefDomainClaim(metadata.refDomain);
-    if (domainError) throw invalidMetadata(`Capability metadata ${domainError}`);
-    refDomain = metadata.refDomain;
-  }
-
   const normalizedMetadata: SpaceCapabilityMetadata = Object.freeze({
     version: SpaceCapabilityVersion,
     ...(metadata.notBefore === undefined ? {} : { notBefore: metadata.notBefore }),
     expiresAt: metadata.expiresAt,
     grants: Object.freeze(grants),
-    ...(refDomain === undefined ? {} : { refDomain }),
   });
   const record = Object.freeze({
     bearerToken: provided.bearerToken,
@@ -244,12 +218,6 @@ function normalizeCapability(
       "UNSATISFIED_CAPABILITY_REQUIREMENT",
       `CAS capability does not satisfy ${requirement.permission} for the requested Space`,
     );
-  }
-  if (
-    credentialClassFor(requirement.permission) === "root-refs"
-    && normalizedMetadata.refDomain === undefined
-  ) {
-    throw invalidMetadata("Root Ref capability metadata requires refDomain");
   }
   return record;
 }

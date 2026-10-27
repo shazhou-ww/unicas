@@ -322,9 +322,6 @@ class MockAdminService {
         keys: [],
       }, { status: 201 });
     }
-    if (path === appAdminRoutes.refDomains({ appId: APP }) && request.method === "GET") {
-      return Response.json({ domains: [{ appId: APP, refDomain: "doc", revision: 2 }] });
-    }
     if (path === appAdminRoutes.controlAuditEvents({ appId: APP }) && request.method === "GET") {
       return Response.json({
         items: [{
@@ -352,14 +349,14 @@ class MockAdminService {
         nextCursor: null,
       });
     }
-    if (path === appAdminRoutes.rootDomainRefs({ appId: APP, refDomain: "doc" }) && request.method === "GET") {
+    if (path === appAdminRoutes.rootRefs({ appId: APP }) && request.method === "GET") {
       return Response.json({
         revision: 2,
         refs: [{ spaceId: "space-1", hash: "a".repeat(64), count: 1 }],
         nextCursor: null,
       });
     }
-    if (path === appAdminRoutes.rootDomainEvents({ appId: APP, refDomain: "doc" }) && request.method === "GET") {
+    if (path === appAdminRoutes.rootEvents({ appId: APP }) && request.method === "GET") {
       return Response.json({
         events: [{ revision: 2, spaceId: "space-1", requestId: "request-1", changes: { ["a".repeat(64)]: 1 }, appliedAt: 1 }],
         latestRevision: 2,
@@ -586,19 +583,16 @@ describe("functional admin client", () => {
   });
 
   it("uses App and Space vocabulary for audit operations", async () => {
-    expect(await client.listAppRefDomains({ appId: APP })).toMatchObject({
-      domains: [{ appId: APP, refDomain: "doc" }],
-    });
     expect(await client.listAppControlAuditEvents(
       { appId: APP },
       { limit: 10, cursor: "cursor-1", actorAccountId: ACCOUNT },
     )).toMatchObject({ items: [{ appId: APP, actorAccount: { accountId: ACCOUNT } }] });
-    expect(await client.listSpaceRootDomainRefs(
-      { appId: APP, refDomain: "doc" },
+    expect(await client.listAppRootRefs(
+      { appId: APP },
       { spaceId: "space-1", limit: 10, cursor: "cursor-1" },
     )).toMatchObject({ refs: [{ spaceId: "space-1", count: 1 }] });
-    expect(await client.listSpaceRootDomainEvents(
-      { appId: APP, refDomain: "doc" },
+    expect(await client.listAppRootEvents(
+      { appId: APP },
       { spaceId: "space-1", after: 1, limit: 10 },
     )).toMatchObject({ events: [{ spaceId: "space-1", revision: 2 }] });
     expect(service.requests).toEqual(expect.arrayContaining([
@@ -607,11 +601,11 @@ describe("functional admin client", () => {
         search: `?limit=10&cursor=cursor-1&actorAccountId=${ACCOUNT}`,
       }),
       expect.objectContaining({
-        path: `/admin/apps/${APP}/root-ref-domains/doc/refs`,
+        path: `/admin/apps/${APP}/root-refs`,
         search: "?spaceId=space-1&limit=10&cursor=cursor-1",
       }),
       expect.objectContaining({
-        path: `/admin/apps/${APP}/root-ref-domains/doc/events`,
+        path: `/admin/apps/${APP}/root-ref-events`,
         search: "?spaceId=space-1&after=1&limit=10",
       }),
     ]));

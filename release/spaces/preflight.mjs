@@ -20,7 +20,6 @@ export function smokePreflightQuery(principalId) {
     (SELECT status FROM spaces_principals WHERE principal_id = ${value}) AS principal_status,
     (SELECT app_id FROM spaces_principal_spaces WHERE principal_id = ${value}) AS app_id,
     (SELECT space_id FROM spaces_principal_spaces WHERE principal_id = ${value}) AS space_id,
-    (SELECT ref_domain FROM spaces_principal_spaces WHERE principal_id = ${value}) AS ref_domain,
     (SELECT COUNT(*) FROM spaces_external_identities WHERE principal_id = ${value}) AS identity_count,
     (SELECT COUNT(*) FROM spaces_file_system_roots WHERE principal_id = ${value}) AS root_count,
     (SELECT COUNT(*) FROM spaces_smoke_runs
@@ -34,7 +33,7 @@ export function smokePreflightQuery(principalId) {
 
 export function validateSmokePreflightRow(row) {
   if (row?.principal_status !== "active") throw new Error("smoke_principal_not_active");
-  if (typeof row.app_id !== "string" || typeof row.space_id !== "string" || typeof row.ref_domain !== "string") {
+  if (typeof row.app_id !== "string" || typeof row.space_id !== "string") {
     throw new Error("smoke_space_mapping_missing");
   }
   if (row.identity_count !== 0) throw new Error("smoke_principal_has_external_identity");
@@ -47,7 +46,6 @@ export function validateSmokePreflightRow(row) {
     principalId: row.principal_id,
     appId: row.app_id,
     spaceId: row.space_id,
-    refDomain: row.ref_domain,
   };
 }
 
@@ -68,7 +66,6 @@ export async function runSpacesPreflight(environment = process.env, execute = ex
       selector: selector.selector,
       permissions: [spaceRootRefsReadPermission()],
     }],
-    refDomain: mapping.refDomain,
   })
     .setProtectedHeader({
       alg: CapabilityAlgorithm,
@@ -96,7 +93,6 @@ export async function runSpacesPreflight(environment = process.env, execute = ex
             selector: selector.selector,
             permissions: [spaceRootRefsReadPermission()],
           }],
-          refDomain: mapping.refDomain,
         },
       }),
     },

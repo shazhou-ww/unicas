@@ -43,6 +43,7 @@ export const SpaceApiStableErrorMap = {
   NODE_NOT_READY: { status: 409, message: "A referenced node is not ready", data: ErrorDataSchema },
   NEGATIVE_AGGREGATE: { status: 409, message: "The Root Ref update would create a negative balance", data: ErrorDataSchema },
   IDEMPOTENCY_CONFLICT: { status: 409, message: "The idempotency identity was reused with different content", data: ErrorDataSchema },
+  ROOT_REF_SNAPSHOT_CHANGED: { status: 409, message: "Restart pagination from the current revision", data: ErrorDataSchema },
   PAYLOAD_TOO_LARGE: { status: 413, message: "The CAS payload exceeds the configured limit", data: ErrorDataSchema },
   CAS_UPLOAD_LIMIT: { status: 429, message: "The Space has too many active uploads", data: ErrorDataSchema },
   SERVICE_UNAVAILABLE: { status: 503, message: "The CAS operation is temporarily unavailable", data: ErrorDataSchema },
@@ -67,7 +68,7 @@ export const SpaceApiStableErrorCodesByStatus = {
     "ROOT_REF_INVALID",
   ],
   404: ["NODE_NOT_FOUND"],
-  409: ["NODE_CONFLICT", "NODE_NOT_READY", "NEGATIVE_AGGREGATE", "IDEMPOTENCY_CONFLICT"],
+  409: ["NODE_CONFLICT", "NODE_NOT_READY", "NEGATIVE_AGGREGATE", "IDEMPOTENCY_CONFLICT", "ROOT_REF_SNAPSHOT_CHANGED"],
   413: ["PAYLOAD_TOO_LARGE"],
   416: ["INVALID_REQUEST"],
   429: ["CAS_UPLOAD_LIMIT"],
@@ -306,7 +307,6 @@ const GcResultSchema = z.object({
   reclaimedContentBytes: z.number().int().nonnegative(),
 }).readonly().meta({ id: "SpaceGcResult" });
 const RootRefsPageSchema = z.object({
-  refDomain: z.string().min(1).describe("Business lifecycle namespace from the verified capability."),
   revision: z.number().int().nonnegative().describe("Stable snapshot revision represented by this page."),
   items: z.array(z.object({
     hash: HashSchema,
@@ -399,7 +399,7 @@ export const listRootRefsContract = spaceProcedure
     path: `${SpaceApiBasePath}/root-refs`,
     operationId: "listRootRefs",
     summary: "List Space Root Ref balances",
-    description: "Returns a revision-stable page for the refDomain in the verified capability. Requires cas:root-refs:read and a valid signed refDomain.",
+    description: "Returns a revision-stable App/Space Root Ref page. Requires the exact cas:root-refs:read permission for this Space.",
     inputStructure: "detailed",
     tags: ["Root Refs"],
   })
@@ -419,7 +419,7 @@ export const updateRootRefsContract = spaceProcedure
     path: `${SpaceApiBasePath}/root-refs`,
     operationId: "updateRootRefs",
     summary: "Apply Space Root Ref changes",
-    description: "Atomically applies signed Root Ref deltas in the capability's refDomain. Requires cas:root-refs:update and a valid signed refDomain.",
+    description: "Atomically applies App/Space Root Ref deltas with an App-global audit revision. Requires the exact cas:root-refs:update permission for this Space.",
     inputStructure: "detailed",
     tags: ["Root Refs"],
   })

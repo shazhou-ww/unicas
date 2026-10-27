@@ -50,7 +50,7 @@ const blobs = createCasBlobClient({
 ```
 
 The capability provider normally supplies `cas:nodes:lease` for writes,
-`cas:nodes:read` for reads, and `cas:root-refs:update` plus a `refDomain` for
+`cas:nodes:read` for reads, and `cas:root-refs:update` for
 retain/release operations. Multiple blob clients may share the same App client
 while each workflow retains its explicit `spaceId`.
 
@@ -75,8 +75,8 @@ const stored = await blobs.storeBlob(source, {
 await blobs.retain({ requestId, references: { [stored.hash]: 1 } });
 ```
 
-Keep `requestId` stable for this exact retain transition. The capability's
-`refDomain` selects the Root Ref domain in which the count is recorded.
+Keep `requestId` stable for this exact retain transition within its App/Space.
+New events share one App-global revision stream across Spaces.
 
 ## Read all or part of a blob
 

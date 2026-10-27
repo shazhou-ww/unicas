@@ -8,6 +8,14 @@
 观察窗口、回滚边界和保留期限。先完成部署计划或 dry-run 审查；
 不得默认修改冻结的旧环境或发布 npm 包。
 
+实施已提供本地 SQLite 只读检查和生成迁移副本工具：
+`release\service\migrate-root-refs.mjs`；`0002_app_root_refs.sql` 仅创建 schema，
+不是生产数据切换。部署前还必须在明确目标环境演练 D1 的 snapshot
+导出、迁移副本导入/恢复和大小限制，并在同一写入栅栏内逐项核对 aggregate。
+Spaces App 须先应用 `0003_remove_ref_domain.sql`，再使用新 bootstrap/preflight。
+Cloudflare 的历史 DO class/binding 名保留，新的 actor key 仅含 App；
+旧 writer 必须停止，不能在两种 key 下并行写入。
+
 ### D-S02: 执行受控迁移并验证
 
 在获得相应发布及数据变更授权后，对目标环境执行 reconciliation、
