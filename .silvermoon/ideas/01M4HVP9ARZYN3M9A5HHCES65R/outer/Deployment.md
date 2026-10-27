@@ -32,6 +32,13 @@ checkpoint、迁移和服务切换，以真实调用验证读写、审计及幂�
 在约定窗口核实 issuer 已停止签发旧 claim、旧 endpoint 无使用，
 验证恢复能力与 archive 可读性；达到保留和审计条件后才清理兼容及遗留存储。
 
+### D-S04: 完成隔离本地迁移恢复演练
+
+使用 [本地演练脚本](./Rehearse-local.mjs) 和全合成数据，验证 Wrangler 本地
+D1 的 SQL 导出、离线迁移副本导入及首次新写入前的备份恢复，并通过本地 HTTP
+请求检查实际 Space/App actor 调用、重放、审计和失败回滚。脚本仅使用新建的
+临时本地存储，禁止 remote 操作；这不能替代目标环境的 D-S01 至 D-S03。
+
 ## Acceptance criteria
 
 ### D-AC01: 切换不改变保留状态
@@ -48,3 +55,9 @@ checkpoint、迁移和服务切换，以真实调用验证读写、审计及幂�
 
 旧 claim 和 endpoint 退休有使用证据，归档保留及清理有明确责任和期限，
 恢复流程在约定边界内可执行；以使用核验、归档记录和恢复演练证明。
+
+### D-AC04: 本地转移与恢复链路可重复
+
+演练退出成功，逐项 aggregate 不变，源 snapshot 未改，旧请求桥接和 archive
+写保护跨 SQL 转移保留；真实本地 HTTP 请求验证 App-global revision、跨 Space
+幂等、分页失效和整批回滚。以脚本结构化结果证明，不推断生产可用性。
