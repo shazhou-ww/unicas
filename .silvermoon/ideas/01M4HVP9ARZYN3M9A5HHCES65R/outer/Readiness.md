@@ -7,9 +7,11 @@
 用户于 2026-10-31 在独立会话与隔离 worktree 中明确恢复推进；
 实际生产变更仍只允许通过现有受保护 Actions 与 Production 审批。
 本地与 Linux 完整预检通过；2026-10-31 受保护 job 已完成生产 Root Ref cutover
-并部署新 service；签名路径已修复，smoke 的最后一个旧路由 probe 因未定义变量
-失败，后续单元未部署。
-生产 marker 后仅允许 forward-fix；整体部署及在线 smoke 尚未完成，不能提交 `submitOuter`。
+并部署新 service；后续执行器和 smoke 修复已沿受保护通道发布。
+run `41213520305` 已完成 service/Spaces/site/docs 部署、全部既有 smoke、五个
+公开 origin 验证和 production tag。切换一致性已满足 D-AC01，但 App 审计 API、
+跨 Space 的同/异 payload 现场证明、观察窗口和归档交接仍须补齐，
+不能提交 `submitOuter`。生产 marker 后仅允许 forward-fix。
 隔离合成数据演练的 `D-S04`、`D-AC04` 已完成，其余 `D-*` 未完成；
 本页不是生产迁移、发布或 archive 清理授权。
 
@@ -560,3 +562,53 @@ reviewer；尚无新生产执行。观察脚本检测到审批门禁后已退出
 完整 service smoke、剩余部署、public origins 与 tag。
 之前的 migration、新写入、cleanup events、archive/replay 全部保留；
 未完成的生产 D-* 和 outer submission/acceptance 不变。
+
+## 全部发布单元成功与切换一致性确认（2026-10-31）
+
+用户批准 run `41213520305` 后，该 run 于 15:24:21Z 完整成功：
+
+| Job | 结果 |
+| --- | --- |
+| validate `124573219106` | 精确 release 验证与完整 `pnpm validate:release` 成功 |
+| Deploy production `124574376725` | cutover `already-cutover`；secrets、service smoke、Spaces smoke、site/docs 与五个公开 origins 全部成功；签名文件 cleanup 成功 |
+| Tag verified production deployment `124576633558` | 创建不可变 tag 成功 |
+
+service smoke 实际输出 `APP/SPACE SMOKE PASS`；Spaces 输出 `result=pass`，
+stages 为 authenticate/hash/lease/upload/commit/verify/cleanup。
+App/Space v1 issuer audience 的特殊切换步骤因既有 flag 未开启而跳过，
+不是失败，也不证明旧 claim 已在观察窗口内完全停止签发。
+其余所有部署和 canonical public origin 验证均执行成功。
+
+发布修订为 `c32f6d5e136d4708bebca1240ef6740b9c72a12b`。
+远程 `git ls-remote --tags` 独立确认
+`production-20261031-649^{}` 指向该完整修订；tag object 为
+`36291f799ab623e1fbcea660eea964483172a294`，没有移动或重建 tag。
+Spaces version 为 `88ae2603-3609-4e17-a9d9-712fbc48bb50`，
+site version 为 `1848c1a3-4b47-4145-9481-ecd8af5dab03`，
+docs version 为 `564c38b6-8a29-49e4-8376-10ab969d46c4`。
+
+发布后又以固定 CAS_DB 的只读 executor 执行完整 `already-cutover` 路径，
+四次只读查询通过：marker 1、旧 events 496、旧 requests 496、新 events 18。
+12 archive guards、append-only constraints、当前 aggregate/projection、
+App checkpoint/events/replay 关系均通过。没有导出私有记录、文件执行、恢复
+snapshot 或清空新事件；发布 smoke 接受的写入及 cleanup events 都被保留。
+与最初冻结 snapshot 的逐项迁移核验及 TimeTravel 记录共同满足 D-AC01，
+因此只将该项勾选。
+
+公开 API health 再次独立返回 `ok=true, service=unicas`；
+公开 docs `artifact-manifest.json` 的 `sourceRevision` 精确等于发布修订。
+这两项只读复核与 run 中五个 origins 的检查互相补充，不替代尚未完成的业务
+观察与使用证据。
+
+### 尚未完成的外层证据
+
+- 既有 service smoke 证明同 payload 重放、单 Space replacement、跨 Space
+  拒绝和旧 endpoint/claim 拒绝；Spaces smoke 证明真实消费者与隔离。
+  它们尚不证明同 App 跨 Space 的相同 requestId、不同 payload 冲突和 App
+  审计 API 的完整现场行为，不能仅用本地或 D1 一致性检查替代 D-AC02。
+- 支持的 CLI 本地状态未登录；没有索取或读取 Production 私钥/session secret
+  来代替用户登录。App 审计接口的只读核验需要控制面授权。
+- 观察窗口长度、archive/replay 的责任角色及保留/退休条件仍未明确；
+  暂保留所有 archive 与桥接，不设新 TTL、不清理遗留表。
+- D-S01/D-S02/D-S03 和 D-AC02/D-AC03 保持未完成；不提交 outer，不请求或记录
+  部署验收。已完成的 production run/tag 不是 Silvermoon lifecycle decision。
