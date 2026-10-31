@@ -7,9 +7,8 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { importPKCS8, SignJWT } from "jose";
-import { normalizeSmokeBaseUrl } from "./smoke-target.mjs";
+import { normalizeSmokeBaseUrl, resolveSmokeKeyPath } from "./smoke-target.mjs";
 import {
   concatenateNodeBytes,
   computeNodeDigest,
@@ -42,7 +41,6 @@ const KID = requiredEnv("UNICAS_SMOKE_KID");
 const KEY_FILE = requiredEnv("UNICAS_SMOKE_KEY_FILE");
 const SPACE_ID = process.env.UNICAS_SMOKE_SPACE_ID ?? "/deploy-smoke";
 const ISOLATION_SPACE_ID = `${SPACE_ID}-isolation`;
-const KEY_DIR = join(import.meta.dirname, "..", ".wrangler", "cas-deploy");
 const NODE_CONTENT_TYPE = "application/vnd.unidocs.cas-node.v1";
 const RUN = `${process.pid}-${Date.now()}`;
 
@@ -80,7 +78,7 @@ async function nodeOf(content, refs = []) {
 
 async function main() {
   const privateKey = await importPKCS8(
-    await readFile(join(KEY_DIR, KEY_FILE), "utf8"),
+    await readFile(resolveSmokeKeyPath(KEY_FILE), "utf8"),
     CapabilityAlgorithm,
   );
   const sign = (claims, subject = "deploy-smoke") => {

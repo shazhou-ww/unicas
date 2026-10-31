@@ -6,8 +6,9 @@
 部署尚未完成。用户现已明确授权通过现有 Actions 通道发布并验证。
 用户于 2026-10-31 在独立会话与隔离 worktree 中明确恢复推进；
 实际生产变更仍只允许通过现有受保护 Actions 与 Production 审批。
-本地构建与打包检查通过，但没有目标环境的
-snapshot、迁移/恢复演练或在线 smoke 证据，不能提交 `submitOuter`。
+本地与 Linux 完整预检通过；2026-10-31 受保护 job 已完成生产 Root Ref cutover
+并部署新 service，但 smoke 因本地签名文件路径错误失败，后续单元未部署。
+生产 marker 后仅允许 forward-fix；整体部署及在线 smoke 尚未完成，不能提交 `submitOuter`。
 隔离合成数据演练的 `D-S04`、`D-AC04` 已完成，其余 `D-*` 未完成；
 本页不是生产迁移、发布或 archive 清理授权。
 
@@ -382,3 +383,74 @@ foreign fence、marker 后 forward-fix、archive 与新事件保护测试。
 与原 Production 审批执行；不能在本机切换数据，不能 rerun 旧修订假装修复
 已进入旧 run。此次执行器修复不改变已接受的 ideal/inner 合同，也不构成 outer
 submit/accept。生产 D-* 仍未完成。
+
+## 修复后的精确预检与第二次审批等待（2026-10-31）
+
+执行器修复已同步 primary `9f744f13b1b9`；其精确 HEAD 的 `pnpm validate`
+与同步后的 `pnpm check:ideas:remote` 均通过。
+[Linux CI run 41180937569](https://github.com/shazhou-ww/unicas/actions/runs/41180937569)
+完整成功，validate job `124478025366` 用时 6m23s，包括实际 Wrangler CLI
+回归、完整 release 套件、SDK artifacts 与所有部署 dry-run。
+
+新 [promotion PR #66](https://github.com/shazhou-ww/unicas/pull/66) 使用仓库 PR
+模板并记录精确验证结果；Dependency review 和 CodeQL 均通过。按既有发布
+授权验证 tree 后正常 merge，未启用 auto-merge 或使用 bypass。
+release `61b4f060b864` 的两个父提交依次为 `af530f374a71` 与已验证的
+main `9f744f13b1b9`，合并前后 tree 均与该 main 一致。
+
+[新 release CI run 41181407106](https://github.com/shazhou-ww/unicas/actions/runs/41181407106)
+的 validate job `124479389683` 于 07:44:57Z 成功，包含精确 promotion
+验证与完整 `pnpm validate:release`。随后 Production job `124480595703`
+为 `waiting`，pending deployment 要求既有 reviewer 审批，尚无执行步骤。
+Agent 没有代替 reviewer 审批，也没有将用户针对旧 run 的批准重放到新 run。
+本地 watcher 已停止，待审批 job 保留。
+
+下一步是在该新 run 上完成 Production review，然后重新观测并检查受保护
+job 的真实 cutover、恢复分类、各部署和 smoke 结果。失败就精确诊断，不
+盲目 rerun 或绕过审批；不可证明的恢复仍保留栅栏。
+目前没有生产迁移或新版上线证明，不勾选生产 D-*，不提交或接受 outer。
+
+## 生产 cutover 完成与 smoke 路径 forward-fix（2026-10-31）
+
+用户完成新 run `41181407106` 的 Production 审批后，cutover 于
+07:51:36Z 输出 `cutover-complete` 并成功退出。脱敏摘要：2 Apps、171 nodes、
+496 legacy events、496 replay records；冻结 snapshot 的 digest 为
+`81c7c50e09501eb42175c98e2bfefcafefe68887859d5177fbff36da6796b7e2`。
+job 记录的 TimeTravel bookmark 为
+`00000423-00000000-00005115-09505d514c8d3d701bcd42afcff2dfe9`。
+runner 已完成逐项 aggregate/projection、checkpoint、archive/replay 核验，
+并最后写入 marker；私有 snapshot 与 provider 输出未作为 artifact 保留。
+
+随后 secrets 同步成功，service 上传与 triggers 发布完成，Worker version
+`4740a6a6-1435-4f4f-bf5b-dafa3c051aff`，路由为本任务的 API/Console origins。
+service smoke 在读取临时签名文件时失败：错误路径指向
+`release/.wrangler/cas-deploy/`，而 job 在仓库根 `.wrangler/cas-deploy/` 创建文件。
+失败发生在 capability 签名与 smoke 网络调用之前；job 的签名文件 cleanup
+成功。Spaces、site、docs、public origin 检查与 deployment tag 均跳过。
+不能将 service 上传成功当作完整发布成功。
+
+marker 已存在且新 service 已启用，因此保留 archive 栅栏、新 events 和 replay，
+仅做 forward-fix；不恢复旧 snapshot，不回滚旧 writer，不清空数据。
+使用固定 CAS_DB 的 runner 和强制只读 executor 再次执行已完成切换路径：
+四次只读查询返回 `already-cutover`，验证 marker、12 archive guards、新 ledger
+append-only constraints、当前 aggregate/projection、checkpoint/events 和 replay
+关系成立。没有文件执行或其他远程写操作。
+`curl.exe --fail --silent --show-error --connect-timeout 10 --max-time 30 --proto '=https' https://api.unicas.work/health`
+返回 `{"ok":true,"service":"unicas"}`；仅证明该公开健康响应，不替代 smoke。
+
+修复将 smoke key 路径定位统一放在既有 `smoke-target.mjs`，相对该模块确定仓库
+根而非 process cwd，正式 smoke 使用同一 helper。回归将 GitHub workflow 的
+创建/清理位置、helper 结果与实际调用接线对应起来，保留全部既有 probe。
+以临时合成 ES256 key 运行真实 smoke 入口，目标固定 loopback，成功读入并导入
+根目录中的 key 后才遭预期网络失败；没有生产调用或密钥输出，临时 key 已删除。
+
+- `pnpm exec vitest run tests\deploy-plan.test.mjs tests\root-refs-production-cutover.test.mjs tests\release-gated-ci.test.mjs`：
+  84 tests 通过。
+- 合成 key 的真实入口验证：`syntheticKeyLoaded=true`、`loopbackOnly=true`、
+  `privateKeyLogged=false`。
+- `git diff --check`：通过。
+
+下一候选须重新经过正常同步、完整精确 Linux CI、main→release PR 及 Production
+review。新 job 的 cutover 必须走只读 `already-cutover` 验证，不覆盖已接受新事件。
+生产迁移的部分证据已真实取得，但完整部署、在线 smoke、观察窗口与保留政策
+尚未完成，生产 D-* 暂不勾选，不提交或接受 outer。
