@@ -1,5 +1,12 @@
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 const PRODUCTION_ORIGIN = "https://api.unicas.work";
 const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+export function resolveSmokeKeyPath(filename) {
+  return join(fileURLToPath(new URL("../..", import.meta.url)), ".wrangler", "cas-deploy", filename);
+}
 
 export function normalizeSmokeBaseUrl(value, allowOtherOrigin = false) {
   let url;

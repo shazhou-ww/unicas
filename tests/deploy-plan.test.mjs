@@ -30,7 +30,7 @@ import {
   validateResetInventory,
 } from "../release/service/reset-smoke.mjs";
 import { CONTROL_SCHEMA_MIGRATIONS } from "../packages/service-cloudflare/src/control-schema.ts";
-import { normalizeSmokeBaseUrl } from "../release/service/smoke-target.mjs";
+import { normalizeSmokeBaseUrl, resolveSmokeKeyPath } from "../release/service/smoke-target.mjs";
 import {
   fetchWorkflowCreatedAt,
   tagProductionDeployment,
@@ -988,6 +988,11 @@ describe("standalone deployment plan", () => {
     expect(job).toContain("if: ${{ always() }}");
     expect(cleanup).toBeGreaterThan(service);
     expect(cleanup).toBeLessThan(site);
+    expect(resolveSmokeKeyPath("github-actions-smoke-key.pem"))
+      .toBe(join(ROOT, ".wrangler", "cas-deploy", "github-actions-smoke-key.pem"));
+    const smoke = readFileSync(join(ROOT, "release/service/cas-app-space-smoke.mjs"), "utf8");
+    expect(smoke).toContain('readFile(resolveSmokeKeyPath(KEY_FILE), "utf8")');
+    expect(smoke).not.toContain("const KEY_DIR");
   });
 
   test("checks every public production origin after all deployments", () => {
