@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, test } from "vitest";
+import ts from "typescript";
 import {
   deploymentPlan,
   parseArgs,
@@ -1169,6 +1170,35 @@ describe("standalone deployment plan", () => {
     expect(appSpaceSmoke).toContain("App/Space token on retired route");
     expect(packageJson.scripts["smoke:v1"]).toBeUndefined();
   });
+
+  test("the complete smoke script has no undefined identifiers", () => {
+    const filename = join(ROOT, "release/service/cas-app-space-smoke.mjs");
+    const program = ts.createProgram([filename], {
+      allowJs: true, checkJs: true, noEmit: true,
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.NodeNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeNext,
+      skipLibCheck: true,
+    });
+    const source = program.getSourceFile(filename);
+    expect(source).toBeDefined();
+    const unbound = program.getSemanticDiagnostics(source)
+      .filter(diagnostic => diagnostic.code === 2304)
+      .map(diagnostic => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"));
+    expect(unbound).toEqual([]);
+    const regression = ts.createSourceFile(filename,
+      source.text.replace(/^\s*const token = await issueSpace\(SPACE_ID\);\r?\n/m, ""),
+      ts.ScriptTarget.ES2022, true, ts.ScriptKind.JS);
+    const host = ts.createCompilerHost(program.getCompilerOptions());
+    const readSource = host.getSourceFile;
+    host.getSourceFile = (name, ...args) => name === source.fileName
+      ? regression : program.getSourceFile(name) ?? readSource(name, ...args);
+    const broken = ts.createProgram([filename], program.getCompilerOptions(), host);
+    expect(broken.getSemanticDiagnostics(broken.getSourceFile(filename))
+      .filter(diagnostic => diagnostic.code === 2304)
+      .map(diagnostic => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")))
+      .toContain("Cannot find name 'token'.");
+  }, 30_000);
 
   test("the smoke reset requires an explicit target and backup or waiver", () => {
     expect(parseResetArgs([])).toEqual({

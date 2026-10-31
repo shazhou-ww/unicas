@@ -7,7 +7,8 @@
 用户于 2026-10-31 在独立会话与隔离 worktree 中明确恢复推进；
 实际生产变更仍只允许通过现有受保护 Actions 与 Production 审批。
 本地与 Linux 完整预检通过；2026-10-31 受保护 job 已完成生产 Root Ref cutover
-并部署新 service，但 smoke 因本地签名文件路径错误失败，后续单元未部署。
+并部署新 service；签名路径已修复，smoke 的最后一个旧路由 probe 因未定义变量
+失败，后续单元未部署。
 生产 marker 后仅允许 forward-fix；整体部署及在线 smoke 尚未完成，不能提交 `submitOuter`。
 隔离合成数据演练的 `D-S04`、`D-AC04` 已完成，其余 `D-*` 未完成；
 本页不是生产迁移、发布或 archive 清理授权。
@@ -475,3 +476,39 @@ pending deployment 要求既有 reviewer；没有代为审批或重放旧批准�
 `already-cutover`，再检查 service smoke 与 Spaces/site/docs 部署、
 public origin 和最终 tag；保留全部新事件与归档，禁止旧 snapshot restore。
 当前生产 cutover 与 service 已有证据，但完整发布和 outer 验收仍未完成。
+
+## 第三次审批执行与最后一个 smoke probe 修复（2026-10-31）
+
+用户于晚间批准 run `41183157999` 后，cutover 的已完成状态只读核验成功，
+secrets 同步、临时签名文件创建、新 service 上传及 triggers 发布均成功。
+Worker version 为 `c202b512-a745-4553-8541-41db4ebd036a`。
+签名路径修复实际生效，service smoke 已执行并通过：
+
+- API health、内部路由不可访问、真实 child/parent lease、content 与 metadata；
+- Root Ref 首次更新、同 payload 重放、projection、mixed-sign replacement；
+- usage、GC 保留当前 leased nodes、旧 v2 endpoint 404；
+- 旧 Space claim v1/v3 和宽 permission 的 401 invalid_token；
+- cross-Space read 403、隔离 Space 为空、旧 Tenant claim 401。
+
+最后一个 `App/Space token on retired route` probe 尚未发出请求，
+因 `ReferenceError: token is not defined` 于 14:51:10Z 失败。
+失败后的 `Root Ref cleanup releases smoke roots` 已成功，临时签名文件 cleanup
+也成功。此次 smoke 已接受的新事件和清理事件必须保留；
+Spaces、site、docs、最终 public origin 检查与 deployment tag 均跳过。
+不能把这些部分成功当作 `APP/SPACE SMOKE PASS` 或完整发布通过。
+
+根因是 capability-provider 重构后，该旧路由 probe 仍引用已移除的变量。
+现使用既有 `issueSpace(SPACE_ID)` 在此 probe 前签发有效的同 Space token；
+保留旧 endpoint 必须返回 404 的原断言，没有绕过网络 probe 或降低鉴权要求。
+新增 TypeScript semantic 检查整个 smoke 脚本的未定义标识符，同时在内存中移除
+该 binding 重现原错误，要求明确检出 `Cannot find name 'token'.`。
+编译器检查只影响测试，不增加运行时依赖；首次冷编译超过默认 5 秒，因此为
+该编译器测试单独设置 30 秒上限，不改变任何生产 smoke 阈值或断言。
+
+- `pnpm exec vitest run tests\deploy-plan.test.mjs tests\root-refs-production-cutover.test.mjs tests\release-gated-ci.test.mjs`：
+  85 tests 通过，包含完整脚本未定义标识符的正/反回归。
+- `git diff --check`：通过。
+
+继续仅允许 forward-fix，新候选须经过精确完整预检、正常 promotion 与新的
+Production review。尚未完成整体部署或 outer gate，不恢复旧 snapshot，
+不清空新事件，不勾选未获得完整证据的生产 D-*。
