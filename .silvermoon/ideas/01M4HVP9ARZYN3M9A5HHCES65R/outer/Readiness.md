@@ -7,9 +7,11 @@
 用户于 2026-10-31 在独立会话与隔离 worktree 中明确恢复推进；
 实际生产变更仍只允许通过现有受保护 Actions 与 Production 审批。
 本地与 Linux 完整预检通过；2026-10-31 受保护 job 已完成生产 Root Ref cutover
-并部署新 service；签名路径已修复，smoke 的最后一个旧路由 probe 因未定义变量
-失败，后续单元未部署。
-生产 marker 后仅允许 forward-fix；整体部署及在线 smoke 尚未完成，不能提交 `submitOuter`。
+并部署新 service；后续执行器和 smoke 修复已沿受保护通道发布。
+run `41213520305` 已完成 service/Spaces/site/docs 部署、全部既有 smoke、五个
+公开 origin 验证和 production tag。切换一致性已满足 D-AC01，但 App 审计 API、
+跨 Space 的同/异 payload 现场证明、观察窗口和归档交接仍须补齐，
+不能提交 `submitOuter`。生产 marker 后仅允许 forward-fix。
 隔离合成数据演练的 `D-S04`、`D-AC04` 已完成，其余 `D-*` 未完成；
 本页不是生产迁移、发布或 archive 清理授权。
 
@@ -537,3 +539,127 @@ documentation-only production dispatch。
 
 新候选仍需同步 primary 后重跑精确完整 Linux CI。已有 #68 随 main 更新，
 不能合并旧失败候选或把镜像修复视为 Production 审批、数据恢复授权或 outer gate。
+
+## 最后一个 probe 与固定平台候选的审批接续（2026-10-31）
+
+browser platform 修复已同步 primary `20f2d59dd405`，精确 HEAD 的
+`pnpm validate` 与同步后 `pnpm check:ideas:remote` 均通过。
+[完整 Linux 预检 run 41212977120](https://github.com/shazhou-ww/unicas/actions/runs/41212977120)
+在固定 Ubuntu 24.04 上成功，validate job `124571638884` 用时 5m39s。
+#68 的 Dependency review 与 CodeQL 均通过，PR 模板中的证据已更新为精确成功
+结果；没有重跑不支持的平台、升级 Playwright 或降低任何检查。
+
+正常 merge #68 后 release `c32f6d5e136d` 的两父提交为 `ce8b12b211e8` 与
+已验证 main `20f2d59dd405`；merge 前后 tree 均与该 main 完全一致。
+[新 release run 41213520305](https://github.com/shazhou-ww/unicas/actions/runs/41213520305)
+的 validate job `124573219106` 成功，包含精确 release 校验和完整
+`pnpm validate:release`。
+
+Production job `124574376725` 当前为 `waiting`，pending deployment 要求既有
+reviewer；尚无新生产执行。观察脚本检测到审批门禁后已退出，没有保留 watcher，
+没有代为审批或重放用户对旧 run 的批准。
+下一步为该新 run 的 Production review，随后核验只读 `already-cutover`、
+完整 service smoke、剩余部署、public origins 与 tag。
+之前的 migration、新写入、cleanup events、archive/replay 全部保留；
+未完成的生产 D-* 和 outer submission/acceptance 不变。
+
+## 全部发布单元成功与切换一致性确认（2026-10-31）
+
+用户批准 run `41213520305` 后，该 run 于 15:24:21Z 完整成功：
+
+| Job | 结果 |
+| --- | --- |
+| validate `124573219106` | 精确 release 验证与完整 `pnpm validate:release` 成功 |
+| Deploy production `124574376725` | cutover `already-cutover`；secrets、service smoke、Spaces smoke、site/docs 与五个公开 origins 全部成功；签名文件 cleanup 成功 |
+| Tag verified production deployment `124576633558` | 创建不可变 tag 成功 |
+
+service smoke 实际输出 `APP/SPACE SMOKE PASS`；Spaces 输出 `result=pass`，
+stages 为 authenticate/hash/lease/upload/commit/verify/cleanup。
+App/Space v1 issuer audience 的特殊切换步骤因既有 flag 未开启而跳过，
+不是失败，也不证明旧 claim 已在观察窗口内完全停止签发。
+其余所有部署和 canonical public origin 验证均执行成功。
+
+发布修订为 `c32f6d5e136d4708bebca1240ef6740b9c72a12b`。
+远程 `git ls-remote --tags` 独立确认
+`production-20261031-649^{}` 指向该完整修订；tag object 为
+`36291f799ab623e1fbcea660eea964483172a294`，没有移动或重建 tag。
+Spaces version 为 `88ae2603-3609-4e17-a9d9-712fbc48bb50`，
+site version 为 `1848c1a3-4b47-4145-9481-ecd8af5dab03`，
+docs version 为 `564c38b6-8a29-49e4-8376-10ab969d46c4`。
+
+发布后又以固定 CAS_DB 的只读 executor 执行完整 `already-cutover` 路径，
+四次只读查询通过：marker 1、旧 events 496、旧 requests 496、新 events 18。
+12 archive guards、append-only constraints、当前 aggregate/projection、
+App checkpoint/events/replay 关系均通过。没有导出私有记录、文件执行、恢复
+snapshot 或清空新事件；发布 smoke 接受的写入及 cleanup events 都被保留。
+与最初冻结 snapshot 的逐项迁移核验及 TimeTravel 记录共同满足 D-AC01，
+因此只将该项勾选。
+
+公开 API health 再次独立返回 `ok=true, service=unicas`；
+公开 docs `artifact-manifest.json` 的 `sourceRevision` 精确等于发布修订。
+这两项只读复核与 run 中五个 origins 的检查互相补充，不替代尚未完成的业务
+观察与使用证据。
+
+### 尚未完成的外层证据
+
+- 既有 service smoke 证明同 payload 重放、单 Space replacement、跨 Space
+  拒绝和旧 endpoint/claim 拒绝；Spaces smoke 证明真实消费者与隔离。
+  它们尚不证明同 App 跨 Space 的相同 requestId、不同 payload 冲突和 App
+  审计 API 的完整现场行为，不能仅用本地或 D1 一致性检查替代 D-AC02。
+- 当前 CLI 已按标准浏览器流程登录，合成 smoke App 的实际审计 API 核验已通过；
+  没有索取或读取 Production 私钥/session secret 来代替用户登录。
+  跨 Space 补充 smoke 后还须用该只读接口核验新增事件。
+- 观察窗口长度、archive/replay 的责任角色及保留/退休条件仍未明确；
+  暂保留所有 archive 与桥接，不设新 TTL、不清理遗留表。
+- D-S01/D-S02/D-S03 和 D-AC02/D-AC03 保持未完成；不提交 outer，不请求或记录
+  部署验收。已完成的 production run/tag 不是 Silvermoon lifecycle decision。
+
+## 上线后补证边界确认（2026-10-31）
+
+用户明确选择继续补齐剩余外层证据，观察窗口暂不指定、保持未验收，
+archive/replay 的保管责任角色为 Production 环境维护者。该边界已纳入 D-S03：
+继续保留、不设新 TTL 或清理期限；角色确认不等于删除授权或兼容退休。
+继续补齐独立 App 审计与跨 Space 重放证明，但不据此勾选观察与退休项目，
+不提交或接受 outer。
+
+已构建当前受支持的 `@unicas/admin-cli`，`pnpm --filter @unicas/admin-cli build`
+通过。控制面只读核验将使用当前 CLI 与明确的 Console origin，
+按标准浏览器登录取得会话，不提取 Production secrets、不打印身份或 session。
+
+## App 审计现场核验与跨 Space 补充 smoke（2026-10-31）
+
+当前受支持 CLI 的本地会话首次调用审计接口时收到授权失败；随后标准浏览器
+登录成功，callback 的 loopback 健康检查通过。没有自动授予 App 权限，没有
+读取或输出身份、cookie、CSRF、私钥或 customer records。
+对 Production 配置明确指定的合成 smoke App 调用 `app-audit root-events`
+与 `app-audit root-refs`：
+
+- Root events API：6 events、latestRevision/nextAfter 均为 89；
+  revision 严格递增，没有 `refDomain`，当前 events 只覆盖一个 Space。
+- Root refs API：合法 revision/refs/nextCursor 响应，refs 为空，
+  与 smoke cleanup 和已验证 D1 状态一致。
+
+这证明真实 App 审计接口与合成数据读取正常，但不能把一个 Space 的 events
+当作跨 Space 重放证明。补充受保护 service smoke 将先完成原有隔离与空 Space
+检查，再只在同一合成 child 的两个 designated smoke Spaces 上验证：
+相同 requestId 分别首次应用、App-global revision 递增、同 payload 的独立
+重放、不同 payload 的 409 IDEMPOTENCY_CONFLICT，以及重放/冲突不改变 revision
+或 projection。所有生产写入仍仅在新的 Production job 中执行。
+
+隔离 Space 名包含当前 RUN，而非复用固定隔离 Space。新增 probe 会在隔离
+Space 产生 leased metadata，即使 Root Ref 清理成功也不会立即删除该 metadata；
+使用每次独立的合成 Space，才能让下一次 smoke 的“隔离 Space 为空”检查成立，
+而不清空已有 Space、缩短 lease 或影响非 smoke 数据。该约束已加入入口回归。
+
+清理只选择本次生成的 child/parent hashes，并分别处理两个 smoke Spaces；
+一处失败仍尝试另一处，聚合错误显式传播，不能返回清理成功或恢复旧 snapshot。
+现有全部 retirement probes 保留；补充逻辑可独立测试，正式入口已接入。
+
+- `pnpm exec vitest run tests\deploy-plan.test.mjs tests\release-gated-ci.test.mjs tests\root-refs-production-cutover.test.mjs`：
+  92 tests 通过，包括请求身份错误跨 Space 合并、Space-local revision、冲突
+  被错误接受/返回 server error、清理响应丢失及非 smoke hashes 保留。
+- `git diff --check`：通过。
+
+补充 smoke 尚未在生产执行；须完成精确预检、正常 promotion 和新的 Production
+review 后，再读取 App 审计新增事件。观察窗口仍暂不指定，D-AC02/D-AC03 与
+outer submission/acceptance 仍未完成；不对完整已上线状态作失败回滚。
