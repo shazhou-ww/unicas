@@ -606,8 +606,9 @@ snapshot 或清空新事件；发布 smoke 接受的写入及 cleanup events 都
   拒绝和旧 endpoint/claim 拒绝；Spaces smoke 证明真实消费者与隔离。
   它们尚不证明同 App 跨 Space 的相同 requestId、不同 payload 冲突和 App
   审计 API 的完整现场行为，不能仅用本地或 D1 一致性检查替代 D-AC02。
-- 支持的 CLI 本地状态未登录；没有索取或读取 Production 私钥/session secret
-  来代替用户登录。App 审计接口的只读核验需要控制面授权。
+- 当前 CLI 已按标准浏览器流程登录，合成 smoke App 的实际审计 API 核验已通过；
+  没有索取或读取 Production 私钥/session secret 来代替用户登录。
+  跨 Space 补充 smoke 后还须用该只读接口核验新增事件。
 - 观察窗口长度、archive/replay 的责任角色及保留/退休条件仍未明确；
   暂保留所有 archive 与桥接，不设新 TTL、不清理遗留表。
 - D-S01/D-S02/D-S03 和 D-AC02/D-AC03 保持未完成；不提交 outer，不请求或记录
@@ -624,3 +625,36 @@ archive/replay 的保管责任角色为 Production 环境维护者。该边界�
 已构建当前受支持的 `@unicas/admin-cli`，`pnpm --filter @unicas/admin-cli build`
 通过。控制面只读核验将使用当前 CLI 与明确的 Console origin，
 按标准浏览器登录取得会话，不提取 Production secrets、不打印身份或 session。
+
+## App 审计现场核验与跨 Space 补充 smoke（2026-10-31）
+
+当前受支持 CLI 的本地会话首次调用审计接口时收到授权失败；随后标准浏览器
+登录成功，callback 的 loopback 健康检查通过。没有自动授予 App 权限，没有
+读取或输出身份、cookie、CSRF、私钥或 customer records。
+对 Production 配置明确指定的合成 smoke App 调用 `app-audit root-events`
+与 `app-audit root-refs`：
+
+- Root events API：6 events、latestRevision/nextAfter 均为 89；
+  revision 严格递增，没有 `refDomain`，当前 events 只覆盖一个 Space。
+- Root refs API：合法 revision/refs/nextCursor 响应，refs 为空，
+  与 smoke cleanup 和已验证 D1 状态一致。
+
+这证明真实 App 审计接口与合成数据读取正常，但不能把一个 Space 的 events
+当作跨 Space 重放证明。补充受保护 service smoke 将先完成原有隔离与空 Space
+检查，再只在同一合成 child 的两个 designated smoke Spaces 上验证：
+相同 requestId 分别首次应用、App-global revision 递增、同 payload 的独立
+重放、不同 payload 的 409 IDEMPOTENCY_CONFLICT，以及重放/冲突不改变 revision
+或 projection。所有生产写入仍仅在新的 Production job 中执行。
+
+清理只选择本次生成的 child/parent hashes，并分别处理两个 smoke Spaces；
+一处失败仍尝试另一处，聚合错误显式传播，不能返回清理成功或恢复旧 snapshot。
+现有全部 retirement probes 保留；补充逻辑可独立测试，正式入口已接入。
+
+- `pnpm exec vitest run tests\deploy-plan.test.mjs tests\release-gated-ci.test.mjs tests\root-refs-production-cutover.test.mjs`：
+  92 tests 通过，包括请求身份错误跨 Space 合并、Space-local revision、冲突
+  被错误接受/返回 server error、清理响应丢失及非 smoke hashes 保留。
+- `git diff --check`：通过。
+
+补充 smoke 尚未在生产执行；须完成精确预检、正常 promotion 和新的 Production
+review 后，再读取 App 审计新增事件。观察窗口仍暂不指定，D-AC02/D-AC03 与
+outer submission/acceptance 仍未完成；不对完整已上线状态作失败回滚。

@@ -9,6 +9,7 @@
 import { readFile } from "node:fs/promises";
 import { importPKCS8, SignJWT } from "jose";
 import { normalizeSmokeBaseUrl, resolveSmokeKeyPath } from "./smoke-target.mjs";
+import { cleanupSmokeRoots, runCrossSpaceRootRefSmoke } from "./root-ref-smoke.mjs";
 import {
   concatenateNodeBytes,
   computeNodeDigest,
@@ -250,6 +251,15 @@ async function main() {
       (await client.usage(ISOLATION_SPACE_ID)).nodeCount === 0,
       "isolation Space remains empty",
     );
+    const isolationLease = await uploadNode(client, ISOLATION_SPACE_ID, child);
+    assert(isolationLease.state === "ready", "lease synthetic child in the isolation Space");
+    await runCrossSpaceRootRefSmoke({
+      client,
+      hash: child.hash,
+      spaceIds: [SPACE_ID, ISOLATION_SPACE_ID],
+      requestId: `${RUN}:roots:cross-space`,
+      assert,
+    });
 
     const retiredToken = await sign({
       ver: SpaceCapabilityVersion,
@@ -270,17 +280,13 @@ async function main() {
     throw error;
   } finally {
     try {
-      const roots = await client.listRootRefs(SPACE_ID, { limit: 100 });
-      const changes = Object.fromEntries(roots.items
-        .filter((item) => (item.hash === parent.hash || item.hash === child.hash) && item.refCount > 0)
-        .map((item) => [item.hash, -item.refCount]));
-      if (Object.keys(changes).length > 0) {
-        const cleanup = await client.updateRootRefs(SPACE_ID, {
-          requestId: `${RUN}:roots:cleanup`,
-          changes,
-        });
-        assert(cleanup.success === true, "Root Ref cleanup releases smoke roots");
-      }
+      await cleanupSmokeRoots({
+        client,
+        spaceIds: [SPACE_ID, ISOLATION_SPACE_ID],
+        hashes: [parent.hash, child.hash],
+        requestId: `${RUN}:roots:cleanup`,
+        assert,
+      });
     } catch (cleanupError) {
       if (smokeFailure) console.error("Root Ref cleanup also failed", cleanupError);
       else throw cleanupError;
