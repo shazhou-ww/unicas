@@ -663,3 +663,25 @@ Space 产生 leased metadata，即使 Root Ref 清理成功也不会立即删除
 补充 smoke 尚未在生产执行；须完成精确预检、正常 promotion 和新的 Production
 review 后，再读取 App 审计新增事件。观察窗口仍暂不指定，D-AC02/D-AC03 与
 outer submission/acceptance 仍未完成；不对完整已上线状态作失败回滚。
+
+## 跨 Space 补充证据的受保护接续（2026-11-01）
+
+补充 smoke 的最终候选为 primary `5f4cb673deb3`，精确 HEAD 的
+`pnpm validate` 与同步后的 `pnpm check:ideas:remote` 均通过。
+[完整 Linux 预检 run 41217077383](https://github.com/shazhou-ww/unicas/actions/runs/41217077383)
+成功，validate job `124583748711` 用时 6m10s。
+[PR #69](https://github.com/shazhou-ww/unicas/pull/69) 的 Dependency review 与
+CodeQL 均通过；正常 merge 后 release `0ed5ebf713db` 的两父提交为
+`c32f6d5e136d` 与 `5f4cb673deb3`，合并前后 tree 与该已验证 main 完全一致。
+
+[补充 release run 41217704485](https://github.com/shazhou-ww/unicas/actions/runs/41217704485)
+的 validate job `124585588127` 于 2026-10-31 16:07:38Z 成功，包含精确 release
+检查及完整 `pnpm validate:release`。Production job `124586899020` 当前为
+`waiting`，pending deployment 要求既有 reviewer，尚未执行补充生产调用。
+观察脚本检测到审批门禁后已退出，没有保留 watcher或自动重放旧批准。
+
+既有 production run `41213520305` 与 tag 的上线成功状态保持不变。
+下一步为补充 run 的 Production review，然后核验跨 Space 同/异 payload
+probes、双 Space cleanup，并用只读 App 审计 API 验证新增事件。
+观察窗口仍按用户决定暂不指定，保持未验收；归档角色、无新 TTL、
+无 legacy 清理和仅 forward-fix 的边界不变。
