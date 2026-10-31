@@ -1,13 +1,14 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import { createRequire } from "node:module";
 import { afterEach, describe, expect, test } from "vitest";
 import {
-  parseCutoverArgs, RootRefCutoverError, runRootRefProductionCutover,
+  cutoverWranglerEnvironment, parseCutoverArgs, RootRefCutoverError, runRootRefProductionCutover,
 } from "../release/service/cut-over-root-refs.mjs";
 
 const BASELINE = readFileSync(join("packages", "service-cloudflare", "migrations", "app-space", "0001_baseline.sql"), "utf8");
@@ -78,6 +79,7 @@ function fake(db, { before, after, omitGuards } = {}) {
       response = "Private export at https://private.example/download?signature=do-not-log";
     } else if (request.args.includes("--command")) {
       const sql = request.args[request.args.indexOf("--command") + 1];
+      expect(sql.match(/\bUNION ALL\b/g) ?? []).toHaveLength(0);
       const rows = db.prepare(sql).all();
       response = JSON.stringify([{ success: true, results: rows }]);
     } else {
@@ -119,6 +121,42 @@ function assertPrivateCleanupAndLogs(run) {
 }
 
 describe("protected Root Ref cutover runner", () => {
+  test("real Wrangler emits machine-readable D1 output with captured private logging", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "unicas-cutover-cli-"));
+    try {
+      const config = join(directory, "wrangler.json");
+      await writeFile(config, JSON.stringify({
+        name: "synthetic-cutover-cli", compatibility_date: "2025-08-17",
+        d1_databases: [{
+          binding: "CAS_DB", database_name: "synthetic-cutover-cli",
+          database_id: "00000000-0000-0000-0000-000000000000",
+        }],
+      }));
+      const manifestPath = require.resolve("wrangler/package.json");
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+      const bin = resolve(dirname(manifestPath), manifest.bin.wrangler);
+      const env = cutoverWranglerEnvironment(directory, { ...process.env, WRANGLER_LOG: "error" });
+      expect(env.WRANGLER_LOG_PATH).toBe(join(directory, "wrangler.log"));
+      expect(env.WRANGLER_SEND_METRICS).toBe("false");
+      const result = spawnSync(process.execPath, [
+        bin, "d1", "execute", "CAS_DB", "--local", "--json",
+        "--command", "SELECT 1 AS diagnostic", "--config", config,
+        "--persist-to", join(directory, "state"),
+      ], {
+        cwd: directory, encoding: "utf8", timeout: 30_000,
+        stdio: ["ignore", "pipe", "pipe"], env,
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(0);
+      const batches = JSON.parse(result.stdout);
+      expect(batches).toEqual([expect.objectContaining({
+        success: true, results: [{ diagnostic: 1 }],
+      })]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   test("defaults to plan-only and accepts no database, account, URL or unapproved mode", async () => {
     const calls = [];
     expect(parseCutoverArgs([])).toEqual({ production: false });

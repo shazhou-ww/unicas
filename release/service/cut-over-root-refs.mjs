@@ -110,18 +110,19 @@ function validateSchema(rows) {
 }
 
 function countersSql(objects) {
-  return [...LEGACY, ...NEW].map(table => objects.has(table)
-    ? `SELECT '${table}' AS name, COUNT(*) AS n FROM ${table}`
-    : `SELECT '${table}' AS name, 0 AS n`).join(" UNION ALL ");
+  return `SELECT ${[...LEGACY, ...NEW].map(table => objects.has(table)
+    ? `(SELECT COUNT(*) FROM ${table}) AS ${table}`
+    : `0 AS ${table}`).join(",")}`;
 }
 
 function countsOf(rows) {
+  requireCondition(rows.length === 1);
   const counts = new Map();
-  for (const row of rows) {
-    requireCondition(typeof row.name === "string" && Number.isSafeInteger(row.n) && row.n >= 0);
-    counts.set(row.name, row.n);
+  for (const name of [...LEGACY, ...NEW]) {
+    const count = rows[0][name];
+    requireCondition(Number.isSafeInteger(count) && count >= 0);
+    counts.set(name, count);
   }
-  for (const name of [...LEGACY, ...NEW]) requireCondition(counts.has(name));
   return counts;
 }
 
@@ -175,12 +176,23 @@ function verificationSql({ partial = false, live = false, objects } = {}) {
     checks.push(`SELECT COUNT(*) AS n FROM cas_app_root_revisions AS r
       WHERE r.revision-r.checkpoint <> (SELECT COUNT(*) FROM cas_app_root_events AS e WHERE e.app_id=r.app_id)`);
   }
-  return checks.length === 0 ? "SELECT 0 AS check_id,0 AS n"
-    : checks.map((sql, index) => `SELECT ${index} AS check_id,n FROM (${sql})`).join(" UNION ALL ");
+  return checks.length === 0 ? "SELECT 0 AS check_0"
+    : `SELECT ${checks.map((sql, index) => `(${sql}) AS check_${index}`).join(",")}`;
 }
 
 function assertVerified(rows) {
-  requireCondition(rows.length > 0 && rows.every(row => row.n === 0));
+  requireCondition(rows.length === 1 && Object.keys(rows[0]).length > 0
+    && Object.entries(rows[0]).every(([name, count]) => /^check_\d+$/.test(name) && count === 0));
+}
+
+export function cutoverWranglerEnvironment(directory, environment = process.env) {
+  return {
+    ...environment,
+    WRANGLER_LOG_PATH: join(directory, "wrangler.log"),
+    // Wrangler suppresses even --json output at the error level.
+    WRANGLER_LOG: "log",
+    WRANGLER_SEND_METRICS: "false",
+  };
 }
 
 /** Fixed binding/config only. Child output, URLs and provider errors never reach the terminal. */
@@ -199,12 +211,7 @@ async function executeWrangler({ args, directory }) {
     maxBuffer: 16 * 1024 * 1024,
     timeout: 10 * 60 * 1000,
     stdio: ["ignore", "pipe", "pipe"],
-    env: {
-      ...process.env,
-      WRANGLER_LOG_PATH: join(directory, "wrangler.log"),
-      WRANGLER_LOG: "error",
-      WRANGLER_SEND_METRICS: "false",
-    },
+    env: cutoverWranglerEnvironment(directory),
   });
   requireCondition(result.status === 0 && !result.error);
   return result.stdout;
