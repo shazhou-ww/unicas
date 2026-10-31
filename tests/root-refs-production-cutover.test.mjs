@@ -4,6 +4,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
+import { createRequire } from "node:module";
 import { afterEach, describe, expect, test } from "vitest";
 import {
   parseCutoverArgs, RootRefCutoverError, runRootRefProductionCutover,
@@ -15,6 +16,8 @@ const HASH = "a".repeat(64);
 const CHANGES = JSON.stringify({ [HASH]: 2 });
 const PAYLOAD = createHash("sha256").update(CHANGES).digest("hex");
 const STORES = [];
+const require = createRequire(resolve("packages", "service-cloudflare", "package.json"));
+const { unstable_splitSqlQuery: splitSqlQuery } = require("wrangler");
 afterEach(() => { for (const db of STORES.splice(0)) db.close(); });
 
 function fixture() {
@@ -84,7 +87,7 @@ function fake(db, { before, after, omitGuards } = {}) {
       expect(sql).not.toMatch(/^\s*(?:BEGIN(?:\s+(?:IMMEDIATE|TRANSACTION))?|COMMIT|ROLLBACK)\s*;/m);
       expect(sql).not.toMatch(/(?:UPDATE|DELETE FROM)\s+cas_nodes/i);
       expect(sql).not.toMatch(/(?:DROP TABLE|time-travel restore)/i);
-      db.exec(sql);
+      for (const statement of splitSqlQuery(sql)) db.exec(statement);
       response = "Result: private SQL or identifiers must never be logged";
     }
     await after?.(request, db);
@@ -255,6 +258,52 @@ describe("protected Root Ref cutover runner", () => {
     expect(guards(db)).toHaveLength(0);
   });
 
+  test("ownership survives the installed Wrangler splitter without relying on SQL comments", async () => {
+    const db = fixture();
+    const run = fake(db, { before(request) {
+      if (request.stage === "export") throw new Error("stop before population");
+    } });
+    await expect(run.run()).rejects.toMatchObject({ stage: "export", recovery: "old-writer-restored" });
+    const fenceSql = run.sqls.find(row => row.stage === "fence").sql;
+    expect(fenceSql).not.toContain("/*");
+    expect(splitSqlQuery(fenceSql).join("\n")).toMatch(/SELECT 'root-ref-cutover-owner:[a-f0-9]{32}'/);
+    expect(guards(db)).toHaveLength(0);
+    assertPrivateCleanupAndLogs(run);
+  });
+
+  test("real local D1 retains literal owners and rolls back the fenced writer's entire batch", async () => {
+    const { Miniflare, convertV4MiniflareOptions } = await import("miniflare");
+    const source = fixture();
+    const fixtureSql = dump(source);
+    const run = fake(source);
+    await run.run();
+    const runtime = new Miniflare(convertV4MiniflareOptions({
+      modules: true, script: "", d1Databases: { DATABASE: "synthetic-root-ref-owner" },
+    }));
+    try {
+      const db = await runtime.getD1Database("DATABASE");
+      const guardSql = run.sqls.filter(row => ["fence", "archive"].includes(row.stage))
+        .map(row => row.sql).join("\n");
+      await db.batch(splitSqlQuery(`${fixtureSql}\n${guardSql}`).map(sql => db.prepare(sql)));
+      const guards = await db.prepare("SELECT sql FROM sqlite_master WHERE type='trigger' AND name GLOB 'cas_root_*_archive_*'").all();
+      expect(guards.results).toHaveLength(12);
+      for (const guard of guards.results) {
+        expect(guard.sql).toMatch(/SELECT 'root-ref-cutover-owner:[a-f0-9]{32}'/);
+        expect(guard.sql).not.toContain("/*");
+      }
+      await expect(db.batch([
+        db.prepare("UPDATE cas_nodes SET root_ref_count=3"),
+        db.prepare("INSERT INTO cas_root_domain_events VALUES ('synthetic-app','old',2,'/one','next',?,?,101)")
+          .bind(PAYLOAD, CHANGES),
+      ])).rejects.toThrow("read-only");
+      expect(await db.prepare("SELECT root_ref_count FROM cas_nodes").first("root_ref_count")).toBe(2);
+      expect(await db.prepare("SELECT COUNT(*) AS n FROM cas_root_domain_events").first("n")).toBe(1);
+    } finally {
+      await runtime.dispose();
+    }
+    assertPrivateCleanupAndLogs(run);
+  }, 30_000);
+
   test("a concurrent operation's fence is never claimed or removed", async () => {
     const db = fixture();
     let inserted = false;
@@ -262,12 +311,12 @@ describe("protected Root Ref cutover runner", () => {
       if (request.stage !== "fence" || inserted) return;
       inserted = true;
       db.exec(`CREATE TRIGGER cas_root_domain_events_archive_insert BEFORE INSERT ON cas_root_domain_events
-        BEGIN SELECT RAISE(ABORT, 'legacy Root Ref archive is read-only');
-        /* root-ref-cutover-owner:foreign */ END`);
+        BEGIN SELECT 'root-ref-cutover-owner:${"f".repeat(32)}';
+        SELECT RAISE(ABORT, 'legacy Root Ref archive is read-only'); END`);
     } });
     await expect(run.run()).rejects.toMatchObject({ recovery: "fence-preserved-manual-recovery" });
     expect(guards(db)).toHaveLength(1);
-    expect(db.prepare("SELECT sql FROM sqlite_master WHERE name='cas_root_domain_events_archive_insert'").get().sql).toContain("owner:foreign");
+    expect(db.prepare("SELECT sql FROM sqlite_master WHERE name='cas_root_domain_events_archive_insert'").get().sql).toContain(`owner:${"f".repeat(32)}`);
     expect(newRows(db)).toBe(0);
     assertPrivateCleanupAndLogs(run);
   });

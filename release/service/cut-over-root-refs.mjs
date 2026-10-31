@@ -46,12 +46,14 @@ function requireCondition(condition) {
 
 function guardSql(guard, owner = "") {
   return `CREATE TRIGGER ${guard.name} BEFORE ${guard.operation} ON ${guard.table}
-    BEGIN SELECT RAISE(ABORT, 'legacy Root Ref archive is read-only');
-    ${owner ? `/* root-ref-cutover-owner:${owner} */` : ""} END;`;
+    BEGIN ${owner ? `SELECT 'root-ref-cutover-owner:${owner}';` : ""}
+    SELECT RAISE(ABORT, 'legacy Root Ref archive is read-only'); END;`;
 }
 
 function normalized(sql) {
-  return sql.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\bIF\s+NOT\s+EXISTS\b/gi, "")
+  return sql.replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\bSELECT\s+'root-ref-cutover-owner:[a-f0-9]{32}'\s*;/g, "")
+    .replace(/\bIF\s+NOT\s+EXISTS\b/gi, "")
     .replace(/[\s;"`[\]]/g, "").toLowerCase();
 }
 
@@ -251,7 +253,8 @@ export async function runRootRefProductionCutover({
     requireCondition(GUARDS.every(guard => objects.has(guard.name))
       && APPEND_ONLY.every(name => objects.has(name)));
   };
-  const ownGuard = object => object?.sql?.includes(`/* root-ref-cutover-owner:${owner} */`) === true;
+  const ownGuard = object => object?.sql?.replace(/\/\*[\s\S]*?\*\//g, "")
+    .match(/\bSELECT\s+'root-ref-cutover-owner:([a-f0-9]{32})'\s*;/)?.[1] === owner;
   const recover = async () => {
     let objects = await inspect("recovery-inspect");
     const counts = await counters(objects, "recovery-inspect");

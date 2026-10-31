@@ -4,8 +4,8 @@
 
 重试修正版 `implementationRevision=b5d1b077bd5e` 已明确验收并同步到 primary，
 部署尚未完成。用户现已明确授权通过现有 Actions 通道发布并验证。
-按用户最新指示，先阶段性同步 primary 并暂停发布，待后续明确恢复。
-以下执行计划不表示现在继续合并 release 或操作生产。
+用户于 2026-10-31 在独立会话与隔离 worktree 中明确恢复推进；
+实际生产变更仍只允许通过现有受保护 Actions 与 Production 审批。
 本地构建与打包检查通过，但没有目标环境的
 snapshot、迁移/恢复演练或在线 smoke 证据，不能提交 `submitOuter`。
 隔离合成数据演练的 `D-S04`、`D-AC04` 已完成，其余 `D-*` 未完成；
@@ -236,3 +236,39 @@ CI 与文档部署因此固定全局安装确已发布、匹配当前记录格�
 所有旧 ledger、备份和请求桥接继续保留，不设置新 TTL 或清理归档。
 实际发布、观察窗口及保留政策未完成，因此 D-S01 至 D-S03 和对应标准
 保持未完成，不记录 `submitOuter` 或部署验收。
+
+## 恢复推进与执行语义核对（2026-10-31）
+
+新 worktree 初始 HEAD 与刷新后的 primary 均为 `fce0337f448c`，工作区干净；
+已将独立分支配置为跟踪 `origin/main`，没有操作原会话的工作区或私有备份。
+重新观测 #65：OPEN、无 auto-merge、精确 head 为该 primary，Dependency review
+与 CodeQL 均通过。`SPACES_RELEASE_ENABLED=true`；release 仍要求 PR 与两项
+检查，包含管理员；Production 仍要求 reviewer，未绕过或修改这些保护。
+完整 Linux 预检尚待新候选同步后运行，旧失败记录不代表当前候选通过。
+
+检查本项目 Wrangler 4.123.0 的实际执行代码：
+远程 `d1 execute --file` 将原文件流上传到 D1 import，再等待 ingestion 完成；
+并不调用本地 `unstable_splitSqlQuery`。该 splitter 会移除 trigger 内的注释，
+但这一事实不能证明远程 import 服务保留或删除注释。现将归属证明改为 trigger
+体内的无副作用 `SELECT 'root-ref-cutover-owner:<随机值>';`，不再依赖注释保留。
+schema 核验只容许固定格式的归属语句；恢复只能认领本次随机值，不能认领
+没有可验证归属的旧栅栏或其他操作的栅栏。已有 marker 的路径仍只读核验。
+
+测试 executor 现通过本项目的真实 Wrangler splitter 再执行 SQL；注释方案
+在此回归中失败，字面量方案通过。另以真实本地 D1 验证 12 个 archive trigger
+的字面量归属保留，以及旧 writer 的 aggregate/event 同批操作因栅栏整体回滚。
+同时保留丢失响应、部分写入、其他所有者、恢复读不可用、新事件及 marker 后
+禁止回滚等测试。没有执行 remote D1 或借助生产数据验证这一修复。
+
+- `pnpm check:release`：88 tests 通过，包含真实本地 D1 测试。
+- `pnpm check:repo`：Silvermoon worktree 校验、184 项仓库测试与 10 项发布门禁测试通过。
+- `pnpm validate`：quick tests、完整构建与 typecheck 均通过；不代替完整 Linux 发布预检。
+- `pnpm exec vitest run tests\root-refs-production-cutover.test.mjs tests\root-refs-cutover.test.mjs tests\release-gated-ci.test.mjs tests\agent-guidance.test.mjs`：
+  字面量修复后的首轮 54 tests 通过；随后新增真实本地 D1 证明已纳入上述完整套件。
+- 初次完整套件遇到测试初始化超时及查询包含 baseline trigger 的断言错误；
+  改为按需加载 runtime、只选择 archive trigger 后重跑通过，未放宽生产断言。
+
+这些结果只支持发布候选准入，不证明远程 import 服务或生产迁移已成功。
+Production job 仍必须读回 trigger 归属并验证冻结状态，任何不可证明的恢复
+继续保留栅栏并报告人工恢复条件。保留政策及观察窗口未完成，不勾选生产 D-*，
+不重开已接受的 ideal/inner gate，不提交或接受 outer。
