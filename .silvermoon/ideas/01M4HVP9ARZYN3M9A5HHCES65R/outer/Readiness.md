@@ -9,8 +9,9 @@
 本地与 Linux 完整预检通过；2026-10-31 受保护 job 已完成生产 Root Ref cutover
 并部署新 service；后续执行器和 smoke 修复已沿受保护通道发布。
 run `41213520305` 已完成 service/Spaces/site/docs 部署、全部既有 smoke、五个
-公开 origin 验证和 production tag。切换一致性已满足 D-AC01，但 App 审计 API、
-跨 Space 的同/异 payload 现场证明、观察窗口和归档交接仍须补齐，
+公开 origin 验证和 production tag。后续 run `41217704485` 已完成 App 审计 API、
+跨 Space 的同/异 payload 现场证明；D-S02 与 D-AC01 已完成，
+观察窗口和兼容退休/归档交接仍未完成，
 不能提交 `submitOuter`。生产 marker 后仅允许 forward-fix。
 隔离合成数据演练的 `D-S04`、`D-AC04` 已完成，其余 `D-*` 未完成；
 本页不是生产迁移、发布或 archive 清理授权。
@@ -685,3 +686,46 @@ CodeQL 均通过；正常 merge 后 release `0ed5ebf713db` 的两父提交为
 probes、双 Space cleanup，并用只读 App 审计 API 验证新增事件。
 观察窗口仍按用户决定暂不指定，保持未验收；归档角色、无新 TTL、
 无 legacy 清理和仅 forward-fix 的边界不变。
+
+## 跨 Space 现场补证完成（2026-11-01）
+
+用户完成补充 run `41217704485` 的 Production 审批后，该 run 于
+2026-10-31 16:25:37Z 完整成功，发布修订为
+`0ed5ebf713db1ebc4f79481c26db708c1bdc88cb`。
+既有 cutover 只读核验、service 与 Spaces smoke、site/docs、五个 public origins
+及最终 tag 均成功；没有重新迁移、snapshot restore 或旧 writer 回滚。
+
+service smoke 的新增现场断言全部通过：同 App 的相同 requestId 在两个 Space
+分别首次应用，App-global revision 递增；两个 Space 各自的同 payload 重放
+保留原 revision，不同 payload 返回 409 IDEMPOTENCY_CONFLICT；
+重放与冲突均不改变最新 revision 或对应 projection。原 retirement/isolation
+probes 保留并通过。双 Space 的合成 child/parent Root Ref 清理均成功，
+最终 `APP/SPACE SMOKE PASS`；Spaces 的 authenticate/hash/lease/upload/
+commit/verify/cleanup 全链路也输出 `result=pass`。
+
+使用当前授权 CLI 对唯一指定的合成 smoke App 做只读审计，after=89：
+新增 events 6、latestRevision/nextAfter=95；events 严格按 revision 递增，
+覆盖两个 Space，没有 refDomain。按 requestId 分组有两组跨 Space 配对，
+组内 revision 独立且不同；refs API 的 revision=95、retained refs=0。
+审计原始记录、hash、session 和身份未输出或持久化，只记录脱敏聚合证据。
+该结果与 service smoke 的首次应用/cleanup events 及 replay 无新事件的
+行为一致，补齐 D-S02 的真实读写、审计及幂等证明，因此勾选该步骤。
+
+发布后再次以只读 executor 运行固定 CAS_DB 的完整 `already-cutover`：
+四次查询通过，旧 events/requests 各 496、新 events 36、marker 1。
+archive guards、append-only、新 checkpoint/events/replay 与当前 aggregate/
+projection 全部一致，保留所有已接受事件和桥接，不作数据清理。
+
+远程 tag `production-20261031-651^{}` 精确指向该发布修订，
+annotated tag object 为 `f438b55d5161171d0a476ecb71fc1927b5d6b9c7`；
+没有移动 tag。公开 docs artifact 的 sourceRevision 同样精确匹配。
+这些是部署和补证结果，不是 Silvermoon submit/accept。
+
+### 接续边界
+
+即时业务契约证明与实际发布已完成；D-AC02 还要求观察窗口内的运行证据，
+用户明确暂不指定窗口，因此该 criterion 仍不勾选。
+D-S01/D-S03/D-AC03 的窗口、兼容使用核验及退休交接仍未完整满足。
+archive/replay 由 Production 环境维护者保管，继续保留、不增 TTL、不清理。
+当前无需再触发发布或反复重跑相同 smoke；等待明确观察窗口与退休条件，
+不记录 submitOuter、不请求或记录 acceptOuter，保持 deploying、未验收。
