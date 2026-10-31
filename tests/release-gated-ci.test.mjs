@@ -65,6 +65,21 @@ describe("release-gated workflow triggers", () => {
     expect(ci.jobs["deploy-production"].needs).toBe("validate");
   });
 
+  test("pins browser-verification jobs to the reviewed Playwright-supported runner", () => {
+    let browserJobs = 0;
+    for (const filename of ["ci.yml", "deploy-docs.yml", "publish-npm.yml"]) {
+      const workflow = parseYaml(readFileSync(join(ROOT, ".github", "workflows", filename), "utf8"));
+      for (const job of Object.values(workflow.jobs)) {
+        if (job.steps.some(step => /playwright install/u.test(step.run ?? ""))) {
+          browserJobs++;
+          expect(job["runs-on"]).toBe("ubuntu-24.04");
+        }
+      }
+    }
+    expect(browserJobs).toBe(3);
+    expect(ci.jobs["deploy-production"]["runs-on"]).toBe("ubuntu-latest");
+  });
+
   test("installs a device-level v2 validator before idea snapshot checks", () => {
     const docs = parseYaml(
       readFileSync(join(ROOT, ".github", "workflows", "deploy-docs.yml"), "utf8"),

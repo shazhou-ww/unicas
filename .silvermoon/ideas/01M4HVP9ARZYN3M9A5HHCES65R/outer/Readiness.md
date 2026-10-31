@@ -512,3 +512,28 @@ Spaces、site、docs、最终 public origin 检查与 deployment tag 均跳过�
 继续仅允许 forward-fix，新候选须经过精确完整预检、正常 promotion 与新的
 Production review。尚未完成整体部署或 outer gate，不恢复旧 snapshot，
 不清空新事件，不勾选未获得完整证据的生产 D-*。
+
+## hosted runner 迁移阻断与固定浏览器平台（2026-10-31）
+
+最后一个 probe 的修复已同步 primary `bccfd2ca8762`，精确 HEAD 的
+`pnpm validate` 与 remote Silvermoon 校验通过；
+[PR #68](https://github.com/shazhou-ww/unicas/pull/68) 已创建。
+[预检 run 41212542225](https://github.com/shazhou-ww/unicas/actions/runs/41212542225)
+在安装浏览器阶段失败，尚未运行 `pnpm validate:release`：
+`ubuntu-latest` 此次分配 Ubuntu 26.04，固定 Playwright 1.55.1 明确报告
+不支持该镜像，无法安装 chromium。不能将此 run 当作实现或完整预检通过。
+
+修复仅将所有执行 `playwright install` 的 job 固定到 Ubuntu 24.04：
+CI validate、documentation-only deployment 和 npm verification。
+保留现有 Playwright/SDK 版本与三浏览器完整验证，不改变依赖或兼容性基线，
+不绕过安装，不跳过测试；其他 Production、安全及恢复 job 的 runner 和
+环境门禁保持原样。workflow 回归枚举这三个浏览器 job 并验证固定镜像，
+同步更新稳定的 validation/release 文档。没有执行 npm release 或
+documentation-only production dispatch。
+
+- `pnpm exec vitest run tests\deploy-plan.test.mjs tests\release-gated-ci.test.mjs tests\npm-release.test.mjs tests\sdk-release.test.mjs`：
+  84 tests 通过，包含完整 smoke binding 正/反验证和 browser job 平台检查。
+- `git diff --check`：通过。
+
+新候选仍需同步 primary 后重跑精确完整 Linux CI。已有 #68 随 main 更新，
+不能合并旧失败候选或把镜像修复视为 Production 审批、数据恢复授权或 outer gate。
