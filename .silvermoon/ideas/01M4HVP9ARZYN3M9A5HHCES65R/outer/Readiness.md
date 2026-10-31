@@ -313,5 +313,32 @@ license 会让遗留 CRLF checkout 生成自洽却不跨平台的证据。正式
 - `pnpm check:release`：89 tests 通过；程序化对比确认刷新后的六包 bytes 与完整
   SHA-512 均逐项等于上述 Linux run 的实际值，API baseline 无变更。
 
-修复候选尚须正常同步并重新通过 Linux 完整 CI。#65 尚未合并，Production
-未触发；不以此修复代替任何精确 gate 或真实部署证据。
+SDK 修复已正常同步 primary `af1f403194a4`，精确 HEAD 的 pre-push
+`pnpm validate` 与 remote Silvermoon 校验通过；重新运行的 Linux
+[CI run 41179173939](https://github.com/shazhou-ww/unicas/actions/runs/41179173939)
+完整成功，包括 `pnpm validate:release`、SDK artifact 的全部断言及部署 dry-run。
+#65 的 Dependency review 与 CodeQL 均通过；没有放宽任何检查或修改 gate。
+
+## 受保护 promotion 与审批等待（2026-10-31）
+
+按既有发布授权，先用 `git merge-tree --write-tree` 验证 promotion tree 与
+已完整验证的 main `af1f403194a4` 一致，再以标准 PR merge 和精确 head
+条件正常合并 #65。没有 force push、admin bypass 或 auto-merge。
+发布修订 `af530f374a71` 的两个父提交依次为旧 release `14739e8e45bd` 与
+已验证 main `af1f403194a4`；合并后再次验证 tree 完全一致。
+
+[release CI run 41179560882](https://github.com/shazhou-ww/unicas/actions/runs/41179560882)
+的 validate job `124473992194` 于 2026-10-31 07:15:13Z 成功：
+`Verify release revision` 和完整 `pnpm validate:release` 均通过。
+这同时给出真正 promotion 修订上的独立验证，不把 main push 当作部署。
+
+随后观测到 `Deploy production` job `124474875009` 为 `waiting`，没有执行步骤；
+pending deployment 明确要求 Production 的既有 reviewer 审批。Agent 没有使用
+当前账号可审批这一权限代替 reviewer 的显式决定，没有运行 cutover、同步
+secrets、部署 Worker 或写生产 D1。监视该 run 的本地 watcher 已停止。
+GitHub 待审批 job 保留，下一步为 reviewer 审批后的受保护执行与真实 smoke；
+若外部状态改变，接续时重新观测，不重放本检查点的旧授权或状态。
+
+以上仅完成发布预检与 promotion。生产 D-*、观察窗口和保留政策仍未完成，
+ledger 不勾选；不以 CI 成功、PR merge 或待审批 job 代替 `submitOuter`、
+部署验收或新的精确生命周期 gate。
