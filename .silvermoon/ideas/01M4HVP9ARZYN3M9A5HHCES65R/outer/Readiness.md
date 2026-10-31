@@ -537,3 +537,26 @@ documentation-only production dispatch。
 
 新候选仍需同步 primary 后重跑精确完整 Linux CI。已有 #68 随 main 更新，
 不能合并旧失败候选或把镜像修复视为 Production 审批、数据恢复授权或 outer gate。
+
+## 最后一个 probe 与固定平台候选的审批接续（2026-10-31）
+
+browser platform 修复已同步 primary `20f2d59dd405`，精确 HEAD 的
+`pnpm validate` 与同步后 `pnpm check:ideas:remote` 均通过。
+[完整 Linux 预检 run 41212977120](https://github.com/shazhou-ww/unicas/actions/runs/41212977120)
+在固定 Ubuntu 24.04 上成功，validate job `124571638884` 用时 5m39s。
+#68 的 Dependency review 与 CodeQL 均通过，PR 模板中的证据已更新为精确成功
+结果；没有重跑不支持的平台、升级 Playwright 或降低任何检查。
+
+正常 merge #68 后 release `c32f6d5e136d` 的两父提交为 `ce8b12b211e8` 与
+已验证 main `20f2d59dd405`；merge 前后 tree 均与该 main 完全一致。
+[新 release run 41213520305](https://github.com/shazhou-ww/unicas/actions/runs/41213520305)
+的 validate job `124573219106` 成功，包含精确 release 校验和完整
+`pnpm validate:release`。
+
+Production job `124574376725` 当前为 `waiting`，pending deployment 要求既有
+reviewer；尚无新生产执行。观察脚本检测到审批门禁后已退出，没有保留 watcher，
+没有代为审批或重放用户对旧 run 的批准。
+下一步为该新 run 的 Production review，随后核验只读 `already-cutover`、
+完整 service smoke、剩余部署、public origins 与 tag。
+之前的 migration、新写入、cleanup events、archive/replay 全部保留；
+未完成的生产 D-* 和 outer submission/acceptance 不变。
