@@ -382,3 +382,29 @@ foreign fence、marker 后 forward-fix、archive 与新事件保护测试。
 与原 Production 审批执行；不能在本机切换数据，不能 rerun 旧修订假装修复
 已进入旧 run。此次执行器修复不改变已接受的 ideal/inner 合同，也不构成 outer
 submit/accept。生产 D-* 仍未完成。
+
+## 修复后的精确预检与第二次审批等待（2026-10-31）
+
+执行器修复已同步 primary `9f744f13b1b9`；其精确 HEAD 的 `pnpm validate`
+与同步后的 `pnpm check:ideas:remote` 均通过。
+[Linux CI run 41180937569](https://github.com/shazhou-ww/unicas/actions/runs/41180937569)
+完整成功，validate job `124478025366` 用时 6m23s，包括实际 Wrangler CLI
+回归、完整 release 套件、SDK artifacts 与所有部署 dry-run。
+
+新 [promotion PR #66](https://github.com/shazhou-ww/unicas/pull/66) 使用仓库 PR
+模板并记录精确验证结果；Dependency review 和 CodeQL 均通过。按既有发布
+授权验证 tree 后正常 merge，未启用 auto-merge 或使用 bypass。
+release `61b4f060b864` 的两个父提交依次为 `af530f374a71` 与已验证的
+main `9f744f13b1b9`，合并前后 tree 均与该 main 一致。
+
+[新 release CI run 41181407106](https://github.com/shazhou-ww/unicas/actions/runs/41181407106)
+的 validate job `124479389683` 于 07:44:57Z 成功，包含精确 promotion
+验证与完整 `pnpm validate:release`。随后 Production job `124480595703`
+为 `waiting`，pending deployment 要求既有 reviewer 审批，尚无执行步骤。
+Agent 没有代替 reviewer 审批，也没有将用户针对旧 run 的批准重放到新 run。
+本地 watcher 已停止，待审批 job 保留。
+
+下一步是在该新 run 上完成 Production review，然后重新观测并检查受保护
+job 的真实 cutover、恢复分类、各部署和 smoke 结果。失败就精确诊断，不
+盲目 rerun 或绕过审批；不可证明的恢复仍保留栅栏。
+目前没有生产迁移或新版上线证明，不勾选生产 D-*，不提交或接受 outer。
