@@ -145,6 +145,11 @@ export async function normalizeGzipOs(archivePath) {
   await writeFile(archivePath, archive);
 }
 
+export function assertSdkLicenseLineEndings(license) {
+  assert(!license.includes(0x0d),
+    "SDK LICENSE must use LF line endings; use a checkout matching .gitattributes before preparing release evidence");
+}
+
 function exportTargets(value) {
   if (typeof value === "string") return [value];
   if (value === null || typeof value !== "object") return [];
@@ -393,6 +398,8 @@ async function copyArtifacts(artifacts, outputDir) {
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const matrix = await readJson(MATRIX_PATH);
+  const rootLicense = await readFile(join(ROOT, "LICENSE"));
+  assertSdkLicenseLineEndings(rootLicense);
   const temporaryRoot = await mkdtemp(join(tmpdir(), "unicas-sdk-release-"));
   console.log(`sdk: temporary release root ${temporaryRoot}`);
   try {
@@ -400,7 +407,6 @@ async function main() {
     await syncSdkApiBaseline(ROOT, matrix, options.mode);
     const firstRound = await packRound(matrix, join(temporaryRoot, "round-a"));
     const secondRound = await packRound(matrix, join(temporaryRoot, "round-b"));
-    const rootLicense = await readFile(join(ROOT, "LICENSE"));
     const openApiBytes = await readFile(join(ROOT, "packages", "space-protocol", "openapi", "app-space-v1.openapi.json"));
     const packageEvidence = [];
     for (let index = 0; index < firstRound.length; index += 1) {

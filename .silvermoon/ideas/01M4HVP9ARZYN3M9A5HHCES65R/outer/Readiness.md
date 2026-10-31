@@ -272,3 +272,46 @@ schema 核验只容许固定格式的归属语句；恢复只能认领本次随�
 Production job 仍必须读回 trigger 归属并验证冻结状态，任何不可证明的恢复
 继续保留栅栏并报告人工恢复条件。保留政策及观察窗口未完成，不勾选生产 D-*，
 不重开已接受的 ideal/inner gate，不提交或接受 outer。
+
+## Linux 完整预检与 SDK 证据修复（2026-10-31）
+
+栅栏修复已正常同步 primary `796481061ac6`，精确 HEAD 的 pre-push
+`pnpm validate`、remote Silvermoon 校验均通过。手动 dispatch 的非生产
+[CI run 41177957838](https://github.com/shazhou-ww/unicas/actions/runs/41177957838)
+在 job `124469324009` 失败：quick tests、build、typecheck、发布测试、
+Worker suite、外部 SDK Node 与 Chromium/Firefox/WebKit smoke 均已通过，
+但 `pnpm release:sdk:artifacts` 检出六包 manifest 大小和 integrity 不匹配。
+这不是 Node deprecation 警告，也不证明当前候选已通过完整发布验证。
+
+在同一新 Windows worktree 用当前 pnpm 11.24.0 打包，六包的实际大小与完整
+SHA-512 均与该 Linux run 一致。进一步只在内存中将每包 tar 内 `LICENSE`
+由 LF 转为 CRLF、重算对应 tar header 并按原参数压缩，就精确重现旧 manifest
+全部六组大小与 SHA-512。源码、版本、导出及依赖未改变；不是 tar/gzip 的
+平台头差异，而是旧证据捕获了 CRLF 许可证正文。
+
+| 包 | 旧证据 CRLF bytes | 当前 Windows/Linux LF bytes |
+| --- | --- | --- |
+| `@unicas/codec` | 7580 | 7562 |
+| `@unicas/space-protocol` | 24421 | 24403 |
+| `@unicas/space-client` | 9757 | 9738 |
+| `@unicas/space-blob-client` | 9828 | 9809 |
+| `@unicas/space-browser-cache` | 7632 | 7613 |
+| `@unicas/space-file-client` | 8791 | 8771 |
+
+`.gitattributes` 已规定根 `LICENSE` 为 LF，但仅比较 checkout 与其自身 packed
+license 会让遗留 CRLF checkout 生成自洽却不跨平台的证据。正式 prepare/check
+入口现于 build/pack 前明确拒绝 CRLF，增加回归测试；不静默改写源码或 tarball，
+不删除大小、完整 integrity、双次打包、消费者、API baseline 或文件内容断言。
+在当前符合 attributes 的 Windows checkout 运行正式 `pnpm release:sdk:prepare`
+刷新 manifest，再独立执行 `pnpm release:sdk:artifacts` 验证。
+
+- `pnpm exec vitest run tests\sdk-release.test.mjs tests\sdk-readiness.test.mjs tests\npm-release.test.mjs`：
+  37 tests 通过。
+- `pnpm release:sdk:prepare`：通过，六包双次打包、声明/API baseline、外部 Node
+  和三浏览器验证通过；仅生成本地证据，没有 npm publication。
+- `pnpm release:sdk:artifacts`：独立重建和检查通过；同样验证所有完整断言。
+- `pnpm check:release`：89 tests 通过；程序化对比确认刷新后的六包 bytes 与完整
+  SHA-512 均逐项等于上述 Linux run 的实际值，API baseline 无变更。
+
+修复候选尚须正常同步并重新通过 Linux 完整 CI。#65 尚未合并，Production
+未触发；不以此修复代替任何精确 gate 或真实部署证据。
