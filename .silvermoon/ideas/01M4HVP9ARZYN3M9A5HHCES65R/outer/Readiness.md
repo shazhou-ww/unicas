@@ -313,5 +313,72 @@ license 会让遗留 CRLF checkout 生成自洽却不跨平台的证据。正式
 - `pnpm check:release`：89 tests 通过；程序化对比确认刷新后的六包 bytes 与完整
   SHA-512 均逐项等于上述 Linux run 的实际值，API baseline 无变更。
 
-修复候选尚须正常同步并重新通过 Linux 完整 CI。#65 尚未合并，Production
-未触发；不以此修复代替任何精确 gate 或真实部署证据。
+SDK 修复已正常同步 primary `af1f403194a4`，精确 HEAD 的 pre-push
+`pnpm validate` 与 remote Silvermoon 校验通过；重新运行的 Linux
+[CI run 41179173939](https://github.com/shazhou-ww/unicas/actions/runs/41179173939)
+完整成功，包括 `pnpm validate:release`、SDK artifact 的全部断言及部署 dry-run。
+#65 的 Dependency review 与 CodeQL 均通过；没有放宽任何检查或修改 gate。
+
+## 受保护 promotion 与审批等待（2026-10-31）
+
+按既有发布授权，先用 `git merge-tree --write-tree` 验证 promotion tree 与
+已完整验证的 main `af1f403194a4` 一致，再以标准 PR merge 和精确 head
+条件正常合并 #65。没有 force push、admin bypass 或 auto-merge。
+发布修订 `af530f374a71` 的两个父提交依次为旧 release `14739e8e45bd` 与
+已验证 main `af1f403194a4`；合并后再次验证 tree 完全一致。
+
+[release CI run 41179560882](https://github.com/shazhou-ww/unicas/actions/runs/41179560882)
+的 validate job `124473992194` 于 2026-10-31 07:15:13Z 成功：
+`Verify release revision` 和完整 `pnpm validate:release` 均通过。
+这同时给出真正 promotion 修订上的独立验证，不把 main push 当作部署。
+
+随后观测到 `Deploy production` job `124474875009` 为 `waiting`，没有执行步骤；
+pending deployment 明确要求 Production 的既有 reviewer 审批。Agent 没有使用
+当前账号可审批这一权限代替 reviewer 的显式决定，没有运行 cutover、同步
+secrets、部署 Worker 或写生产 D1。监视该 run 的本地 watcher 已停止。
+GitHub 待审批 job 保留，下一步为 reviewer 审批后的受保护执行与真实 smoke；
+若外部状态改变，接续时重新观测，不重放本检查点的旧授权或状态。
+
+以上仅完成发布预检与 promotion。生产 D-*、观察窗口和保留政策仍未完成，
+ledger 不勾选；不以 CI 成功、PR merge 或待审批 job 代替 `submitOuter`、
+部署验收或新的精确生命周期 gate。
+
+## 审批后 inspect 失败与真实执行器修复（2026-10-31）
+
+用户明确完成 Production 审批后，run `41179560882` 的生产 job 于
+07:22:51Z 开始，07:23:09Z 在 cutover 的 `inspect` 阶段失败并报告
+`no-remote-mutation`。全部 secrets 同步、Worker 部署、issuer 切换、smoke、
+public origin 验证和 deployment tag 均跳过。没有开始 bookmark、writer fence
+或数据迁移，不能把审批或 validate 成功当作部署完成。
+
+在同一 Production account、固定 `CAS_DB` / `unicas-tenant` 上仅做只读诊断：
+
+1. Wrangler 4.123.0 在 `WRANGLER_LOG=error` 下执行 `SELECT 1 --json`：
+   exit 0、stdout 0 bytes；在正常 `log` 级别下 exit 0 且 JSON 有效。
+   runner 原先将静默日志级别误用于机器输出，导致 inspect 解析空串失败。
+   现恢复正常日志级别，仍用 pipe 私有捕获 stdout/stderr、日志进入受限临时
+   目录并退出清理；不把 provider 正文、私有下载 URL 或客户记录输出。
+2. 去掉上述阻断后，真实 schema 核验通过，但九段 `UNION ALL` counter 查询
+   被远程 D1 拒绝：`too many terms in compound SELECT: SQLITE_ERROR [code: 7500]`。
+   本地 SQLite fixture 未施加该远程限制。现 counters 与全部 verification
+   查询使用一个 SELECT 中的标量子查询，每个原有检查仍独立验证且必须为 0；
+   不删减检查、不在失败时返回默认成功。
+3. 修复后以真实 Wrangler 调用 runner 的原 schema/counters 准入，executor
+   强制仅允许 `d1 execute --remote --json --command`，禁止文件执行及所有
+   后续阶段。两次只读查询通过，runner 到达 `bookmark` 后因该只读边界主动
+   停止，结果为 `inspectionPassed=true`、`no-remote-mutation`。
+   这证明当前真实 schema 与初始新状态准入通过，不证明迁移已经执行。
+
+新增真实本地 Wrangler CLI JSON 回归：继承错误日志级别时 helper 仍明确设置
+正常日志级别，验证合成 D1 `SELECT 1` 的完整机器结果；子进程输出不继承终端。
+所有 fake executor 查询均断言不再使用宽 `UNION ALL`，保留完整 recovery、
+foreign fence、marker 后 forward-fix、archive 与新事件保护测试。
+
+- `pnpm check:release`：90 tests 通过。
+- `pnpm exec vitest run tests\release-gated-ci.test.mjs`：10 tests 通过。
+- `git diff --check`：通过。
+
+候选仍须正常同步 primary、通过精确 Linux 完整预检，再经新 main→release PR
+与原 Production 审批执行；不能在本机切换数据，不能 rerun 旧修订假装修复
+已进入旧 run。此次执行器修复不改变已接受的 ideal/inner 合同，也不构成 outer
+submit/accept。生产 D-* 仍未完成。
