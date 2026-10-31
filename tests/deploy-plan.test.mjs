@@ -1281,6 +1281,8 @@ describe("standalone deployment plan", () => {
     expect(appSpaceSmoke).toContain("runCrossSpaceRootRefSmoke({");
     expect(appSpaceSmoke).toContain("cleanupSmokeRoots({");
     expect(appSpaceSmoke).toContain("spaceIds: [SPACE_ID, ISOLATION_SPACE_ID]");
+    expect(appSpaceSmoke).toContain('const ISOLATION_SPACE_ID = `${SPACE_ID}-isolation-${RUN}`;');
+    expect(appSpaceSmoke.indexOf("const RUN =")).toBeLessThan(appSpaceSmoke.indexOf("const ISOLATION_SPACE_ID ="));
     expect(appSpaceSmoke).toContain("GC keeps current leased nodes");
     expect(appSpaceSmoke).not.toContain("gc.deleted === 0");
     expect(appSpaceSmoke).toContain("cross-Space read");

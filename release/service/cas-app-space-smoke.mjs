@@ -41,9 +41,9 @@ const AUDIENCE = requiredEnv("UNICAS_SMOKE_AUDIENCE");
 const KID = requiredEnv("UNICAS_SMOKE_KID");
 const KEY_FILE = requiredEnv("UNICAS_SMOKE_KEY_FILE");
 const SPACE_ID = process.env.UNICAS_SMOKE_SPACE_ID ?? "/deploy-smoke";
-const ISOLATION_SPACE_ID = `${SPACE_ID}-isolation`;
 const NODE_CONTENT_TYPE = "application/vnd.unidocs.cas-node.v1";
 const RUN = `${process.pid}-${Date.now()}`;
+const ISOLATION_SPACE_ID = `${SPACE_ID}-isolation-${RUN}`;
 
 function requiredEnv(name) {
   const value = process.env[name];

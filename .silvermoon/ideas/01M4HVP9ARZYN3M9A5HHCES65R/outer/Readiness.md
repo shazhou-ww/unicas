@@ -646,6 +646,11 @@ archive/replay 的保管责任角色为 Production 环境维护者。该边界�
 重放、不同 payload 的 409 IDEMPOTENCY_CONFLICT，以及重放/冲突不改变 revision
 或 projection。所有生产写入仍仅在新的 Production job 中执行。
 
+隔离 Space 名包含当前 RUN，而非复用固定隔离 Space。新增 probe 会在隔离
+Space 产生 leased metadata，即使 Root Ref 清理成功也不会立即删除该 metadata；
+使用每次独立的合成 Space，才能让下一次 smoke 的“隔离 Space 为空”检查成立，
+而不清空已有 Space、缩短 lease 或影响非 smoke 数据。该约束已加入入口回归。
+
 清理只选择本次生成的 child/parent hashes，并分别处理两个 smoke Spaces；
 一处失败仍尝试另一处，聚合错误显式传播，不能返回清理成功或恢复旧 snapshot。
 现有全部 retirement probes 保留；补充逻辑可独立测试，正式入口已接入。
