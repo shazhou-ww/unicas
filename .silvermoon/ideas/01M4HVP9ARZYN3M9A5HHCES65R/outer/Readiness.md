@@ -612,3 +612,15 @@ snapshot 或清空新事件；发布 smoke 接受的写入及 cleanup events 都
   暂保留所有 archive 与桥接，不设新 TTL、不清理遗留表。
 - D-S01/D-S02/D-S03 和 D-AC02/D-AC03 保持未完成；不提交 outer，不请求或记录
   部署验收。已完成的 production run/tag 不是 Silvermoon lifecycle decision。
+
+## 上线后补证边界确认（2026-10-31）
+
+用户明确选择继续补齐剩余外层证据，观察窗口暂不指定、保持未验收，
+archive/replay 的保管责任角色为 Production 环境维护者。该边界已纳入 D-S03：
+继续保留、不设新 TTL 或清理期限；角色确认不等于删除授权或兼容退休。
+继续补齐独立 App 审计与跨 Space 重放证明，但不据此勾选观察与退休项目，
+不提交或接受 outer。
+
+已构建当前受支持的 `@unicas/admin-cli`，`pnpm --filter @unicas/admin-cli build`
+通过。控制面只读核验将使用当前 CLI 与明确的 Console origin，
+按标准浏览器登录取得会话，不提取 Production secrets、不打印身份或 session。
