@@ -454,3 +454,24 @@ append-only constraints、当前 aggregate/projection、checkpoint/events 和 re
 review。新 job 的 cutover 必须走只读 `already-cutover` 验证，不覆盖已接受新事件。
 生产迁移的部分证据已真实取得，但完整部署、在线 smoke、观察窗口与保留政策
 尚未完成，生产 D-* 暂不勾选，不提交或接受 outer。
+
+## smoke forward-fix 准入与第三次审批等待（2026-10-31）
+
+smoke 路径修复已同步 primary `c58bf77e5d9c`，其精确 HEAD 的 `pnpm validate`
+及同步后的 `pnpm check:ideas:remote` 均通过。
+[完整 Linux CI run 41182687325](https://github.com/shazhou-ww/unicas/actions/runs/41182687325)
+成功，validate job `124483168394` 用时 6m5s。
+[PR #67](https://github.com/shazhou-ww/unicas/pull/67) 的 Dependency review 与
+CodeQL 通过；正常 merge 后 release `ce8b12b211e8` 的两父提交为
+`61b4f060b864` 与 `c58bf77e5d9c`，tree 与该已验证 main 完全一致。
+
+[新 release run 41183157999](https://github.com/shazhou-ww/unicas/actions/runs/41183157999)
+的 validate job `124484546051` 成功，包含精确 release 校验和完整
+`pnpm validate:release`。Production job `124485858307` 当前为 `waiting`，
+pending deployment 要求既有 reviewer；没有代为审批或重放旧批准。
+等待脚本在检测到审批门禁后已退出，没有保留 watcher。
+
+下一步为该新 run 的 Production review。审批后应先验证 cutover
+`already-cutover`，再检查 service smoke 与 Spaces/site/docs 部署、
+public origin 和最终 tag；保留全部新事件与归档，禁止旧 snapshot restore。
+当前生产 cutover 与 service 已有证据，但完整发布和 outer 验收仍未完成。
