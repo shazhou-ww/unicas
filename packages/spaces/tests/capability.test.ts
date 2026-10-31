@@ -29,7 +29,6 @@ describe("issueSpaceCapability", () => {
       provider: "google",
       appId: "app-a",
       spaceId: "/space-a",
-      refDomain: "spaces",
     }, ["read", "write"], () => 1_000_000);
     const publicKey = await importJWK(await exportJWK(pair.publicKey), CapabilityAlgorithm);
     const verified = await jwtVerify(token, publicKey, {
@@ -43,7 +42,6 @@ describe("issueSpaceCapability", () => {
     expect(verified.payload).toMatchObject({
       ver: SpaceCapabilityVersion,
       sub: "principal-a",
-      refDomain: "spaces",
       grants: [
         {
           selector: "/space-a",
@@ -75,7 +73,6 @@ describe("issueSpaceCapability", () => {
       provider: "google",
       appId: "app-a",
       spaceId: "/space-a",
-      refDomain: "spaces",
     }, [])).rejects.toThrow("At least one Space access permission is required");
   });
 });

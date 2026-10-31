@@ -210,8 +210,8 @@ describe("unicas mcp (stdio server)", () => {
       id: 4,
       method: "tools/call",
       params: {
-        name: "list_space_root_domain_refs",
-        arguments: { appId: "cas_app_a", refDomain: "doc", spaceId: "space-1" },
+        name: "list_app_root_refs",
+        arguments: { appId: "cas_app_a", spaceId: "space-1" },
       },
     })}\n`);
     expect((await reader.next()).result).toMatchObject({

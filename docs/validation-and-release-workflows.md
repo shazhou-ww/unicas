@@ -4,6 +4,33 @@ UniCAS keeps validation ownership in reproducible package and root scripts.
 GitHub Actions owns triggers, permissions, protected environments, concurrency,
 and exact revision checks; it does not maintain a second test command list.
 
+## Preset task orchestration
+
+The repository inherits its baseline task graph from
+[`preset-cloudflare-fullstack`](https://github.com/shazhou-ww/preset-cloudflare-fullstack).
+`pnpm check` delegates to the existing `pnpm validate` gate. Turbo executes
+workspace builds, package tests, typechecks, and cleanup, with dependency builds
+ordered before consumers. The service build also explicitly depends on the
+administrator browser build; standalone package scripts retain their own asset
+preparation.
+
+Tasks run serially because existing TypeScript build-mode commands can write
+shared project-reference outputs. Environment variables are forwarded in loose
+mode, matching the previous recursive pnpm commands. Task caching is disabled:
+validation must execute every time, and runtime-specific test inputs and
+generated source assets must not become success-shaped cache hits. No remote
+cache is configured.
+
+The task runner is pinned to Turbo 2.9.14, the first patched version for
+GHSA-hcf7-66rw-9f5r and GHSA-3qcw-2rhx-2726. This security update overrides
+the inherited preset's 2.7.2 pin without changing the task graph, serial
+execution, environment forwarding, or validation boundaries.
+
+The quick gate still excludes the slow Cloudflare adapter test suite, not its
+build. Release validation, exact-revision checks, protected environments, and
+external-write boundaries are unchanged. The preset's demo applications,
+formatting/lint stack, and push-triggered deployment workflow are not imported.
+
 ## Supported matrix
 
 | Path | Command or trigger | Added guarantee | External writes |

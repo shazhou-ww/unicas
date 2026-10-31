@@ -20,7 +20,6 @@ const AGENTS_GUIDE = join(ROOT, "AGENTS.md");
 const GUIDANCE_README = join(AGENTS_DIR, "README.md");
 const EXPECTED_SKILLS = [
   "business-data-model-review",
-  "silvermoon",
   "ui-change-review",
   "unicas-cli",
   "unicas-observability",
@@ -30,10 +29,6 @@ const LOCKED_SKILLS = {
   "business-data-model-review": {
     source: "shazhou-ww/skills",
     sourceType: "github",
-  },
-  silvermoon: {
-    source: "./node_modules/silvermoon/skills",
-    sourceType: "local",
   },
   "ui-change-review": {
     source: "shazhou-ww/skills",
@@ -86,12 +81,6 @@ function skillMetadata(skillName) {
   const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(content);
   if (!frontmatter) throw new Error(`${skillName}/SKILL.md has no YAML frontmatter`);
   return parse(frontmatter[1]);
-}
-
-function relativeFiles(directory) {
-  return walkFiles(directory)
-    .map((filePath) => toPosix(relative(directory, filePath)))
-    .sort();
 }
 
 function localMarkdownLinks(filePath) {
@@ -173,16 +162,16 @@ describe("canonical Agent guidance", () => {
     expect(guidance).toContain("--agent universal");
   });
 
-  test("keeps the Silvermoon registration identical to its packaged canonical skill", () => {
-    const registered = join(SKILLS_DIR, "silvermoon");
-    const canonical = join(ROOT, "node_modules", "silvermoon", "skills", "silvermoon");
-    const files = relativeFiles(canonical);
-
-    expect(relativeFiles(registered)).toEqual(files);
-    for (const filePath of files) {
-      expect(readFileSync(join(registered, filePath), "utf8"))
-        .toBe(readFileSync(join(canonical, filePath), "utf8"));
+  test("keeps Silvermoon runtime and skill registration at the device boundary", () => {
+    const manifest = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+    for (const field of ["dependencies", "devDependencies", "optionalDependencies"]) {
+      expect(manifest[field] ?? {}).not.toHaveProperty("silvermoon");
     }
+    expect(existsSync(join(SKILLS_DIR, "silvermoon"))).toBe(false);
+    const guidance = readFileSync(GUIDANCE_README, "utf8");
+    expect(guidance).toContain("npm install --global silvermoon@0.5.0-canary.50.g7e6b2e80af33");
+    expect(guidance).toContain("personal discovery link");
+    expect(readFileSync(AGENTS_GUIDE, "utf8")).toContain("device-level `silvermoon` skill");
   });
 
   test("resolves every local link in active Agent guidance", () => {
@@ -208,7 +197,7 @@ describe("canonical Agent guidance", () => {
     expect(brokenLinks).toEqual([]);
   });
 
-  test("routes package and stack edits through the complete boundary skill", () => {
+  test("routes package and release edits through the complete boundary skill", () => {
     const agentsGuide = readFileSync(AGENTS_GUIDE, "utf8");
     const boundarySkill = readFileSync(
       join(SKILLS_DIR, "unicas-package-boundaries", "SKILL.md"),
@@ -216,7 +205,7 @@ describe("canonical Agent guidance", () => {
     );
 
     expect(agentsGuide).toContain(
-      "Before changing any file under `packages/**` or `stacks/unicas/**`, load and",
+      "Before changing any file under `packages/**` or `release/**`, load and",
     );
     expect(agentsGuide).toContain(
       ".agents/skills/unicas-package-boundaries/SKILL.md",

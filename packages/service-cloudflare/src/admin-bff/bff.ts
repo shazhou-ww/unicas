@@ -127,14 +127,6 @@ function isLoopbackRedirect(value: string | null): value is string {
   }
 }
 
-/** Read-side refDomain validation; reserved migration domains are readable. */
-function validateAuditRefDomain(value: string): string | null {
-  if (value.length === 0) return "refDomain must not be empty";
-  if (value.length > 64) return "refDomain is too long";
-  if (!/^[a-z0-9_][a-z0-9_:.-]*$/.test(value)) return "refDomain is malformed";
-  return null;
-}
-
 export function createAdminBff(options: CreateAdminBffOptions): (request: Request) => Promise<Response> {
   const { config } = options;
   const now = config.now ?? (() => Date.now());
@@ -309,8 +301,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
     if (appRoute?.operation === "listControlAuditEvents") {
       return handleAccountAppAudit(request, url, appRoute.appId);
     }
-    if (appRoute?.operation === "listRefDomains" || appRoute?.operation === "listRootDomainRefs"
-      || appRoute?.operation === "listRootDomainEvents") {
+    if (appRoute?.operation === "listRootRefs" || appRoute?.operation === "listRootEvents") {
       return handleAccountAuditRead(request, url, appRoute);
     }
     if (appRoute?.operation === "listPeople") return handlePeople(request, appRoute.appId);
@@ -1853,7 +1844,7 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
   async function handleAccountAuditRead(
     request: Request,
     url: URL,
-    route: AppAdminRoute & { operation: "listRefDomains" | "listRootDomainRefs" | "listRootDomainEvents" },
+    route: AppAdminRoute & { operation: "listRootRefs" | "listRootEvents" },
   ): Promise<Response> {
     const auth = await requireAuthenticated(request);
     if (auth instanceof Response) return auth;
@@ -1868,23 +1859,14 @@ export function createAdminBff(options: CreateAdminBffOptions): (request: Reques
       }
       throw error;
     }
-    if (route.operation !== "listRefDomains") {
-      const domainError = validateAuditRefDomain(route.refDomain);
-      if (domainError) return adminErrorResponse(CasAdminErrorCodes.INVALID_REQUEST, domainError);
-    }
     if (!options.auditReader) {
       return adminErrorResponse(CasAdminErrorCodes.SERVICE_UNAVAILABLE, NOT_AVAILABLE_MESSAGE);
     }
-    const rpcPath = route.operation === "listRefDomains"
-      ? "/_internal/audit/domains"
-      : route.operation === "listRootDomainRefs"
-        ? "/_internal/audit/refs"
-        : "/_internal/audit/events";
+    const rpcPath = route.operation === "listRootRefs" ? "/_internal/audit/refs" : "/_internal/audit/events";
     const rpcUrl = new URL(`https://cas-audit.internal${rpcPath}`);
-    rpcUrl.searchParams.set("stackId", route.appId);
-    if (route.operation !== "listRefDomains") rpcUrl.searchParams.set("refDomain", route.refDomain);
+    rpcUrl.searchParams.set("appId", route.appId);
     const query = queryFromUrl(url);
-    if (query.spaceId !== undefined) rpcUrl.searchParams.set("tenantId", query.spaceId);
+    if (query.spaceId !== undefined) rpcUrl.searchParams.set("spaceId", query.spaceId);
     if (query.limit !== undefined) rpcUrl.searchParams.set("limit", query.limit);
     if (query.cursor !== undefined) rpcUrl.searchParams.set("cursor", query.cursor);
     if (query.after !== undefined) rpcUrl.searchParams.set("after", query.after);

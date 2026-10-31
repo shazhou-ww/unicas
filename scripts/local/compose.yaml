@@ -1,0 +1,22 @@
+services:
+  unicas:
+    build:
+      context: ../..
+      dockerfile: scripts/local/Dockerfile
+    init: true
+    environment:
+      UNICAS_LOCAL_ARGS_JSON: ${UNICAS_LOCAL_ARGS_JSON:-[]}
+      UNICAS_LOCAL_PUBLIC_HOST: localhost
+      UNICAS_ADMIN_ORIGIN: ${UNICAS_ADMIN_ORIGIN:-http://localhost:4070}
+      OAUTH_GOOGLE_CLIENT_ID: ${OAUTH_GOOGLE_CLIENT_ID:-}
+      OAUTH_GOOGLE_CLIENT_SECRET: ${OAUTH_GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_OIDC_ISSUER: ${GOOGLE_OIDC_ISSUER:-}
+    ports:
+      - "4070:4070"
+      - "8793:8793"
+      - "8794:8794"
+    volumes:
+      - unicas-state:/workspace/.wrangler
+
+volumes:
+  unicas-state:

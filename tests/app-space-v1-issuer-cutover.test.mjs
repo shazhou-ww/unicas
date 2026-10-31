@@ -4,7 +4,7 @@ import {
   casV1Audience,
   cutOverAppSpaceV1Issuers,
   parseIssuerInspectionChallenge,
-} from "../stacks/unicas/deploy/cut-over-app-space-v1-issuers.mjs";
+} from "../release/service/cut-over-app-space-v1-issuers.mjs";
 import {
   buildOAuthIssuerInspectionChallenge,
   parseOAuthIssuerInspectionChallenge,

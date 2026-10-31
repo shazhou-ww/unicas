@@ -214,23 +214,21 @@ For a newly inserted node, the initial lease values and all ordered edge rows ar
 ### 6.4 Idempotent root-reference requests
 
 ```sql
-CREATE TABLE cas_root_ref_requests (
-  stack_id TEXT NOT NULL,
-  tenant_id TEXT NOT NULL,
-  ref_domain TEXT NOT NULL,
+CREATE TABLE cas_app_root_requests (
+  app_id TEXT NOT NULL,
+  space_id TEXT NOT NULL,
   request_id TEXT NOT NULL,
   payload_hash TEXT NOT NULL,
   revision INTEGER NOT NULL,
   applied_at INTEGER NOT NULL,
 
-  PRIMARY KEY (stack_id, tenant_id, ref_domain, request_id)
+  PRIMARY KEY (app_id, space_id, request_id)
 );
 ```
 
 `payload_hash` is SHA-256 over the canonical sorted root-reference change map.
-Reusing a request ID with different changes in the same logical App, Space, and
-domain is an error. The corresponding physical audit event is keyed by
-`(stack_id, ref_domain, revision)` and records `tenant_id`.
+Reusing a request ID with different changes in the same App and Space is an
+error. The audit event is keyed by `(app_id, revision)` and records `space_id`.
 
 ## 7. Streaming hash computation
 
@@ -408,9 +406,8 @@ The service must enforce configurable limits before allocation or traversal:
 
 A valid hash does not authorize access. Every Space data-plane operation is
 authenticated with a trusted App JWT capability and scoped to a verified
-`(appId, spaceId)` partition. Root Refs writes derive `refDomain` from the
-verified capability; callers cannot select it through a header, query
-parameter, or body. App admin APIs use the separate admin authentication
+`(appId, spaceId)` partition. Root Ref writes require the exact update
+permission in a matching Space grant. App admin APIs use the separate admin authentication
 plane defined by the CAS architecture.
 
 Content type is descriptive metadata and must not be trusted for content sniffing, browser execution policy, or DOCX image validation. Consumers validate actual bytes for their domain.

@@ -12,7 +12,6 @@ import {
   SpaceCapabilityClaimsSchema,
   spaceOperationPolicyFor,
   spaceSelectorMatches,
-  validateRefDomainClaim,
   type AppSpaceRoute,
 } from "@unicas/space-protocol";
 
@@ -64,7 +63,6 @@ export interface VerifiedAppSpaceCall {
   readonly jti: string;
   readonly kid: string;
   readonly permissions: readonly string[];
-  readonly refDomain?: string;
 }
 
 const DEFAULT_CACHE_TTL_MS = 30_000;
@@ -125,7 +123,6 @@ export class AppSpaceCapabilityVerifier {
       jti: capability.jti,
       kid: capability.kid,
       permissions: capability.permissions,
-      ...(capability.refDomain === undefined ? {} : { refDomain: capability.refDomain }),
     };
   }
 
@@ -219,10 +216,6 @@ export class AppSpaceCapabilityVerifier {
       );
     }
 
-    let refDomain: string | undefined;
-    if (route.operation === "listRootRefs" || route.operation === "updateRootRefs") {
-      refDomain = this.#requireValidRefDomain(payload);
-    }
     return {
       subject: payload.subject,
       jti: payload.jti,
@@ -231,7 +224,6 @@ export class AppSpaceCapabilityVerifier {
       spaceId: route.spaceId,
       kid,
       permissions: [...new Set(matchingGrants.flatMap(grant => grant.permissions))],
-      ...(refDomain === undefined ? {} : { refDomain }),
     };
   }
 
@@ -299,22 +291,6 @@ export class AppSpaceCapabilityVerifier {
     return authority;
   }
 
-  #requireValidRefDomain(
-    payload: Pick<NormalizedAppSpacePayload, "refDomain">,
-  ): string {
-    const claimed = payload.refDomain;
-    if (claimed === undefined) {
-      throw new CapabilityAuthorizationError(
-        "resource_scope_mismatch",
-        "Root Refs write requires a refDomain claim",
-      );
-    }
-    const error = validateRefDomainClaim(claimed);
-    if (error) {
-      throw new CapabilityAuthorizationError("resource_scope_mismatch", error);
-    }
-    return claimed;
-  }
 }
 
 export function appSpacePermissionFor(route: AppSpaceRoute): string {
@@ -327,7 +303,6 @@ interface VerifiedAppSpacePayload {
   readonly spaceId: string;
   readonly permissions: readonly string[];
   readonly issuer: string;
-  readonly refDomain?: string;
   readonly appId: string;
   readonly kid: string;
 }
@@ -340,7 +315,6 @@ interface NormalizedAppSpacePayload {
     readonly permissions: readonly string[];
   }[];
   readonly issuer: string;
-  readonly refDomain?: string;
 }
 
 interface CachedAppAuthority {
@@ -361,6 +335,5 @@ function normalizeAppSpacePayload(
     jti: claims.jti,
     grants: claims.grants,
     issuer: claims.iss,
-    ...(claims.refDomain === undefined ? {} : { refDomain: claims.refDomain }),
   };
 }

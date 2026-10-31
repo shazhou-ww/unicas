@@ -1,5 +1,5 @@
 /**
- * `createCasBlobClient` — the blob layer above the node-level Space client.
+ * `createCasBlobClient` — the blob layer above the node-level App client.
  *
  * Large content is chunked into fixed-size chunk nodes plus a bounded
  * fan-out blob-index tree; every stored node is automatically leased and the
@@ -27,12 +27,15 @@ import type {
   CasBlobWriteOptions,
 } from "./types.js";
 import type {
+  AppCasClient,
   CasLeaseOptions,
   CasNodeRange,
   CasRootRefsResult,
-  SpaceCasClient,
 } from "@unicas/space-client";
-import type { CasBlobRetentionUpdate } from "./types.js";
+import type {
+  CasBlobClientConfig,
+  CasBlobRetentionUpdate,
+} from "./types.js";
 
 interface BlobTreeNode {
   readonly hash: string;
@@ -40,12 +43,11 @@ interface BlobTreeNode {
   readonly level: number;
 }
 
-type BlobCas = SpaceCasClient;
-
 export function createCasBlobClient(
-  cas: BlobCas,
-  options: CasBlobClientOptions = {},
+  config: CasBlobClientConfig,
 ): CasBlobClient {
+  const { client: cas, spaceId } = config;
+  const options: CasBlobClientOptions = config;
   const chunkBytes = options.chunkBytes ?? BlobChunkBytes;
   if (!Number.isSafeInteger(chunkBytes) || chunkBytes <= 0 || chunkBytes > BlobChunkBytes) {
     throw new RangeError(`Blob chunk size must be an integer between 1 and ${BlobChunkBytes}`);
@@ -60,7 +62,15 @@ export function createCasBlobClient(
     refs: readonly string[] = [],
     leaseOptions?: CasLeaseOptions,
   ): Promise<string> => {
-    return storeNodeContent(cas, content, contentType, refs, leaseOptions, options.uploadFetcher);
+    return storeNodeContent(
+      cas,
+      spaceId,
+      content,
+      contentType,
+      refs,
+      leaseOptions,
+      options.uploadFetcher,
+    );
   };
 
   const storeIndex = async (
@@ -135,12 +145,12 @@ export function createCasBlobClient(
   };
 
   const resolveBlobRef = async (hash: string): Promise<CasBlobRef> => {
-    const metadata = await cas.readMetadata(hash);
+    const metadata = await cas.readMetadata(spaceId, hash);
     if (metadata.contentType !== BlobIndexContentType) {
       if (metadata.refs.length !== 0) throw new Error(`CAS node ${hash} is not a blob root`);
       return { hash, size: metadata.size, contentType: metadata.contentType };
     }
-    const index = decodeBlobIndex(await collectStream(await cas.readContent(hash)));
+    const index = decodeBlobIndex(await collectStream(await cas.readContent(spaceId, hash)));
     if (index.children.length !== metadata.refs.length) {
       throw new Error(`Blob index ${hash} child metadata does not match its CAS refs`);
     }
@@ -154,13 +164,13 @@ export function createCasBlobClient(
     signal?: AbortSignal,
   ): AsyncGenerator<Uint8Array> {
     signal?.throwIfAborted();
-    const metadata = await cas.readMetadata(hash);
+    const metadata = await cas.readMetadata(spaceId, hash);
     if (metadata.contentType !== BlobIndexContentType) {
       validateLeaf(hash, metadata.refs, metadata.contentType, expectedLevel);
-      yield* readStream(await cas.readContent(hash), signal);
+      yield* readStream(await cas.readContent(spaceId, hash), signal);
       return;
     }
-    const index = decodeBlobIndex(await collectStream(await cas.readContent(hash)));
+    const index = decodeBlobIndex(await collectStream(await cas.readContent(spaceId, hash)));
     validateIndex(hash, index.mediaType, index.level, index.children.length, metadata.refs.length, expectedLevel, expectedMediaType);
     for (let child = 0; child < metadata.refs.length; child++) {
       yield* readNode(metadata.refs[child], index.level - 1, expectedMediaType, signal);
@@ -176,13 +186,16 @@ export function createCasBlobClient(
     signal?: AbortSignal,
   ): AsyncGenerator<Uint8Array> {
     signal?.throwIfAborted();
-    const metadata = await cas.readMetadata(hash);
+    const metadata = await cas.readMetadata(spaceId, hash);
     if (metadata.contentType !== BlobIndexContentType) {
       validateLeaf(hash, metadata.refs, metadata.contentType, expectedLevel);
-      yield* readStream(await cas.readContent(hash, { offset, length }), signal);
+      yield* readStream(
+        await cas.readContent(spaceId, hash, { offset, length }),
+        signal,
+      );
       return;
     }
-    const index = decodeBlobIndex(await collectStream(await cas.readContent(hash)));
+    const index = decodeBlobIndex(await collectStream(await cas.readContent(spaceId, hash)));
     validateIndex(hash, index.mediaType, index.level, index.children.length, metadata.refs.length, expectedLevel, expectedMediaType);
     const end = offset + length;
     let childStart = 0;
@@ -233,6 +246,7 @@ export function createCasBlobClient(
 
   return Object.freeze({
     unicasClient: cas,
+    spaceId,
 
     async storeBlob(source: CasBlobSource, options: CasBlobWriteOptions): Promise<CasBlobRef> {
       const leaseOptions: CasLeaseOptions = {
@@ -297,14 +311,17 @@ export function createCasBlobClient(
 
     openBlob: openHandle,
 
-    retain: (update: CasBlobRetentionUpdate) => updateRetention(cas, update, 1),
+    retain: (update: CasBlobRetentionUpdate) =>
+      updateRetention(cas, spaceId, update, 1),
 
-    release: (update: CasBlobRetentionUpdate) => updateRetention(cas, update, -1),
+    release: (update: CasBlobRetentionUpdate) =>
+      updateRetention(cas, spaceId, update, -1),
   });
 }
 
 async function updateRetention(
-  cas: SpaceCasClient,
+  cas: AppCasClient,
+  spaceId: string,
   update: CasBlobRetentionUpdate,
   direction: 1 | -1,
 ): Promise<CasRootRefsResult> {
@@ -315,7 +332,7 @@ async function updateRetention(
     }
     changes[hash] = direction * count;
   }
-  return await cas.updateRootRefs({ requestId: update.requestId, changes });
+  return await cas.updateRootRefs(spaceId, { requestId: update.requestId, changes });
 }
 
 function validateLeaf(

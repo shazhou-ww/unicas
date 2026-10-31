@@ -15,3 +15,24 @@ export class CasClientError extends Error {
     this.code = code;
   }
 }
+
+export type CasCapabilityErrorCode =
+  | "PROVIDER_FAILED"
+  | "INVALID_CAPABILITY_METADATA"
+  | "UNSATISFIED_CAPABILITY_REQUIREMENT";
+
+export class CasCapabilityError extends Error {
+  readonly code: CasCapabilityErrorCode;
+  override readonly cause?: unknown;
+
+  constructor(
+    code: CasCapabilityErrorCode,
+    message: string,
+    cause?: unknown,
+  ) {
+    super(message, cause === undefined ? undefined : { cause });
+    this.name = "CasCapabilityError";
+    this.code = code;
+    this.cause = cause;
+  }
+}

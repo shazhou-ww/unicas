@@ -34,7 +34,6 @@ export type {
   AppMembership,
   AppOAuthIssuer,
   AppOAuthIssuerInspection,
-  AppRefDomain,
   AppUsage,
   Principal,
   Profile,

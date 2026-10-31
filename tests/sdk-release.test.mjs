@@ -2,10 +2,10 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { normalizeGzipOs } from "../scripts/prepare-sdk-release.mjs";
+import { assertSdkLicenseLineEndings, normalizeGzipOs } from "../release/app-user-sdk/prepare-sdk-release.mjs";
 
 const ROOT = join(import.meta.dirname, "..");
-const matrix = readJson("sdk/package-matrix.json");
+const matrix = readJson("release/app-user-sdk/package-matrix.json");
 const packageNames = new Set(matrix.packages.map(({ name }) => name));
 
 function readJson(path) {
@@ -25,7 +25,7 @@ describe("App-user SDK release matrix", () => {
     expect(matrix).toMatchObject({
       schemaVersion: 1,
       releaseKey: "app-user-sdk",
-      version: "0.1.2",
+      version: "0.2.0",
       distTag: "latest",
       tagPrefix: "npm/app-user-sdk/v",
       compatibility: {
@@ -122,5 +122,15 @@ describe("App-user SDK release matrix", () => {
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
+  });
+
+  test("rejects checkout-dependent LICENSE line endings before generating archive evidence", () => {
+    expect(() => assertSdkLicenseLineEndings(Buffer.from("Synthetic license\n\nTerms."))).not.toThrow();
+    for (const license of ["Synthetic license\r\n\r\nTerms.", "Synthetic license\rTerms."]) {
+      expect(() => assertSdkLicenseLineEndings(Buffer.from(license))).toThrow("SDK LICENSE must use LF");
+    }
+    const attributes = readFileSync(join(ROOT, ".gitattributes"), "utf8");
+    expect(attributes).toMatch(/^LICENSE text eol=lf$/m);
+    expect(() => assertSdkLicenseLineEndings(readFileSync(join(ROOT, "LICENSE")))).not.toThrow();
   });
 });

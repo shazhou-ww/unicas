@@ -9,9 +9,7 @@
     "test": "vitest run --root . tests/docs-site.test.mjs",
     "test:browser": "pnpm run build && playwright test --config playwright.config.mjs",
     "typecheck": "tsc -b",
-    "clean": "rimraf --glob dist .playwright test-results \"*.tsbuildinfo\"",
-    "deploy": "pnpm run build && wrangler deploy --config wrangler.jsonc",
-    "deploy:plan": "pnpm run build && wrangler deploy --dry-run --config wrangler.jsonc"
+    "clean": "rimraf --glob dist .playwright test-results \"*.tsbuildinfo\""
   },
   "engines": {
     "node": ">=24"

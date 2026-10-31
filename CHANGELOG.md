@@ -5,7 +5,40 @@ This changelog covers the unified release set: `@unicas/codec`,
 `@unicas/space-blob-client`, `@unicas/space-browser-cache`, and
 `@unicas/space-file-client`. All six packages use the same version.
 
-## 0.1.2 - Unreleased
+## 0.2.0 - Unreleased
+
+### Changed
+
+- Replaced the Space-bound client with one App-level `AppCasClient`; every CAS
+  operation now receives `spaceId` first and one instance can serve multiple
+  Spaces.
+- Replaced `getToken` with a metadata-aware capability provider, fixed
+  credential classes, concurrent acquisition coalescing, expiry replacement,
+  and bounded safe-read refresh after
+  `401 invalid_token`.
+- Updated blob and file factories to receive a shared App client and explicit
+  Space while preserving workflow and browser-cache isolation.
+- Migrated first-party Spaces consumers, packed Node/browser consumers,
+  examples, API references, and migration guidance to the new surface.
+
+### Removed
+
+- Removed `SpaceCasClient`, `SpaceCasClientConfig`,
+  `SpaceCasNodeCacheKey`, and `createSpaceCasClient` without compatibility
+  aliases.
+- Removed the Root Ref domain dimension from capability metadata, authorization,
+  responses and admin APIs/CLI/MCP. Balances now use App/Space/hash; revisions
+  are App-global and request replay is App/Space/requestId scoped.
+- Removed domain discovery and domain-specific admin routes without aliases.
+  Existing v2 tokens may temporarily carry ignored extra claims. Migration
+  requires fenced aggregate reconciliation, explicit request-collision checks,
+  a checkpoint and read-only legacy archive; see the
+  [migration guide](packages/docs-site/content/app-user-api/migration-root-refs.md).
+
+This entry describes an unreleased candidate. It does not authorize an npm tag,
+dist-tag change, GitHub Release, or publication.
+
+## 0.1.2 - Unreleased (superseded)
 
 ### Added
 
@@ -29,8 +62,8 @@ This changelog covers the unified release set: `@unicas/codec`,
 - Security and workflow automation now reflects published `0.1.x` packages and
   uses immutable Action and container references.
 
-This entry describes an unreleased candidate. It does not authorize an npm tag,
-dist-tag change, GitHub Release, legacy package deprecation, or publication.
+This candidate was not published and is superseded by the breaking `0.2.0`
+candidate.
 
 ## 0.1.1 - 2026-10-08
 

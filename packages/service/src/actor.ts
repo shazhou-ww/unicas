@@ -32,7 +32,6 @@ export interface AuthorizedSpaceCall {
   readonly jti: string;
   readonly kid: string;
   readonly permissions: readonly string[];
-  readonly refDomain?: string;
 }
 
 export interface AppAdminRequestContext {
@@ -121,7 +120,6 @@ async function dispatchSpaceRequest(
       "X-CAS-Space-Id": call.spaceId,
       "X-CAS-Route-Family": "app-space",
     },
-    call.refDomain,
   );
 }
 
@@ -131,17 +129,9 @@ async function dispatchDataRequest(
   platform: ServicePlatform,
   actorKey: string,
   headers: Record<string, string>,
-  refDomain: string | undefined,
 ): Promise<Response> {
 
   if (route.operation === "listRootRefs" || route.operation === "updateRootRefs") {
-    if (refDomain === undefined) {
-      return Response.json(
-        { error: "ROOT_REF_INVALID", message: "Root Refs access requires a verified refDomain" },
-        { status: 403 },
-      );
-    }
-    headers["X-CAS-Ref-Domain"] = refDomain;
     if (route.operation === "listRootRefs") {
       const publicParams = new URL(request.url).searchParams;
       const params = new URLSearchParams();

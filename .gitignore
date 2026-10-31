@@ -9,7 +9,10 @@ dist/
 !.env.example
 !.env.azure.example
 .dev.vars
+.dev.vars.*
 !.dev.vars.example
+coverage/
+*.tgz
 .treespec-output/
 .artifacts/
 .sdk-release/

@@ -121,7 +121,6 @@ export interface CasRootRefBalance {
 }
 
 export interface CasRootRefsPage {
-  readonly refDomain: string;
   readonly revision: number;
   readonly items: readonly CasRootRefBalance[];
   readonly nextCursor: string | null;

@@ -19,6 +19,7 @@ export { CasClientError } from "@unicas/space-client";
 
 export type {
   CasBlobClient,
+  CasBlobClientConfig,
   CasBlobClientOptions,
   CasBlobHandle,
   CasBlobRef,

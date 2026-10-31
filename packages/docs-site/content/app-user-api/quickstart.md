@@ -5,20 +5,37 @@ directory. They do not resolve workspace source.
 
 ## Offline Node quickstart
 
-This example binds a synthetic App and Space, injects a no-network fetcher, and
-reads immutable metadata:
+This example creates one App-level client, injects a synthetic capability
+provider and no-network fetcher, and reads immutable metadata from one Space:
 
 <!-- sdk-snippet: node-quickstart -->
 ```ts
 import assert from "node:assert/strict";
-import { createSpaceCasClient } from "@unicas/space-client";
+import { parseSpaceSelector } from "@unicas/space-protocol";
+import { createAppCasClient } from "@unicas/space-client";
 
 const hash = "a".repeat(64);
-const cas = createSpaceCasClient({
+const spaceId = "/space-example";
+const selector = parseSpaceSelector(spaceId);
+if (!selector) throw new Error("Invalid example Space ID");
+const cas = createAppCasClient({
   baseUrl: "https://api.example",
   appId: "app-example",
-  spaceId: "/space-example",
-  getToken: async () => "synthetic-capability",
+  capabilityProvider: {
+    async acquire(requirement) {
+      return {
+        bearerToken: "synthetic-capability",
+        metadata: {
+          version: 2,
+          expiresAt: Math.floor(Date.now() / 1000) + 300,
+          grants: [{
+            selector: selector.selector,
+            permissions: [requirement.permission],
+          }],
+        },
+      };
+    },
+  },
   fetcher: {
     fetch: async () => Response.json({
       metadata: { hash, size: 5, contentType: "text/plain", refs: [] },
@@ -26,7 +43,7 @@ const cas = createSpaceCasClient({
   },
 });
 
-const metadata = await cas.readMetadata(hash);
+const metadata = await cas.readMetadata(spaceId, hash);
 assert.equal(metadata.contentType, "text/plain");
 ```
 
@@ -47,21 +64,38 @@ import {
   clearBrowserCasNodeCaches,
   createBrowserCasNodeCache,
 } from "@unicas/space-browser-cache";
-import { createSpaceCasClient } from "@unicas/space-client";
+import { parseSpaceSelector } from "@unicas/space-protocol";
+import { createAppCasClient } from "@unicas/space-client";
 
 const principal = "issuer.example:subject-example";
+const spaceId = "/space-example";
+const selector = parseSpaceSelector(spaceId);
+if (!selector) throw new Error("Invalid example Space ID");
 const cache = createBrowserCasNodeCache({
   namespace: { endpoint: "https://api.example", principal },
 });
-const cas = createSpaceCasClient({
+const cas = createAppCasClient({
   baseUrl: "https://api.example",
   appId: "app-example",
-  spaceId: "/space-example",
-  getToken: async () => "synthetic-capability",
+  capabilityProvider: {
+    async acquire(requirement) {
+      return {
+        bearerToken: "synthetic-capability",
+        metadata: {
+          version: 2,
+          expiresAt: Math.floor(Date.now() / 1000) + 300,
+          grants: [{
+            selector: selector.selector,
+            permissions: [requirement.permission],
+          }],
+        },
+      };
+    },
+  },
   cache,
 });
 
-await cas.readMetadata("a".repeat(64));
+await cas.readMetadata(spaceId, "a".repeat(64));
 await clearBrowserCasNodeCaches({ principal });
 cache.close();
 ```
@@ -73,9 +107,10 @@ and runs it in Chromium, Firefox, and WebKit.
 ## Production boundary
 
 An App backend authenticates its user, authorizes the requested Principal and
-Space, and returns a short-lived capability through an App-owned authenticated
-route. Browser code must never contain the App signing key or administrator
-credentials.
+Space, and returns a short-lived capability plus its trusted metadata through
+an App-owned authenticated route. The provider metadata describes the opaque
+token to the SDK; it does not replace server authorization. Browser code must
+never contain the App signing key or administrator credentials.
 
 Blob upload creates leases rather than a durable business reference. Persist
 the blob hash in App state first, then call `retain` with a stable request ID.

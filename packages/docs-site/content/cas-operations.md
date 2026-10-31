@@ -142,17 +142,17 @@ Local emergency deployment remains explicit. **Always rebuild first** because
 Wrangler uploads `dist/` and stale output silently deploys old code:
 
 ```text
-pnpm deploy:plan
-pnpm deploy:production
-pnpm deploy:spaces:plan
-pnpm deploy:spaces
-pnpm deploy:site
-pnpm deploy:docs
-pnpm smoke                    # App/Space v1; run twice 70s apart
-pnpm spaces:smoke -- --base-url https://spaces.unicas.work
+pnpm release:service:plan
+pnpm release:service:production
+pnpm release:spaces:plan
+pnpm release:spaces:production
+pnpm release:site:production
+pnpm release:docs:production
+pnpm release:service:smoke                    # App/Space v1; run twice 70s apart
+pnpm release:spaces:smoke -- --base-url https://spaces.unicas.work
 ```
 
-`pnpm deploy:production` applies pending `CAS_DB` D1 migrations after the
+`pnpm release:service:production` applies pending `CAS_DB` D1 migrations after the
 service build and before Worker publication. Tenant schema initialization is
 not a request or cron responsibility. A migration error stops publication;
 do not deploy the new Worker separately. Worker rollback does not roll back
@@ -285,7 +285,7 @@ stored only on External Identity and retained with audit evidence.
 Fresh control-schema initialization creates only the current Account/App model.
 It does not inspect, synthesize, backfill, or upgrade legacy administrator data.
 For the authorized internal-development production cutover, use
-`stacks/unicas/deploy/reset-smoke.mjs` from the exact release candidate. Its
+`release/service/reset-smoke.mjs` from the exact release candidate. Its
 preview inventories the fixed production bindings and refuses unknown tables,
 Apps, Spaces, issuer configuration, R2 prefixes, or KV key formats. Execution
 requires the exact Smoke App ID and either a reviewed backup directory or the
@@ -423,11 +423,11 @@ service version unsafe to restore.
 pnpm --filter @unicas/docs-site exec wrangler deployments list --config wrangler.jsonc
 pnpm --filter @unicas/docs-site exec wrangler rollback <docs-version-id> --config wrangler.jsonc --yes --message "rollback failed production release"
 
-pnpm --filter @unicas/service-cloudflare exec wrangler deployments list --config ../../stacks/unicas/site/wrangler.jsonc
-pnpm --filter @unicas/service-cloudflare exec wrangler rollback <site-version-id> --config ../../stacks/unicas/site/wrangler.jsonc --yes --message "rollback failed production release"
+pnpm --filter @unicas/site exec wrangler deployments list --config wrangler.jsonc
+pnpm --filter @unicas/site exec wrangler rollback <site-version-id> --config wrangler.jsonc --yes --message "rollback failed production release"
 
-pnpm --filter @unicas/service-cloudflare exec wrangler deployments list --config ../../.wrangler/spaces/wrangler.production.json
-pnpm --filter @unicas/service-cloudflare exec wrangler rollback <spaces-version-id> --config ../../.wrangler/spaces/wrangler.production.json --yes --message "rollback failed production release"
+pnpm --filter @unicas/spaces exec wrangler deployments list --config ../../.wrangler/spaces/wrangler.production.json
+pnpm --filter @unicas/spaces exec wrangler rollback <spaces-version-id> --config ../../.wrangler/spaces/wrangler.production.json --yes --message "rollback failed production release"
 
 pnpm --filter @unicas/service-cloudflare exec wrangler deployments list
 pnpm --filter @unicas/service-cloudflare exec wrangler rollback <service-version-id> --yes --message "rollback failed production release"
@@ -449,7 +449,7 @@ Backup (manual or scheduled; daily target):
 ```text
 wrangler d1 export unicas-control --remote --no-schema --output <cutover>/unicas-control.sql
 wrangler d1 export unicas-tenant --remote --no-schema --output <cutover>/unicas-tenant.sql
-pnpm --filter @unicas/service-cloudflare exec wrangler d1 export SPACES_DB --remote --config ../../.wrangler/spaces/wrangler.production.json --output ../../.wrangler/spaces/unicas-spaces.sql
+pnpm --filter @unicas/spaces exec wrangler d1 export SPACES_DB --remote --config ../../.wrangler/spaces/wrangler.production.json --output ../../.wrangler/spaces/unicas-spaces.sql
 ```
 
 `--remote` is mandatory (without it wrangler exports an empty local DB).
@@ -462,7 +462,7 @@ For the split-origin smoke-only cutover, review the live reset plan without
 executing it:
 
 ```powershell
-node stacks/unicas/deploy/reset-smoke.mjs `
+node release/service/reset-smoke.mjs `
    --expected-stack-id <current-smoke-stack-id>
 ```
 
@@ -486,7 +486,7 @@ After reviewing the printed R2, OAuth KV, and D1 commands, execute with the
 same explicit physical Stack ID and either a fresh backup directory:
 
 ```powershell
-node stacks/unicas/deploy/reset-smoke.mjs --execute `
+node release/service/reset-smoke.mjs --execute `
    --expected-stack-id <current-smoke-stack-id> `
    --backup-dir <off-machine-cutover-directory>
 ```

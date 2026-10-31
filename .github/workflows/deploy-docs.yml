@@ -46,6 +46,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$REVISION"
+          git remote set-url origin https://github.com/shazhou-ww/unicas.git
           git fetch --no-tags origin main:refs/remotes/origin/main
           test "$(git rev-parse origin/main)" = "$REVISION"
 
@@ -63,6 +64,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install device-level idea validator
+        run: npm install --global silvermoon@0.5.0-canary.50.g7e6b2e80af33
+
       - name: Install documentation browser
         run: pnpm --filter @unicas/docs-site exec playwright install --with-deps chromium
 
@@ -76,14 +80,14 @@ jobs:
       - name: Review documentation deployment
         env:
           DOCS_SOURCE_REVISION: ${{ inputs.revision }}
-        run: pnpm deploy:docs:plan
+        run: pnpm release:docs:plan
 
       - name: Deploy documentation
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           DOCS_SOURCE_REVISION: ${{ inputs.revision }}
-        run: pnpm deploy:docs
+        run: pnpm release:docs:production
 
       - name: Verify documentation routes and source revision
         shell: bash

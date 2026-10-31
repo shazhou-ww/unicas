@@ -1,0 +1,9 @@
+{"type":"setAlias","payload":{"alias":"remove-root-ref-domain"}}
+{"type":"setLanguage","payload":{"language":"zh-CN"}}
+{"type":"submitIdeal","timestamp":"2026-10-27T06:03:35.916Z","payload":{"idealRevision":"5319058e15879712717008642fafca8a27b8dd9a"}}
+{"type":"acceptIdeal","timestamp":"2026-10-27T11:57:02.179Z","payload":{"idealRevision":"5319058e15879712717008642fafca8a27b8dd9a"}}
+{"type":"submitInner","timestamp":"2026-10-27T12:53:08.070Z","payload":{"implementationRevision":"a6b053aab1e316bdfe701eed441759d589222e1d"}}
+{"type":"acceptInner","timestamp":"2026-10-27T12:57:30.428Z","payload":{"implementationRevision":"a6b053aab1e316bdfe701eed441759d589222e1d"}}
+{"type":"submitInner","timestamp":"2026-10-27T13:44:55.413Z","payload":{"implementationRevision":"b5d1b077bd5e0ad59c31b94a181c79c53dedad6e"}}
+{"type":"acceptInner","timestamp":"2026-10-27T13:55:36.593Z","payload":{"implementationRevision":"b5d1b077bd5e0ad59c31b94a181c79c53dedad6e"}}
+{"type":"pong","timestamp":"2026-10-27T16:04:49.030Z","payload":{"message":"按用户要求暂停发布，阶段性同步 primary 后等待明日明确恢复。"}}

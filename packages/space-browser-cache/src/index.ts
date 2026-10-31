@@ -1,7 +1,7 @@
 import type {
+  AppCasNodeCacheKey,
   CasNodeCache,
   CasNodeMetadata,
-  SpaceCasNodeCacheKey,
 } from "@unicas/space-client";
 import {
   clearBrowserNodeCachesCore,
@@ -24,7 +24,7 @@ export interface BrowserCasNodeCache extends CasNodeCache {
 export function createBrowserCasNodeCache(
   options: BrowserCasNodeCacheOptions,
 ): BrowserCasNodeCache {
-  return createBrowserNodeCacheCore<SpaceCasNodeCacheKey>({
+  return createBrowserNodeCacheCore<AppCasNodeCacheKey>({
     ...options,
     databaseName: options.databaseName ?? "unicas-node-cache-v2",
     namespaceParts: (endpoint, principal) => ["v2", endpoint, principal],

@@ -1,6 +1,6 @@
 {
   "name": "@unicas/space-client",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Cloud-neutral HTTP client for the UniCAS App/Space v1 data plane",
   "license": "MIT",
   "sideEffects": false,

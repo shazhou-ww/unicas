@@ -204,12 +204,12 @@ describe("App admin physical compatibility adapter", () => {
 
   test("forwards Account-authorized Space audit reads without legacy rewriting", async () => {
     const { response, legacyHandler } = await invoke(
-      { operation: "listRootDomainRefs", appId: "app-1", refDomain: "doc" },
-      "/admin/apps/app-1/root-ref-domains/doc/refs?spaceId=space-1",
+      { operation: "listRootRefs", appId: "app-1" },
+      "/admin/apps/app-1/root-refs?spaceId=space-1",
       { revision: 2, refs: [{ spaceId: "space-1", hash: "a".repeat(64), count: 1 }], nextCursor: null },
     );
     expect(legacyHandler).toHaveBeenCalledWith(expect.objectContaining({
-      url: "https://console.unicas.work/admin/apps/app-1/root-ref-domains/doc/refs?spaceId=space-1",
+      url: "https://console.unicas.work/admin/apps/app-1/root-refs?spaceId=space-1",
     }));
     await expect(response.json()).resolves.toMatchObject({
       refs: [{ spaceId: "space-1", count: 1 }],

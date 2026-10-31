@@ -48,14 +48,11 @@ export function transformAppAdminResponse(route: AppAdminRoute, body: unknown): 
     case "inspectOAuthIssuer":
     case "activateOAuthIssuer":
       return body === null ? null : renameField(body, "stackId", "appId");
-    case "listRefDomains":
-      return mapArrayProperty(body, "domains", value => renameField(value, "stackId", "appId"));
     case "listControlAuditEvents":
       return mapPage(body, mapAuditEvent);
-    case "listRootDomainRefs":
-      return mapArrayProperty(body, "refs", value => renameField(value, "tenantId", "spaceId"));
-    case "listRootDomainEvents":
-      return mapArrayProperty(body, "events", value => renameField(value, "tenantId", "spaceId"));
+    case "listRootRefs":
+    case "listRootEvents":
+      return body;
     case "deleteMember":
       return body;
   }

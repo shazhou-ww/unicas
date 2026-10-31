@@ -109,14 +109,14 @@ export {
   RootRefsErrorCodes,
   RootRefsRetryableError,
   RootRefsValidationError,
-  withDomainRetry,
+  withRootRefsRetry,
 } from "./root-refs.js";
 export type {
   CanonicalRootRefsUpdate,
-  DomainRetryOptions,
-  DomainUpdateResult,
+  RootRefsRetryOptions,
+  RootRefsUpdateResult,
   RootRefCommitPlan,
-  RootRefDomainState,
+  RootRefAppState,
   RootRefsErrorCode,
   RootRefNodeState,
   RootRefProjectionChange,

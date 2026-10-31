@@ -1,14 +1,28 @@
 import assert from "node:assert/strict";
-import { createSpaceCasClient } from "@unicas/space-client";
+import { parseSpaceSelector } from "@unicas/space-protocol";
+import { createAppCasClient } from "@unicas/space-client";
 
 const hash = "a".repeat(64);
+const spaceId = "/space-example";
+const selector = parseSpaceSelector(spaceId);
+if (!selector) throw new Error("Invalid example Space ID");
 let request: Request | undefined;
 
-const cas = createSpaceCasClient({
+const cas = createAppCasClient({
   baseUrl: "https://api.example",
   appId: "app-example",
-  spaceId: "/space-example",
-  getToken: async () => "synthetic-capability",
+  capabilityProvider: {
+    async acquire(requirement) {
+      return {
+        bearerToken: "synthetic-capability",
+        metadata: {
+          version: 2,
+          expiresAt: Math.floor(Date.now() / 1000) + 300,
+          grants: [{ selector: selector.selector, permissions: [requirement.permission] }],
+        },
+      };
+    },
+  },
   fetcher: {
     async fetch(input, init) {
       request = input instanceof Request ? input : new Request(input, init);
@@ -24,7 +38,7 @@ const cas = createSpaceCasClient({
   },
 });
 
-const metadata = await cas.readMetadata(hash);
+const metadata = await cas.readMetadata(spaceId, hash);
 
 assert.equal(metadata.contentType, "text/plain");
 const [scheme, token] = request?.headers.get("Authorization")?.split(" ") ?? [];

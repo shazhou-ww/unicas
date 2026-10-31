@@ -5,7 +5,7 @@
  * gate. Canonical request bodies stream to R2 outside that gate, so unrelated
  * uploads and reads do not queue behind a slow body. An upload reservation is
  * the durable GC fence across that unlocked interval. Root Ref commands flow
- * ONE way to the `(appId, refDomain)` domain DO, so lock ordering cannot
+ * ONE way to the App Root Ref DO, so lock ordering cannot
  * cycle.
  */
 
@@ -20,6 +20,7 @@ import {
   readNodeUsage,
 } from "@unicas/service";
 import { canonicalComposite } from "./do-names.js";
+import { AuditReadError, decodeRefsCursor } from "./audit-reads.js";
 import {
   cleanupExpiredLeaseDrivenUploads,
   leaseDrivenNodeUpload,
@@ -48,7 +49,7 @@ import { CasNodeRefsHeader, formatCasNodeRefsHeader } from "@unicas/space-protoc
 export interface SpaceCasDoEnv extends ManualTraceEnvironment {
   CAS_DB: D1Database;
   CAS_R2: R2Bucket;
-  /** Root Ref domain DO namespace (one-way calls only). */
+  /** App Root Ref DO namespace; historical binding name, one-way calls only. */
   CAS_DOMAIN_DO: DurableObjectNamespace;
   CAS_R2_ACCOUNT_ID?: string;
   CAS_R2_BUCKET_NAME?: string;
@@ -109,7 +110,6 @@ export class CasDurableObject {
           db: store.db,
           appId: appId,
           spaceId: spaceId,
-          refDomain: requireHeader(request, "X-CAS-Ref-Domain"),
           limit,
           cursor,
         }));
@@ -136,6 +136,11 @@ export class CasDurableObject {
       return finishDoTrace(serverTiming.decorate(response), traceSession);
     } catch (error) {
       serverTiming.record("cas_do_route", performance.now() - started);
+      if (error instanceof AuditReadError) {
+        return finishDoTrace(serverTiming.decorate(Response.json(
+          { error: error.code === "INVALID_CURSOR" ? "INVALID_REQUEST" : error.code, message: error.message }, { status: error.status },
+        )), traceSession);
+      }
       if (error instanceof NodeOpError) {
         return finishDoTrace(serverTiming.decorate(Response.json(
           { error: error.code, message: error.message },
@@ -344,13 +349,11 @@ export class CasDurableObject {
     spaceId: string,
     traceSession: ManualTraceSession,
   ): Promise<Response> {
-    let refDomain: string;
     let canonical;
     try {
-      refDomain = requireHeader(request, "X-CAS-Ref-Domain");
       const text = await request.text();
       const parsed = parseRootRefsBody(text);
-      canonical = await canonicalizeRootRefsUpdate({ ...parsed, refDomain });
+      canonical = await canonicalizeRootRefsUpdate(parsed);
     } catch (error) {
       if (error instanceof RootRefsValidationError) {
         return Response.json({ error: error.code, message: error.message }, { status: error.status });
@@ -360,14 +363,13 @@ export class CasDurableObject {
         { status: 400 },
       );
     }
-    const domainId = this.#env.CAS_DOMAIN_DO.idFromName(canonicalComposite(appId, refDomain));
+    const domainId = this.#env.CAS_DOMAIN_DO.idFromName(`app-root-refs:${encodeURIComponent(appId)}`);
     const stub = this.#env.CAS_DOMAIN_DO.get(domainId);
     const response = await traceSession.tracing.enterSpan("unicas.do.dispatch", async (span) => {
       span.setAttribute("unicas.actor.kind", "root_ref_domain");
       const headers: Record<string, string> = {
         "X-CAS-App-Id": appId,
         "X-CAS-Space-Id": spaceId,
-        "X-CAS-Ref-Domain": refDomain,
       };
       if (span.context) {
         const internalContext = await createInternalTraceContextHeader(
@@ -375,7 +377,7 @@ export class CasDurableObject {
           this.#env.UNICAS_TRACE_HMAC_KEYS,
           createInternalTraceAudience(
             "root_ref_domain_do",
-            canonicalComposite(appId, refDomain),
+            `app-root-refs:${encodeURIComponent(appId)}`,
             "POST",
             "/update",
           ),
@@ -421,7 +423,7 @@ function parseRootRefsLimit(value: string | null): number {
 
 function parseRootRefsCursor(value: string | null): string {
   if (value === null) return "";
-  if (!/^[a-f0-9]{64}$/.test(value)) {
+  if (decodeRefsCursor(value) === null) {
     throw new NodeOpError(400, NodeOpErrorCodes.INVALID_REQUEST, "root refs cursor is invalid");
   }
   return value;

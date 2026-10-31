@@ -1,0 +1,29 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "envMode": "loose",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "*.tsbuildinfo"],
+      "cache": false
+    },
+    "@unicas/service-cloudflare#build": {
+      "dependsOn": ["^build", "@unicas/admin-webui#build"],
+      "outputs": ["dist/**", "*.tsbuildinfo", "src/admin-bff/ui-assets.generated.ts"],
+      "cache": false
+    },
+    "clean": {
+      "cache": false
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "outputs": ["coverage/**"],
+      "cache": false
+    },
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "outputs": ["*.tsbuildinfo"],
+      "cache": false
+    }
+  }
+}

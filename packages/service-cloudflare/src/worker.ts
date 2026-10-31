@@ -23,9 +23,8 @@ import {
 import { CapabilityError } from "@unicas/space-protocol";
 import {
   AuditReadError,
-  listRootDomainEvents,
-  listRootDomainRefs,
-  listRootDomains,
+  listAppRootEvents,
+  listAppRootRefs,
 } from "./audit-reads.js";
 import { AppAuthorityRepository } from "./control-authority.js";
 import { migrateControlSchema } from "./control-schema.js";
@@ -543,7 +542,7 @@ function platformFromEnv(
     spaceDatabase: env.CAS_DB as unknown as SqlDatabase,
     blobs: env.CAS_R2 as unknown as BlobStore,
     spaceActors: keyedActorPort(env.CAS_DO, "space", env, timing, traceState),
-    refDomainActors: keyedActorPort(
+    rootRefActors: keyedActorPort(
       env.CAS_DOMAIN_DO as unknown as DurableObjectNamespace,
       "root_ref_domain",
       env,
@@ -621,19 +620,14 @@ async function handleAuditRpc(request: Request, env: Env, url: URL): Promise<Res
   if (request.method !== "GET") {
     return Response.json({ error: "Method not allowed" }, { status: 405 });
   }
-  const stackId = url.searchParams.get("stackId") ?? "";
-  const refDomain = url.searchParams.get("refDomain") ?? "";
+  const appId = url.searchParams.get("appId") ?? "";
+  if (!appId) return Response.json({ error: "INVALID_REQUEST" }, { status: 400 });
   try {
-    if (url.pathname === "/_internal/audit/domains") {
-      const domains = await listRootDomains({ db: env.CAS_DB, stackId });
-      return Response.json({ domains }, { headers: { "Cache-Control": "no-store" } });
-    }
     if (url.pathname === "/_internal/audit/refs") {
-      const page = await listRootDomainRefs({
+      const page = await listAppRootRefs({
         db: env.CAS_DB,
-        stackId,
-        refDomain,
-        tenantId: url.searchParams.get("tenantId") ?? undefined,
+        appId,
+        spaceId: url.searchParams.get("spaceId") ?? undefined,
         limit: optionalNumber(url.searchParams.get("limit")),
         cursor: url.searchParams.get("cursor") ?? undefined,
       });
@@ -641,11 +635,13 @@ async function handleAuditRpc(request: Request, env: Env, url: URL): Promise<Res
         headers: { "Cache-Control": "no-store" },
       });
     }
-    const page = await listRootDomainEvents({
+    if (url.pathname !== "/_internal/audit/events") {
+      return Response.json({ error: "Unknown CAS endpoint" }, { status: 404 });
+    }
+    const page = await listAppRootEvents({
       db: env.CAS_DB,
-      stackId,
-      refDomain,
-      tenantId: url.searchParams.get("tenantId") ?? undefined,
+      appId,
+      spaceId: url.searchParams.get("spaceId") ?? undefined,
       after: optionalNumber(url.searchParams.get("after")),
       limit: optionalNumber(url.searchParams.get("limit")),
     });
@@ -765,16 +761,16 @@ export { appCanonicalNodeKey, canonicalComposite, decodeComposite } from "./do-n
 
 export type {
   CanonicalRootRefsUpdate,
-  DomainUpdateResult,
-  DomainRetryOptions,
+  RootRefsUpdateResult,
+  RootRefsRetryOptions,
   RootRefsErrorCode,
 } from "./root-refs.js";
 export { RootRefsRetryableError, RootRefsValidationError } from "./root-refs.js";
 
 export type {
-  RootDomainBalanceRow,
-  RootDomainEventRow,
-  RootDomainEventsPage,
-  RootDomainRefsPage,
+  AppRootBalanceRow,
+  AppRootEventRow,
+  AppRootEventsPage,
+  AppRootRefsPage,
 } from "./audit-reads.js";
 export { AuditReadError } from "./audit-reads.js";

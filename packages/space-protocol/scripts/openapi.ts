@@ -12,7 +12,6 @@ import {
   SpaceCapabilityPermissionKinds,
   SpaceCapabilityVersion,
   SpaceOperationPolicies,
-  SpaceRefDomainClaimSchema,
 } from "../src/space-capability.js";
 
 export async function generateSpaceOpenApiDocument() {
@@ -37,7 +36,7 @@ export async function generateSpaceOpenApiDocument() {
     ],
     tags: [
       { name: "Nodes", description: "Read immutable nodes and establish temporary protection leases within a Space." },
-      { name: "Root Refs", description: "Read and atomically update business-root balances in the verified capability's refDomain." },
+      { name: "Root Refs", description: "Read and atomically update App/Space root balances with App-global audit revisions." },
       { name: "Operations", description: "Inspect Space accounting and run bounded garbage collection." },
     ],
     security: [{ spaceCapability: [] }],
@@ -67,14 +66,10 @@ export async function generateSpaceOpenApiDocument() {
   const { $schema: _claimsMetaSchema, ...claimsSchema } = z.toJSONSchema(
     SpaceCapabilityClaimsSchema,
   );
-  const { $schema: _refDomainMetaSchema, ...refDomainSchema } = z.toJSONSchema(
-    SpaceRefDomainClaimSchema,
-  );
   document.components ??= {};
   document.components.schemas ??= {};
   Object.assign(document.components.schemas, {
     SpaceCapabilityClaims: claimsSchema,
-    SpaceRefDomainClaim: refDomainSchema,
   });
 
   const securityScheme = document.components.securitySchemes?.spaceCapability;
@@ -104,13 +99,6 @@ export async function generateSpaceOpenApiDocument() {
           capabilityVersion: SpaceCapabilityVersion,
           requiredPermission: policy.permission,
           requiredClaims: [...policy.requiredClaims],
-          ...(policy.requiredClaims.some(claim => claim === "refDomain")
-            ? {
-                claimSchemas: {
-                  refDomain: "#/components/schemas/SpaceRefDomainClaim",
-                },
-              }
-            : {}),
         },
       });
     }

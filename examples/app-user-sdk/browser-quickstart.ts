@@ -1,8 +1,12 @@
 import { clearBrowserCasNodeCaches, createBrowserCasNodeCache } from "@unicas/space-browser-cache";
-import { createSpaceCasClient } from "@unicas/space-client";
+import { parseSpaceSelector } from "@unicas/space-protocol";
+import { createAppCasClient } from "@unicas/space-client";
 
 async function main(): Promise<void> {
   const hash = "a".repeat(64);
+  const spaceId = "/space-example";
+  const selector = parseSpaceSelector(spaceId);
+  if (!selector) throw new Error("Invalid example Space ID");
   const principal = "issuer.example:subject-example";
   const databaseName = `unicas-quickstart-${crypto.randomUUID()}`;
   const cache = createBrowserCasNodeCache({
@@ -10,11 +14,21 @@ async function main(): Promise<void> {
     databaseName,
   });
   let requests = 0;
-  const cas = createSpaceCasClient({
+  const cas = createAppCasClient({
     baseUrl: "https://api.example",
     appId: "app-example",
-    spaceId: "/space-example",
-    getToken: async () => "synthetic-capability",
+    capabilityProvider: {
+      async acquire(requirement) {
+        return {
+          bearerToken: "synthetic-capability",
+          metadata: {
+            version: 2,
+            expiresAt: Math.floor(Date.now() / 1000) + 300,
+            grants: [{ selector: selector.selector, permissions: [requirement.permission] }],
+          },
+        };
+      },
+    },
     cache,
     fetcher: {
       async fetch() {
@@ -26,8 +40,8 @@ async function main(): Promise<void> {
     },
   });
 
-  await cas.readMetadata(hash);
-  await cas.readMetadata(hash);
+  await cas.readMetadata(spaceId, hash);
+  await cas.readMetadata(spaceId, hash);
   if (requests !== 1) throw new Error(`expected one metadata request, received ${requests}`);
 
   await clearBrowserCasNodeCaches({ principal, databaseName });

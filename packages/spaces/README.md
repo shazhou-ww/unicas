@@ -3,8 +3,8 @@
 `https://spaces.unicas.work` is a separately deployed first-party App that
 exercises UniCAS through the same public App/Space interfaces available to an
 external backend. Application code is the private `@unicas/spaces` workspace
-package. `stacks/unicas/spaces/` contains only Cloudflare deployment
-composition and the App-owned D1 migration.
+package. The package root owns its Cloudflare configuration and App-owned D1
+migrations; repository release scripts own deployment orchestration.
 
 The browser authenticates to Spaces with Google and receives only an opaque,
 host-only App session. The Spaces Worker selects the provisioned App and Space,
@@ -19,7 +19,7 @@ These commands require no Cloudflare credentials and do not contact production:
 ```powershell
 pnpm --filter @unicas/spaces test
 pnpm --filter @unicas/spaces typecheck
-pnpm deploy:spaces:plan
+pnpm release:spaces:plan
 ```
 
 Run the browser-only Vite UI with:
@@ -95,7 +95,7 @@ clients and must allow only their explicit origins, methods, and headers.
 Generate the App signing fixture outside source control:
 
 ```powershell
-pnpm keys:local -- --output .wrangler/spaces/signing-key.json `
+pnpm local:keys -- --output .wrangler/spaces/signing-key.json `
   --issuer https://spaces.unicas.work `
   --kid spaces-YYYY-MM
 ```
@@ -108,7 +108,7 @@ new D1 UUID, then publish only the issuer/UI bootstrap deployment:
 
 ```powershell
 $env:SPACES_BOOTSTRAP_DEPLOY_CONFIRM = "spaces.unicas.work"
-pnpm deploy:spaces:bootstrap
+pnpm release:spaces:bootstrap-deploy
 ```
 
 This explicit one-time mode applies the additive D1 migration and deploys with
@@ -139,7 +139,7 @@ $env:SPACES_BOOTSTRAP_DISPLAY_NAME = "<display-name>"
 $env:SPACES_BOOTSTRAP_GOOGLE_SUBJECT = "<stable-google-sub>"
 $env:SPACES_BOOTSTRAP_KEY_FILE = ".wrangler/spaces/signing-key.json"
 $env:SPACES_BOOTSTRAP_REF_DOMAIN = "spaces:files"
-pnpm spaces:bootstrap -- --mode google
+pnpm release:spaces:bootstrap-data -- --mode google
 ```
 
 Bootstrap the dedicated smoke Principal in its own Space. It has no social
@@ -151,7 +151,7 @@ $env:SPACES_BOOTSTRAP_SPACE_ID = "/smoke/<dedicated-smoke-space-id>"
 $env:SPACES_BOOTSTRAP_PRINCIPAL_ID = "<smoke-principal-id>"
 $env:SPACES_BOOTSTRAP_DISPLAY_NAME = "Release smoke"
 $env:SPACES_BOOTSTRAP_REF_DOMAIN = "spaces:smoke"
-pnpm spaces:bootstrap -- --mode smoke
+pnpm release:spaces:bootstrap-data -- --mode smoke
 ```
 
 Both modes are idempotent only for an exact complete match. Partial or
@@ -166,12 +166,12 @@ The protected `release` workflow runs:
 deploy UniCAS service and run canonical service smoke
 -> apply Spaces D1 migrations
 -> deploy Spaces with its ephemeral secrets file
--> run pnpm spaces:smoke -- --base-url https://spaces.unicas.work
+-> run pnpm release:spaces:smoke -- --base-url https://spaces.unicas.work
 -> deploy product and documentation sites
 -> verify origins and tag the revision
 ```
 
-Before the normal Spaces deploy, `packages/spaces/scripts/preflight.mjs`
+Before the normal Spaces deploy, `release/spaces/preflight.mjs`
 checks the remote App D1 mapping and proves the active issuer through a
 least-privileged public Root Ref read. A live unexpired run blocks deployment.
 A failed, pending, or expired run is recoverable: the newly deployed Worker
@@ -213,7 +213,7 @@ before retrying a release.
 Back up App-owned metadata separately from UniCAS storage:
 
 ```powershell
-pnpm --filter @unicas/service-cloudflare exec wrangler d1 export SPACES_DB `
+pnpm --filter @unicas/spaces exec wrangler d1 export SPACES_DB `
   --remote --config ../../.wrangler/spaces/wrangler.production.json `
   --output ../../.wrangler/spaces/unicas-spaces.sql
 ```
