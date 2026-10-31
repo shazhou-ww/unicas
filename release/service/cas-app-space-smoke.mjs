@@ -260,6 +260,7 @@ async function main() {
       headers: { Authorization: `Bearer ${retiredToken}` },
     });
     assert(response.status === 401, `retired Tenant claim on App/Space v1 route -> ${response.status} (401)`);
+    const token = await issueSpace(SPACE_ID);
     response = await fetch(`${BASE}/stacks/${encodeURIComponent(APP_ID)}/tenants/${encodeURIComponent(SPACE_ID)}/cas/usage`, {
       headers: { Authorization: `Bearer ${token}` },
     });

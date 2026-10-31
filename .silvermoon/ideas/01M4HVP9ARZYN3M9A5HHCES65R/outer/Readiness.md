@@ -7,7 +7,8 @@
 用户于 2026-10-31 在独立会话与隔离 worktree 中明确恢复推进；
 实际生产变更仍只允许通过现有受保护 Actions 与 Production 审批。
 本地与 Linux 完整预检通过；2026-10-31 受保护 job 已完成生产 Root Ref cutover
-并部署新 service，但 smoke 因本地签名文件路径错误失败，后续单元未部署。
+并部署新 service；签名路径已修复，smoke 的最后一个旧路由 probe 因未定义变量
+失败，后续单元未部署。
 生产 marker 后仅允许 forward-fix；整体部署及在线 smoke 尚未完成，不能提交 `submitOuter`。
 隔离合成数据演练的 `D-S04`、`D-AC04` 已完成，其余 `D-*` 未完成；
 本页不是生产迁移、发布或 archive 清理授权。
@@ -454,3 +455,85 @@ append-only constraints、当前 aggregate/projection、checkpoint/events 和 re
 review。新 job 的 cutover 必须走只读 `already-cutover` 验证，不覆盖已接受新事件。
 生产迁移的部分证据已真实取得，但完整部署、在线 smoke、观察窗口与保留政策
 尚未完成，生产 D-* 暂不勾选，不提交或接受 outer。
+
+## smoke forward-fix 准入与第三次审批等待（2026-10-31）
+
+smoke 路径修复已同步 primary `c58bf77e5d9c`，其精确 HEAD 的 `pnpm validate`
+及同步后的 `pnpm check:ideas:remote` 均通过。
+[完整 Linux CI run 41182687325](https://github.com/shazhou-ww/unicas/actions/runs/41182687325)
+成功，validate job `124483168394` 用时 6m5s。
+[PR #67](https://github.com/shazhou-ww/unicas/pull/67) 的 Dependency review 与
+CodeQL 通过；正常 merge 后 release `ce8b12b211e8` 的两父提交为
+`61b4f060b864` 与 `c58bf77e5d9c`，tree 与该已验证 main 完全一致。
+
+[新 release run 41183157999](https://github.com/shazhou-ww/unicas/actions/runs/41183157999)
+的 validate job `124484546051` 成功，包含精确 release 校验和完整
+`pnpm validate:release`。Production job `124485858307` 当前为 `waiting`，
+pending deployment 要求既有 reviewer；没有代为审批或重放旧批准。
+等待脚本在检测到审批门禁后已退出，没有保留 watcher。
+
+下一步为该新 run 的 Production review。审批后应先验证 cutover
+`already-cutover`，再检查 service smoke 与 Spaces/site/docs 部署、
+public origin 和最终 tag；保留全部新事件与归档，禁止旧 snapshot restore。
+当前生产 cutover 与 service 已有证据，但完整发布和 outer 验收仍未完成。
+
+## 第三次审批执行与最后一个 smoke probe 修复（2026-10-31）
+
+用户于晚间批准 run `41183157999` 后，cutover 的已完成状态只读核验成功，
+secrets 同步、临时签名文件创建、新 service 上传及 triggers 发布均成功。
+Worker version 为 `c202b512-a745-4553-8541-41db4ebd036a`。
+签名路径修复实际生效，service smoke 已执行并通过：
+
+- API health、内部路由不可访问、真实 child/parent lease、content 与 metadata；
+- Root Ref 首次更新、同 payload 重放、projection、mixed-sign replacement；
+- usage、GC 保留当前 leased nodes、旧 v2 endpoint 404；
+- 旧 Space claim v1/v3 和宽 permission 的 401 invalid_token；
+- cross-Space read 403、隔离 Space 为空、旧 Tenant claim 401。
+
+最后一个 `App/Space token on retired route` probe 尚未发出请求，
+因 `ReferenceError: token is not defined` 于 14:51:10Z 失败。
+失败后的 `Root Ref cleanup releases smoke roots` 已成功，临时签名文件 cleanup
+也成功。此次 smoke 已接受的新事件和清理事件必须保留；
+Spaces、site、docs、最终 public origin 检查与 deployment tag 均跳过。
+不能把这些部分成功当作 `APP/SPACE SMOKE PASS` 或完整发布通过。
+
+根因是 capability-provider 重构后，该旧路由 probe 仍引用已移除的变量。
+现使用既有 `issueSpace(SPACE_ID)` 在此 probe 前签发有效的同 Space token；
+保留旧 endpoint 必须返回 404 的原断言，没有绕过网络 probe 或降低鉴权要求。
+新增 TypeScript semantic 检查整个 smoke 脚本的未定义标识符，同时在内存中移除
+该 binding 重现原错误，要求明确检出 `Cannot find name 'token'.`。
+编译器检查只影响测试，不增加运行时依赖；首次冷编译超过默认 5 秒，因此为
+该编译器测试单独设置 30 秒上限，不改变任何生产 smoke 阈值或断言。
+
+- `pnpm exec vitest run tests\deploy-plan.test.mjs tests\root-refs-production-cutover.test.mjs tests\release-gated-ci.test.mjs`：
+  85 tests 通过，包含完整脚本未定义标识符的正/反回归。
+- `git diff --check`：通过。
+
+继续仅允许 forward-fix，新候选须经过精确完整预检、正常 promotion 与新的
+Production review。尚未完成整体部署或 outer gate，不恢复旧 snapshot，
+不清空新事件，不勾选未获得完整证据的生产 D-*。
+
+## hosted runner 迁移阻断与固定浏览器平台（2026-10-31）
+
+最后一个 probe 的修复已同步 primary `bccfd2ca8762`，精确 HEAD 的
+`pnpm validate` 与 remote Silvermoon 校验通过；
+[PR #68](https://github.com/shazhou-ww/unicas/pull/68) 已创建。
+[预检 run 41212542225](https://github.com/shazhou-ww/unicas/actions/runs/41212542225)
+在安装浏览器阶段失败，尚未运行 `pnpm validate:release`：
+`ubuntu-latest` 此次分配 Ubuntu 26.04，固定 Playwright 1.55.1 明确报告
+不支持该镜像，无法安装 chromium。不能将此 run 当作实现或完整预检通过。
+
+修复仅将所有执行 `playwright install` 的 job 固定到 Ubuntu 24.04：
+CI validate、documentation-only deployment 和 npm verification。
+保留现有 Playwright/SDK 版本与三浏览器完整验证，不改变依赖或兼容性基线，
+不绕过安装，不跳过测试；其他 Production、安全及恢复 job 的 runner 和
+环境门禁保持原样。workflow 回归枚举这三个浏览器 job 并验证固定镜像，
+同步更新稳定的 validation/release 文档。没有执行 npm release 或
+documentation-only production dispatch。
+
+- `pnpm exec vitest run tests\deploy-plan.test.mjs tests\release-gated-ci.test.mjs tests\npm-release.test.mjs tests\sdk-release.test.mjs`：
+  84 tests 通过，包含完整 smoke binding 正/反验证和 browser job 平台检查。
+- `git diff --check`：通过。
+
+新候选仍需同步 primary 后重跑精确完整 Linux CI。已有 #68 随 main 更新，
+不能合并旧失败候选或把镜像修复视为 Production 审批、数据恢复授权或 outer gate。

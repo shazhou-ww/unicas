@@ -52,6 +52,12 @@ inside the protected job. An npm release likewise builds inside its protected
 job. Local or pre-push validation artifacts never cross into an external-write
 trust boundary.
 
+Jobs that install Playwright browsers use `ubuntu-24.04`, including CI
+validation, documentation-only deployment, and npm verification. The reviewed
+Playwright 1.55.1 baseline does not support Ubuntu 26.04; a moving
+`ubuntu-latest` image must not silently change its browser-test platform.
+Other jobs retain their existing runner selection and all environment gates.
+
 ## Repository-managed pre-push hook
 
 Run `pnpm hooks:install` once per Git repository and verify it with
