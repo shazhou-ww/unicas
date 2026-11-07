@@ -48,6 +48,10 @@ Package ownership and dependency direction are documented in
 
 ## Pull requests
 
+CodeQL initialization and analysis must use the same pinned action revision.
+Dependabot groups `github/codeql-action/*` updates so both steps are reviewed
+and upgraded together.
+
 Keep each pull request focused and:
 
 1. explain the user or maintainer problem being solved;
