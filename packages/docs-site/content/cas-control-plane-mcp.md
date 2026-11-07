@@ -32,6 +32,9 @@ On first use, the client discovers UniCAS OAuth, offers the configured Google,
 personal Microsoft, and GitHub methods, and shows the UniCAS consent page.
 The resulting access and refresh tokens are UniCAS tokens. Provider tokens are
 discarded after identity verification and are never accepted by `/mcp`.
+The OAuth provider supports only authorization-code responses with S256 PKCE;
+implicit flow and plain PKCE are not supported. Provider 1.2 enforces this
+without the removed `allowImplicitFlow` and `allowPlainPKCE` options.
 
 ## Authorization scopes
 
