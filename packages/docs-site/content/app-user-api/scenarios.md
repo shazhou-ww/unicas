@@ -21,7 +21,7 @@ sequenceDiagram
     User->>UI: Sign in to the App
     UI->>App: Request access for a business action
     App->>App: Authenticate user and resolve Principal
-    App->>App: Authorize Principal -> App / Space / refDomain
+    App->>App: Authorize Principal -> App / Space / exact permission
     App->>App: Select minimum permission and short expiry
     App-->>UI: Signed Space capability
     UI->>CAS: Space request with Bearer capability
@@ -114,8 +114,8 @@ sequenceDiagram
     participant App as App backend
     participant CAS as UniCAS Space data plane
 
-    App->>CAS: POST .../root-refs<br/>requestId + changes + cas:root-refs:update + refDomain
-    CAS->>CAS: Validate all hashes, readiness, balances, and domain revision
+    App->>CAS: POST .../root-refs<br/>requestId + changes + cas:root-refs:update
+    CAS->>CAS: Validate hashes, readiness, aggregate counts, and App-global revision
     alt First successful commit
         CAS-->>App: 200 success, idempotent=false, revision
     else Same requestId and same canonical payload
@@ -134,8 +134,8 @@ If the client loses the response, retry the exact same canonical request with
 the same `requestId`. Never reuse a `requestId` for different changes.
 
 To inspect committed state, page through `GET .../root-refs` with a
-`cas:root-refs:read` capability carrying the same `refDomain`. Pages are
-revision-stable; the response returns the domain and revision alongside the
+`cas:root-refs:read` capability selecting the Space. Pages are
+revision-stable; the response returns the App-global revision alongside the
 next cursor.
 
 ## Inspect usage and run bounded garbage collection

@@ -11,6 +11,11 @@
 import type { D1Database } from "@cloudflare/workers-types";
 
 const TABLE_MIGRATIONS = [
+  "CREATE TABLE IF NOT EXISTS cas_app_root_revisions (app_id TEXT PRIMARY KEY NOT NULL, revision INTEGER NOT NULL CHECK (revision >= 0), checkpoint INTEGER NOT NULL DEFAULT 0 CHECK (checkpoint >= 0))",
+  "CREATE TABLE IF NOT EXISTS cas_app_root_refs (app_id TEXT NOT NULL, space_id TEXT NOT NULL, hash TEXT NOT NULL, ref_count INTEGER NOT NULL CHECK (ref_count > 0), PRIMARY KEY (app_id, space_id, hash))",
+  "CREATE TABLE IF NOT EXISTS cas_app_root_events (app_id TEXT NOT NULL, revision INTEGER NOT NULL CHECK (revision > 0), space_id TEXT NOT NULL, request_id TEXT NOT NULL, payload_hash TEXT NOT NULL, changes_json TEXT NOT NULL, applied_at INTEGER NOT NULL, PRIMARY KEY (app_id, revision), UNIQUE (app_id, space_id, request_id))",
+  "CREATE TABLE IF NOT EXISTS cas_app_root_requests (app_id TEXT NOT NULL, space_id TEXT NOT NULL, request_id TEXT NOT NULL, payload_hash TEXT NOT NULL, revision INTEGER NOT NULL, applied_at INTEGER NOT NULL, PRIMARY KEY (app_id, space_id, request_id))",
+  "CREATE TABLE IF NOT EXISTS cas_app_root_cutover (singleton INTEGER PRIMARY KEY CHECK (singleton = 1), source_digest TEXT NOT NULL, applied_at INTEGER NOT NULL)",
   // Authoritative node rows: (appId, spaceId, hash).
   "CREATE TABLE IF NOT EXISTS cas_nodes (app_id TEXT NOT NULL, space_id TEXT NOT NULL, hash TEXT NOT NULL, content_size INTEGER NOT NULL, content_type TEXT NOT NULL, lease_started_at INTEGER NOT NULL DEFAULT 0, lease_expires_at INTEGER NOT NULL DEFAULT 0, child_ref_count INTEGER NOT NULL DEFAULT 0 CHECK (child_ref_count >= 0), root_ref_count INTEGER NOT NULL DEFAULT 0 CHECK (root_ref_count >= 0), ready INTEGER NOT NULL DEFAULT 1 CHECK (ready IN (0, 1)), canonical_stored_bytes INTEGER CHECK (canonical_stored_bytes IS NULL OR canonical_stored_bytes >= 0), canonical_observed_at INTEGER CHECK (canonical_observed_at IS NULL OR canonical_observed_at >= 0), PRIMARY KEY (app_id, space_id, hash))",
 
@@ -60,6 +65,8 @@ const INDEX_MIGRATIONS = [
 ];
 
 const TRIGGER_MIGRATIONS = [
+  "CREATE TRIGGER IF NOT EXISTS cas_app_root_events_no_update BEFORE UPDATE ON cas_app_root_events BEGIN SELECT RAISE(ABORT, 'Root Ref events are append-only'); END",
+  "CREATE TRIGGER IF NOT EXISTS cas_app_root_events_no_delete BEFORE DELETE ON cas_app_root_events BEGIN SELECT RAISE(ABORT, 'Root Ref events are append-only'); END",
   `CREATE TRIGGER IF NOT EXISTS cas_nodes_usage_update_guard BEFORE UPDATE ON cas_nodes
    WHEN NOT EXISTS (SELECT 1 FROM cas_space_usage WHERE app_id = OLD.app_id AND space_id = OLD.space_id)
    BEGIN SELECT RAISE(ABORT, 'missing Space usage projection'); END`,

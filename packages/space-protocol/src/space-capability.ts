@@ -1,9 +1,5 @@
 import { z } from "zod";
-import {
-  REF_DOMAIN_MAX_LENGTH,
-  REF_DOMAIN_PATTERN,
-  type CapabilityProtectedHeader,
-} from "./shared-capability.js";
+import type { CapabilityProtectedHeader } from "./shared-capability.js";
 import type { AppSpaceRoute } from "./routes.js";
 import {
   parseSpaceSelector,
@@ -20,11 +16,7 @@ export {
   DefaultCapabilityLifetimeSeconds,
   MaximumCapabilityClockSkewSeconds,
   MaximumCapabilityLifetimeSeconds,
-  REF_DOMAIN_MAX_LENGTH,
-  REF_DOMAIN_PATTERN,
   canonicalPermissionSegment,
-  isReservedRefDomain,
-  validateRefDomainClaim,
 } from "./shared-capability.js";
 export type {
   CapabilityErrorCode,
@@ -100,11 +92,6 @@ export interface SpaceCapabilityGrant {
   readonly permissions: readonly SpaceCapabilityPermission[];
 }
 
-export const SpaceRefDomainClaimSchema = z.string()
-  .max(REF_DOMAIN_MAX_LENGTH)
-  .regex(REF_DOMAIN_PATTERN)
-  .describe("Root Ref business namespace required by Root Ref operations.");
-
 const SpaceSelectorClaimSchema = z.string()
   .min(1)
   .max(SPACE_SELECTOR_MAX_LENGTH)
@@ -132,7 +119,6 @@ export const SpaceCapabilityClaimsSchema = z.object({
     .min(1)
     .max(MaximumSpaceCapabilityGrants)
     .readonly(),
-  refDomain: z.string().optional(),
 }).passthrough().readonly().meta({ id: "SpaceCapabilityClaims" });
 
 export type SpaceCapabilityClaims =
@@ -142,7 +128,7 @@ export type SpaceCapabilityClaims =
 type SpaceOperationPolicyDefinition = {
   readonly operationId: string;
   readonly permission: SpaceCapabilityPermissionKind;
-  readonly requiredClaims: readonly ("grants" | "refDomain")[];
+  readonly requiredClaims: readonly "grants"[];
 };
 
 export const SpaceOperationPolicies = {
@@ -174,12 +160,12 @@ export const SpaceOperationPolicies = {
   listRootRefs: {
     operationId: "listRootRefs",
     permission: "cas:root-refs:read",
-    requiredClaims: ["grants", "refDomain"],
+    requiredClaims: ["grants"],
   },
   updateRootRefs: {
     operationId: "updateRootRefs",
     permission: "cas:root-refs:update",
-    requiredClaims: ["grants", "refDomain"],
+    requiredClaims: ["grants"],
   },
 } as const satisfies Record<AppSpaceRoute["operation"], SpaceOperationPolicyDefinition>;
 

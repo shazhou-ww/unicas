@@ -28,7 +28,6 @@ const idempotencyKey = z.string().min(1).max(128);
 const etag = z.string().min(1);
 const email = z.string().email();
 const url = z.string().url();
-const refDomain = z.string().min(1).max(64);
 const rootId = z.string().min(1);
 const manifestHash = z.string().regex(/^[0-9a-f]{64}$/);
 
@@ -84,15 +83,6 @@ export const APP_ADMIN_MCP_TOOLS = {
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
   }),
-  list_app_ref_domains: tool({
-    name: "list_app_ref_domains",
-    requiredScope: "control:read",
-    registration: {
-      description: "List refDomains observed in successful App Root Ref writes.",
-      inputSchema: z.object({ appId }),
-      annotations: { readOnlyHint: true, destructiveHint: false },
-    },
-  }),
   list_app_control_audit_events: tool({
     name: "list_app_control_audit_events",
     requiredScope: "control:read",
@@ -109,14 +99,13 @@ export const APP_ADMIN_MCP_TOOLS = {
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
   }),
-  list_space_root_domain_refs: tool({
-    name: "list_space_root_domain_refs",
+  list_app_root_refs: tool({
+    name: "list_app_root_refs",
     requiredScope: "control:read",
     registration: {
-      description: "List current non-zero Space Root Ref balances for one App refDomain.",
+      description: "List current non-zero App Root Ref balances across Spaces.",
       inputSchema: z.object({
         appId,
-        refDomain,
         spaceId: spaceId.optional(),
         limit: boundedLimit.optional(),
         cursor: cursor.optional(),
@@ -124,14 +113,13 @@ export const APP_ADMIN_MCP_TOOLS = {
       annotations: { readOnlyHint: true, destructiveHint: false },
     },
   }),
-  list_space_root_domain_events: tool({
-    name: "list_space_root_domain_events",
+  list_app_root_events: tool({
+    name: "list_app_root_events",
     requiredScope: "control:read",
     registration: {
-      description: "List ordered Space Root Ref events for one App refDomain.",
+      description: "List App-global Root Ref events, optionally filtered by Space.",
       inputSchema: z.object({
         appId,
-        refDomain,
         spaceId: spaceId.optional(),
         after: z.number().int().min(0).optional(),
         limit: boundedLimit.optional(),

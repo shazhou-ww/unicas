@@ -137,7 +137,7 @@ so the later WebUI reuses the same store:
 | --- | --- |
 | Session | `login <stack> [--issuer URL]`, `logout <stack> <tenant>\|--all`, `list`, `status`, `use <stack> <tenant>` |
 | Read | `node get <hash> [--range N[:L]] [--out file]`, `node meta <hash>`, `walk <hash> [--depth N]` |
-| Admin | `usage`, `gc [--max-nodes N] [-y\|--yes]`, `root-refs update <refDomain> <hash> <delta> [-y\|--yes]`, `lease <hash> [--source file] [--duration-ms N]` |
+| Admin | `usage`, `gc [--max-nodes N] [-y\|--yes]`, `root-refs update <hash> <delta> [-y\|--yes]`, `lease <hash> [--source file] [--duration-ms N]` |
 
 Conventions aligned with the admin CLI: JSON on stdout, diagnostics on stderr,
 exit codes 0/1/2, idempotency keys where applicable, CAS base URL from

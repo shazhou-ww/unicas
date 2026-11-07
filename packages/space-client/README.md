@@ -94,7 +94,7 @@ const preview = new Uint8Array(
 
 ## List and atomically update Root Refs
 
-Root Ref capabilities also carry the App-selected `refDomain`. Page through the
+Root Ref capabilities require no additional namespace claim. Page through the
 current domain with `listRootRefs`:
 
 <!-- sdk-snippet: space-client -->
@@ -137,8 +137,8 @@ for a raw-node helper, or use the blob/file clients for complete workflows.
 | --- | --- | --- |
 | `readNode(spaceId, ...)`, `readMetadata(spaceId, ...)`, `readContent(spaceId, ...)` | `cas:nodes:read` | Read immutable node data |
 | `leaseNode(spaceId, ...)` | `cas:nodes:lease` | Acquire or renew a node lease and negotiate direct upload |
-| `listRootRefs(spaceId, ...)` | `cas:root-refs:read` + `refDomain` | Inspect one Root Ref domain |
-| `updateRootRefs(spaceId, ...)` | `cas:root-refs:update` + `refDomain` | Atomically retain or release roots |
+| `listRootRefs(spaceId, ...)` | `cas:root-refs:read` | Inspect App/Space Root Refs |
+| `updateRootRefs(spaceId, ...)` | `cas:root-refs:update` | Atomically retain or release roots |
 | `usage(spaceId, ...)` | `cas:usage:read` | Read current Space accounting |
 | `gc(spaceId, ...)` | `cas:gc:execute` | Run one bounded garbage-collection pass |
 

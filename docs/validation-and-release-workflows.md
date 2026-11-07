@@ -21,6 +21,11 @@ validation must execute every time, and runtime-specific test inputs and
 generated source assets must not become success-shaped cache hits. No remote
 cache is configured.
 
+The task runner is pinned to Turbo 2.9.14, the first patched version for
+GHSA-hcf7-66rw-9f5r and GHSA-3qcw-2rhx-2726. This security update overrides
+the inherited preset's 2.7.2 pin without changing the task graph, serial
+execution, environment forwarding, or validation boundaries.
+
 The quick gate still excludes the slow Cloudflare adapter test suite, not its
 build. Release validation, exact-revision checks, protected environments, and
 external-write boundaries are unchanged. The preset's demo applications,
@@ -46,6 +51,12 @@ strict superset, not an alternative assertion set. A normal release rebuilds
 inside the protected job. An npm release likewise builds inside its protected
 job. Local or pre-push validation artifacts never cross into an external-write
 trust boundary.
+
+Jobs that install Playwright browsers use `ubuntu-24.04`, including CI
+validation, documentation-only deployment, and npm verification. The reviewed
+Playwright 1.55.1 baseline does not support Ubuntu 26.04; a moving
+`ubuntu-latest` image must not silently change its browser-test platform.
+Other jobs retain their existing runner selection and all environment gates.
 
 ## Repository-managed pre-push hook
 

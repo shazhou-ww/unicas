@@ -1,4 +1,4 @@
-/** `unicas app-audit control|root-domain-refs|root-domain-events`. */
+/** `unicas app-audit control|root-refs|root-events`. */
 
 import { parseArgs } from "node:util";
 import { printJson } from "../output.js";
@@ -9,18 +9,18 @@ import { parseBoundedLimit } from "./common.js";
 export async function appAuditCommand(ctx: CliContext, subcommand: string | undefined, argv: string[]): Promise<void> {
   requireSubcommand(
     subcommand,
-    "usage: unicas app-audit control|root-domain-refs|root-domain-events",
-    ["control", "root-domain-refs", "root-domain-events"],
+    "usage: unicas app-audit control|root-refs|root-events",
+    ["control", "root-refs", "root-events"],
   );
   switch (subcommand) {
     case "control":
       return appAuditControl(ctx, argv);
-    case "root-domain-refs":
-      return appAuditRootDomainRefs(ctx, argv);
-    case "root-domain-events":
-      return appAuditRootDomainEvents(ctx, argv);
+    case "root-refs":
+      return appAuditRootRefs(ctx, argv);
+    case "root-events":
+      return appAuditRootEvents(ctx, argv);
     default:
-      throw new Error("usage: unicas app-audit control|root-domain-refs|root-domain-events");
+      throw new Error("usage: unicas app-audit control|root-refs|root-events");
   }
 }
 
@@ -52,7 +52,7 @@ async function appAuditControl(ctx: CliContext, argv: string[]): Promise<void> {
   });
 }
 
-async function appAuditRootDomainRefs(ctx: CliContext, argv: string[]): Promise<void> {
+async function appAuditRootRefs(ctx: CliContext, argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({
     args: argv,
     options: {
@@ -62,13 +62,13 @@ async function appAuditRootDomainRefs(ctx: CliContext, argv: string[]): Promise<
     },
     allowPositionals: true,
   });
-  const [appId, refDomain] = positionals;
-  if (!appId || !refDomain) {
-    throw new Error("usage: unicas app-audit root-domain-refs <appId> <refDomain> [--space-id S] [--limit N] [--cursor C]");
+  const [appId] = positionals;
+  if (!appId || positionals.length !== 1) {
+    throw new Error("usage: unicas app-audit root-refs <appId> [--space-id S] [--limit N] [--cursor C]");
   }
   await withAdminClient(ctx, async (admin) => {
-    printJson(await admin.listSpaceRootDomainRefs(
-      { appId, refDomain },
+    printJson(await admin.listAppRootRefs(
+      { appId },
       {
         ...(values["space-id"] !== undefined ? { spaceId: values["space-id"] } : {}),
         ...(values.limit !== undefined ? { limit: parseBoundedLimit(values.limit) } : {}),
@@ -78,7 +78,7 @@ async function appAuditRootDomainRefs(ctx: CliContext, argv: string[]): Promise<
   });
 }
 
-async function appAuditRootDomainEvents(ctx: CliContext, argv: string[]): Promise<void> {
+async function appAuditRootEvents(ctx: CliContext, argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({
     args: argv,
     options: {
@@ -88,13 +88,13 @@ async function appAuditRootDomainEvents(ctx: CliContext, argv: string[]): Promis
     },
     allowPositionals: true,
   });
-  const [appId, refDomain] = positionals;
-  if (!appId || !refDomain) {
-    throw new Error("usage: unicas app-audit root-domain-events <appId> <refDomain> [--space-id S] [--after N] [--limit N]");
+  const [appId] = positionals;
+  if (!appId || positionals.length !== 1) {
+    throw new Error("usage: unicas app-audit root-events <appId> [--space-id S] [--after N] [--limit N]");
   }
   await withAdminClient(ctx, async (admin) => {
-    printJson(await admin.listSpaceRootDomainEvents(
-      { appId, refDomain },
+    printJson(await admin.listAppRootEvents(
+      { appId },
       {
         ...(values["space-id"] !== undefined ? { spaceId: values["space-id"] } : {}),
         ...(values.after !== undefined ? { after: parseAfter(values.after) } : {}),

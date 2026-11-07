@@ -4,7 +4,6 @@ import {
   SpaceCapabilityPermissionKinds,
   SpaceCapabilityVersion,
   SpaceOperationPolicies,
-  SpaceRefDomainClaimSchema,
   parseSpaceCapabilityPermission,
   spaceOperationPolicyFor,
   parseSpaceSelector,
@@ -80,9 +79,7 @@ describe("Space capability vocabulary", () => {
       grants: [{ selector: "space-1", permissions: ["cas:nodes:read"] }],
     }).success).toBe(false);
     expect(SpaceCapabilityClaimsSchema.safeParse({ ...claims, grants: [] }).success).toBe(false);
-    expect(SpaceRefDomainClaimSchema.safeParse("files:primary").success).toBe(true);
-    expect(SpaceRefDomainClaimSchema.safeParse("_reserved").success).toBe(false);
-    expect(SpaceRefDomainClaimSchema.safeParse(`a${"b".repeat(64)}`).success).toBe(false);
+    expect(SpaceCapabilityClaimsSchema.safeParse({ ...claims, refDomain: "_legacy" }).success).toBe(true);
   });
 
   test("maps every route operation to one exact policy", () => {
@@ -115,12 +112,12 @@ describe("Space capability vocabulary", () => {
       listRootRefs: {
         operationId: "listRootRefs",
         permission: "cas:root-refs:read",
-        requiredClaims: ["grants", "refDomain"],
+        requiredClaims: ["grants"],
       },
       updateRootRefs: {
         operationId: "updateRootRefs",
         permission: "cas:root-refs:update",
-        requiredClaims: ["grants", "refDomain"],
+        requiredClaims: ["grants"],
       },
     });
     expect(spaceOperationPolicyFor("lease")).toBe(SpaceOperationPolicies.lease);

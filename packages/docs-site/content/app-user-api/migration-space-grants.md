@@ -37,8 +37,8 @@ The `0.2.0` SDK removes the Space-bound `SpaceCasClient`,
    `createAppCasClient({ baseUrl, appId, capabilityProvider })`.
 2. Implement `SpaceCapabilityProvider.acquire(requirement)`. Return the opaque
    `bearerToken` and trusted metadata for that token: version 2, Unix-second
-   expiry (and optional not-before), grants, and `refDomain` when Root Ref
-   permissions are present. The SDK does not parse the token; the service still
+   expiry (and optional not-before), and grants. Root Ref operations need no
+   additional namespace. The SDK does not parse the token; the service still
    performs authoritative authorization.
 3. Pass the target Space ID as the first argument to every CAS operation, for
    example `client.readMetadata(spaceId, hash)` and
@@ -88,7 +88,7 @@ negative deltas.
    storage dispatch.
 - Retired Stack/Tenant claim shapes cannot authorize App/Space routes and
    return `401 invalid_token`.
-- App, grant, operation permission, and Root Ref domain mismatches fail closed
+- App, Space selector, and exact operation permission mismatches fail closed
   with the documented authorization errors.
 
 There is no automatic data migration. Changing a persisted Space ID changes

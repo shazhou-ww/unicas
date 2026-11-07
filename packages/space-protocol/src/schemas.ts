@@ -151,11 +151,10 @@ export const CasRootRefUpdateSchema: z.ZodType<CasRootRefUpdate> = z.object({
 
 export const CasRootRefBalanceSchema: z.ZodType<CasRootRefBalance> = z.object({
   hash: CasHashSchema.describe("Node whose business Root Ref balance is reported."),
-  refCount: z.number().int().describe("Current balance in the capability's refDomain."),
+  refCount: z.number().int().nonnegative().describe("Current App/Space Root Ref balance."),
 }).readonly().meta({ id: "CasRootRefBalance" });
 
 export const CasRootRefsPageSchema: z.ZodType<CasRootRefsPage> = z.object({
-  refDomain: z.string().min(1).describe("Business lifecycle namespace taken from the verified capability, never from caller input."),
   revision: z.number().int().nonnegative().describe("Stable Root Ref snapshot revision represented by this page."),
   items: z.array(CasRootRefBalanceSchema).readonly().describe("Root Ref balances in this page."),
   nextCursor: z.string().min(1).nullable().describe("Opaque cursor for the next page, or null when this snapshot is exhausted."),

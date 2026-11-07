@@ -1,0 +1,4 @@
+{"type":"setAlias","payload":{"alias":"app-level-multi-space-client"}}
+{"type":"acceptIdeal","payload":{"idealRevision":"542c070aafa1b3253bc28add5d0b2f048eb79027"}}
+{"type":"acceptInner","payload":{"implementationRevision":"e3de9e727abd40070127055de5b45922fe54b8e7"}}
+{"type":"acceptOuter","payload":{"deploymentRevision":"ae02eec8826ea5c71f19964400548feb124c7a3a"}}

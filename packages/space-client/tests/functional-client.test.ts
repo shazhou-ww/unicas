@@ -22,7 +22,7 @@ describe("functional App CAS client", () => {
     const provider = vi.fn(async () => capability("session-token", [
       { selector: "/users/alice", permissions: ALL_PERMISSIONS },
       { selector: "/shared/**", permissions: ["cas:nodes:read"] },
-    ], "documents"));
+    ]));
     const client = createAppCasClient({
       baseUrl: "https://cas.test/",
       appId: "app/1",
@@ -48,7 +48,6 @@ describe("functional App CAS client", () => {
           }
           if (pathname.endsWith("/root-refs") && request.method === "GET") {
             return Response.json({
-              refDomain: "documents",
               revision: 1,
               items: [],
               nextCursor: null,
@@ -180,16 +179,17 @@ describe("functional App CAS client", () => {
     expect(() => wrongScope.readMetadata("not-a-space", HASH)).toThrow(TypeError);
   });
 
-  it("pins the hidden Root Ref domain for the App client session", async () => {
+  it("refreshes Root Ref capabilities without a hidden namespace", async () => {
     const provider = vi.fn()
       .mockResolvedValueOnce(capability("root-1", [
         { selector: "/users/alice", permissions: ["cas:root-refs:read"] },
-      ], "documents"))
+      ]))
       .mockResolvedValueOnce(capability("root-2", [
         { selector: "/users/alice", permissions: ["cas:root-refs:read"] },
-      ], "other"));
+      ]));
     const responses = [
       Response.json({ error: "invalid_token" }, { status: 401 }),
+      Response.json({ revision: 1, items: [], nextCursor: null }),
     ];
     const client = createAppCasClient({
       baseUrl: "https://cas.test",
@@ -198,11 +198,7 @@ describe("functional App CAS client", () => {
       fetcher: { fetch: async () => responses.shift()! },
     });
 
-    await expect(client.listRootRefs("/users/alice"))
-      .rejects.toMatchObject({
-        name: "CasCapabilityError",
-        code: "INVALID_CAPABILITY_METADATA",
-      });
+    await expect(client.listRootRefs("/users/alice")).resolves.toMatchObject({ revision: 1, items: [] });
     expect(provider.mock.calls.map(([request]) => request.reason))
       .toEqual(["missing", "server-rejected"]);
   });
@@ -363,7 +359,6 @@ function capability(
     readonly selector: string;
     readonly permissions: readonly SpaceCapabilityPermissionKind[];
   }[],
-  refDomain?: string,
 ): ProvidedSpaceCapability {
   return {
     bearerToken,
@@ -378,7 +373,6 @@ function capability(
           permissions: grant.permissions,
         };
       }),
-      ...(refDomain === undefined ? {} : { refDomain }),
     },
   };
 }

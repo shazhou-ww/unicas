@@ -88,7 +88,7 @@ Platform administration
 ```
 
 Every data-plane operation is scoped by both App and Space. Root Ref revision
-ordering remains App/refDomain-scoped while each event and balance retains the
+ordering is App-global while each event and balance retains the
 Space dimension.
 
 ## Naming guidance

@@ -46,8 +46,8 @@ remain available. Suspension does not change retention, membership, or data;
 see [operations](cas-operations.md#suspend-and-restore-an-app).
 
 `appId` is the top-level trust and storage namespace. Within an App,
-`spaceId` identifies data ownership; `refDomain` is an orthogonal Root Ref
-audit dimension.
+`spaceId` identifies data ownership. Root Ref revisions order events across
+Spaces within the App, without an additional namespace.
 
 - Every public data-plane route carries both `appId` and `spaceId`.
 - Identical content in different App-and-Space partitions is stored independently.
@@ -292,14 +292,13 @@ The canonical service operation is:
 
 ```http
 POST /v1/cas/root-refs?appId={appId}&spaceId={spaceId}
-Authorization: Bearer <capability carrying refDomain>
+Authorization: Bearer <capability>
 ```
 
 The request body does not carry App, Space, or domain identity. CAS maps the
 globally unique verified issuer to App authority, requires query `appId` to
 match that authority, requires one signed grant to select query `spaceId` and
-contain the operation permission, and derives `refDomain` from the signed
-capability.
+contain the exact operation permission. No additional namespace is selected.
 
 The update operation:
 
@@ -310,9 +309,9 @@ The update operation:
 5. if the same request ID has a different payload, returns conflict;
 6. verifies every positively referenced target is ready;
 7. verifies every resulting `rootRefCount` is non-negative;
-8. allocates the next `(appId, refDomain)` audit revision;
+8. allocates the next App-global audit revision;
 9. applies aggregate changes, appends one Space-bearing audit event, updates
-  the domain projection, and records idempotency in one D1 transaction.
+  the App/Space projection, and records idempotency in one D1 transaction.
 
 Every hash in `changes` must identify an existing D1 node, including hashes with negative deltas. Each delta must be a non-zero safe integer within configured per-request bounds. The service checks addition overflow before applying it. Empty change sets, unknown hashes, non-integer values, overflow, and results below zero reject the entire batch.
 
@@ -327,7 +326,7 @@ doc:{documentId}:truncate:{firstVersion}-{lastVersion}:remove-refs
 snapshot:{documentId}:{version}:add-refs
 ```
 
-Idempotency is scoped to `(appId, spaceId, refDomain, requestId)` and is
+Idempotency is scoped to `(appId, spaceId, requestId)` and is
 required for timeout and retry safety. It does not introduce owner entities;
 aggregate root counts remain scoped only by App, Space, and hash. Business
 domains own logical-reference lifecycle; CAS stores counts and audit facts.
@@ -337,8 +336,8 @@ domains own logical-reference lifecycle; CAS stores counts and audit facts.
 Reconciliation is an operator-assisted comparison, not an automatic repair:
 
 1. The business system exports its intended balances for one stable
-  `(appId, refDomain)` and records the source watermark.
-2. An administrator reads the CAS domain balance and ordered events through a
+  App and records the source watermark.
+2. An administrator reads the CAS App balance and ordered events through a
   consistent audit revision, optionally filtering one Space at a time.
 3. The operator compares intended and CAS-recorded counts by Space and hash,
   then uses event request IDs and business records to explain differences.
@@ -347,9 +346,11 @@ Reconciliation is an operator-assisted comparison, not an automatic repair:
 5. The operator reads a new audit revision and verifies the intended result.
 
 Do not update audit projections directly, derive aggregate lifecycle state from
-domain balances, or silently force the aggregate to match business claims. A
-legacy migration may seed the reserved `_legacy` audit domain, but normal
-capabilities cannot write that domain.
+audit balances, or silently force the aggregate to match business claims.
+The offline cutover compares old projections with every authoritative aggregate,
+preserves old histories in a read-only archive, and records an App checkpoint.
+It never seeds a sentinel namespace or invents a cross-history order.
+See the [Root Ref migration and replay bridge](./app-user-api/migration-root-refs.md).
 
 ## 10. Space client TypeScript API
 
@@ -405,7 +406,7 @@ storage/concurrency strategies through explicit platform ports.
 public endpoint. The same Worker serves `/v1/cas`, `/admin`, MCP/OAuth, and the
 admin UI while preserving credential isolation between route classes. D1, R2,
 KV, and Durable Object bindings are Cloudflare adapter concerns; keyed actor
-ports preserve the single-writer semantics required by Space and ref-domain
+ports preserve the single-writer semantics required by Space and App Root Ref
 operations. Node, usage, and GC routes retain the canonical `/cas`
 resource-family segment; Root Refs is a sibling Space operation. A Gateway or
 other shared ingress may map selected Space operations to another path, but
@@ -421,8 +422,9 @@ The controlled authority registry is cached for 30 seconds; records
 older than the 60-second hard stale/revocation bound fail closed when they
 cannot be refreshed.
 
-Root Refs writers carry signed `refDomain`; callers cannot provide or override
-it through path, query, header, or body.
+Root Ref writers require the exact update permission in a grant selecting the
+Space. Unknown legacy claims and caller-supplied forwarding headers cannot
+introduce an authorization or storage dimension.
 
 Top-level `/admin` routes use a provider-registry-backed BFF session plus
 deny-by-default Platform Access. Google OIDC, Microsoft personal-account OIDC,
@@ -553,7 +555,7 @@ Business services apply signed non-zero count deltas:
 
 ```http
 POST /v1/cas/root-refs?appId={appId}&spaceId={spaceId}
-Authorization: Bearer <CAS capability carrying refDomain>
+Authorization: Bearer <capability>
 Content-Type: application/json
 
 {
@@ -567,18 +569,20 @@ Content-Type: application/json
 
 CAS does not store logical owner identities. `cas_nodes.root_ref_count` is the
 authoritative aggregate. Every newly accepted update atomically changes the
-aggregate, allocates an App-domain revision, appends one event containing the
-affected Space, updates the domain balance projection, and stores the
-idempotency result. Aggregate counts cannot become negative; audit domain
-balances may.
+aggregate, allocates an App-global revision, appends one event containing the
+affected Space, updates the App/Space/hash projection, and stores the
+App/Space/requestId idempotency result. Both aggregate and current projection
+counts are non-negative; zero projection rows are omitted.
 
 Logical owner assignment is not part of the CAS contract. The aggregate count
 and signed-delta API are the only live root lifecycle model.
 
 <!-- cas-contract-docs: migration-start -->
-A temporary `/_internal/root-refs` compatibility route may exist during cutover
-only; it is bound to trusted server-configured legacy stack/domain identity and
-is then disabled.
+There is no compatibility route or hidden namespace for Root Ref writes.
+Old histories remain read-only; unique old requests replay their original
+revision without applying another delta. New requests use the App-global
+stream after its explicit checkpoint. The offline cutover and post-write
+rollback limits are defined in the [migration guide](./app-user-api/migration-root-refs.md).
 <!-- cas-contract-docs: migration-end -->
 
 ### 11.7 App admin audit API
@@ -586,13 +590,13 @@ is then disabled.
 Root Ref audit reads are formal App-level admin contracts:
 
 ```http
-GET /admin/apps/{appId}/root-ref-domains/{refDomain}/refs
-GET /admin/apps/{appId}/root-ref-domains/{refDomain}/events
+GET /admin/apps/{appId}/root-refs
+GET /admin/apps/{appId}/root-ref-events
 Cookie: cas_admin_session=<HttpOnly OIDC-backed session>
 ```
 
 Both reads support an optional exact `spaceId` filter and include `spaceId` in
-every row/event. Revisions are monotonic per `(appId, refDomain)`. All App
+every row/event. Revisions are monotonic per App across Spaces. All App
 members can use the MVP admin surface; finer-grained control-plane roles are
 deferred.
 

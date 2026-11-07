@@ -30,13 +30,22 @@ const PNPM = resolvePnpmCommand();
 const TAR = process.platform === "win32" ? "tar.exe" : "tar";
 
 function resolvePnpmCommand() {
-  if (process.platform !== "win32") return "pnpm";
+  if (process.platform !== "win32") return { command: "pnpm", prefix: [] };
   const located = spawnSync("where.exe", ["pnpm.CMD"], { encoding: "utf8" });
   if (located.status !== 0) throw new Error("pnpm.CMD is not available on PATH");
   const shim = located.stdout.split(/\r?\n/u).find(Boolean);
-  const match = /@"([^"]+pnpm\.exe)"/iu.exec(readFileSync(shim, "utf8"));
-  if (!match) throw new Error(`cannot resolve pnpm executable from ${shim}`);
-  return resolve(match[1].replace(/^%~dp0/iu, `${dirname(shim)}${sep}`));
+  const contents = readFileSync(shim, "utf8");
+  const match = /@"([^"]+pnpm\.exe)"/iu.exec(contents);
+  if (match) return {
+    command: resolve(match[1].replace(/^%~dp0/iu, `${dirname(shim)}${sep}`)),
+    prefix: [],
+  };
+  const nodeShim = /"%~dp0\\([^"]+\.(?:c?js))"/iu.exec(contents);
+  if (nodeShim) return {
+    command: process.execPath,
+    prefix: [resolve(dirname(shim), nodeShim[1])],
+  };
+  throw new Error(`cannot resolve pnpm executable from ${shim}`);
 }
 
 function parseArgs(argv) {
@@ -76,7 +85,7 @@ function run(command, args, { cwd = ROOT, env = process.env, stdio = "pipe", enc
 }
 
 function runPnpm(args, options) {
-  return run(PNPM, args, options);
+  return run(PNPM.command, [...PNPM.prefix, ...args], options);
 }
 
 async function readJson(path) {
@@ -134,6 +143,11 @@ export async function normalizeGzipOs(archivePath) {
   // pnpm's advisory gzip OS byte varies by host and is outside the payload checksum.
   archive[9] = 0x03;
   await writeFile(archivePath, archive);
+}
+
+export function assertSdkLicenseLineEndings(license) {
+  assert(!license.includes(0x0d),
+    "SDK LICENSE must use LF line endings; use a checkout matching .gitattributes before preparing release evidence");
 }
 
 function exportTargets(value) {
@@ -261,7 +275,9 @@ async function verifyInstalledPackages(matrix, consumerDirectory) {
     const [scope, name] = entry.name.split("/");
     const installed = await realpath(join(consumerDirectory, "node_modules", scope, name));
     assert(installed.startsWith(consumerRoot), `${entry.name}: resolved outside the external consumer`);
-    assert(!installed.startsWith(`${await realpath(ROOT)}${sep}`), `${entry.name}: resolved to the repository workspace`);
+    const workspacePackage = await realpath(join(ROOT, entry.directory));
+    assert(installed !== workspacePackage && !installed.startsWith(`${workspacePackage}${sep}`),
+      `${entry.name}: resolved to the repository workspace`);
   }
 }
 
@@ -294,7 +310,7 @@ async function createConsumer(matrix, artifacts, temporaryRoot) {
     stringifyYaml({ packages: ["."], overrides }, { lineWidth: 0 }),
   );
 
-  console.log("sdk: install packed artifacts outside the workspace");
+  console.log("sdk: install packed artifacts in an isolated consumer workspace");
   runPnpm(["install", "--ignore-scripts", "--no-frozen-lockfile"], { cwd: consumerDirectory, stdio: "inherit" });
   await verifyInstalledPackages(matrix, consumerDirectory);
   console.log("sdk: typecheck packed declarations");
@@ -382,6 +398,8 @@ async function copyArtifacts(artifacts, outputDir) {
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const matrix = await readJson(MATRIX_PATH);
+  const rootLicense = await readFile(join(ROOT, "LICENSE"));
+  assertSdkLicenseLineEndings(rootLicense);
   const temporaryRoot = await mkdtemp(join(tmpdir(), "unicas-sdk-release-"));
   console.log(`sdk: temporary release root ${temporaryRoot}`);
   try {
@@ -389,7 +407,6 @@ async function main() {
     await syncSdkApiBaseline(ROOT, matrix, options.mode);
     const firstRound = await packRound(matrix, join(temporaryRoot, "round-a"));
     const secondRound = await packRound(matrix, join(temporaryRoot, "round-b"));
-    const rootLicense = await readFile(join(ROOT, "LICENSE"));
     const openApiBytes = await readFile(join(ROOT, "packages", "space-protocol", "openapi", "app-space-v1.openapi.json"));
     const packageEvidence = [];
     for (let index = 0; index < firstRound.length; index += 1) {

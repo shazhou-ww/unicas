@@ -14,3 +14,4 @@ tests/fixtures/sdk-consumer/** text eol=lf
 packages/service-cloudflare/migrations/** text eol=lf
 packages/site/** text eol=lf
 packages/spaces/migrations/** text eol=lf
+**/events.jsonl -text -filter

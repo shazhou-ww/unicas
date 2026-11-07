@@ -71,7 +71,6 @@ async function fixture() {
     provider: "google",
     appId: "app-a",
     spaceId: "/space-a",
-    refDomain: "spaces",
   };
   return { assets, db, env, principal };
 }

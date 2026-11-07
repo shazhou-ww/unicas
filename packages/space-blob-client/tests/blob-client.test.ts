@@ -118,7 +118,7 @@ class MemoryCas implements AppCasClient, HttpFetcher {
   }
 
   async listRootRefs() {
-    return { refDomain: "test", revision: 0, items: [], nextCursor: null };
+    return { revision: 0, items: [], nextCursor: null };
   }
 
   async usage(spaceId: string): Promise<CasUsage> {

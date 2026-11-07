@@ -86,7 +86,6 @@ function fixture(options: {
   const cas = {
     updateRootRefs: vi.fn(async () => ({ success: true, revision: 1 })),
     listRootRefs: vi.fn(async () => ({
-      refDomain: "spaces",
       revision: 1,
       items: options.retained === false ? [] : [{ hash: "manifest-next", refCount: 1 }],
       nextCursor: null,
@@ -290,7 +289,6 @@ describe("SpacesFileService", () => {
     let oldRefCount = 1;
     const cas = {
       listRootRefs: vi.fn(async () => ({
-        refDomain: "spaces",
         revision: 1,
         items: oldRefCount > 0 ? [{ hash: "manifest-old", refCount: oldRefCount }] : [],
         nextCursor: null,
@@ -339,7 +337,6 @@ describe("SpacesFileService", () => {
   test("keeps a pending release when Root Ref pagination exceeds the scan bound", async () => {
     const cas = {
       listRootRefs: vi.fn(async () => ({
-        refDomain: "spaces",
         revision: 1,
         items: [],
         nextCursor: "more",

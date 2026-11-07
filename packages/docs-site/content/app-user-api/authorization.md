@@ -15,8 +15,7 @@ configured external issuer. The UniCAS service:
 5. requires the issuer-derived App to equal query `appId`;
 6. finds grants whose selector matches the route `spaceId`;
 7. requires at least one matching grant to contain the exact operation
-   permission; and
-8. requires a valid `refDomain` for Root Ref list or update.
+   permission.
 
 Client-side route construction or operation visibility is not an authorization
 boundary.
@@ -36,14 +35,12 @@ boundary.
 | `grants` | Non-empty array of at most 32 Space selector and permission bindings. |
 | `grants[].selector` | Canonical exact, terminal single-segment prefix, or terminal recursive Space selector. |
 | `grants[].permissions` | Non-empty array of exact `cas:{resource}:{action}` operation strings for that selector. |
-| `refDomain` | Optional for non-Root-Ref operations; required and validated for Root Ref list/update. |
 
 The generated OpenAPI publishes this shape as
 `components.schemas.SpaceCapabilityClaims`. The bearer security scheme's
 `x-unicas-capability` extension references that schema, and each operation's
 `x-unicas-authorization` extension names its exact permission and required
-claims. Root Ref operations additionally link `refDomain` to
-`components.schemas.SpaceRefDomainClaim`. The global security requirement
+claims. Root Ref operations require no additional namespace claim. The global security requirement
 deliberately retains an empty array:
 these permission strings are signed capability claims, not OAuth scopes.
 
@@ -96,15 +93,15 @@ token with write permission on `/users/u_123` and read permission on
 
 ## Operation-to-permission matrix
 
-| Operation | Required permission | `refDomain` |
-| --- | --- | --- |
-| Read node content | `cas:nodes:read` | Not used |
-| Read node metadata | `cas:nodes:read` | Not used |
-| Lease/upload node | `cas:nodes:lease` | Not used |
-| List Root Refs | `cas:root-refs:read` | Required |
-| Update Root Refs | `cas:root-refs:update` | Required |
-| Get usage | `cas:usage:read` | Not used |
-| Run GC | `cas:gc:execute` | Not used |
+| Operation | Required permission |
+| --- | --- |
+| Read node content | `cas:nodes:read` |
+| Read node metadata | `cas:nodes:read` |
+| Lease/upload node | `cas:nodes:lease` |
+| List Root Refs | `cas:root-refs:read` |
+| Update Root Refs | `cas:root-refs:update` |
+| Get usage | `cas:usage:read` |
+| Run GC | `cas:gc:execute` |
 
 A grant may contain multiple permissions when one user action genuinely needs
 them, and a token may contain multiple grants for owned and shared resources.
@@ -117,40 +114,20 @@ exposes usage inspection.
 | Workflow | Normal permissions | Guidance |
 | --- | --- | --- |
 | Client data preparation | `cas:nodes:read`, `cas:nodes:lease` | Normal frontend profile. It can prepare immutable state but cannot commit or release durable roots. |
-| App-backend Root Ref coordination | `cas:root-refs:read`, `cas:root-refs:update` and one `refDomain` | Backend-only by default. Add node permissions only when the backend separately requires them. |
-| Explicit client-only App | Client data preparation plus the required Root Ref permission and one `refDomain` | Grant Root Ref update only as a deliberate App authorization decision. |
+| App-backend Root Ref coordination | `cas:root-refs:read`, `cas:root-refs:update` | Backend-only by default. Add node permissions only when the backend separately requires them. |
+| Explicit client-only App | Client data preparation plus the required Root Ref permission | Grant Root Ref update only as a deliberate App authorization decision. |
 | Usage inspection | `cas:usage:read` | Does not grant GC or data access. |
 | Garbage collection | `cas:gc:execute` | Does not grant usage inspection or data access. |
 
 UniCAS does not infer browser or backend origin from a bearer token. The App
 issuer owns that delivery decision.
 
-## `refDomain`
+## Root Ref scope
 
-A `refDomain`:
-
-- is at most 64 characters;
-- starts with a lowercase ASCII letter;
-- then contains lowercase letters or digits;
-- may contain colon-separated non-empty lowercase alphanumeric segments;
-- cannot start with `_` and cannot use reserved values.
-
-Examples:
-
-```text
-files
-files:primary
-documents:shared
-```
-
-The service takes the domain only from the verified capability and overwrites
-attacker-supplied forwarding headers. This prevents one caller from selecting a
-different domain through query, body, or header manipulation.
-
-The App owns the meaning and lifecycle of domains. Use separate domains when
-independent business root catalogs need independent revisions and authority.
-`refDomain` applies to the whole token, not to an individual grant; use
-separate tokens when selected Spaces require different Root Ref domains.
+Root Ref authorization uses only App authority, the matching Space selector,
+and the exact operation permission. There is no default or hidden namespace.
+Extra legacy v2 claims are temporarily ignored and never forwarded or used
+for audit or idempotency. See [the breaking-change migration](./migration-root-refs.md).
 
 ## Least-privilege examples
 
@@ -183,7 +160,7 @@ Read an owned Space and matching shared Spaces:
 }
 ```
 
-Commit roots in one domain:
+Commit roots in one selected Space:
 
 ```json
 {
@@ -202,8 +179,7 @@ Commit roots in one domain:
         "cas:root-refs:update"
       ]
     }
-  ],
-  "refDomain": "files:primary"
+  ]
 }
 ```
 
@@ -247,16 +223,8 @@ exact operation permission.
 The client must not automatically exchange this for a broader token. The App
 must authorize a new action independently.
 
-### Missing Root Ref domain
-
-A token with the correct Root Ref read or update permission calls that
-operation without a valid `refDomain`.
-
-```text
-403 resource_scope_mismatch
-```
-
-Both listing and updating Root Refs require the domain.
+Node permissions never imply Root Ref authority. Root Ref read and update are
+independent exact permissions even when the token selects the same Space.
 
 ### Suspended App
 
@@ -279,7 +247,7 @@ fall back to administrator credentials or another App.
 | `registry_unavailable` | `401` | Authority data cannot be obtained within the hard-stale bound. |
 | `unsupported_algorithm` | `403` | The protected header does not use the supported algorithm. |
 | `APP_SUSPENDED` | `403` | The issuer-derived App is suspended. |
-| `resource_scope_mismatch` | `403` | The App, Space, or required Root Ref domain does not match. |
+| `resource_scope_mismatch` | `403` | The App or Space does not match. |
 | `insufficient_permission` | `403` | The exact operation permission is absent. |
 
 Authority metadata is cached for 30 seconds by default. If refresh fails, known

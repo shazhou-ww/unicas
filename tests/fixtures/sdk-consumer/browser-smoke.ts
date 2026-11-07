@@ -38,7 +38,6 @@ async function main(): Promise<void> {
             version: 2,
             expiresAt: Math.floor(Date.now() / 1000) + 300,
             grants: [{ selector: selector.selector, permissions: [requirement.permission] }],
-            refDomain: "docs",
           },
         };
       },

@@ -65,6 +65,72 @@ describe("release-gated workflow triggers", () => {
     expect(ci.jobs["deploy-production"].needs).toBe("validate");
   });
 
+  test("pins browser-verification jobs to the reviewed Playwright-supported runner", () => {
+    let browserJobs = 0;
+    for (const filename of ["ci.yml", "deploy-docs.yml", "publish-npm.yml"]) {
+      const workflow = parseYaml(readFileSync(join(ROOT, ".github", "workflows", filename), "utf8"));
+      for (const job of Object.values(workflow.jobs)) {
+        if (job.steps.some(step => /playwright install/u.test(step.run ?? ""))) {
+          browserJobs++;
+          expect(job["runs-on"]).toBe("ubuntu-24.04");
+        }
+      }
+    }
+    expect(browserJobs).toBe(3);
+    expect(ci.jobs["deploy-production"]["runs-on"]).toBe("ubuntu-latest");
+  });
+
+  test("installs a device-level v2 validator before idea snapshot checks", () => {
+    const docs = parseYaml(
+      readFileSync(join(ROOT, ".github", "workflows", "deploy-docs.yml"), "utf8"),
+    );
+    for (const steps of [
+      ci.jobs.validate.steps,
+      ...Object.values(docs.jobs).map(job => job.steps),
+    ]) {
+      const commands = steps.flatMap(step => step.run ? [step.run] : []);
+      const install = commands.indexOf("npm install --global silvermoon@0.5.0-canary.50.g7e6b2e80af33");
+      const check = commands.findIndex(command => /pnpm (?:validate:release|check:ideas:commit)/u.test(command));
+      expect(install).toBeGreaterThanOrEqual(0);
+      expect(check).toBeGreaterThan(install);
+    }
+  });
+
+  test("prepares the exact canonical named primary before v2 history validation", () => {
+    const docs = parseYaml(
+      readFileSync(join(ROOT, ".github", "workflows", "deploy-docs.yml"), "utf8"),
+    );
+    for (const steps of [
+      ci.jobs.validate.steps,
+      ...Object.values(docs.jobs).map(job => job.steps),
+    ]) {
+      const commands = steps.flatMap(step => step.run ? [step.run] : []);
+      const prepare = commands.findIndex(command => (
+        command.includes("git remote set-url origin https://github.com/shazhou-ww/unicas.git")
+        && command.includes("git fetch --no-tags origin main:refs/remotes/origin/main")
+      ));
+      const validate = commands.findIndex(command => /pnpm (?:validate:release|check:ideas:commit)/u.test(command));
+      expect(prepare).toBeGreaterThanOrEqual(0);
+      expect(validate).toBeGreaterThan(prepare);
+    }
+  });
+
+  test("cuts over Root Ref data only inside Production before secrets and Worker deployment", () => {
+    const deployment = ci.jobs["deploy-production"];
+    expect(deployment.environment).toBe("Production");
+    const steps = deployment.steps;
+    const verify = steps.findIndex(step => step.name === "Verify protected release revision");
+    const cutover = steps.findIndex(step => step.run === "node release/service/cut-over-root-refs.mjs --production");
+    const secrets = steps.findIndex(step => step.name === "Synchronize production provider secrets");
+    expect(cutover).toBeGreaterThan(verify);
+    expect(secrets).toBeGreaterThan(cutover);
+    expect(steps[cutover].env).toEqual({
+      CLOUDFLARE_ACCOUNT_ID: "${{ vars.CLOUDFLARE_ACCOUNT_ID }}",
+      CLOUDFLARE_API_TOKEN: "${{ secrets.CLOUDFLARE_API_TOKEN }}",
+    });
+    expect(ci.jobs.validate.steps.some(step => step.run?.includes("cut-over-root-refs.mjs --production"))).toBe(false);
+  });
+
   test("retains PR dependency review and release, scheduled, and manual CodeQL", () => {
     expect(Object.keys(security.on).sort()).toEqual([
       "pull_request",

@@ -19,7 +19,7 @@ describe("Cloudflare fullstack preset adoption", () => {
   });
 
   test("uses the preset task runner without replacing delivery or release gates", () => {
-    expect(rootPackage.devDependencies.turbo).toBe("2.7.2");
+    expect(rootPackage.devDependencies.turbo).toBe("2.9.14");
     expect(rootPackage.scripts).toMatchObject({
       build: "turbo run build --concurrency=1",
       check: "pnpm validate",
@@ -63,11 +63,11 @@ describe("Cloudflare fullstack preset adoption", () => {
   test("locks the task runner and every platform binary with portable SHA-512 resolutions", () => {
     const lock = parse(readFileSync(join(ROOT, "pnpm-lock.yaml"), "utf8"));
     expect(lock.importers["."].devDependencies.turbo).toEqual({
-      specifier: "2.7.2",
-      version: "2.7.2",
+      specifier: "2.9.14",
+      version: "2.9.14",
     });
     const entries = Object.entries(lock.packages)
-      .filter(([name]) => name.startsWith("turbo"));
+      .filter(([name]) => name.startsWith("turbo@") || name.startsWith("@turbo/"));
     expect(entries).toHaveLength(7);
     for (const [, entry] of entries) {
       expect(entry.resolution.integrity).toMatch(/^sha512-/);
