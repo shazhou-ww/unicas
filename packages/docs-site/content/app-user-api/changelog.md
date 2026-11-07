@@ -4,6 +4,9 @@ All six public App-user SDK packages share each version.
 
 ## 0.2.0 - Unreleased
 
+- Updates production dependencies while retaining the published inline
+  capability-claims OpenAPI component across Zod schema-export changes.
+
 - Removes the Root Ref domain dimension throughout capability metadata,
   authorization, responses and admin APIs. Revisions are App-global;
   replay keys include App and Space. See the breaking

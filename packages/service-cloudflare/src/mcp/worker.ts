@@ -133,8 +133,6 @@ export function createControlPlaneMcpWorker(
     tokenEndpoint: "/oauth/token",
     clientRegistrationEndpoint: "/oauth/register",
     clientIdMetadataDocumentEnabled: true,
-    allowImplicitFlow: false,
-    allowPlainPKCE: false,
     accessTokenTTL: 15 * 60,
     refreshTokenTTL: 8 * 60 * 60,
     scopesSupported: [...CONTROL_PLANE_MCP_SCOPES],

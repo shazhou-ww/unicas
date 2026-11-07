@@ -105,7 +105,7 @@ describe("App-user SDK release matrix", () => {
   test("the OpenAPI generator is not a protocol consumer dependency", () => {
     const protocol = packageManifest(matrix.packages.find(({ name }) => name === "@unicas/space-protocol"));
     expect(protocol.dependencies?.["@orpc/openapi"]).toBeUndefined();
-    expect(protocol.devDependencies?.["@orpc/openapi"]).toBe("1.15.0");
+    expect(protocol.devDependencies?.["@orpc/openapi"]).toBe("1.16.1");
   });
 
   test("normalizes host-specific gzip metadata without changing the payload", async () => {
