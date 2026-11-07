@@ -38,7 +38,7 @@ database_id = "3a64d58d-692c-4340-af22-c4b4f3e923f1"
 binding = "CAS_DB"
 database_name = "unicas-tenant"
 database_id = "c3924c96-0a9c-479c-b82d-4eb840642bfd"
-migrations_dir = "../../stacks/unicas/deploy/migrations/tenant"
+migrations_dir = "./migrations/app-space"
 
 [[r2_buckets]]
 binding = "CAS_R2"

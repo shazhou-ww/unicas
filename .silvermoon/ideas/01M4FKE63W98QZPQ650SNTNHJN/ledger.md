@@ -24,8 +24,19 @@
 
 ### Deployment steps
 
-- [ ] **D-S01:** Implementation 接受后制定 GitHub settings 与实测步骤
+- [x] **D-S01:** 发布并固定 Deployment contract
+- [x] **D-S02:** 读取 live workflow 与保护设置
+- [x] **D-S03:** 证明普通 main push 为零 hosted gate
+- [x] **D-S04:** 运行 exact-primary manual release preflight
+- [x] **D-S05:** 运行 exact-primary manual CodeQL proof
+- [x] **D-S06:** 核对无外部写入并发布证据
+- [x] **D-S07:** 失败时停止而不是削弱 gate
 
 ### Deployment acceptance criteria
 
-- [ ] **D-AC01:** 外部 trigger 与保护状态可读取且不削弱 release gate
+- [x] **D-AC01:** live trigger matrix 与已验收实现一致
+- [x] **D-AC02:** ordinary main push 不创建 CI 或 CodeQL run
+- [x] **D-AC03:** manual CI 对 exact primary 完成 release superset
+- [x] **D-AC04:** manual Security proof 保留独立 CodeQL
+- [x] **D-AC05:** required checks 与 environments 没有 stale 或弱化
+- [x] **D-AC06:** 外部证据可追溯且没有未经授权写入

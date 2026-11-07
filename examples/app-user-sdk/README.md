@@ -5,9 +5,9 @@ application does.
 
 ## Offline quickstarts
 
-- `node-quickstart.ts` creates a Space-bound transport with a synthetic
-  fetcher, reads immutable metadata, and runs without credentials or network
-  access.
+- `node-quickstart.ts` creates an App-level transport with a synthetic
+  capability provider and fetcher, reads immutable metadata from an explicit
+  Space, and runs without credentials or network access.
 - `browser-quickstart.ts` attaches the browser cache, proves a repeated
   immutable read is cached, and clears the authenticated Principal partition
   at logout.
@@ -38,6 +38,7 @@ $env:UNICAS_BASE_URL = "https://api.unicas.work"
 $env:UNICAS_APP_ID = "<your-app-id>"
 $env:UNICAS_SPACE_ID = "<your-space-id>"
 $env:UNICAS_CAPABILITY = "<short-lived-capability>"
+$env:UNICAS_CAPABILITY_EXPIRES_AT = "<token-expiration-unix-seconds>"
 $env:UNICAS_NODE_HASH = "<64-character-node-hash>"
 pnpm exec tsx examples/app-user-sdk/live-metadata.ts
 ```

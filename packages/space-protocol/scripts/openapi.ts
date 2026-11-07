@@ -12,7 +12,6 @@ import {
   SpaceCapabilityPermissionKinds,
   SpaceCapabilityVersion,
   SpaceOperationPolicies,
-  SpaceRefDomainClaimSchema,
 } from "../src/space-capability.js";
 
 export async function generateSpaceOpenApiDocument() {
@@ -27,7 +26,7 @@ export async function generateSpaceOpenApiDocument() {
       description: [
         "App-scoped Space API for immutable content-addressed nodes, leases, usage accounting, garbage collection, and atomic Root Ref commits.",
         "",
-        "Every request uses a version 1 JWT capability on the version 1 HTTP API. The registered issuer establishes App authority; the token's signed `spaceId` must match the route and its exact operation permission must authorize the request.",
+        "Every request uses a version 2 JWT capability for the shared CAS v1 audience. The registered issuer establishes App authority; one signed grant must select query `spaceId` and contain the operation's exact permission.",
         "",
         "Principal identity and Profile metadata are independent of Space ownership and authorization.",
       ].join("\n"),
@@ -37,7 +36,7 @@ export async function generateSpaceOpenApiDocument() {
     ],
     tags: [
       { name: "Nodes", description: "Read immutable nodes and establish temporary protection leases within a Space." },
-      { name: "Root Refs", description: "Read and atomically update business-root balances in the verified capability's refDomain." },
+      { name: "Root Refs", description: "Read and atomically update App/Space root balances with App-global audit revisions." },
       { name: "Operations", description: "Inspect Space accounting and run bounded garbage collection." },
     ],
     security: [{ spaceCapability: [] }],
@@ -47,7 +46,7 @@ export async function generateSpaceOpenApiDocument() {
           type: "http",
           scheme: "bearer",
           bearerFormat: "JWT",
-          description: "Version 1 Space capability. Issuer authority and signed spaceId must match the request path, and the permission set must contain the operation's exact CAS authority.",
+          description: "Version 2 Space capability for the shared CAS v1 audience. The verified issuer authority must match query appId, and one signed grant must both select query spaceId and contain the operation's exact CAS permission.",
         },
       },
     },
@@ -67,14 +66,10 @@ export async function generateSpaceOpenApiDocument() {
   const { $schema: _claimsMetaSchema, ...claimsSchema } = z.toJSONSchema(
     SpaceCapabilityClaimsSchema,
   );
-  const { $schema: _refDomainMetaSchema, ...refDomainSchema } = z.toJSONSchema(
-    SpaceRefDomainClaimSchema,
-  );
   document.components ??= {};
   document.components.schemas ??= {};
   Object.assign(document.components.schemas, {
     SpaceCapabilityClaims: claimsSchema,
-    SpaceRefDomainClaim: refDomainSchema,
   });
 
   const securityScheme = document.components.securitySchemes?.spaceCapability;
@@ -104,20 +99,13 @@ export async function generateSpaceOpenApiDocument() {
           capabilityVersion: SpaceCapabilityVersion,
           requiredPermission: policy.permission,
           requiredClaims: [...policy.requiredClaims],
-          ...(policy.requiredClaims.some(claim => claim === "refDomain")
-            ? {
-                claimSchemas: {
-                  refDomain: "#/components/schemas/SpaceRefDomainClaim",
-                },
-              }
-            : {}),
         },
       });
     }
   }
 
   const readContent = document.paths?.[
-    `${SpaceApiBasePath}/cas/nodes/{hash}/content`
+    `${SpaceApiBasePath}/nodes/{hash}`
   ]?.get;
   if (readContent?.responses === undefined) {
     throw new Error("Generated Space OpenAPI is missing the readContent operation");

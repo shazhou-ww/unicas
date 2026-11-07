@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   canonicalJson,
-  appOAuthResource,
+  casOAuthResource,
   decodeControlListCursor,
   encodeControlListCursor,
   isSupportedKeyAlgorithm,
@@ -33,8 +33,8 @@ describe("control-plane validation", () => {
   });
 
   test("App OAuth resources use the released v1 audience", () => {
-    expect(appOAuthResource("https://cas.example/admin", "app/a"))
-      .toBe("https://cas.example/v1/apps/app%2Fa");
+    expect(casOAuthResource("https://cas.example/admin"))
+      .toBe("https://cas.example/v1/cas/");
   });
 
   test("invitation tokens are bounded URL-safe strings", () => {

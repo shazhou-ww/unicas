@@ -148,19 +148,6 @@ export function createControlPlaneMcpServer(
   );
 
   server.registerTool(
-    APP_ADMIN_MCP_TOOLS.list_app_ref_domains.name,
-    APP_ADMIN_MCP_TOOLS.list_app_ref_domains.registration,
-    async ({ appId }) => {
-      const grant = requireGrantScope("control:read");
-      return accountAppToolResult({ operation: "listRefDomains", appId }, async () => {
-        const actor = await requireGrantAccount(grant, options);
-        await options.accountService!.requireAppMembership(actor.account.accountId, appId);
-        return auditReaderValue(options, "/_internal/audit/domains", { stackId: appId });
-      });
-    },
-  );
-
-  server.registerTool(
     APP_ADMIN_MCP_TOOLS.list_app_control_audit_events.name,
     APP_ADMIN_MCP_TOOLS.list_app_control_audit_events.registration,
     async ({ appId, limit, cursor, after, actorAccountId, targetAccountId }) => {
@@ -177,17 +164,16 @@ export function createControlPlaneMcpServer(
   );
 
   server.registerTool(
-    APP_ADMIN_MCP_TOOLS.list_space_root_domain_refs.name,
-    APP_ADMIN_MCP_TOOLS.list_space_root_domain_refs.registration,
-    async ({ appId, refDomain, spaceId, limit, cursor }) => {
+    APP_ADMIN_MCP_TOOLS.list_app_root_refs.name,
+    APP_ADMIN_MCP_TOOLS.list_app_root_refs.registration,
+    async ({ appId, spaceId, limit, cursor }) => {
       const grant = requireGrantScope("control:read");
-      return accountAppToolResult({ operation: "listRootDomainRefs", appId, refDomain }, async () => {
+      return accountAppToolResult({ operation: "listRootRefs", appId }, async () => {
         const actor = await requireGrantAccount(grant, options);
         await options.accountService!.requireAppMembership(actor.account.accountId, appId);
         return auditReaderValue(options, "/_internal/audit/refs", {
-          stackId: appId,
-          refDomain,
-          tenantId: spaceId,
+          appId,
+          spaceId,
           limit: limit === undefined ? undefined : String(limit),
           cursor,
         });
@@ -196,17 +182,16 @@ export function createControlPlaneMcpServer(
   );
 
   server.registerTool(
-    APP_ADMIN_MCP_TOOLS.list_space_root_domain_events.name,
-    APP_ADMIN_MCP_TOOLS.list_space_root_domain_events.registration,
-    async ({ appId, refDomain, spaceId, after, limit }) => {
+    APP_ADMIN_MCP_TOOLS.list_app_root_events.name,
+    APP_ADMIN_MCP_TOOLS.list_app_root_events.registration,
+    async ({ appId, spaceId, after, limit }) => {
       const grant = requireGrantScope("control:read");
-      return accountAppToolResult({ operation: "listRootDomainEvents", appId, refDomain }, async () => {
+      return accountAppToolResult({ operation: "listRootEvents", appId }, async () => {
         const actor = await requireGrantAccount(grant, options);
         await options.accountService!.requireAppMembership(actor.account.accountId, appId);
         return auditReaderValue(options, "/_internal/audit/events", {
-          stackId: appId,
-          refDomain,
-          tenantId: spaceId,
+          appId,
+          spaceId,
           after: after === undefined ? undefined : String(after),
           limit: limit === undefined ? undefined : String(limit),
         });

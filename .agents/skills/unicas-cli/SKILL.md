@@ -55,10 +55,9 @@ unicas apps list [--limit N] [--cursor C]
 unicas apps get <appId>
 unicas app-members list <appId> [--limit N] [--cursor C]
 unicas app-oauth-issuer get <appId>
-unicas app-ref-domains list <appId>
 unicas app-audit control <appId> [--limit N] [--cursor C] [--after ID]
-unicas app-audit root-domain-refs <appId> <refDomain> [--space-id S] [--limit N] [--cursor C]
-unicas app-audit root-domain-events <appId> <refDomain> [--space-id S] [--after N] [--limit N]
+unicas app-audit root-refs <appId> [--space-id S] [--limit N] [--cursor C]
+unicas app-audit root-events <appId> [--space-id S] [--after N] [--limit N]
 ```
 
 Write operations (`control:write`):

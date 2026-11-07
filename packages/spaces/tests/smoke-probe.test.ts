@@ -10,12 +10,17 @@ describe("verifySmokeIsolation", () => {
       const authorization = new Headers(init?.headers).get("Authorization") ?? "";
       const claims = decodeJwt(authorization.slice("Bearer ".length));
       if (url.pathname.endsWith("/lease")) {
-        expect(claims.spaceId).toBe("space-a");
-        expect(claims.permissions).toEqual(["cas:nodes:read"]);
+        expect(claims.grants).toEqual([{
+          selector: "/space-a",
+          permissions: ["cas:nodes:read"],
+        }]);
         return Response.json({ error: "insufficient_permission" }, { status: 403 });
       }
-      expect(url.pathname).toContain("/spaces/space-a/");
-      expect(claims.spaceId).toBe("space-a-isolation");
+      expect(url.searchParams.get("spaceId")).toBe("/space-a");
+      expect(claims.grants).toEqual([{
+        selector: "/space-a-isolation",
+        permissions: ["cas:nodes:read"],
+      }]);
       return Response.json({ error: "resource_scope_mismatch" }, { status: 403 });
     });
 
@@ -33,8 +38,7 @@ describe("verifySmokeIsolation", () => {
         displayName: "Ada",
         provider: "google",
         appId: "app-a",
-        spaceId: "space-a",
-        refDomain: "spaces",
+        spaceId: "/space-a",
       },
       fetchImpl,
     })).resolves.toEqual({
@@ -59,8 +63,7 @@ describe("verifySmokeIsolation", () => {
         displayName: "Ada",
         provider: "google",
         appId: "app-a",
-        spaceId: "space-a",
-        refDomain: "spaces",
+        spaceId: "/space-a",
       },
       fetchImpl: vi.fn(async () => Response.json({ error: "invalid_token" }, { status: 401 })),
     })).rejects.toThrow("expected 403 insufficient_permission");

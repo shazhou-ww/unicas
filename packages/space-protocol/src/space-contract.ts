@@ -13,7 +13,7 @@ import type {
   SpaceNodeUploadRejection,
 } from "./types.js";
 
-export const SpaceApiBasePath = "/v1/apps/{appId}/spaces/{spaceId}";
+export const SpaceApiBasePath = "/v1/cas";
 export const DefaultSpaceNodeLeaseDurationMs = 15 * 60 * 1000;
 
 const ErrorDataSchema = z.object({ message: z.string().optional() }).readonly();
@@ -43,6 +43,7 @@ export const SpaceApiStableErrorMap = {
   NODE_NOT_READY: { status: 409, message: "A referenced node is not ready", data: ErrorDataSchema },
   NEGATIVE_AGGREGATE: { status: 409, message: "The Root Ref update would create a negative balance", data: ErrorDataSchema },
   IDEMPOTENCY_CONFLICT: { status: 409, message: "The idempotency identity was reused with different content", data: ErrorDataSchema },
+  ROOT_REF_SNAPSHOT_CHANGED: { status: 409, message: "Restart pagination from the current revision", data: ErrorDataSchema },
   PAYLOAD_TOO_LARGE: { status: 413, message: "The CAS payload exceeds the configured limit", data: ErrorDataSchema },
   CAS_UPLOAD_LIMIT: { status: 429, message: "The Space has too many active uploads", data: ErrorDataSchema },
   SERVICE_UNAVAILABLE: { status: 503, message: "The CAS operation is temporarily unavailable", data: ErrorDataSchema },
@@ -67,7 +68,7 @@ export const SpaceApiStableErrorCodesByStatus = {
     "ROOT_REF_INVALID",
   ],
   404: ["NODE_NOT_FOUND"],
-  409: ["NODE_CONFLICT", "NODE_NOT_READY", "NEGATIVE_AGGREGATE", "IDEMPOTENCY_CONFLICT"],
+  409: ["NODE_CONFLICT", "NODE_NOT_READY", "NEGATIVE_AGGREGATE", "IDEMPOTENCY_CONFLICT", "ROOT_REF_SNAPSHOT_CHANGED"],
   413: ["PAYLOAD_TOO_LARGE"],
   416: ["INVALID_REQUEST"],
   429: ["CAS_UPLOAD_LIMIT"],
@@ -83,11 +84,11 @@ const HashSchema = z.string()
   .describe("Lowercase hexadecimal SHA-256 digest of canonical CAS node bytes.");
 const TimestampSchema = z.number().int().nonnegative()
   .describe("Unix timestamp in milliseconds since 1970-01-01T00:00:00Z.");
-const spaceParams = z.object({
+const scopeQuery = z.object({
   appId: AppIdSchema.describe("App that establishes issuer authority and storage isolation."),
   spaceId: SpaceIdSchema.describe("Space authorized by the capability for this request."),
 }).readonly();
-const nodeParams = spaceParams.unwrap().extend({
+const nodeParams = z.object({
   hash: HashSchema.describe("Lowercase SHA-256 content digest."),
 }).readonly();
 
@@ -306,7 +307,6 @@ const GcResultSchema = z.object({
   reclaimedContentBytes: z.number().int().nonnegative(),
 }).readonly().meta({ id: "SpaceGcResult" });
 const RootRefsPageSchema = z.object({
-  refDomain: z.string().min(1).describe("Business lifecycle namespace from the verified capability."),
   revision: z.number().int().nonnegative().describe("Stable snapshot revision represented by this page."),
   items: z.array(z.object({
     hash: HashSchema,
@@ -318,7 +318,7 @@ const RootRefsPageSchema = z.object({
 export const readContentContract = spaceProcedure
   .route({
     method: "GET",
-    path: `${SpaceApiBasePath}/cas/nodes/{hash}/content`,
+    path: `${SpaceApiBasePath}/nodes/{hash}`,
     operationId: "readContent",
     summary: "Read immutable node content",
     description: "Streams canonical bytes for a ready node in the requested Space. Content-Type, Content-Length, and X-CAS-Refs describe the same immutable node so clients can consume metadata and content in one authorized request. Requires cas:nodes:read.",
@@ -328,6 +328,7 @@ export const readContentContract = spaceProcedure
   })
   .input(z.object({
     params: nodeParams,
+    query: scopeQuery,
     headers: z.object({ Range: RangeHeaderSchema.optional() }).readonly().optional(),
   }).readonly())
   .output(ReadContentOutputSchema);
@@ -335,21 +336,21 @@ export const readContentContract = spaceProcedure
 export const readMetadataContract = spaceProcedure
   .route({
     method: "GET",
-    path: `${SpaceApiBasePath}/cas/nodes/{hash}/metadata`,
+    path: `${SpaceApiBasePath}/nodes/{hash}/metadata`,
     operationId: "readMetadata",
     summary: "Read node metadata",
     description: "Returns immutable metadata and mutable retention state for one Space node. Requires cas:nodes:read.",
     inputStructure: "detailed",
     tags: ["Nodes"],
   })
-  .input(z.object({ params: nodeParams }).readonly())
+  .input(z.object({ params: nodeParams, query: scopeQuery }).readonly())
   .output(z.object({ metadata: NodeMetadataSchema, state: NodeStateSchema }).readonly()
     .meta({ id: "SpaceReadMetadataResponse" }));
 
 export const leaseNodeContract = spaceProcedure
   .route({
     method: "POST",
-    path: `${SpaceApiBasePath}/cas/nodes/{hash}/lease`,
+    path: `${SpaceApiBasePath}/nodes/{hash}/lease`,
     operationId: "leaseNode",
     summary: "Lease a node",
     description: "Advances the lease-driven node state machine and returns the resulting ready, upload, replacement-upload, or dependency state. Requires cas:nodes:lease.",
@@ -358,6 +359,7 @@ export const leaseNodeContract = spaceProcedure
   })
   .input(z.object({
     params: nodeParams,
+    query: scopeQuery,
     body: SpaceNodeLeaseRequestSchema,
   }).readonly())
   .output(LeaseOperationResultSchema);
@@ -365,20 +367,20 @@ export const leaseNodeContract = spaceProcedure
 export const getUsageContract = spaceProcedure
   .route({
     method: "GET",
-    path: `${SpaceApiBasePath}/cas/usage`,
+    path: `${SpaceApiBasePath}/usage`,
     operationId: "getUsage",
     summary: "Read Space CAS usage",
     description: "Returns current operational accounting for one Space. Requires cas:usage:read.",
     inputStructure: "detailed",
     tags: ["Operations"],
   })
-  .input(z.object({ params: spaceParams }).readonly())
+  .input(z.object({ query: scopeQuery }).readonly())
   .output(UsageSchema);
 
 export const runGcContract = spaceProcedure
   .route({
     method: "POST",
-    path: `${SpaceApiBasePath}/cas/gc`,
+    path: `${SpaceApiBasePath}/gc`,
     operationId: "runGc",
     summary: "Run Space garbage collection",
     description: "Runs one bounded and race-safe garbage-collection pass within the Space. Requires cas:gc:execute.",
@@ -386,7 +388,7 @@ export const runGcContract = spaceProcedure
     tags: ["Operations"],
   })
   .input(z.object({
-    params: spaceParams,
+    query: scopeQuery,
     body: z.object({ maxNodes: z.number().int().positive().optional() }).readonly().optional(),
   }).readonly())
   .output(GcResultSchema);
@@ -397,16 +399,17 @@ export const listRootRefsContract = spaceProcedure
     path: `${SpaceApiBasePath}/root-refs`,
     operationId: "listRootRefs",
     summary: "List Space Root Ref balances",
-    description: "Returns a revision-stable page for the refDomain in the verified capability. Requires cas:root-refs:read and a valid signed refDomain.",
+    description: "Returns a revision-stable App/Space Root Ref page. Requires the exact cas:root-refs:read permission for this Space.",
     inputStructure: "detailed",
     tags: ["Root Refs"],
   })
   .input(z.object({
-    params: spaceParams,
     query: z.object({
+      appId: AppIdSchema.describe("App that establishes issuer authority and storage isolation."),
+      spaceId: SpaceIdSchema.describe("Space authorized by the capability for this request."),
       limit: z.number().int().min(1).max(200).optional(),
       cursor: z.string().min(1).optional(),
-    }).readonly().optional(),
+    }).readonly(),
   }).readonly())
   .output(RootRefsPageSchema);
 
@@ -416,11 +419,11 @@ export const updateRootRefsContract = spaceProcedure
     path: `${SpaceApiBasePath}/root-refs`,
     operationId: "updateRootRefs",
     summary: "Apply Space Root Ref changes",
-    description: "Atomically applies signed Root Ref deltas in the capability's refDomain. Requires cas:root-refs:update and a valid signed refDomain.",
+    description: "Atomically applies App/Space Root Ref deltas with an App-global audit revision. Requires the exact cas:root-refs:update permission for this Space.",
     inputStructure: "detailed",
     tags: ["Root Refs"],
   })
-  .input(z.object({ params: spaceParams, body: CasRootRefUpdateSchema }).readonly())
+  .input(z.object({ query: scopeQuery, body: CasRootRefUpdateSchema }).readonly())
   .output(z.object({
     success: z.literal(true),
     idempotent: z.boolean(),

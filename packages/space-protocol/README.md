@@ -18,11 +18,13 @@ npm install @unicas/space-protocol
 ```
 
 The package exposes the App/Space v1 HTTP API through `spaceApiContract`,
-`appSpaceRoutes`, capability `ver: 1`, signed `spaceId`, and exact
-`cas:{resource}:{action}` permissions. It covers node, lease, usage, garbage
-collection, and Root Ref operations. Binary CAS node bodies remain streamable;
-the `readContent` contract also describes `Range`, `200`, `206`, `416`, and
-their response headers.
+`appSpaceRoutes`, canonical Space IDs, and capability `ver: 2` grants that bind
+a Space selector to exact `cas:{resource}:{action}` permissions. Public data
+routes share the `/v1/cas` base and carry `appId` plus `spaceId` as required
+query scope. It covers node, lease, usage, garbage collection, and Root Ref
+operations. Binary CAS node bodies remain streamable; the `readContent`
+contract also describes `Range`, `200`, `206`, `416`, and their response
+headers.
 
 Use the shared contract and route helpers without duplicating path strings:
 
@@ -36,7 +38,7 @@ import {
 } from "@unicas/space-protocol";
 
 const contract: SpaceApiContract = spaceApiContract;
-const spaceId = SpaceIdSchema.parse("space-example");
+const spaceId = SpaceIdSchema.parse("/space-example");
 const usagePath = appSpaceRoutes.usage({
   appId: "app-example",
   spaceId,
@@ -58,7 +60,7 @@ extensions. These permissions are signed JWT claim values, not OAuth scopes.
 
 The package is ESM-only. It supports Node.js 24+ and the browser engines in the
 [compatibility matrix](https://docs.unicas.work/app-user-api/compatibility/).
-Package semver, HTTP path version `v1`, capability claim version `1`, and
+Package semver, HTTP path version `v1`, capability claim version `2`, and
 product deployment maturity are independent version axes. Only package-root
 exports and `@unicas/space-protocol/openapi.json` are public.
 

@@ -16,7 +16,7 @@ Never commit tokens, private keys, `.dev.vars`, `.env`, or `.wrangler/`.
 Run the host runtime:
 
 ```powershell
-pnpm dev
+pnpm local:dev
 ```
 
 It starts:
@@ -24,12 +24,12 @@ It starts:
 | Surface | Default URL |
 | --- | --- |
 | Administrator console | `http://localhost:4070/admin/` |
-| Browser-facing UniCAS edge | `http://localhost:4070/v1/apps/.../spaces/...` |
+| Browser-facing UniCAS edge | `http://localhost:4070/v1/cas/...?appId=...&spaceId=...` |
 | Direct Miniflare edge | `http://127.0.0.1:8794` |
 | Mock OIDC discovery | `http://127.0.0.1:8793/.well-known/openid-configuration` |
 
 Host-mode Miniflare state persists under `.wrangler/miniflare`. Stop the environment
-with Ctrl+C; restarting `pnpm dev` reuses that state.
+with Ctrl+C; restarting `pnpm local:dev` reuses that state.
 
 Vite proxies Space and discovery routes to the direct edge so
 the local browser topology matches production's single public origin.
@@ -59,13 +59,13 @@ Other local settings:
 Run the same environment in Docker when host Node.js is unavailable:
 
 ```powershell
-pnpm dev --docker
+pnpm local:dev --docker
 ```
 
 Compose forwards `UNICAS_ADMIN_ORIGIN` and the three OIDC variables above. It
 publishes ports 4070, 8793, and 8794 and stores `.wrangler` state in the named Docker
 volume `unicas-state`; it does not bind-mount the checkout's `.wrangler/`
-directory. `docker compose -f stacks/unicas/local/compose.yaml down` preserves
+directory. `docker compose -f scripts/local/compose.yaml down` preserves
 that volume, so the next start reuses state.
 
 ### Disposable capability fixture
@@ -74,7 +74,7 @@ Generate a local ES256 issuer fixture only when a test or non-production App
 needs one:
 
 ```powershell
-pnpm keys:local
+pnpm local:keys
 ```
 
 The default output is `.wrangler/capability/local.json`, created with exclusive
@@ -197,7 +197,7 @@ Deploy the lease-upload migration in this order:
 
 1. Configure the R2 signing credentials and browser CORS policy.
 2. Apply the versioned `CAS_DB` D1 migrations before publishing the service.
-   `pnpm deploy:production` performs this step after building and before
+   `pnpm release:service:production` performs this step after building and before
    `wrangler deploy`; the Worker never runs tenant DDL on a request or cron.
 3. Publish protocol and client consumers together. Clients using inline bodies
    or `X-CAS-Upload-*` headers are not compatible with the released endpoint.
@@ -206,13 +206,14 @@ Deploy the lease-upload migration in this order:
 
 ### App/Space v1 rollout
 
-The released Space HTTP API and its family-local capability claim both use
-version 1 with exact operation permissions. Deploy the service and maintained
-App consumers from the same accepted repository revision. Prototype routes,
-claim versions, and broad permissions are rejected immediately; there is no
+The released Space HTTP API uses the unified `/v1/cas` base, shared
+`https://api.unicas.work/v1/cas/` audience, and independent capability version
+2 grants. Deploy the service and maintained App consumers from the same
+accepted repository revision. Old App-in-path data routes, old audiences,
+claim versions, and malformed grants are rejected immediately; there is no
 cutoff binding or compatibility mode. Follow the
-[prototype migration guide](app-user-api/migration-v2-to-v1.md) for consumer
-changes and rollback boundaries.
+[Space grants migration guide](app-user-api/migration-space-grants.md) for
+consumer changes and rollback boundaries.
 
 Optional OIDC/session variables include `OIDC_ISSUER`, `OIDC_DISCOVERY_URL`,
 `SESSION_TTL_MS`, `SESSION_COOKIE_NAME`, `SESSION_COOKIE_SECURE`, and
@@ -250,8 +251,8 @@ bindings or credentials. Validate and deploy it separately:
 
 ```powershell
 pnpm docs:check
-pnpm deploy:docs:plan
-pnpm deploy:docs
+pnpm release:docs:plan
+pnpm release:docs:production
 ```
 
 `spaces.unicas.work` is a separately deployed full-stack App, not a route on
@@ -268,14 +269,14 @@ The accepted origin ownership model is documented in
 Print the repository-controlled deployment sequence without running it:
 
 ```powershell
-pnpm deploy:plan
+pnpm release:service:plan
 ```
 
 Build Wrangler's actual upload bundle without contacting the deployment API:
 
 ```powershell
 pnpm --filter @unicas/service-cloudflare exec wrangler deploy --dry-run
-pnpm deploy:spaces:plan
+pnpm release:spaces:plan
 ```
 
 Both dynamic Worker configs explicitly persist 5% sampled custom logs with
@@ -297,16 +298,15 @@ secret-absence evidence, and explicit approval of the exact rate. Native
 automatic tracing remains disabled even after such approval. See
 [Observability](observability.md) for the full contract and rollback.
 
-Do not run `pnpm deploy --dry-run`: pnpm can consume that argument instead of
-forwarding it, which invokes the real root deploy script. Use only
-`pnpm deploy:plan` or the direct Wrangler command above for dry runs.
+There is no implicit root `deploy` command. Use only
+`pnpm release:service:plan` or the direct Wrangler command above for dry runs.
 
 ## Deploy and smoke
 
 After the plan, bundle dry-run, tests, and typecheck pass, deploy with:
 
 ```powershell
-pnpm deploy:production
+pnpm release:service:production
 ```
 
 The explicit production command builds the Worker, applies pending `CAS_DB`
@@ -316,19 +316,18 @@ publication. The initial migration is an additive baseline for the schema
 already established by prior accepted releases; fresh databases receive the
 same complete schema. Request handling and scheduled cleanup never run
 `CREATE`, `ALTER`, `DROP`, or schema `PRAGMA` statements.
-`pnpm deploy` intentionally refuses to run. A named Wrangler environment must
-use `--skip-smoke`; otherwise the deploy command refuses to proceed because the
-default smoke target is production:
+A named Wrangler environment must use `--skip-smoke`; otherwise the deploy
+command refuses to proceed because the default smoke target is production:
 
 ```powershell
-node stacks/unicas/deploy/deploy.mjs --env staging --skip-smoke
-node stacks/unicas/deploy/smoke.mjs https://staging.example.com
+node release/service/deploy.mjs --env staging --skip-smoke
+node release/service/smoke.mjs https://staging.example.com
 ```
 
 No named environments are currently declared in `wrangler.toml`, so the example
 above is valid only after adding isolated bindings and routes.
 
-The protected release runs `pnpm deploy:spaces` after the UniCAS service smoke
+The protected release runs `pnpm release:spaces:production` after the UniCAS service smoke
 and before product or documentation promotion. It applies App-owned D1
 migrations, deploys Spaces, runs upload/commit/readback/isolation/cleanup smoke,
 and refuses an implicit or smoke-skipping production invocation.
@@ -343,7 +342,7 @@ The smoke signer reads provisioned private keys from the gitignored
 `.wrangler/cas-deploy/` directory. To target one control-plane-managed App,
 set `UNICAS_SMOKE_APP_ID`, `UNICAS_SMOKE_ISSUER`, `UNICAS_SMOKE_AUDIENCE`,
 `UNICAS_SMOKE_KID`, and `UNICAS_SMOKE_KEY_FILE`; optional
-`UNICAS_SMOKE_SPACE_ID` defaults to `deploy-smoke`. The default smoke covers
+`UNICAS_SMOKE_SPACE_ID` defaults to `/deploy-smoke`. The default smoke covers
 lease, read, metadata, Root Ref idempotency, usage, GC, cross-Space isolation,
 prototype-version denial, retired-claim denial, and retired-route `404`. Never
 commit the key files or print their contents.
@@ -407,7 +406,7 @@ secrets:
 | Variable | `UNICAS_SMOKE_ISSUER` | Issuer registered for the smoke App |
 | Variable | `UNICAS_SMOKE_AUDIENCE` | Audience registered for the smoke App |
 | Variable | `UNICAS_SMOKE_KID` | Key ID published by the smoke issuer |
-| Variable | `UNICAS_SMOKE_SPACE_ID` | Dedicated smoke Space, normally `deploy-smoke` |
+| Variable | `UNICAS_SMOKE_SPACE_ID` | Dedicated smoke Space, normally `/deploy-smoke` |
 | Secret | `UNICAS_SMOKE_PRIVATE_KEY_PKCS8` | PEM-encoded PKCS#8 private key matching the smoke key ID |
 
 Do not create a GitHub value for `UNICAS_SMOKE_KEY_FILE`. The workflow assigns
@@ -438,14 +437,14 @@ Initial provisioning is an explicit bootstrap operation:
 1. Generate an extractable ES256 key pair offline under the gitignored
    `.wrangler/cas-deploy/` directory and choose a unique `kid`.
 2. Add only the public JWK to the product-site JWKS, validate
-   `pnpm deploy:site:plan`, and deploy the product-site Worker.
+   `pnpm release:site:plan`, and deploy the product-site Worker.
 3. Run `unicas app-oauth-issuer inspect <appId>
    https://unicas.work/deploy-smoke` through a production control-plane
    session. Sign its exact, expiring challenge as an ES256 compact JWS with
    the new key and activate that inspection. Never pass the private key to the
    control plane.
 4. Set the five `UNICAS_SMOKE_*` variables from the activated response, set
-   `UNICAS_SMOKE_SPACE_ID=deploy-smoke`, and stream the PKCS#8 PEM directly
+   `UNICAS_SMOKE_SPACE_ID=/deploy-smoke`, and stream the PKCS#8 PEM directly
    into the `UNICAS_SMOKE_PRIVATE_KEY_PKCS8` GitHub environment secret without
    printing it.
 5. If recovery is required, dispatch **Recover Spaces production** with the
@@ -453,9 +452,23 @@ Initial provisioning is an explicit bootstrap operation:
    only in the approved operator credential store until rotation or recovery
    no longer requires it.
 
-The App/Space v1 issuer cutover is complete. Normal production contains no
-cutover switch or executable cutover step. Preserve its historical run and
-cutover documentation as audit evidence; do not repeat it as recovery.
+The production workflow retains an explicit App/Space issuer cutover gate for
+pre-release contract migrations. Leave `APP_SPACE_V1_CUTOVER_ENABLED=false`
+during normal releases. For a coordinated audience migration:
+
+1. Set `APP_SPACE_V1_CUTOVER_ENABLED=true` and update both maintained issuer
+   audience variables to the accepted shared CAS audience.
+2. Update every maintained Space deployment variable to a canonical `/`-led
+   Space ID before approving the release.
+3. Approve one release. The workflow first deploys the verifier, activates both
+   issuer authorities with the release-admin session, and then performs the
+   normal deployment and smoke checks.
+4. After the release and public-origin checks succeed, verify both active
+   authorities and set `APP_SPACE_V1_CUTOVER_ENABLED=false`.
+
+The cutover script is idempotent when an authority already has the target
+audience. Do not use the gate as general recovery or leave it enabled after the
+coordinated release.
 
 For the one-time Account-model production cutover, configure a required
 reviewer on the `Production` Environment before merging the promotion pull
@@ -463,7 +476,7 @@ request. Let the release revision pass `validate` and stop at that environment
 approval. From a checkout of the exact release SHA:
 
 1. Preview the bounded inventory with
-   `node stacks/unicas/deploy/reset-smoke.mjs --expected-stack-id <app-id>`.
+   `node release/service/reset-smoke.mjs --expected-stack-id <app-id>`.
 2. Execute the authorized no-backup reset with `--execute`, the same App ID,
    and `--confirm DELETE-ALL-TEST-DATA-NO-BACKUP`.
 3. Require the script to report `resetVerified`, `bootstrapVerified`, and
@@ -503,10 +516,10 @@ the time each deployment job starts waiting, which can differ from workflow
 dispatch order; every job still deploys its own validated `github.sha`. The
 job deploys in this order:
 
-1. `pnpm deploy:production` for the API/console service and canonical smoke.
-2. `pnpm deploy:spaces` for the Spaces App and file smoke.
-3. `pnpm deploy:site` for `unicas.work`.
-4. `pnpm deploy:docs` for `docs.unicas.work`.
+1. `pnpm release:service:production` for the API/console service and canonical smoke.
+2. `pnpm release:spaces:production` for the Spaces App and file smoke.
+3. `pnpm release:site:production` for `unicas.work`.
+4. `pnpm release:docs:production` for `docs.unicas.work`.
 5. HTTPS checks requiring the API health JSON, the console's same-origin
    `/admin/` redirect, and identifying HTML from the product and documentation
    origins. Redirects to another host or protocol do not pass.

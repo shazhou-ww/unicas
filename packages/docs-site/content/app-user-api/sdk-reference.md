@@ -3,7 +3,7 @@
 Only the exports listed here and
 `@unicas/space-protocol/openapi.json` are public. The release gate compares the
 generated declarations with the committed
-[API baseline](https://github.com/shazhou-ww/unicas/tree/main/sdk/api).
+[API baseline](https://github.com/shazhou-ww/unicas/tree/main/release/app-user-sdk/api).
 
 ## `@unicas/codec`
 
@@ -33,13 +33,19 @@ generated declarations with the committed
 
 ## `@unicas/space-client`
 
-- `createSpaceCasClient(config)` creates one `SpaceCasClient`.
+- `createAppCasClient(config)` creates one `AppCasClient`; every operation
+  accepts `spaceId` first.
 - Operations: `readNode`, `readMetadata`, `readContent`, `leaseNode`,
   `listRootRefs`, `updateRootRefs`, `usage`, and `gc`.
-- Configuration and result types include fetcher, cache, range, node source,
-  lease, Root Ref, usage, and GC contracts.
+- `SpaceCapabilityProvider.acquire(requirement)` returns an opaque bearer token
+  and trusted `SpaceCapabilityMetadata`; requirement types expose App, Space,
+  exact permission, and acquisition reason.
+- Configuration and result types include provider, fetcher, cache, range, node
+  source, lease, Root Ref, usage, and GC contracts.
 - `CasClientError` preserves the non-success HTTP status and stable response
   error code when present.
+- `CasCapabilityError` exposes stable provider/metadata/requirement error
+  codes.
 
 ## `@unicas/space-blob-client`
 

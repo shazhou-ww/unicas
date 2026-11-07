@@ -1,34 +1,101 @@
 import {
-  CasNodeRefsHeader,
-  parseCasNodeRefsHeader,
-  type CasHash,
-  type CasNodeMetadata,
+  validateSpaceId,
+  type SpaceCapabilityPermissionKind,
 } from "@unicas/space-protocol";
+import {
+  createCapabilityManager,
+  type CapabilityRecord,
+  type CapabilityRequirement,
+} from "./capability.js";
 import { CasClientError } from "./errors.js";
-import type {
-  CasClientConfigBase,
-  CasClientOperations,
-  CasGcOptions,
-  CasListRootRefsOptions,
-  CasNodeRange,
-  CasRootRefsResult,
-} from "./shared-types.js";
+import type { AppCasClientConfig } from "./types.js";
 
-export interface CasClientRoutes {
-  readMetadata(hash: string): string;
-  readContent(hash: string): string;
-  lease(hash: string): string;
-  updateRootRefs(): string;
-  listRootRefs(options: CasListRootRefsOptions): string;
-  usage(): string;
-  gc(): string;
+export interface AuthorizedTransport {
+  request(
+    requirement: CapabilityRequirement,
+    route: string,
+    init: RequestInit,
+    operation: string,
+    retryInvalidToken: boolean,
+  ): Promise<Response>;
+  requireSpaceId(spaceId: string): void;
 }
 
-export interface ScopedCasClientContext {
-  readonly client: CasClientOperations;
-  readonly request: (route: string, init?: RequestInit) => Promise<Response>;
-  readonly requireOk: (response: Response, operation: string) => Promise<Response>;
-  readonly routes: CasClientRoutes;
+interface ErrorResponse {
+  readonly code?: string;
+  readonly detail?: string;
+}
+
+export function createAuthorizedTransport(
+  config: AppCasClientConfig,
+): AuthorizedTransport {
+  const baseUrl = config.baseUrl.replace(/\/$/, "");
+  const fetcher = config.fetcher ?? { fetch: globalThis.fetch.bind(globalThis) };
+  const capabilities = createCapabilityManager(config.capabilityProvider);
+
+  const fetchWith = (
+    record: CapabilityRecord,
+    route: string,
+    init: RequestInit,
+  ): Promise<Response> => {
+    const headers = new Headers(init.headers);
+    headers.set("Authorization", ["Bearer", record.bearerToken].join(" "));
+    return fetcher.fetch(`${baseUrl}${route}`, { ...init, headers });
+  };
+
+  const request = async (
+    requirement: CapabilityRequirement,
+    route: string,
+    init: RequestInit,
+    operation: string,
+    retryInvalidToken: boolean,
+  ): Promise<Response> => {
+    let record = await capabilities.resolve(requirement);
+    let response = await fetchWith(record, route, init);
+    if (response.ok) return response;
+
+    let error = await readError(response);
+    if (response.status === 401 && error.code === "invalid_token") {
+      if (retryInvalidToken) {
+        record = await capabilities.refreshAfterRejection(requirement, record);
+        response = await fetchWith(record, route, init);
+        if (response.ok) return response;
+        error = await readError(response);
+      } else {
+        capabilities.invalidate(record);
+      }
+    } else if (
+      response.status === 403
+      && (error.code === "insufficient_permission" || error.code === "resource_scope_mismatch")
+    ) {
+      capabilities.invalidate(record);
+    }
+
+    throw new CasClientError(
+      response.status,
+      response.statusText,
+      operation,
+      error.detail,
+      error.code,
+    );
+  };
+
+  const transport: AuthorizedTransport = {
+    request,
+    requireSpaceId(spaceId: string) {
+      const error = validateSpaceId(spaceId);
+      if (error) throw new TypeError(error);
+    },
+  };
+  return Object.freeze(transport);
+}
+
+export function requirement(
+  appId: string,
+  spaceId: string,
+  permission: SpaceCapabilityPermissionKind,
+): CapabilityRequirement {
+  return { appId, spaceId, permission };
 }
 
 export function withSignal(
@@ -38,154 +105,19 @@ export function withSignal(
   return signal === undefined || signal === null ? init : { ...init, signal };
 }
 
-export function createScopedCasClient<Key extends { readonly hash: CasHash }>(
-  config: CasClientConfigBase<Key>,
-  scope: Omit<Key, "hash">,
-  routes: CasClientRoutes,
-): ScopedCasClientContext {
-  const baseUrl = config.baseUrl.replace(/\/$/, "");
-  const fetcher = config.fetcher ?? { fetch: globalThis.fetch.bind(globalThis) };
-
-  const request = async (route: string, init: RequestInit = {}): Promise<Response> => {
-    const token = await config.getToken();
-    if (token.length === 0) throw new TypeError("CAS token must not be empty");
-    const headers = new Headers(init.headers);
-    headers.set("Authorization", `Bearer ${token}`);
-    return fetcher.fetch(`${baseUrl}${route}`, { ...init, headers });
-  };
-
-  const requireOk = async (response: Response, operation: string): Promise<Response> => {
-    if (!response.ok) {
-      const body = await response.json().catch(() => null) as { message?: unknown; error?: unknown } | null;
-      const code = typeof body?.error === "string" ? body.error : undefined;
-      const detail = typeof body?.message === "string"
-        ? body.message
-        : code;
-      throw new CasClientError(response.status, response.statusText, operation, detail, code);
-    }
-    return response;
-  };
-
-  const client: CasClientOperations = {
-    async readNode(hash, options: { readonly signal?: AbortSignal } = {}) {
-      options.signal?.throwIfAborted();
-      const response = await requireOk(
-        await request(routes.readContent(hash), withSignal({}, options.signal)),
-        "readNode",
-      );
-      const contentType = response.headers.get("Content-Type");
-      const contentLength = response.headers.get("Content-Length");
-      const size = contentLength === null ? NaN : Number(contentLength);
-      if (!contentType || !Number.isSafeInteger(size) || size < 0 || response.body === null) {
-        throw new CasClientError(502, "Invalid node response", "readNode");
-      }
-      let refs: readonly string[];
-      try {
-        refs = parseCasNodeRefsHeader(response.headers.get(CasNodeRefsHeader));
-      } catch (error) {
-        throw new CasClientError(
-          502,
-          "Invalid node response",
-          "readNode",
-          error instanceof Error ? error.message : undefined,
-        );
-      }
-      return {
-        metadata: { hash, size, contentType, refs },
-        content: response.body,
-      };
-    },
-
-    readMetadata(hash, options: { readonly signal?: AbortSignal } = {}) {
-      options.signal?.throwIfAborted();
-      const key = { ...scope, hash } as Key;
-      const loadMetadata = async (): Promise<CasNodeMetadata> => {
-        const response = await requireOk(
-          await request(routes.readMetadata(hash), withSignal({}, options.signal)),
-          "metadata",
-        );
-        const body = await response.json() as { metadata: CasNodeMetadata };
-        return body.metadata;
-      };
-      return config.cache?.metadata(key, loadMetadata, options) ?? loadMetadata();
-    },
-
-    readContent(hash, range?: CasNodeRange, options: { readonly signal?: AbortSignal } = {}) {
-      options.signal?.throwIfAborted();
-      validateRange(range);
-      const key = { ...scope, hash } as Key;
-      const loadContent = async (): Promise<ReadableStream<Uint8Array>> => {
-        if (range?.length === 0) {
-          return new ReadableStream({ start: controller => controller.close() });
-        }
-        const headers = range === undefined
-          ? undefined
-          : { Range: `bytes=${range.offset}-${range.length === undefined ? "" : range.offset + range.length - 1}` };
-        const response = await requireOk(
-          await request(routes.readContent(hash), withSignal(
-            headers === undefined ? {} : { headers },
-            options.signal,
-          )),
-          "read",
-        );
-        if (response.body === null) throw new CasClientError(502, "Missing response body", "read");
-        return response.body;
-      };
-      return config.cache?.read(key, range, loadContent, options) ?? loadContent();
-    },
-
-    async updateRootRefs(update): Promise<CasRootRefsResult> {
-      const response = await requireOk(
-        await request(routes.updateRootRefs(), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(update),
-        }),
-        "updateRootRefs",
-      );
-      return response.json() as Promise<CasRootRefsResult>;
-    },
-
-    async listRootRefs(options: CasListRootRefsOptions = {}) {
-      const response = await requireOk(
-        await request(routes.listRootRefs(options), withSignal({}, options.signal)),
-        "listRootRefs",
-      );
-      return response.json();
-    },
-
-    async usage(signal?: AbortSignal) {
-      const response = await requireOk(
-        await request(routes.usage(), withSignal({}, signal)),
-        "usage",
-      );
-      return response.json();
-    },
-
-    async gc(options: CasGcOptions = {}) {
-      const response = await requireOk(
-        await request(routes.gc(), withSignal({
-          method: "POST",
-          ...(options.maxNodes === undefined ? {} : {
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ maxNodes: options.maxNodes }),
-          }),
-        }, options.signal)),
-        "gc",
-      );
-      return response.json();
-    },
-  };
-
-  return { client: Object.freeze(client), request, requireOk, routes };
-}
-
-function validateRange(range: CasNodeRange | undefined): void {
-  if (range === undefined) return;
-  if (!Number.isSafeInteger(range.offset) || range.offset < 0) {
-    throw new TypeError("CAS node range offset must be a non-negative safe integer");
+async function readError(response: Response): Promise<ErrorResponse> {
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return {};
   }
-  if (range.length !== undefined && (!Number.isSafeInteger(range.length) || range.length < 0)) {
-    throw new TypeError("CAS node range length must be a non-negative safe integer");
-  }
+  if (typeof body !== "object" || body === null) return {};
+  const envelope = body as { readonly error?: unknown; readonly message?: unknown };
+  const code = typeof envelope.error === "string" ? envelope.error : undefined;
+  const detail = typeof envelope.message === "string" ? envelope.message : code;
+  return {
+    ...(code === undefined ? {} : { code }),
+    ...(detail === undefined ? {} : { detail }),
+  };
 }

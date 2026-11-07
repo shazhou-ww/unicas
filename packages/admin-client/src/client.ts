@@ -42,7 +42,6 @@ import type {
   AppMembership,
   AppOAuthIssuer,
   AppOAuthIssuerInspection,
-  AppRefDomain,
   AppUsage,
   PlatformAccountDetail,
   PlatformAccountPage,
@@ -151,7 +150,6 @@ export interface AdminClient {
     body: { readonly inspectionId: string; readonly activationProof: string },
     precondition: string | { readonly ifNoneMatch: "*" },
   ): Promise<{ readonly etag: string }>;
-  listAppRefDomains(path: { readonly appId: AppId }): Promise<{ readonly domains: readonly AppRefDomain[] }>;
   listAppControlAuditEvents(
     path: { readonly appId: AppId },
     query?: CasAdminPageQuery & {
@@ -160,12 +158,12 @@ export interface AdminClient {
       readonly targetAccountId?: AccountId;
     },
   ): Promise<CasAdminPage<AppControlAuditEvent>>;
-  listSpaceRootDomainRefs(
-    path: { readonly appId: AppId; readonly refDomain: string },
+  listAppRootRefs(
+    path: { readonly appId: AppId },
     query?: { readonly spaceId?: string; readonly limit?: number; readonly cursor?: string },
   ): Promise<{ readonly revision: number; readonly refs: readonly SpaceRootRefBalance[]; readonly nextCursor: string | null }>;
-  listSpaceRootDomainEvents(
-    path: { readonly appId: AppId; readonly refDomain: string },
+  listAppRootEvents(
+    path: { readonly appId: AppId },
     query?: { readonly spaceId?: string; readonly after?: number; readonly limit?: number },
   ): Promise<{ readonly events: readonly SpaceRootRefEvent[]; readonly latestRevision: number; readonly nextAfter: number }>;
 }
@@ -525,14 +523,6 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
       return { etag: readEtag(response) };
     },
 
-    async listAppRefDomains(path) {
-      const response = await requireOk(
-        await request(appAdminRoutes.refDomains(path)),
-        "listAppRefDomains",
-      );
-      return response.json();
-    },
-
     async listAppControlAuditEvents(path, query) {
       const response = await requireOk(
         await request(`${appAdminRoutes.controlAuditEvents(path)}${queryString(query)}`),
@@ -541,18 +531,18 @@ export function createAdminClient(config: AdminClientConfig): AdminClient {
       return response.json();
     },
 
-    async listSpaceRootDomainRefs(path, query) {
+    async listAppRootRefs(path, query) {
       const response = await requireOk(
-        await request(`${appAdminRoutes.rootDomainRefs(path)}${queryString(query)}`),
-        "listSpaceRootDomainRefs",
+        await request(`${appAdminRoutes.rootRefs(path)}${queryString(query)}`),
+        "listAppRootRefs",
       );
       return response.json();
     },
 
-    async listSpaceRootDomainEvents(path, query) {
+    async listAppRootEvents(path, query) {
       const response = await requireOk(
-        await request(`${appAdminRoutes.rootDomainEvents(path)}${queryString(query)}`),
-        "listSpaceRootDomainEvents",
+        await request(`${appAdminRoutes.rootEvents(path)}${queryString(query)}`),
+        "listAppRootEvents",
       );
       return response.json();
     },

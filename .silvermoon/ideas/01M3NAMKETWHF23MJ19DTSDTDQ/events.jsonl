@@ -1,0 +1,4 @@
+{"type":"setAlias","payload":{"alias":"adopt-cloudflare-performance-tracing"}}
+{"type":"acceptIdeal","payload":{"idealRevision":"53803c529f152bce1a487ecf3c8fe9afcfcdaad3"}}
+{"type":"acceptInner","payload":{"implementationRevision":"082b351fca47d7e8591b5d136277ddd1f39f7f24"}}
+{"type":"acceptOuter","payload":{"deploymentRevision":"0cd3b6efc20034afb53323e8b1574e55fb5677c5"}}

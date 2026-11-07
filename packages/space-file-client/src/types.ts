@@ -3,7 +3,7 @@ import type {
   CasBlobSource,
   CasBlobWriteOptions,
 } from "@unicas/space-blob-client";
-import type { SpaceCasClient } from "@unicas/space-client";
+import type { AppCasClient } from "@unicas/space-client";
 
 export interface SpaceFileRootInfo {
   readonly rootId: string;
@@ -57,7 +57,8 @@ export interface SpaceFileSystem {
 }
 
 export interface SpaceFileSystemOptions {
-  readonly cas: SpaceCasClient;
+  readonly client: AppCasClient;
+  readonly spaceId: string;
   readonly catalog: SpaceFileRootCatalog;
   readonly blobOptions?: CasBlobClientOptions;
   readonly createId?: () => string;

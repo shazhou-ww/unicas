@@ -3,11 +3,14 @@ import { extname, join, relative } from "node:path";
 import { describe, expect, test } from "vitest";
 
 const ROOT = join(import.meta.dirname, "..");
-const SCAN_ROOTS = ["packages", "docs", "scripts", "stacks"];
+const SCAN_ROOTS = ["packages", "docs", "release", "scripts"];
 const INCLUDED_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".mjs", ".json", ".jsonc", ".md"]);
 const EXCLUDED_DIRECTORIES = new Set(["dist", "node_modules", "tests", ".wrangler"]);
 const FORBIDDEN_PUBLIC_ARTIFACTS = [
   /\/v2\/apps/,
+  /\/v2\/cas/,
+  /\/v1\/apps\/[^\s"'`]+\/cas/,
+  /\/v1\/apps\/[^\s"'`]+\/root-refs/,
   /space-v2-contract/,
   /space-v2\.openapi\.json/,
   /@unicas\/space-protocol\/openapi-v2\.json/,

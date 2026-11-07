@@ -15,8 +15,7 @@ describe("GoogleOidcClient", () => {
       displayName: "Ada",
       provider: "google",
       appId: "app-a",
-      spaceId: "space-a",
-      refDomain: "spaces",
+      spaceId: "/space-a",
     };
     const repository = {
       createOAuthAttempt: vi.fn(async (input: typeof attempt extends infer _ ? {
@@ -146,8 +145,7 @@ describe("GoogleOidcClient", () => {
       displayName: "Ada",
       provider: "google" as const,
       appId: "app-a",
-      spaceId: "space-a",
-      refDomain: "spaces",
+      spaceId: "/space-a",
     };
     const client = new GoogleOidcClient({
       issuer: "https://accounts.google.test",

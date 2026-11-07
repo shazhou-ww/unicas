@@ -18,7 +18,6 @@ import type {
   AppMembership,
   AppOAuthIssuer,
   AppOAuthIssuerInspection,
-  AppRefDomain,
   CasHash,
   CasRefChanges,
   ExternalIdentityDetail,
@@ -283,12 +282,6 @@ export const AppOAuthIssuerInspectionSchema: z.ZodType<AppOAuthIssuerInspection>
   }).readonly()).readonly(),
 }).strict().readonly().meta({ id: "AppOAuthIssuerInspection" });
 
-export const AppRefDomainSchema: z.ZodType<AppRefDomain> = z.object({
-  appId: AppIdSchema,
-  refDomain: NonEmptyStringSchema,
-  revision: RevisionSchema,
-}).readonly().meta({ id: "AppRefDomain" });
-
 export const AppControlAuditEventSchema: z.ZodType<AppControlAuditEvent> = z.object({
   eventId: NonEmptyStringSchema,
   appId: AppIdSchema.nullable(),
@@ -317,6 +310,7 @@ export const SpaceRootRefEventSchema: z.ZodType<SpaceRootRefEvent> = z.object({
   revision: RevisionSchema,
   spaceId: NonEmptyStringSchema,
   requestId: NonEmptyStringSchema,
+  payloadHash: CasHashSchema,
   changes: CasRefChangesSchema,
   appliedAt: TimestampSchema,
 }).readonly().meta({ id: "SpaceRootRefEvent" });

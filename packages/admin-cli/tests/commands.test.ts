@@ -7,7 +7,6 @@ import type { CliContext } from "../src/commands/common.js";
 import { appAuditCommand } from "../src/commands/app-audit.js";
 import { appMembersCommand } from "../src/commands/app-members.js";
 import { appOAuthIssuerCommand } from "../src/commands/app-oauth-issuer.js";
-import { appRefDomainsCommand } from "../src/commands/app-refdomains.js";
 import { appsCommand } from "../src/commands/apps.js";
 import { logoutCommand } from "../src/commands/logout.js";
 import { accountCommand } from "../src/commands/principal.js";
@@ -351,14 +350,11 @@ describe("command layer", () => {
     ]));
   });
 
-  test("App ref-domain and audit commands use App/Space vocabulary", async () => {
+  test("App audit commands use App/Space vocabulary", async () => {
     await seedLoggedIn(ctx.store);
     const server = new FakeAdminApi({ adminVocabulary: "app" });
     ctx = createContext({ UNICAS_CONFIG_DIR: dir, UNICAS_ADMIN_URL: FAKE_ORIGIN }, server.fetch);
     const { writes } = captureStdout();
-    await appRefDomainsCommand(ctx, "list", ["cas_app_a"]);
-    expect(JSON.parse(writes.join(""))).toMatchObject({ domains: [{ appId: "cas_app_a", refDomain: "doc" }] });
-    writes.length = 0;
     await appAuditCommand(ctx, "control", ["cas_app_a", "--after", "event-0"]);
     expect(JSON.parse(writes.join(""))).toMatchObject({
       items: [{
@@ -368,15 +364,15 @@ describe("command layer", () => {
       }]
     });
     writes.length = 0;
-    await appAuditCommand(ctx, "root-domain-refs", ["cas_app_a", "doc", "--space-id", "space-1"]);
+    await appAuditCommand(ctx, "root-refs", ["cas_app_a", "--space-id", "space-1"]);
     expect(JSON.parse(writes.join(""))).toMatchObject({ refs: [{ spaceId: "space-1" }] });
     writes.length = 0;
-    await appAuditCommand(ctx, "root-domain-events", ["cas_app_a", "doc", "--space-id", "space-1", "--after", "0"]);
+    await appAuditCommand(ctx, "root-events", ["cas_app_a", "--space-id", "space-1", "--after", "0"]);
     expect(JSON.parse(writes.join(""))).toMatchObject({ events: [{ spaceId: "space-1" }] });
     expect(server.requests).toEqual(expect.arrayContaining([
       expect.objectContaining({ pathname: "/admin/apps/cas_app_a/audit-events", search: "?after=event-0" }),
-      expect.objectContaining({ pathname: "/admin/apps/cas_app_a/root-ref-domains/doc/refs", search: "?spaceId=space-1" }),
-      expect.objectContaining({ pathname: "/admin/apps/cas_app_a/root-ref-domains/doc/events", search: "?spaceId=space-1&after=0" }),
+      expect.objectContaining({ pathname: "/admin/apps/cas_app_a/root-refs", search: "?spaceId=space-1" }),
+      expect.objectContaining({ pathname: "/admin/apps/cas_app_a/root-ref-events", search: "?spaceId=space-1&after=0" }),
     ]));
   });
 });

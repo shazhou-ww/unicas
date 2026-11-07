@@ -1,10 +1,11 @@
 import { z } from "zod";
-import {
-  REF_DOMAIN_MAX_LENGTH,
-  REF_DOMAIN_PATTERN,
-  type CapabilityProtectedHeader,
-} from "./shared-capability.js";
+import type { CapabilityProtectedHeader } from "./shared-capability.js";
 import type { AppSpaceRoute } from "./routes.js";
+import {
+  parseSpaceSelector,
+  SPACE_SELECTOR_MAX_LENGTH,
+  type SpaceSelector,
+} from "./space-id.js";
 
 export {
   CapabilityAlgorithm,
@@ -15,11 +16,7 @@ export {
   DefaultCapabilityLifetimeSeconds,
   MaximumCapabilityClockSkewSeconds,
   MaximumCapabilityLifetimeSeconds,
-  REF_DOMAIN_MAX_LENGTH,
-  REF_DOMAIN_PATTERN,
   canonicalPermissionSegment,
-  isReservedRefDomain,
-  validateRefDomainClaim,
 } from "./shared-capability.js";
 export type {
   CapabilityErrorCode,
@@ -87,12 +84,24 @@ function spaceOperationPermission(
   return kind as SpaceCapabilityPermission;
 }
 
-export const SpaceCapabilityVersion = 1 as const;
+export const SpaceCapabilityVersion = 2 as const;
+export const MaximumSpaceCapabilityGrants = 32;
 
-export const SpaceRefDomainClaimSchema = z.string()
-  .max(REF_DOMAIN_MAX_LENGTH)
-  .regex(REF_DOMAIN_PATTERN)
-  .describe("Root Ref business namespace required by Root Ref operations.");
+export interface SpaceCapabilityGrant {
+  readonly selector: SpaceSelector;
+  readonly permissions: readonly SpaceCapabilityPermission[];
+}
+
+const SpaceSelectorClaimSchema = z.string()
+  .min(1)
+  .max(SPACE_SELECTOR_MAX_LENGTH)
+  .refine(selector => parseSpaceSelector(selector) !== null)
+  .describe("Exact, terminal segment-prefix, or terminal recursive-prefix Space selector.");
+
+const SpaceCapabilityGrantSchema = z.object({
+  selector: SpaceSelectorClaimSchema,
+  permissions: z.array(z.enum(SpaceCapabilityPermissionKinds)).min(1).readonly(),
+}).readonly();
 
 export const SpaceCapabilityClaimsSchema = z.object({
   ver: z.literal(SpaceCapabilityVersion),
@@ -106,56 +115,57 @@ export const SpaceCapabilityClaimsSchema = z.object({
   nbf: z.number(),
   exp: z.number(),
   jti: z.string().min(1),
-  spaceId: z.string().min(1),
-  permissions: z.array(z.enum(SpaceCapabilityPermissionKinds)).readonly(),
-  refDomain: z.string().optional(),
+  grants: z.array(SpaceCapabilityGrantSchema)
+    .min(1)
+    .max(MaximumSpaceCapabilityGrants)
+    .readonly(),
 }).passthrough().readonly().meta({ id: "SpaceCapabilityClaims" });
 
 export type SpaceCapabilityClaims =
-  Omit<z.infer<typeof SpaceCapabilityClaimsSchema>, "permissions">
-  & { readonly permissions: readonly SpaceCapabilityPermission[] };
+  Omit<z.infer<typeof SpaceCapabilityClaimsSchema>, "grants">
+  & { readonly grants: readonly SpaceCapabilityGrant[] };
 
 type SpaceOperationPolicyDefinition = {
   readonly operationId: string;
   readonly permission: SpaceCapabilityPermissionKind;
-  readonly requiredClaims: readonly ("spaceId" | "refDomain")[];
+  readonly requiredClaims: readonly "grants"[];
 };
 
 export const SpaceOperationPolicies = {
   readContent: {
     operationId: "readContent",
     permission: "cas:nodes:read",
-    requiredClaims: ["spaceId"],
+    requiredClaims: ["grants"],
   },
   readMetadata: {
     operationId: "readMetadata",
     permission: "cas:nodes:read",
-    requiredClaims: ["spaceId"],
+    requiredClaims: ["grants"],
   },
   lease: {
     operationId: "leaseNode",
     permission: "cas:nodes:lease",
-    requiredClaims: ["spaceId"],
+    requiredClaims: ["grants"],
   },
   usage: {
     operationId: "getUsage",
     permission: "cas:usage:read",
-    requiredClaims: ["spaceId"],
+    requiredClaims: ["grants"],
   },
   gc: {
     operationId: "runGc",
     permission: "cas:gc:execute",
-    requiredClaims: ["spaceId"],
+    requiredClaims: ["grants"],
   },
   listRootRefs: {
     operationId: "listRootRefs",
     permission: "cas:root-refs:read",
-    requiredClaims: ["spaceId", "refDomain"],
+    requiredClaims: ["grants"],
   },
   updateRootRefs: {
     operationId: "updateRootRefs",
     permission: "cas:root-refs:update",
-    requiredClaims: ["spaceId", "refDomain"],
+    requiredClaims: ["grants"],
   },
 } as const satisfies Record<AppSpaceRoute["operation"], SpaceOperationPolicyDefinition>;
 

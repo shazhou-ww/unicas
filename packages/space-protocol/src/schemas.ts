@@ -20,13 +20,19 @@ import type {
   Space,
   SpaceId,
 } from "./types.js";
+import {
+  SPACE_ID_MAX_LENGTH,
+  SPACE_ID_PATTERN,
+} from "./space-id.js";
 
 export const AppIdSchema: z.ZodType<AppId> = z.string().min(1)
   .describe("Opaque UniCAS-generated App identifier.")
   .meta({ id: "AppId" });
 
-export const SpaceIdSchema: z.ZodType<SpaceId> = z.string().min(1)
-  .describe("App-scoped logical data ownership and authorization identifier.")
+export const SpaceIdSchema: z.ZodType<SpaceId> = z.string()
+  .max(SPACE_ID_MAX_LENGTH)
+  .regex(SPACE_ID_PATTERN)
+  .describe("Canonical slash-prefixed App-scoped data ownership and authorization path.")
   .meta({ id: "SpaceId" });
 
 export const SpaceSchema: z.ZodType<Space> = z.object({
@@ -145,11 +151,10 @@ export const CasRootRefUpdateSchema: z.ZodType<CasRootRefUpdate> = z.object({
 
 export const CasRootRefBalanceSchema: z.ZodType<CasRootRefBalance> = z.object({
   hash: CasHashSchema.describe("Node whose business Root Ref balance is reported."),
-  refCount: z.number().int().describe("Current balance in the capability's refDomain."),
+  refCount: z.number().int().nonnegative().describe("Current App/Space Root Ref balance."),
 }).readonly().meta({ id: "CasRootRefBalance" });
 
 export const CasRootRefsPageSchema: z.ZodType<CasRootRefsPage> = z.object({
-  refDomain: z.string().min(1).describe("Business lifecycle namespace taken from the verified capability, never from caller input."),
   revision: z.number().int().nonnegative().describe("Stable Root Ref snapshot revision represented by this page."),
   items: z.array(CasRootRefBalanceSchema).readonly().describe("Root Ref balances in this page."),
   nextCursor: z.string().min(1).nullable().describe("Opaque cursor for the next page, or null when this snapshot is exhausted."),
