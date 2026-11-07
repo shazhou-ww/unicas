@@ -37,7 +37,7 @@
     "@unicas/control-auth": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^24.13.3",
+    "@types/node": "^26.6.6",
     "typescript": "^5.9.0",
     "vitest": "^5.0.5"
   },

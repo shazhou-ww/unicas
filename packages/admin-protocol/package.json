@@ -26,7 +26,7 @@
     "clean": "rimraf --glob dist \"*.tsbuildinfo\""
   },
   "devDependencies": {
-    "@types/node": "^24.13.3",
+    "@types/node": "^26.6.6",
     "tsx": "^4.23.15",
     "typescript": "^5.9.0",
     "vitest": "^5.0.5"
