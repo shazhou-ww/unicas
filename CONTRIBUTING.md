@@ -52,6 +52,10 @@ CodeQL initialization and analysis must use the same pinned action revision.
 Dependabot groups `github/codeql-action/*` updates so both steps are reviewed
 and upgraded together.
 
+Validate dependency groups with `pnpm validate:release`, not only the Security
+workflow. Recheck transitive overrides during toolchain upgrades; forcing an
+older dependency can remove exports required by the upgraded build tools.
+
 Keep each pull request focused and:
 
 1. explain the user or maintainer problem being solved;
