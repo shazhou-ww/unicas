@@ -11,10 +11,16 @@ updates:
     groups:
       production-dependencies:
         dependency-type: production
+        update-types:
+          - minor
+          - patch
         patterns:
           - "*"
       development-dependencies:
         dependency-type: development
+        update-types:
+          - minor
+          - patch
         patterns:
           - "*"
   - package-ecosystem: github-actions

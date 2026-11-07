@@ -165,6 +165,18 @@ describe("release-gated workflow triggers", () => {
     );
     expect(updates.groups.codeql.patterns).toEqual(["github/codeql-action/*"]);
   });
+
+  test("keeps npm major upgrades out of minor and patch dependency groups", () => {
+    const dependabot = parseYaml(
+      readFileSync(join(ROOT, ".github", "dependabot.yml"), "utf8"),
+    );
+    const updates = dependabot.updates.find(
+      update => update["package-ecosystem"] === "npm",
+    );
+    for (const group of Object.values(updates.groups)) {
+      expect(group["update-types"]).toEqual(["minor", "patch"]);
+    }
+  });
 });
 
 describe("main pre-push validation", () => {

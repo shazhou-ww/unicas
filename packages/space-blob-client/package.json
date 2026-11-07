@@ -45,7 +45,7 @@
     "clean": "rimraf --glob dist \"*.tsbuildinfo\""
   },
   "devDependencies": {
-    "typescript": "^7.0.2",
+    "typescript": "^5.9.0",
     "vitest": "^5.0.5"
   },
   "publishConfig": {
