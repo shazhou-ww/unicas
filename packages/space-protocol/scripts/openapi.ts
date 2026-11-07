@@ -64,7 +64,8 @@ export async function generateSpaceOpenApiDocument() {
   });
 
   const { $schema: _claimsMetaSchema, ...claimsSchema } = z.toJSONSchema(
-    SpaceCapabilityClaimsSchema,
+    // The OpenAPI component already supplies this name; keep its body inline.
+    SpaceCapabilityClaimsSchema.meta({ id: undefined }),
   );
   document.components ??= {};
   document.components.schemas ??= {};
