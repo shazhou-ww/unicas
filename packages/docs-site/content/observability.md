@@ -17,6 +17,11 @@ custom logs. The assets-only `unicas-site` and `unicas-docs` Workers remain
 excluded. Built-in Workers metrics remain available independently of Workers
 Logs.
 
+The manual tracing implementation retains the OpenTelemetry 2.x SDK/resources,
+0.222.x exporter, and 1.9.x API compatibility family. Upgrade these together:
+the 2.x SDK excludes API 1.10, while the 3.x resources/exporter require it.
+Dependency maintenance does not enable production sampling or exports.
+
 Never persist or export bearer capabilities, cookies, CSRF tokens, OAuth codes
 or state, private keys, client secrets, presigned upload URLs, request bodies,
 node/file content, raw exceptions, storage keys, or SQL bindings.

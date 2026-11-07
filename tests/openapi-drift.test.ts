@@ -7,6 +7,9 @@ import {
 import {
   generateSpaceOpenApiDocument,
 } from "../packages/space-protocol/scripts/openapi.js";
+import {
+  SpaceCapabilityClaimsSchema,
+} from "../packages/space-protocol/src/space-capability.js";
 
 const ROOT = join(import.meta.dirname, "..");
 
@@ -29,5 +32,14 @@ describe("generated OpenAPI documents", () => {
     expect(jsonValue(await generateSpaceOpenApiDocument())).toEqual(
       await readJson("packages/space-protocol/openapi/app-space-v1.openapi.json"),
     );
+  });
+
+  test("embeds capability claims inline without changing runtime schema metadata", async () => {
+    const document = await generateSpaceOpenApiDocument();
+    const claims = document.components?.schemas?.SpaceCapabilityClaims;
+    expect(claims).toMatchObject({ type: "object" });
+    expect(claims).not.toHaveProperty("$ref");
+    expect(claims).not.toHaveProperty("$defs");
+    expect(SpaceCapabilityClaimsSchema.meta()?.id).toBe("SpaceCapabilityClaims");
   });
 });
