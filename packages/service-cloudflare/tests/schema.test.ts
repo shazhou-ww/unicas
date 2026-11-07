@@ -39,7 +39,7 @@ describe("App-scoped Space schema", () => {
   test("applies the deployment migration to an empty database", async () => {
     const database = await createRawDb();
     const migration = await readFile(
-      new URL("../../../stacks/unicas/deploy/migrations/tenant/0001_baseline.sql", import.meta.url),
+      new URL("../migrations/app-space/0001_baseline.sql", import.meta.url),
       "utf8",
     );
     await database.exec(migration.replace(/\r?\n/g, " "));
@@ -62,7 +62,7 @@ describe("App-scoped Space schema", () => {
   test("applies the deployment baseline over the previously initialized schema", async () => {
     const database = await createDb();
     const migration = await readFile(
-      new URL("../../../stacks/unicas/deploy/migrations/tenant/0001_baseline.sql", import.meta.url),
+      new URL("../migrations/app-space/0001_baseline.sql", import.meta.url),
       "utf8",
     );
 
@@ -74,7 +74,7 @@ describe("App-scoped Space schema", () => {
 
   test("keeps deployment triggers compatible with the remote D1 statement splitter", async () => {
     const migration = await readFile(
-      new URL("../../../stacks/unicas/deploy/migrations/tenant/0001_baseline.sql", import.meta.url),
+      new URL("../migrations/app-space/0001_baseline.sql", import.meta.url),
       "utf8",
     );
     const triggerSql = migration.slice(migration.indexOf("CREATE TRIGGER"));

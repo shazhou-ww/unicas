@@ -342,9 +342,6 @@ export class FakeAdminApi {
       this.appOAuthIssuer.set("cas_app_a", record);
       return new Response(null, { status: 204, headers: { ETag: `"${record.revision}"` } });
     }
-    if (url.pathname === appAdminRoutes.refDomains({ appId: "cas_app_a" })) {
-      return json({ domains: [{ appId: "cas_app_a", refDomain: "doc", revision: 1 }] });
-    }
     if (url.pathname === appAdminRoutes.controlAuditEvents({ appId: "cas_app_a" })) {
       const accountId = `acct_${"a".repeat(22)}`;
       return json({
@@ -364,10 +361,10 @@ export class FakeAdminApi {
         nextCursor: null,
       });
     }
-    if (url.pathname === appAdminRoutes.rootDomainRefs({ appId: "cas_app_a", refDomain: "doc" })) {
+    if (url.pathname === appAdminRoutes.rootRefs({ appId: "cas_app_a" })) {
       return json({ revision: 1, refs: [{ spaceId: "space-1", hash: "a".repeat(64), count: 1 }], nextCursor: null });
     }
-    if (url.pathname === appAdminRoutes.rootDomainEvents({ appId: "cas_app_a", refDomain: "doc" })) {
+    if (url.pathname === appAdminRoutes.rootEvents({ appId: "cas_app_a" })) {
       return json({
         events: [{ revision: 1, spaceId: "space-1", requestId: "request-1", changes: { ["a".repeat(64)]: 1 }, appliedAt: 1 }],
         latestRevision: 1,

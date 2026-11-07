@@ -6,8 +6,9 @@ Status: frozen historical v1 requirements; not implemented and not the current
 This document is retained to preserve the August 2026 design record. Its
 Stack/Tenant routes, claims, session layout, command names, and provider
 assumptions must not be reinterpreted as App/Space. Any future data-plane debug
-tool must use the reviewed App/Space HTTP v1 design based on `appId`, signed
-`spaceId`, family-local capability `ver: 1`, and exact operation permissions.
+tool must use the reviewed App/Space HTTP v1 design based on unified
+`/v1/cas` routes, query `appId` and `spaceId`, family-local capability `ver: 2`
+grants, and exact operation permissions.
 
 `unicas-tenant` is the tenant-facing debug tooling for the CAS data plane
 (`/stacks/{stackId}/tenants/{tenantId}/cas/...`). It lets a tenant user query
@@ -123,9 +124,10 @@ so the later WebUI reuses the same store:
   comment in space-client is updated to state that `range === undefined`
   means a full read (populate) and a present range means a partial read (serve
   or bypass); the policy lives in the cache implementation.
-- **Blob layer**: `createCasBlobClient(cas, options)` is cache-agnostic and
-  takes the tenant client as injected; its normal path reads child nodes in
-  full, so blob reads populate the node cache automatically.
+- **Blob layer**: `createCasBlobClient({ client, spaceId, ...options })` is
+  cache-agnostic and takes the App client plus explicit Space as injected; its
+  normal path reads child nodes in full, so blob reads populate the node cache
+  automatically.
 - **Permissions**: tenant directories 0700, `session.json` 0600; cached
   content may be sensitive and inherits the current user's permissions.
 
@@ -135,7 +137,7 @@ so the later WebUI reuses the same store:
 | --- | --- |
 | Session | `login <stack> [--issuer URL]`, `logout <stack> <tenant>\|--all`, `list`, `status`, `use <stack> <tenant>` |
 | Read | `node get <hash> [--range N[:L]] [--out file]`, `node meta <hash>`, `walk <hash> [--depth N]` |
-| Admin | `usage`, `gc [--max-nodes N] [-y\|--yes]`, `root-refs update <refDomain> <hash> <delta> [-y\|--yes]`, `lease <hash> [--source file] [--duration-ms N]` |
+| Admin | `usage`, `gc [--max-nodes N] [-y\|--yes]`, `root-refs update <hash> <delta> [-y\|--yes]`, `lease <hash> [--source file] [--duration-ms N]` |
 
 Conventions aligned with the admin CLI: JSON on stdout, diagnostics on stderr,
 exit codes 0/1/2, idempotency keys where applicable, CAS base URL from

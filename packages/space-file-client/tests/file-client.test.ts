@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { createCasBlobClient, storeNodeContent } from "@unicas/space-blob-client";
-import type { SpaceCasClient } from "@unicas/space-client";
+import type { AppCasClient } from "@unicas/space-client";
 import type { SpaceFileRootCatalog, SpaceFileRootInfo } from "../src/index.js";
 
 const state = vi.hoisted(() => ({
@@ -10,9 +10,16 @@ const state = vi.hoisted(() => ({
   released: [] as string[],
   sequence: 0,
 }));
+const SPACE_ID = "/space-1";
 
 vi.mock("@unicas/space-blob-client", () => ({
-  storeNodeContent: vi.fn(async (_cas, content: Uint8Array, contentType: string, refs: readonly string[]) => {
+  storeNodeContent: vi.fn(async (
+    _client,
+    _spaceId: string,
+    content: Uint8Array,
+    contentType: string,
+    refs: readonly string[],
+  ) => {
     const hash = `manifest-${++state.sequence}`;
     state.manifests.set(hash, { content, contentType, refs });
     return hash;
@@ -66,9 +73,10 @@ function catalogFixture(): SpaceFileRootCatalog & { readonly records: Map<string
   };
 }
 
-function casFixture(): SpaceCasClient {
+function casFixture(): AppCasClient {
   return {
-    async readNode(hash) {
+    async readNode(spaceId, hash) {
+      expect(spaceId).toBe(SPACE_ID);
       const manifest = state.manifests.get(hash)!;
       return {
         metadata: {
@@ -80,14 +88,16 @@ function casFixture(): SpaceCasClient {
         content: new Blob([manifest.content]).stream(),
       };
     },
-    async readMetadata(hash) {
+    async readMetadata(spaceId, hash) {
+      expect(spaceId).toBe(SPACE_ID);
       const manifest = state.manifests.get(hash)!;
       return { hash, size: manifest.content.length, contentType: manifest.contentType, refs: manifest.refs };
     },
-    async readContent(hash) {
+    async readContent(spaceId, hash) {
+      expect(spaceId).toBe(SPACE_ID);
       return new Blob([state.manifests.get(hash)!.content]).stream();
     },
-  } as SpaceCasClient;
+  } as AppCasClient;
 }
 
 beforeEach(() => {
@@ -103,7 +113,8 @@ describe("Space file system", () => {
   test("edits a working tree and switches the catalog only on commit", async () => {
     const catalog = catalogFixture();
     const fileSystem = createSpaceFileSystem({
-      cas: casFixture(),
+      client: casFixture(),
+      spaceId: SPACE_ID,
       catalog,
       createId: () => "root-1",
       createRequestId: () => "request-1",
@@ -134,7 +145,8 @@ describe("Space file system", () => {
 
   test("discard restores the last committed snapshot", async () => {
     const fileSystem = createSpaceFileSystem({
-      cas: casFixture(),
+      client: casFixture(),
+      spaceId: SPACE_ID,
       catalog: catalogFixture(),
       createId: () => "root-1",
     });
@@ -150,7 +162,8 @@ describe("Space file system", () => {
 
   test("preserves mixed-case path references after reopening a committed Root", async () => {
     const fileSystem = createSpaceFileSystem({
-      cas: casFixture(),
+      client: casFixture(),
+      spaceId: SPACE_ID,
       catalog: catalogFixture(),
       createId: () => "root-1",
     });
@@ -170,7 +183,8 @@ describe("Space file system", () => {
     const list = vi.spyOn(catalog, "list");
     const readNode = vi.spyOn(cas, "readNode");
     const fileSystem = createSpaceFileSystem({
-      cas,
+      client: cas,
+      spaceId: SPACE_ID,
       catalog,
       createId: () => "root-1",
     });
@@ -187,15 +201,25 @@ describe("Space file system", () => {
   test("passes bounded blob options to the public blob client", () => {
     const cas = casFixture();
     const blobOptions = { chunkBytes: 1024, indexFanout: 4 };
-    createSpaceFileSystem({ cas, catalog: catalogFixture(), blobOptions });
+    createSpaceFileSystem({
+      client: cas,
+      spaceId: SPACE_ID,
+      catalog: catalogFixture(),
+      blobOptions,
+    });
 
-    expect(vi.mocked(createCasBlobClient)).toHaveBeenLastCalledWith(cas, blobOptions);
+    expect(vi.mocked(createCasBlobClient)).toHaveBeenLastCalledWith({
+      client: cas,
+      spaceId: SPACE_ID,
+      ...blobOptions,
+    });
   });
 
   test("uses the injected upload transport for file manifests", async () => {
     const uploadFetcher = { fetch: vi.fn() };
     const fileSystem = createSpaceFileSystem({
-      cas: casFixture(),
+      client: casFixture(),
+      spaceId: SPACE_ID,
       catalog: catalogFixture(),
       blobOptions: { uploadFetcher },
       createId: () => "root-1",
@@ -205,6 +229,7 @@ describe("Space file system", () => {
 
     expect(vi.mocked(storeNodeContent)).toHaveBeenCalledWith(
       expect.anything(),
+      SPACE_ID,
       expect.any(Uint8Array),
       expect.any(String),
       [],

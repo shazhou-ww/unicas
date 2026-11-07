@@ -38,8 +38,8 @@ describe("cross-plane separation", () => {
       appAdminRoutes.app({ appId: "a" }),
       appAdminRoutes.usage({ appId: "a" }),
       appAdminRoutes.members({ appId: "a" }),
-      appAdminRoutes.rootDomainRefs({ appId: "a", refDomain: "doc" }),
-      appAdminRoutes.rootDomainEvents({ appId: "a", refDomain: "doc" }),
+      appAdminRoutes.rootRefs({ appId: "a" }),
+      appAdminRoutes.rootEvents({ appId: "a" }),
       appAdminRoutes.controlAuditEvents({ appId: "a" }),
     ];
     for (const path of adminPaths) {
@@ -67,7 +67,7 @@ describe("cross-plane separation", () => {
     expect(casAuthPlanePolicy.appAdminPlane.rejects).toEqual([
       "app_issuer_space_capability",
     ]);
-    expect(casAuthPlanePolicy.spaceDataPlane.pathPrefix).toBe("/v1/apps");
+    expect(casAuthPlanePolicy.spaceDataPlane.pathPrefix).toBe("/v1/cas");
     expect(casAuthPlanePolicy.spaceDataPlane.credential).toBe(
       "app_issuer_space_capability",
     );

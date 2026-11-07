@@ -29,7 +29,11 @@ interface WorkingFile {
 type WorkingEntry = WorkingDirectory | WorkingFile;
 
 export function createSpaceFileSystem(options: SpaceFileSystemOptions): SpaceFileSystem {
-  const blobs = createCasBlobClient(options.cas, options.blobOptions);
+  const blobs = createCasBlobClient({
+    client: options.client,
+    spaceId: options.spaceId,
+    ...options.blobOptions,
+  });
   const createId = options.createId ?? (() => crypto.randomUUID());
   const createRequestId = options.createRequestId ?? (() => crypto.randomUUID());
 
@@ -42,7 +46,8 @@ export function createSpaceFileSystem(options: SpaceFileSystemOptions): SpaceFil
       return { type: "file", path, ref: refs.length - 1, size: entry.size, mediaType: entry.mediaType };
     });
     return storeNodeContent(
-      options.cas,
+      options.client,
+      options.spaceId,
       encodeFileManifest(createFileManifest(manifestEntries)),
       FileManifestContentType,
       refs,
@@ -60,7 +65,7 @@ export function createSpaceFileSystem(options: SpaceFileSystemOptions): SpaceFil
   }
 
   async function loadRoot(info: SpaceFileRootInfo): Promise<SpaceFileRoot> {
-    const node = await options.cas.readNode(info.manifestHash);
+    const node = await options.client.readNode(options.spaceId, info.manifestHash);
     const { metadata } = node;
     if (metadata.contentType !== FileManifestContentType) throw new TypeError("File root has an unsupported manifest type");
     const bytes = new Uint8Array(await new Response(node.content).arrayBuffer());

@@ -4,14 +4,44 @@ UniCAS keeps validation ownership in reproducible package and root scripts.
 GitHub Actions owns triggers, permissions, protected environments, concurrency,
 and exact revision checks; it does not maintain a second test command list.
 
+## Preset task orchestration
+
+The repository inherits its baseline task graph from
+[`preset-cloudflare-fullstack`](https://github.com/shazhou-ww/preset-cloudflare-fullstack).
+`pnpm check` delegates to the existing `pnpm validate` gate. Turbo executes
+workspace builds, package tests, typechecks, and cleanup, with dependency builds
+ordered before consumers. The service build also explicitly depends on the
+administrator browser build; standalone package scripts retain their own asset
+preparation.
+
+Tasks run serially because existing TypeScript build-mode commands can write
+shared project-reference outputs. Environment variables are forwarded in loose
+mode, matching the previous recursive pnpm commands. Task caching is disabled:
+validation must execute every time, and runtime-specific test inputs and
+generated source assets must not become success-shaped cache hits. No remote
+cache is configured.
+
+The task runner is pinned to Turbo 2.9.14, the first patched version for
+GHSA-hcf7-66rw-9f5r and GHSA-3qcw-2rhx-2726. This security update overrides
+the inherited preset's 2.7.2 pin without changing the task graph, serial
+execution, environment forwarding, or validation boundaries.
+
+The quick gate still excludes the slow Cloudflare adapter test suite, not its
+build. Release validation, exact-revision checks, protected environments, and
+external-write boundaries are unchanged. The preset's demo applications,
+formatting/lint stack, and push-triggered deployment workflow are not imported.
+
 ## Supported matrix
 
 | Path | Command or trigger | Added guarantee | External writes |
 | --- | --- | --- | --- |
 | Focused local work | package `test`, `build`, or `typecheck`; `pnpm test:quick`; `pnpm test:packages` | Fast affected-scope feedback | None |
-| Local delivery, branch, PR, `main` | `pnpm validate` | Repository policy, package tests except the slow Cloudflare adapter suite, one workspace build, and one workspace typecheck | None |
-| `main` push | `pnpm validate`, then separate `pnpm check:ideas:remote` | Canonical shared idea state and primary-history validation | None |
+| Local delivery or a push targeting remote `main` | `pnpm validate`; the repository pre-push hook invokes it for exact checked-out `main` updates | Repository policy, package tests except the slow Cloudflare adapter suite, one workspace build, and one workspace typecheck | None |
+| Ordinary branch or `main` push | No hosted full-validation workflow | High-frequency synchronization does not consume a hosted validation runner | None |
+| Pull request | **Security** workflow: Dependency Review and CodeQL | Dependency-diff review and JavaScript/TypeScript security analysis without duplicating `pnpm validate` | None |
+| Silvermoon primary synchronization | Agent-run worktree/staged checks before commit and explicit `pnpm check:ideas:remote` after synchronization | Canonical shared idea state and refreshed primary-history validation | None |
 | Release preflight | `pnpm validate:release` or manual **CI** dispatch | Strict superset: Cloudflare adapter and release-policy suites, open-source readiness, deterministic SDK artifacts and API baseline, docs browser test, SDK Chromium/Firefox/WebKit consumer smoke, all deployment dry-runs | None |
+| Security assurance | **Security** on `release`, weekly schedule, or manual dispatch | CodeQL remains independent of local hooks and ordinary `main` traffic | None |
 | Production promotion | Push of a reviewed `main` revision to protected `release` | Exact SHA and `main` ancestry, protected rebuild, serial deploy/smoke/origin checks, immutable production tag | Cloudflare and Git tag, after `Production` approval |
 | npm release | `npm/app-user-sdk/v<version>` tag | Exact tag SHA and `main` ancestry, deterministic six-package rebuild, full registry preflight, ordered OIDC publication, provenance and external verification | npm, after `npm` approval |
 | Spaces recovery | Manual **Recover Spaces production** dispatch with a full `main` SHA and operation | Exact revision, isolated bootstrap/recovery, shared production serialization | Cloudflare, after `Production` approval |
@@ -19,12 +49,37 @@ and exact revision checks; it does not maintain a second test command list.
 `pnpm validate:release` starts by running `pnpm validate`; it is therefore a
 strict superset, not an alternative assertion set. A normal release rebuilds
 inside the protected job. An npm release likewise builds inside its protected
-job. Executable artifacts from branch, pull-request, or ordinary `main`
-validation never cross into an external-write trust boundary.
+job. Local or pre-push validation artifacts never cross into an external-write
+trust boundary.
+
+Jobs that install Playwright browsers use `ubuntu-24.04`, including CI
+validation, documentation-only deployment, and npm verification. The reviewed
+Playwright 1.55.1 baseline does not support Ubuntu 26.04; a moving
+`ubuntu-latest` image must not silently change its browser-test platform.
+Other jobs retain their existing runner selection and all environment gates.
+
+## Repository-managed pre-push hook
+
+Run `pnpm hooks:install` once per Git repository and verify it with
+`pnpm hooks:status`. The installer writes only local
+`core.hooksPath=.githooks`; it refuses to replace local, global, or system hook
+configuration that it does not own. `pnpm hooks:uninstall` removes only that
+repository-owned local setting.
+
+Git supplies every pending ref update on pre-push stdin. The Node.js dispatcher
+checks all rows and runs `pnpm validate` once only when a remote ref is
+`refs/heads/main`. It requires the local object to be the current `HEAD` and the
+worktree to remain clean before and after validation. Main deletion, malformed
+input, a non-HEAD SHA, dirty state, or validation failure rejects the push.
+Other remote refs pass immediately. `--no-verify` remains an explicit Git
+bypass and is never accepted as proof by release, production, npm, or
+Silvermoon gates.
 
 ## Ownership rules
 
 - Put checks required for every delivery in `pnpm validate`.
+- Keep the main-targeted pre-push hook as an early feedback mechanism, not a
+  security or release trust boundary.
 - Put the slow Cloudflare adapter suite, historical release-policy guards,
   browser tests, deterministic release artifacts, deployment plans, or other
   promotion-only checks in `pnpm validate:release`.

@@ -42,7 +42,7 @@ function oauthIssuerInserts(rows: Array<{
     ).bind(
       appId,
       issuer,
-      "https://cas.example/v1/apps/" + appId,
+      "https://cas.example/v1/cas/",
       "https://oauth.example/.well-known/oauth-authorization-server",
       "oauth",
       "https://oauth.example/authorize",
@@ -68,7 +68,7 @@ describe("AppAuthorityRepository", () => {
       appId: "cas_app",
       appStatus: "active",
       issuer: "https://app-issuer.example",
-      audience: "https://cas.example/v1/apps/cas_app",
+      audience: "https://cas.example/v1/cas/",
       jwksUri: "https://oauth.example/jwks",
       capabilityMaxLifetimeSeconds: 600,
     });

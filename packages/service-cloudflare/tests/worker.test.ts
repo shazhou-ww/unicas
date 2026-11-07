@@ -118,7 +118,7 @@ describe("service-cloudflare public routing", () => {
   test("accepts client ULID correlation only for Space routes", async () => {
     const requestedTraceId = createTraceUlid();
     const space = await worker.fetch(new Request(
-      "https://cas.example/v1/apps/app-1/spaces/space-1/cas/usage",
+      "https://cas.example/v1/cas/usage?appId=app-1&spaceId=%2Fspace-1",
       {
         headers: {
           Authorization: "Bearer v1-capability",
@@ -267,7 +267,7 @@ describe("service-cloudflare public routing", () => {
   test("authorizes Space routes through the released verifier and trusted scope", async () => {
     const spaceEnv = { ...env, CAS_DB: {} } as Env;
     const space = await worker.fetch(new Request(
-      "https://cas.example/v1/apps/app-1/spaces/space-1/cas/usage",
+      "https://cas.example/v1/cas/usage?appId=app-1&spaceId=%2Fspace-1",
       {
         headers: {
           Authorization: "Bearer v1-capability",
@@ -284,12 +284,12 @@ describe("service-cloudflare public routing", () => {
     expect(app.status).toBe(200);
     expect(handlers.verifySpace).toHaveBeenCalledWith(
       expect.any(Request),
-      { operation: "usage", appId: "app-1", spaceId: "space-1" },
+      { operation: "usage", appId: "app-1", spaceId: "/space-1" },
     );
-    expect(handlers.spaceIdFromName).toHaveBeenCalledWith("app-1|space-1");
+    expect(handlers.spaceIdFromName).toHaveBeenCalledWith("app-1|%2Fspace-1");
     const spaceRequest = handlers.spaceActor.mock.calls[0]![0] as Request;
     expect(spaceRequest.headers.get("X-CAS-App-Id")).toBe("app-1");
-    expect(spaceRequest.headers.get("X-CAS-Space-Id")).toBe("space-1");
+    expect(spaceRequest.headers.get("X-CAS-Space-Id")).toBe("/space-1");
     expect(spaceRequest.headers.get("X-CAS-Route-Family")).toBe("app-space");
     const adminRequest = handlers.admin.mock.calls[0]![0] as Request;
     expect(adminRequest.url).toBe("https://cas.example/admin/apps/app-1");
@@ -305,7 +305,7 @@ describe("service-cloudflare public routing", () => {
       "CAS capability token is required",
     ));
     const unauthenticated = await worker.fetch(new Request(
-      "https://cas.example/v1/apps/app-1/spaces/space-1/cas/usage",
+      "https://cas.example/v1/cas/usage?appId=app-1&spaceId=%2Fspace-1",
       { headers: { "X-Trace-Id": untrustedTraceId } },
     ), env, ctx);
     expect(unauthenticated.status).toBe(401);
@@ -316,7 +316,7 @@ describe("service-cloudflare public routing", () => {
       "CAS capability Space does not match the requested path",
     ));
     const forbidden = await worker.fetch(new Request(
-      "https://cas.example/v1/apps/app-1/spaces/space-1/cas/usage",
+      "https://cas.example/v1/cas/usage?appId=app-1&spaceId=%2Fspace-1",
       { headers: { Authorization: "Bearer wrong-space-capability" } },
     ), env, ctx);
     expect(forbidden.status).toBe(403);

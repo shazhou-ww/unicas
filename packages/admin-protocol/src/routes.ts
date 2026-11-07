@@ -20,10 +20,9 @@ export type AppAdminRoute =
   | { operation: "getOAuthIssuer"; appId: string }
   | { operation: "inspectOAuthIssuer"; appId: string }
   | { operation: "activateOAuthIssuer"; appId: string }
-  | { operation: "listRefDomains"; appId: string }
   | { operation: "listControlAuditEvents"; appId: string }
-  | { operation: "listRootDomainRefs"; appId: string; refDomain: string }
-  | { operation: "listRootDomainEvents"; appId: string; refDomain: string }
+  | { operation: "listRootRefs"; appId: string }
+  | { operation: "listRootEvents"; appId: string }
   | { operation: "listPlatformAccounts" }
   | { operation: "getPlatformAccount"; accountId: string }
   | { operation: "grantPlatformAccountAuthority"; accountId: string; authority: "platform.admin" | "apps.create" }
@@ -74,14 +73,12 @@ export const appAdminRoutes = {
     `/admin/apps/${segment(appId)}/oauth-issuer`,
   oauthIssuerInspections: ({ appId }: { appId: string }) =>
     `/admin/apps/${segment(appId)}/oauth-issuer/inspections`,
-  refDomains: ({ appId }: { appId: string }) =>
-    `/admin/apps/${segment(appId)}/ref-domains`,
   controlAuditEvents: ({ appId }: { appId: string }) =>
     `/admin/apps/${segment(appId)}/audit-events`,
-  rootDomainRefs: ({ appId, refDomain }: { appId: string; refDomain: string }) =>
-    `/admin/apps/${segment(appId)}/root-ref-domains/${segment(refDomain)}/refs`,
-  rootDomainEvents: ({ appId, refDomain }: { appId: string; refDomain: string }) =>
-    `/admin/apps/${segment(appId)}/root-ref-domains/${segment(refDomain)}/events`,
+  rootRefs: ({ appId }: { appId: string }) =>
+    `/admin/apps/${segment(appId)}/root-refs`,
+  rootEvents: ({ appId }: { appId: string }) =>
+    `/admin/apps/${segment(appId)}/root-ref-events`,
   platformAccounts: () => "/admin/platform/accounts",
   platformAccount: ({ accountId }: { accountId: string }) =>
     `/admin/platform/accounts/${segment(accountId)}`,
@@ -198,27 +195,16 @@ export function matchAppAdminRoute(
     return { operation: "inspectOAuthIssuer", appId };
   }
 
-  if (parts.length === 4 && parts[3] === "ref-domains") {
-    return method === "GET" ? { operation: "listRefDomains", appId } : null;
-  }
-
   if (parts.length === 4 && parts[3] === "audit-events" && method === "GET") {
     return { operation: "listControlAuditEvents", appId };
   }
 
   if (
-    parts.length === 6
-    && parts[3] === "root-ref-domains"
-    && parts[4]
-    && (parts[5] === "refs" || parts[5] === "events")
+    parts.length === 4
+    && (parts[3] === "root-refs" || parts[3] === "root-ref-events")
     && method === "GET"
   ) {
-    const refDomain = decodeSegment(parts[4]);
-    if (refDomain === null) return null;
-    if (parts[5] === "refs") {
-      return { operation: "listRootDomainRefs", appId, refDomain };
-    }
-    return { operation: "listRootDomainEvents", appId, refDomain };
+    return { operation: parts[3] === "root-refs" ? "listRootRefs" : "listRootEvents", appId };
   }
 
   return null;

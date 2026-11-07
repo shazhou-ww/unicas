@@ -25,7 +25,7 @@ export const CasAdminErrorCodes = {
   FORBIDDEN_PLATFORM_ACTION: "FORBIDDEN_PLATFORM_ACTION",
   /**
    * Task 2 amendment: generic client error for invalid/malformed request
-   * input (illegal refDomain/kid/displayName, empty bodies, bad limits).
+   * input (illegal kid/displayName, empty bodies, bad limits).
    * The frozen set had no 400-class code besides INVALID_CURSOR.
    */
   INVALID_REQUEST: "INVALID_REQUEST",

@@ -458,18 +458,15 @@ describe("adapter-hosted control-plane MCP server", () => {
       fetch: async (input: RequestInfo | URL) => {
         const url = new URL(String(input));
         requests.push(url);
-        if (url.pathname === "/_internal/audit/domains") {
-          return Response.json({ domains: [{ stackId: url.searchParams.get("stackId"), refDomain: "doc", revision: 2 }] });
-        }
         if (url.pathname === "/_internal/audit/refs") {
           return Response.json({
             revision: 2,
-            refs: [{ tenantId: url.searchParams.get("tenantId"), hash: "a".repeat(64), count: 1 }],
+            refs: [{ spaceId: url.searchParams.get("spaceId"), hash: "a".repeat(64), count: 1 }],
             nextCursor: null,
           });
         }
         return Response.json({
-          events: [{ revision: 2, tenantId: url.searchParams.get("tenantId"), requestId: "request-1", changes: {}, appliedAt: 1 }],
+          events: [{ revision: 2, spaceId: url.searchParams.get("spaceId"), requestId: "request-1", changes: {}, appliedAt: 1 }],
           latestRevision: 2,
           nextAfter: 2,
         });
@@ -480,28 +477,22 @@ describe("adapter-hosted control-plane MCP server", () => {
       { auditReader, accountService },
     );
 
-    expect((await callTool(handler, "list_app_ref_domains", { appId })).structuredContent)
-      .toEqual({ domains: [{ appId, refDomain: "doc", revision: 2 }] });
-    expect((await callTool(handler, "list_space_root_domain_refs", {
+    expect((await callTool(handler, "list_app_root_refs", {
       appId,
-      refDomain: "doc",
       spaceId: "space-1",
     })).structuredContent).toMatchObject({ refs: [{ spaceId: "space-1", count: 1 }] });
-    expect((await callTool(handler, "list_space_root_domain_events", {
+    expect((await callTool(handler, "list_app_root_events", {
       appId,
-      refDomain: "doc",
       spaceId: "space-1",
     })).structuredContent).toMatchObject({ events: [{ spaceId: "space-1", revision: 2 }] });
 
     expect(requests.map((url) => ({
       pathname: url.pathname,
-      stackId: url.searchParams.get("stackId"),
-      tenantId: url.searchParams.get("tenantId"),
+      appId: url.searchParams.get("appId"),
       spaceId: url.searchParams.get("spaceId"),
     }))).toEqual([
-      { pathname: "/_internal/audit/domains", stackId: appId, tenantId: null, spaceId: null },
-      { pathname: "/_internal/audit/refs", stackId: appId, tenantId: "space-1", spaceId: null },
-      { pathname: "/_internal/audit/events", stackId: appId, tenantId: "space-1", spaceId: null },
+      { pathname: "/_internal/audit/refs", appId, spaceId: "space-1" },
+      { pathname: "/_internal/audit/events", appId, spaceId: "space-1" },
     ]);
   });
 });

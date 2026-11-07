@@ -22,7 +22,7 @@ async function fixture(now = 1_000) {
   }));
   await runtime.ready;
   const db = await runtime.getD1Database("SPACES_DB", "spaces-repository-test");
-  const migration = await readFile(new URL("../../../stacks/unicas/spaces/migrations/0001_initial.sql", import.meta.url), "utf8");
+  const migration = await readFile(new URL("../migrations/0001_initial.sql", import.meta.url), "utf8");
   await db.exec(migration.replace(/\r?\n/g, " "));
   await db.prepare(`
     INSERT INTO spaces_principals (principal_id, status, display_name, created_at, updated_at)
@@ -36,12 +36,62 @@ async function fixture(now = 1_000) {
   await db.prepare(`
     INSERT INTO spaces_principal_spaces (
       principal_id, app_id, space_id, ref_domain, created_at, updated_at
-    ) VALUES ('principal-a', 'app-a', 'space-a', 'spaces', 1, 1)
+    ) VALUES ('principal-a', 'app-a', '/space-a', 'spaces', 1, 1)
   `).run();
   return { db, repository: new SpacesRepository(db, () => now) };
 }
 
 describe("SpacesRepository", () => {
+  test("canonicalizes legacy Principal-to-Space mappings", async () => {
+    runtime = new Miniflare(convertV4MiniflareOptions({
+      workers: [{
+        name: "spaces-migration-test",
+        modules: true,
+        script: "export default { fetch() { return new Response('ok'); } };",
+        compatibilityDate: "2025-08-17",
+        d1Databases: { SPACES_DB: "spaces-migration-test" },
+      }],
+    }));
+    await runtime.ready;
+    const db = await runtime.getD1Database("SPACES_DB", "spaces-migration-test");
+    const initial = await readFile(
+      new URL("../migrations/0001_initial.sql", import.meta.url),
+      "utf8",
+    );
+    await db.exec(initial.replace(/\r?\n/g, " "));
+    await db.prepare(`
+      INSERT INTO spaces_principals (principal_id, status, display_name, created_at, updated_at)
+      VALUES ('legacy-principal', 'active', 'Legacy', 1, 1),
+             ('canonical-principal', 'active', 'Canonical', 1, 1)
+    `).run();
+    await db.prepare(`
+      INSERT INTO spaces_principal_spaces (
+        principal_id, app_id, space_id, ref_domain, created_at, updated_at
+      ) VALUES ('legacy-principal', 'app-a', 'space_legacy', 'spaces', 1, 1),
+               ('canonical-principal', 'app-a', '/users/canonical', 'spaces', 1, 1)
+    `).run();
+
+    const canonical = await readFile(
+      new URL("../migrations/0002_canonical_space_ids.sql", import.meta.url),
+      "utf8",
+    );
+    await db.exec(canonical.replace(/\r?\n/g, " "));
+
+    const rows = await db.prepare(`
+      SELECT principal_id, space_id, updated_at
+      FROM spaces_principal_spaces
+      ORDER BY principal_id
+    `).all<{ principal_id: string; space_id: string; updated_at: number }>();
+    expect(rows.results).toEqual([
+      { principal_id: "canonical-principal", space_id: "/users/canonical", updated_at: 1 },
+      expect.objectContaining({
+        principal_id: "legacy-principal",
+        space_id: "/space_legacy",
+      }),
+    ]);
+    expect(rows.results[1]?.updated_at).toBeGreaterThan(1);
+  });
+
   test("resolves only explicitly admitted external identities", async () => {
     const { repository } = await fixture();
     await expect(repository.resolveExternalIdentity("google", "google-subject")).resolves.toEqual({
@@ -50,8 +100,7 @@ describe("SpacesRepository", () => {
       displayName: "Ada",
       provider: "google",
       appId: "app-a",
-      spaceId: "space-a",
-      refDomain: "spaces",
+      spaceId: "/space-a",
     });
     await expect(repository.resolveExternalIdentity("google", "unknown")).resolves.toBeNull();
     await expect(repository.resolveExternalIdentity("github", "google-subject")).resolves.toBeNull();
@@ -179,13 +228,13 @@ describe("SpacesRepository", () => {
     await db.prepare(`
       INSERT INTO spaces_principal_spaces (
         principal_id, app_id, space_id, ref_domain, created_at, updated_at
-      ) VALUES ('smoke-principal', 'app-a', 'smoke-space', 'spaces-smoke', 1, 1)
+      ) VALUES ('smoke-principal', 'app-a', '/smoke-space', 'spaces-smoke', 1, 1)
     `).run();
 
     await expect(repository.readPrincipal("smoke-principal")).resolves.toMatchObject({
       principalId: "smoke-principal",
       provider: "smoke",
-      spaceId: "smoke-space",
+      spaceId: "/smoke-space",
     });
     const issued = await repository.createSession("smoke-principal", 500);
     await expect(repository.readSession(issued.sessionId)).resolves.toMatchObject({

@@ -1,9 +1,16 @@
 import { validateHash } from "@unicas/codec";
+import {
+  CAS_MAX_REQUEST_ID_LENGTH,
+  CAS_MAX_ROOT_REF_CHANGES,
+  CAS_MAX_ROOT_REF_DELTA,
+} from "@unicas/space-protocol";
 import type { AppSpaceScope } from "./space-scope.js";
 
-export const CAS_MAX_ROOT_REF_CHANGES = 1000;
-export const CAS_MAX_ROOT_REF_DELTA = 1_000_000;
-export const CAS_MAX_REQUEST_ID_LENGTH = 256;
+export {
+  CAS_MAX_REQUEST_ID_LENGTH,
+  CAS_MAX_ROOT_REF_CHANGES,
+  CAS_MAX_ROOT_REF_DELTA,
+} from "@unicas/space-protocol";
 
 export const RootRefsErrorCodes = {
   INVALID_REQUEST: "ROOT_REF_INVALID",
@@ -44,9 +51,7 @@ export interface CanonicalRootRefsUpdate {
   readonly entries: readonly (readonly [string, number])[];
 }
 
-export interface RootRefScope extends AppSpaceScope {
-  readonly refDomain: string;
-}
+export type RootRefScope = AppSpaceScope;
 
 export interface RootRefRequestRecord {
   readonly payloadHash: string;
@@ -58,7 +63,7 @@ export interface RootRefNodeState {
   readonly rootRefCount: number;
 }
 
-export interface RootRefDomainState {
+export interface RootRefAppState {
   readonly revision: number;
   readonly balances: ReadonlyMap<string, number>;
 }
@@ -92,11 +97,11 @@ export interface RootRefRepository {
     scope: AppSpaceScope,
     hashes: readonly string[],
   ): Promise<string | null>;
-  readDomainState(scope: RootRefScope): Promise<RootRefDomainState>;
+  readAppState(scope: RootRefScope): Promise<RootRefAppState>;
   commit(plan: RootRefCommitPlan): Promise<"committed" | "revision-conflict">;
 }
 
-export interface DomainUpdateResult {
+export interface RootRefsUpdateResult {
   readonly idempotent: boolean;
   readonly revision: number;
 }
@@ -142,7 +147,6 @@ export function parseRootRefsBody(text: string): { requestId: unknown; changes: 
 export async function canonicalizeRootRefsUpdate(input: {
   requestId: unknown;
   changes: unknown;
-  refDomain: string;
 }): Promise<CanonicalRootRefsUpdate> {
   if (typeof input.requestId !== "string" || input.requestId.length === 0) {
     throw new RootRefsValidationError(400, RootRefsErrorCodes.INVALID_REQUEST, "requestId must be a non-empty string");
@@ -197,7 +201,7 @@ export async function canonicalizeRootRefsUpdate(input: {
 }
 
 /**
- * Apply one Root Ref domain update through a semantic repository. All business
+ * Apply one Root Ref update through a semantic repository. All business
  * validation and transition planning happens here; the repository supplies
  * durable state and commits the resulting plan atomically.
  */
@@ -205,14 +209,12 @@ export async function applyRootRefsUpdate(input: {
   readonly repository: RootRefRepository;
   readonly appId: string;
   readonly spaceId: string;
-  readonly refDomain: string;
   readonly canonical: CanonicalRootRefsUpdate;
   readonly now?: () => number;
-}): Promise<DomainUpdateResult> {
+}): Promise<RootRefsUpdateResult> {
   const scope: RootRefScope = {
     appId: input.appId,
     spaceId: input.spaceId,
-    refDomain: input.refDomain,
   };
   const { requestId, payloadHash, changesJson, entries } = input.canonical;
   const existing = await repositoryCall(
@@ -274,13 +276,20 @@ export async function applyRootRefsUpdate(input: {
     );
   }
 
-  const domain = await repositoryCall(
-    () => input.repository.readDomainState(scope),
-    "Root Ref domain-state lookup failed",
+  const app = await repositoryCall(
+    () => input.repository.readAppState(scope),
+    "Root Ref App-state lookup failed",
   );
-  const revision = domain.revision + 1;
+  const revision = app.revision + 1;
+  if (!Number.isSafeInteger(revision)) {
+    throw new RootRefsValidationError(409, RootRefsErrorCodes.BUSY, "App revision exhausted");
+  }
   const projections = entries.map(([hash, delta]) => {
-    const refCount = (domain.balances.get(hash) ?? 0) + delta;
+    const balance = app.balances.get(hash) ?? 0;
+    if (balance !== nodes.get(hash)!.rootRefCount) {
+      throw new RootRefsValidationError(409, RootRefsErrorCodes.BUSY, "Root Ref projection differs from aggregate");
+    }
+    const refCount = balance + delta;
     return { hash, refCount: refCount === 0 ? null : refCount };
   });
   const plan: RootRefCommitPlan = {
@@ -289,7 +298,7 @@ export async function applyRootRefsUpdate(input: {
     payloadHash,
     changesJson,
     entries,
-    expectedRevision: domain.revision,
+    expectedRevision: app.revision,
     revision,
     projections,
     appliedAt: (input.now ?? (() => Date.now()))(),
@@ -300,7 +309,7 @@ export async function applyRootRefsUpdate(input: {
     "Root Ref repository commit failed",
   );
   if (commitResult === "revision-conflict") {
-    throw new RootRefsRetryableError("App-domain revision allocation lost a conflict");
+    throw new RootRefsRetryableError("App revision allocation lost a conflict");
   }
   return { idempotent: false, revision };
 }
@@ -316,7 +325,7 @@ async function repositoryCall<T>(operation: () => Promise<T>, fallback: string):
   }
 }
 
-export interface DomainRetryOptions {
+export interface RootRefsRetryOptions {
   readonly maxAttempts?: number;
   readonly baseDelayMs?: number;
   readonly maxDelayMs?: number;
@@ -326,7 +335,7 @@ export interface DomainRetryOptions {
 }
 
 const DEFAULT_RETRY_OPTIONS: Required<
-  Pick<DomainRetryOptions, "maxAttempts" | "baseDelayMs" | "maxDelayMs" | "jitter">
+  Pick<RootRefsRetryOptions, "maxAttempts" | "baseDelayMs" | "maxDelayMs" | "jitter">
 > = {
   maxAttempts: 5,
   baseDelayMs: 25,
@@ -335,14 +344,16 @@ const DEFAULT_RETRY_OPTIONS: Required<
 };
 
 /** Bounded exponential backoff for retryable conflicts and store failures. */
-export async function withDomainRetry<T>(
+export async function withRootRefsRetry<T>(
   operation: () => Promise<T>,
-  options: DomainRetryOptions = {},
+  options: RootRefsRetryOptions = {},
 ): Promise<T> {
-  const { maxAttempts, baseDelayMs, maxDelayMs, jitter } = {
-    ...DEFAULT_RETRY_OPTIONS,
-    ...options,
-  };
+  const {
+    maxAttempts = DEFAULT_RETRY_OPTIONS.maxAttempts,
+    baseDelayMs = DEFAULT_RETRY_OPTIONS.baseDelayMs,
+    maxDelayMs = DEFAULT_RETRY_OPTIONS.maxDelayMs,
+    jitter = DEFAULT_RETRY_OPTIONS.jitter,
+  } = options;
   const sleep = options.sleep
     ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   let attempt = 0;

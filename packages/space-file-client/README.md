@@ -1,5 +1,8 @@
 # @unicas/space-file-client
 
+[![npm version](https://img.shields.io/npm/v/%40unicas%2Fspace-file-client?label=npm)](https://www.npmjs.com/package/%40unicas%2Fspace-file-client)
+[![MIT license](https://img.shields.io/npm/l/%40unicas%2Fspace-file-client)](https://github.com/shazhou-ww/unicas/blob/main/LICENSE)
+
 File manifests and mutable working trees above the UniCAS blob and Space
 clients.
 
@@ -63,20 +66,22 @@ email address or display name as the stable Principal key.
 
 <!-- sdk-snippet: space-file-client -->
 ```ts
-import { createSpaceCasClient } from "@unicas/space-client";
+import {
+  createAppCasClient,
+  type SpaceCapabilityProvider,
+} from "@unicas/space-client";
 import { createSpaceFileSystem } from "@unicas/space-file-client";
 
 declare const appId: string;
 declare const spaceId: string;
-declare const getToken: () => Promise<string>;
+declare const capabilityProvider: SpaceCapabilityProvider;
 
-const cas = createSpaceCasClient({
+const cas = createAppCasClient({
   baseUrl: "https://api.unicas.work",
   appId,
-  spaceId,
-  getToken,
+  capabilityProvider,
 });
-const files = createSpaceFileSystem({ cas, catalog });
+const files = createSpaceFileSystem({ client: cas, spaceId, catalog });
 const root = await files.createRoot("Documents");
 
 await root.mkdir("/notes");
@@ -119,7 +124,7 @@ revision and releases the manifest Root Ref; it does not reinterpret file
 content on the server.
 
 File workflows need node read/lease permissions and Root Ref update permission
-with the App-selected `refDomain`. The App remains responsible for user
+for the selected App/Space. The App remains responsible for user
 authentication, Principal-to-Space mapping, catalog authorization, retries,
 and conflict presentation.
 

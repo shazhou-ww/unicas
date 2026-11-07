@@ -1,0 +1,237 @@
+{
+  "compatibility": {
+    "browserEngines": [
+      "chromium",
+      "firefox",
+      "webkit"
+    ],
+    "esbuild": "0.28.2",
+    "moduleFormat": "esm",
+    "node": ">=24",
+    "playwright": "1.55.1",
+    "typescript": "5.9.3",
+    "typescriptRange": ">=5.9 <6"
+  },
+  "distTag": "latest",
+  "packages": [
+    {
+      "bytes": 7562,
+      "dependencies": {
+        "cborg": "^6.1.1"
+      },
+      "exports": {
+        ".": {
+          "import": "./dist/index.js",
+          "types": "./dist/index.d.ts"
+        }
+      },
+      "files": [
+        "LICENSE",
+        "README.md",
+        "dist/binary.d.ts",
+        "dist/binary.js",
+        "dist/canonical-stream.d.ts",
+        "dist/canonical-stream.js",
+        "dist/digest.d.ts",
+        "dist/digest.js",
+        "dist/index.d.ts",
+        "dist/index.js",
+        "dist/validation.d.ts",
+        "dist/validation.js",
+        "package.json"
+      ],
+      "integrity": "sha512-l0VjwwoHQcOOUxf23p2qjY/XKNo50hc5y9t5+UwpGjrPlhjOSQ3QIxgGLmGDrIYnHP0hk0xSUmV/4mWlH8NXrQ==",
+      "name": "@unicas/codec",
+      "order": 1,
+      "runtime": "node-browser",
+      "tarball": "unicas-codec-0.2.0.tgz",
+      "version": "0.2.0"
+    },
+    {
+      "bytes": 24403,
+      "dependencies": {
+        "@opentelemetry/api": "^1.9.0",
+        "@orpc/contract": "1.15.0",
+        "@orpc/zod": "1.15.0",
+        "jose": "^6.2.10",
+        "zod": "^4.4.3"
+      },
+      "exports": {
+        ".": {
+          "import": "./dist/index.js",
+          "types": "./dist/index.d.ts"
+        },
+        "./openapi.json": "./openapi/app-space-v1.openapi.json"
+      },
+      "files": [
+        "LICENSE",
+        "README.md",
+        "dist/http.d.ts",
+        "dist/http.js",
+        "dist/index.d.ts",
+        "dist/index.js",
+        "dist/routes.d.ts",
+        "dist/routes.js",
+        "dist/schemas.d.ts",
+        "dist/schemas.js",
+        "dist/shared-capability.d.ts",
+        "dist/shared-capability.js",
+        "dist/space-capability.d.ts",
+        "dist/space-capability.js",
+        "dist/space-contract.d.ts",
+        "dist/space-contract.js",
+        "dist/space-id.d.ts",
+        "dist/space-id.js",
+        "dist/types.d.ts",
+        "dist/types.js",
+        "openapi/app-space-v1.openapi.json",
+        "package.json"
+      ],
+      "integrity": "sha512-Er63Bb8trz2ow5puVP74RZ6WL0j9aFQ1CRsq8AYBuwK9BJl3pr1wMDzEhJpINRtD1rpH7OGSyQh2WN94kbmTDw==",
+      "name": "@unicas/space-protocol",
+      "order": 2,
+      "runtime": "node-browser",
+      "tarball": "unicas-space-protocol-0.2.0.tgz",
+      "version": "0.2.0"
+    },
+    {
+      "bytes": 9738,
+      "dependencies": {
+        "@unicas/space-protocol": "0.2.0"
+      },
+      "exports": {
+        ".": {
+          "import": "./dist/index.js",
+          "types": "./dist/index.d.ts"
+        }
+      },
+      "files": [
+        "LICENSE",
+        "README.md",
+        "dist/capability.d.ts",
+        "dist/capability.js",
+        "dist/client.d.ts",
+        "dist/client.js",
+        "dist/errors.d.ts",
+        "dist/errors.js",
+        "dist/index.d.ts",
+        "dist/index.js",
+        "dist/shared-types.d.ts",
+        "dist/shared-types.js",
+        "dist/transport.d.ts",
+        "dist/transport.js",
+        "dist/types.d.ts",
+        "dist/types.js",
+        "package.json"
+      ],
+      "integrity": "sha512-msH6NFGrIdRVBlarjzFPtfzUtfF9pb5SAZZSNjTOusAb7lXA257zSGVPeYjRrIdmmUuA//aWdjlU13d03HRLXg==",
+      "name": "@unicas/space-client",
+      "order": 3,
+      "runtime": "node-browser",
+      "tarball": "unicas-space-client-0.2.0.tgz",
+      "version": "0.2.0"
+    },
+    {
+      "bytes": 9809,
+      "dependencies": {
+        "@unicas/codec": "0.2.0",
+        "@unicas/space-client": "0.2.0",
+        "cborg": "^6.1.1"
+      },
+      "exports": {
+        ".": {
+          "import": "./dist/index.js",
+          "types": "./dist/index.d.ts"
+        }
+      },
+      "files": [
+        "LICENSE",
+        "README.md",
+        "dist/blob-client.d.ts",
+        "dist/blob-client.js",
+        "dist/blob-index.d.ts",
+        "dist/blob-index.js",
+        "dist/index.d.ts",
+        "dist/index.js",
+        "dist/node-content.d.ts",
+        "dist/node-content.js",
+        "dist/types.d.ts",
+        "dist/types.js",
+        "package.json"
+      ],
+      "integrity": "sha512-cSJHusHNmbrRn6Q5KfcR8i1LI8eAdqaiHnEwGTLJT0aGEzYlbpU0R767x/sMoD+Br58b2jlm5brvlZ5eTkCa/A==",
+      "name": "@unicas/space-blob-client",
+      "order": 4,
+      "runtime": "node-browser",
+      "tarball": "unicas-space-blob-client-0.2.0.tgz",
+      "version": "0.2.0"
+    },
+    {
+      "bytes": 7613,
+      "dependencies": {
+        "@unicas/space-client": "0.2.0",
+        "idb": "^8.0.3"
+      },
+      "exports": {
+        ".": {
+          "import": "./dist/index.js",
+          "types": "./dist/index.d.ts"
+        }
+      },
+      "files": [
+        "LICENSE",
+        "README.md",
+        "dist/cache-core.d.ts",
+        "dist/cache-core.js",
+        "dist/index.d.ts",
+        "dist/index.js",
+        "package.json"
+      ],
+      "integrity": "sha512-bfdQpoae3K8dB0SG9QvsZZoU1Ki4QXHaR25ciquQBNdljht4PWWkHS9kEtVRx0ZM5B1g3dtuz+2efFXEeszOTA==",
+      "name": "@unicas/space-browser-cache",
+      "order": 5,
+      "runtime": "browser",
+      "tarball": "unicas-space-browser-cache-0.2.0.tgz",
+      "version": "0.2.0"
+    },
+    {
+      "bytes": 8771,
+      "dependencies": {
+        "@unicas/space-blob-client": "0.2.0",
+        "@unicas/space-client": "0.2.0",
+        "cborg": "^6.1.1"
+      },
+      "exports": {
+        ".": {
+          "import": "./dist/index.js",
+          "types": "./dist/index.d.ts"
+        }
+      },
+      "files": [
+        "LICENSE",
+        "README.md",
+        "dist/file-client.d.ts",
+        "dist/file-client.js",
+        "dist/file-manifest.d.ts",
+        "dist/file-manifest.js",
+        "dist/file-protocol.d.ts",
+        "dist/file-protocol.js",
+        "dist/index.d.ts",
+        "dist/index.js",
+        "dist/types.d.ts",
+        "dist/types.js",
+        "package.json"
+      ],
+      "integrity": "sha512-mebM6fhfBOvk+hMlGwl3abHKeVUb4YBoWzktJQnDN6QeCGlg6ErpGURRpinh1P1AL7+/2hf1hQ23YciBwSXYww==",
+      "name": "@unicas/space-file-client",
+      "order": 6,
+      "runtime": "node-browser",
+      "tarball": "unicas-space-file-client-0.2.0.tgz",
+      "version": "0.2.0"
+    }
+  ],
+  "releaseKey": "app-user-sdk",
+  "schemaVersion": 1,
+  "tag": "npm/app-user-sdk/v0.2.0",
+  "version": "0.2.0"
+}

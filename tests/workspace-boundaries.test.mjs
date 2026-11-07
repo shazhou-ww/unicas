@@ -7,7 +7,31 @@ const ROOT = join(import.meta.dirname, "..");
 const PACKAGES_DIR = join(ROOT, "packages");
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/;
 const SKIPPED_DIRECTORIES = new Set(["node_modules", "dist", ".wrangler"]);
-const FORBIDDEN_STANDALONE_PATHS = ["unicas-packages/", "stacks/unidocs-"];
+const FORBIDDEN_REPOSITORY_PATHS = [
+  "unicas-packages/",
+  "stacks/unidocs-",
+  "stacks/unicas/",
+  "packages/spaces/scripts/",
+  "scripts/git-hooks.mjs",
+  "scripts/pre-push-main.mjs",
+  "scripts/forward-local-args.mjs",
+  "scripts/generate-local-capability-keys.mjs",
+  "scripts/run-local-compose.mjs",
+];
+const FORBIDDEN_REPOSITORY_PATTERNS = [
+  /(?:^|[^a-z0-9-])sdk\/(?:api\/|package-matrix\.json|release-manifest\.json)/iu,
+];
+const RETIRED_ROOT_COMMANDS = [
+  "pnpm dev",
+  "pnpm deploy",
+  "pnpm smoke",
+  "pnpm spaces:",
+  "pnpm sdk:",
+  "pnpm check:sdk",
+  "pnpm check:npm",
+  "pnpm verify:npm",
+  "pnpm keys:local",
+];
 
 function walk(directory, files = []) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -133,6 +157,21 @@ describe("standalone workspace boundaries", () => {
     expect(existsSync(join(ROOT, "unicas-packages"))).toBe(false);
   });
 
+  test("repository ownership roots use only the accepted layout", () => {
+    expect(existsSync(join(ROOT, "stacks"))).toBe(false);
+    expect(existsSync(join(ROOT, "sdk"))).toBe(false);
+    expect(readdirSync(join(ROOT, "scripts")).sort()).toEqual(["git", "local"]);
+    expect(readdirSync(join(ROOT, "release")).sort()).toEqual([
+      "README.md",
+      "app-user-sdk",
+      "docs",
+      "service",
+      "shared",
+      "site",
+      "spaces",
+    ]);
+  });
+
   test.each(packages.map((pkg) => [pkg.packageJson.name, pkg]))(
     "%s directory matches its package name",
     (_name, pkg) => {
@@ -204,8 +243,10 @@ describe("standalone workspace boundaries", () => {
       join(ROOT, ".github"),
       join(ROOT, "docs"),
       join(ROOT, "packages"),
+      join(ROOT, "release"),
       join(ROOT, "scripts"),
-      join(ROOT, "stacks"),
+      join(ROOT, ".githooks"),
+      join(ROOT, "AGENTS.md"),
       join(ROOT, "README.md"),
       join(ROOT, "GLOSSARY.md"),
       join(ROOT, "package.json"),
@@ -216,9 +257,14 @@ describe("standalone workspace boundaries", () => {
     const violations = [];
     for (const filePath of files) {
       const content = readFileSync(filePath, "utf8");
-      for (const forbiddenPath of FORBIDDEN_STANDALONE_PATHS) {
+      for (const forbiddenPath of [...FORBIDDEN_REPOSITORY_PATHS, ...RETIRED_ROOT_COMMANDS]) {
         if (content.includes(forbiddenPath)) {
           violations.push(`${relative(ROOT, filePath).replace(/\\/g, "/")}: ${forbiddenPath}`);
+        }
+      }
+      for (const forbiddenPattern of FORBIDDEN_REPOSITORY_PATTERNS) {
+        if (forbiddenPattern.test(content)) {
+          violations.push(`${relative(ROOT, filePath).replace(/\\/g, "/")}: ${forbiddenPattern}`);
         }
       }
     }

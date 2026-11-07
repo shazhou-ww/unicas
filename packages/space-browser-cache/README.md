@@ -1,5 +1,8 @@
 # @unicas/space-browser-cache
 
+[![npm version](https://img.shields.io/npm/v/%40unicas%2Fspace-browser-cache?label=npm)](https://www.npmjs.com/package/%40unicas%2Fspace-browser-cache)
+[![MIT license](https://img.shields.io/npm/l/%40unicas%2Fspace-browser-cache)](https://github.com/shazhou-ww/unicas/blob/main/LICENSE)
+
 Optional browser implementation of `CasNodeCache`. The HTTP client remains
 platform-neutral and has no dependency on this package. No server or application
 manifest types are imported; the `space-client` dependency is type-only in source.
@@ -21,7 +24,10 @@ npm install @unicas/space-client @unicas/space-browser-cache
 
 <!-- sdk-snippet: space-browser-cache -->
 ```ts
-import { createSpaceCasClient } from "@unicas/space-client";
+import {
+  createAppCasClient,
+  type SpaceCapabilityProvider,
+} from "@unicas/space-client";
 import {
   clearBrowserCasNodeCaches,
   createBrowserCasNodeCache,
@@ -35,7 +41,7 @@ declare const casBaseUrl: string;
 declare const appId: string;
 declare const spaceId: string;
 declare const hash: string;
-declare const getToken: () => Promise<string>;
+declare const capabilityProvider: SpaceCapabilityProvider;
 
 const principal = JSON.stringify([identity.identityIssuer, identity.subject]);
 const cache = createBrowserCasNodeCache({
@@ -44,16 +50,15 @@ const cache = createBrowserCasNodeCache({
   maxMemoryBytes: 8 * 1024 * 1024,
   maxEntryBytes: 4 * 1024 * 1024,
 });
-const cas = createSpaceCasClient({
+const cas = createAppCasClient({
   baseUrl: casBaseUrl,
   appId,
-  spaceId,
-  getToken,
+  capabilityProvider,
   cache,
 });
 
-const metadata = await cas.readMetadata(hash);
-const content = await cas.readContent(hash);
+const metadata = await cas.readMetadata(spaceId, hash);
+const content = await cas.readContent(spaceId, hash);
 
 // A full content read is cached only after the stream is completely consumed.
 const bytes = new Uint8Array(await new Response(content).arrayBuffer());

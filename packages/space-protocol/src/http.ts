@@ -2,6 +2,7 @@
 
 export interface CasErrorResponse {
   readonly error: string;
+  readonly message?: string;
 }
 
 export const CasNodeRefsHeader = "X-CAS-Refs";

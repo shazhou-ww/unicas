@@ -15,9 +15,9 @@ import {
   hexToHash,
 } from "@unicas/codec";
 import type {
+  AppCasClient,
   CasLeaseOptions,
   HttpFetcher,
-  SpaceCasClient,
   SpaceNodeLeaseOptions,
   SpaceNodeLeaseResult,
 } from "@unicas/space-client";
@@ -45,7 +45,8 @@ async function encodeCanonicalNode(
 }
 
 export async function leaseNodeContent(
-  cas: Pick<SpaceCasClient, "leaseNode">,
+  cas: Pick<AppCasClient, "leaseNode">,
+  spaceId: string,
   hash: string,
   content: Uint8Array,
   contentType: string,
@@ -57,11 +58,19 @@ export async function leaseNodeContent(
   if (canonical.hash !== hash) {
     throw new Error(`CAS node digest mismatch: expected ${hash}, got ${canonical.hash}`);
   }
-  return uploadCanonicalNode(cas, canonical.hash, canonical.bytes, options, uploadFetcher);
+  return uploadCanonicalNode(
+    cas,
+    spaceId,
+    canonical.hash,
+    canonical.bytes,
+    options,
+    uploadFetcher,
+  );
 }
 
 export async function storeNodeContent(
-  cas: Pick<SpaceCasClient, "leaseNode">,
+  cas: Pick<AppCasClient, "leaseNode">,
+  spaceId: string,
   content: Uint8Array,
   contentType: string,
   refs: readonly string[] = [],
@@ -69,12 +78,20 @@ export async function storeNodeContent(
   uploadFetcher: HttpFetcher = { fetch: globalThis.fetch.bind(globalThis) },
 ): Promise<string> {
   const canonical = await encodeCanonicalNode(content, contentType, refs);
-  await uploadCanonicalNode(cas, canonical.hash, canonical.bytes, options, uploadFetcher);
+  await uploadCanonicalNode(
+    cas,
+    spaceId,
+    canonical.hash,
+    canonical.bytes,
+    options,
+    uploadFetcher,
+  );
   return canonical.hash;
 }
 
 async function uploadCanonicalNode(
-  cas: Pick<SpaceCasClient, "leaseNode">,
+  cas: Pick<AppCasClient, "leaseNode">,
+  spaceId: string,
   hash: string,
   bytes: Uint8Array,
   options: CasLeaseOptions | undefined,
@@ -84,18 +101,18 @@ async function uploadCanonicalNode(
     durationMs: options?.durationMs ?? DEFAULT_SPACE_NODE_LEASE_OPTIONS.durationMs,
     signal: options?.signal ?? null,
   };
-  let result = await cas.leaseNode(hash, leaseOptions);
+  let result = await cas.leaseNode(spaceId, hash, leaseOptions);
   let uploaded = false;
   for (let attempt = 0; attempt < 3; attempt++) {
     if (result.state === "ready") return result;
     if (result.state === "validated_awaiting_children") {
       for (const childHash of result.childHashes) {
-        const child = await cas.leaseNode(childHash, leaseOptions);
+        const child = await cas.leaseNode(spaceId, childHash, leaseOptions);
         if (child.state !== "ready") {
           throw new Error(`CAS child node ${childHash} is not ready`);
         }
       }
-      result = await cas.leaseNode(hash, leaseOptions);
+      result = await cas.leaseNode(spaceId, hash, leaseOptions);
       continue;
     }
     if (result.state === "awaiting_replacement_upload" && uploaded) {
@@ -113,7 +130,7 @@ async function uploadCanonicalNode(
       throw new CasClientError(uploadResponse.status, uploadResponse.statusText, "upload");
     }
     uploaded = true;
-    result = await cas.leaseNode(hash, leaseOptions);
+    result = await cas.leaseNode(spaceId, hash, leaseOptions);
   }
   if (result.state === "awaiting_replacement_upload") {
     throw new Error(`${result.rejection.code}: ${result.rejection.message}`);

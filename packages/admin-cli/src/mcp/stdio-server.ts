@@ -317,10 +317,6 @@ const TOOL_HANDLERS = {
     return result;
   },
 
-  async list_app_ref_domains(admin, args) {
-    return admin.listAppRefDomains({ appId: str(args.appId) });
-  },
-
   async list_app_control_audit_events(admin, args) {
     return admin.listAppControlAuditEvents(
       { appId: str(args.appId) },
@@ -328,16 +324,16 @@ const TOOL_HANDLERS = {
     );
   },
 
-  async list_space_root_domain_refs(admin, args) {
-    return admin.listSpaceRootDomainRefs(
-      { appId: str(args.appId), refDomain: str(args.refDomain) },
+  async list_app_root_refs(admin, args) {
+    return admin.listAppRootRefs(
+      { appId: str(args.appId) },
       pick(args, ["spaceId", "limit", "cursor"]),
     );
   },
 
-  async list_space_root_domain_events(admin, args) {
-    return admin.listSpaceRootDomainEvents(
-      { appId: str(args.appId), refDomain: str(args.refDomain) },
+  async list_app_root_events(admin, args) {
+    return admin.listAppRootEvents(
+      { appId: str(args.appId) },
       pick(args, ["spaceId", "after", "limit"]),
     );
   },

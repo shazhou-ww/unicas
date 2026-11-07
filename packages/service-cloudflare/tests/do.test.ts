@@ -76,6 +76,7 @@ async function seedNode(hash: string): Promise<void> {
   await db!.prepare(
     "INSERT INTO cas_nodes (app_id, space_id, hash, content_size, content_type, lease_started_at, lease_expires_at, child_ref_count, root_ref_count) VALUES (?, ?, ?, 10, 'text/plain', 1, 1, 0, 1)",
   ).bind(STACK, TENANT, hash).run();
+  await db!.prepare("INSERT INTO cas_app_root_refs VALUES (?, ?, ?, 1)").bind(STACK, TENANT, hash).run();
   await bucket!.put(appCanonicalNodeKey(STACK, TENANT, hash), new TextEncoder().encode("content"));
 }
 
@@ -107,7 +108,6 @@ function domainCommand(requestId: string, changes: Record<string, number>): Requ
     headers: {
       "X-CAS-App-Id": STACK,
       "X-CAS-Space-Id": TENANT,
-      "X-CAS-Ref-Domain": DOMAIN,
     },
     body: JSON.stringify({ requestId, changes }),
   });
@@ -213,12 +213,12 @@ describe("CasDurableObject (Space DO)", () => {
     }));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ success: true, idempotent: false, revision: 7 });
-    expect(forwarded?.name).toBe(canonicalComposite(STACK, DOMAIN));
+    expect(forwarded?.name).toBe(`app-root-refs:${encodeURIComponent(STACK)}`);
     expect(forwarded?.headers.get("X-CAS-App-Id")).toBe(STACK);
     expect(forwarded?.headers.get("X-CAS-Space-Id")).toBe(TENANT);
     expect(forwarded?.headers.has("X-CAS-Stack-Id")).toBe(false);
     expect(forwarded?.headers.has("X-CAS-Tenant-Id")).toBe(false);
-    expect(forwarded?.headers.get("X-CAS-Ref-Domain")).toBe(DOMAIN);
+    expect(forwarded?.headers.has("X-CAS-Ref-Domain")).toBe(false);
     const body = JSON.parse(forwarded!.body) as { requestId: string; changes: Record<string, number> };
     expect(body).toEqual({ requestId: "r1", changes: { [H1]: 1 } });
   });

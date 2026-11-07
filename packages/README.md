@@ -47,7 +47,7 @@ space: [space-cli, space-webui] -> space-client -> space-protocol
 - 上图是固定的角色与依赖模型；某个 CLI/WebUI 产品尚未实现时不创建空包。
   WebUI 的服务端 BFF 属于服务端梳理范围，不改变浏览器侧的依赖方向。
 
-## 包清单（16 包）
+## 包清单（17 包）
 
 ```
 packages/                           @unicas org
@@ -87,18 +87,21 @@ packages/                           @unicas org
 │         D1/R2/KV/DO bindings、统一公网路由、credential 隔离、admin BFF/OIDC、
 │         MCP/OAuth ingress、control schema 与 D1 repository 适配
 │
-├── ■ 私有文档部署
-│   └── docs-site/         @unicas/docs-site           docs.unicas.work 静态站点
-│         私有且不发布；拥有公开文档内容、渲染器、测试、静态资源、构建产物与
-│         assets-only Wrangler 配置；仅把 space-protocol OpenAPI 导出作为构建输入
+├── ■ 私有呈现部署
+│   ├── docs-site/         @unicas/docs-site           docs.unicas.work 静态站点
+│   │     私有且不发布；拥有公开文档内容、渲染器、测试、静态资源、构建产物与
+│   │     assets-only Wrangler 配置；仅把 space-protocol OpenAPI 导出作为构建输入
+│   └── site/              @unicas/site                unicas.work product apex
+│         私有且不发布；只拥有静态源码、测试、assets-only Wrangler 配置与
+│         独立 Wrangler tooling，不含 service bindings、secrets 或 runtime code
 │
 ├── ■ client 层
     ├── admin-webui/       @unicas/admin-webui         admin 组 · 浏览器 UI（纯前端）
     │     经 @unicas/admin-client 取 admin-protocol 类型；不含任何服务端代码
     ├── space-client/     @unicas/space-client       Space 数据面 · 传输层
     │     纯 HTTP 封装，每个路由一个函数（readMetadata/readContent/
-    │     leaseNode/updateRootRefs/usage/gc）；`createSpaceCasClient` 绑定
-    │     App/Space；无编码、无业务封装，仅组装层使用
+    │     leaseNode/updateRootRefs/usage/gc）；`createAppCasClient` 绑定 App，
+    │     每个操作显式接收 Space；无编码、无业务封装，仅组装层使用
     ├── space-blob-client/@unicas/space-blob-client  Space 数据面 · 业务面
     │     业务方唯一入口：storeBlob / openBlob(含元数据的句柄式随机读) /
     │     retain / release；底层能力统一经 unicasClient 访问
@@ -122,8 +125,8 @@ packages/                           @unicas org
     │
     └── ■ 私有第一方集成 App
         └── spaces/            @unicas/spaces              文件工作流与 release smoke
-          独立部署且不发布；只消费公开 Space client，部署配置与 App-owned
-          D1 migration 位于 stacks/unicas/spaces
+          独立部署且不发布；只消费公开 Space client，package root 拥有部署配置、
+          App-owned D1 migration 与独立 Wrangler tooling
 ```
 
 ## 依赖规则（分层单向，guard + boundary 测试强制）
@@ -145,11 +148,12 @@ space-protocol OpenAPI 导出 ← docs-site（仅构建时读取，不形成运�
 - **codec 是最底层**：无 workspace 依赖，仅外部 `cborg`；`space-protocol`
   不 re-export codec 符号（强制迁移，2026-08-29 决策）。
 - **space-client 是纯函数传输层**：与 HTTP 路由一一对应。factory 绑定
-  `appId`/`spaceId`，只组装 JWT 与公共传输参数，无编码、无业务抽象、无对象模式
-  （`node()` 已移除）。
+  `appId` 与 capability provider，每个方法以 `spaceId` 为首个参数；client
+  只管理有限 capability 生命周期并组装公共传输参数，无编码、无业务抽象、
+  无 `forSpace()` 或 `node()` 对象模式。
 - **业务方只用 space-blob-client**：其接口覆盖完整数据面
   （blob 写/随机读 + 节点元数据/续租/root-refs + usage/gc），应用栈不再直接
-  依赖 space-client；当前业务层只接收 `SpaceCasClient`。
+  依赖 space-client；业务 workflow 接收共享 `AppCasClient` 与显式 `spaceId`。
 - 契约层：`space-protocol` 持有数据面共享类型；`admin-protocol` 仅通过允许的
   单向依赖复用 App/Space identity 类型，反向依赖禁止。
 - `service` 同时依赖 Space/admin protocol，统一 App/Space 与 Admin HTTP surface；
@@ -200,7 +204,7 @@ refs 一致性若需兜底，由应用栈侧在写入前自检（`refsFromSValue
 ## 能力（capability）词汇归属
 
 Current Space capability 归属 `space-protocol/src/space-capability.ts`，共享算法、
-错误与 refDomain 规则归属 `shared-capability.ts`。已退役的 Stack/Tenant claim
+错误归属 `shared-capability.ts`。Root Ref 不再增加 domain claim。已退役的 Stack/Tenant claim
 parser 不再属于任何公共 package。capability 是 JWT claim 词汇而非编码，故不进
 `codec` 包。
 

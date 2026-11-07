@@ -24,7 +24,7 @@ import { generateAccountId, generateAppId, generateEventId, generateExternalIden
 import { decodeControlListCursor, encodeControlListCursor } from "./control-cursor.js";
 import { extractJwsPayload, extractJwsProtectedHeader, verifyCompactJwsProof } from "./control-possession.js";
 import { buildOAuthIssuerInspectionChallenge, canonicalizeOAuthIssuer, OAUTH_ISSUER_INSPECTION_TTL_MS, parseOAuthIssuerInspectionChallenge, type DiscoveredOAuthJwk, type OAuthDiscoveryPort } from "./oauth-discovery.js";
-import { appOAuthResource, canonicalJson, INVITATION_TTL_MS, normalizeEmailConstraint, OAUTH_CAPABILITY_MAX_LIFETIME_SECONDS, sha256Hex, validateDisplayName, validateEmailConstraint, validateInvitationToken } from "./control-validation.js";
+import { canonicalJson, casOAuthResource, INVITATION_TTL_MS, normalizeEmailConstraint, OAUTH_CAPABILITY_MAX_LIFETIME_SECONDS, sha256Hex, validateDisplayName, validateEmailConstraint, validateInvitationToken } from "./control-validation.js";
 import { requireInvitationEmailEvidence, type AuthenticatedProviderResult, type VerifiedEmailEvidence } from "./authentication.js";
 import { AUTHENTICATION_FLOW_TTL_MS } from "./authentication.js";
 
@@ -713,7 +713,7 @@ export class AccountService {
     const now = this.now();
     const inspectionId = (this.options.generateOAuthInspectionId ?? generateOAuthInspectionId)();
     const expiresAt = now + (this.options.oauthInspectionTtlMs ?? OAUTH_ISSUER_INSPECTION_TTL_MS);
-    const audience = appOAuthResource(this.options.oauthResourcePublicOrigin, input.appId);
+    const audience = casOAuthResource(this.options.oauthResourcePublicOrigin);
     const challenge = buildOAuthIssuerInspectionChallenge({
       nonce: (this.options.generateNonce ?? generateNonce)(),
       inspectionId,

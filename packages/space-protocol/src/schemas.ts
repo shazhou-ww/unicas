@@ -1,3 +1,4 @@
+import { JSON_SCHEMA_INPUT_REGISTRY } from "@orpc/zod/zod4";
 import { z } from "zod";
 import type {
   AppId,
@@ -19,13 +20,19 @@ import type {
   Space,
   SpaceId,
 } from "./types.js";
+import {
+  SPACE_ID_MAX_LENGTH,
+  SPACE_ID_PATTERN,
+} from "./space-id.js";
 
 export const AppIdSchema: z.ZodType<AppId> = z.string().min(1)
   .describe("Opaque UniCAS-generated App identifier.")
   .meta({ id: "AppId" });
 
-export const SpaceIdSchema: z.ZodType<SpaceId> = z.string().min(1)
-  .describe("App-scoped logical data ownership and authorization identifier.")
+export const SpaceIdSchema: z.ZodType<SpaceId> = z.string()
+  .max(SPACE_ID_MAX_LENGTH)
+  .regex(SPACE_ID_PATTERN)
+  .describe("Canonical slash-prefixed App-scoped data ownership and authorization path.")
   .meta({ id: "SpaceId" });
 
 export const SpaceSchema: z.ZodType<Space> = z.object({
@@ -97,24 +104,57 @@ export const CasReferencesSchema: z.ZodType<CasReferences> =
     .describe("Reference counts keyed by child node digest.")
     .meta({ id: "CasReferences" });
 
+export const CAS_MAX_REQUEST_ID_LENGTH = 256;
+export const CAS_MAX_ROOT_REF_CHANGES = 1_000;
+export const CAS_MAX_ROOT_REF_DELTA = 1_000_000;
+
 export const CasRefChangesSchema: z.ZodType<CasRefChanges> =
   z.record(CasHashSchema, z.number().int()).readonly()
+    .refine(
+      (changes) => {
+        const deltas = Object.values(changes);
+        return deltas.length >= 1
+          && deltas.length <= CAS_MAX_ROOT_REF_CHANGES
+          && deltas.every(
+            delta => Number.isSafeInteger(delta)
+              && delta !== 0
+              && Math.abs(delta) <= CAS_MAX_ROOT_REF_DELTA,
+          );
+      },
+      `Expected 1 to ${CAS_MAX_ROOT_REF_CHANGES} non-zero safe-integer deltas with an absolute value no greater than ${CAS_MAX_ROOT_REF_DELTA}`,
+    )
     .describe("Signed, non-zero Root Ref deltas keyed by node digest. Positive values acquire references; negative values release them.")
     .meta({ id: "CasRefChanges" });
 
+JSON_SCHEMA_INPUT_REGISTRY.add(CasRefChangesSchema, {
+  type: "object",
+  minProperties: 1,
+  maxProperties: CAS_MAX_ROOT_REF_CHANGES,
+  propertyNames: {
+    type: "string",
+    pattern: "^[0-9a-f]{64}$",
+  },
+  additionalProperties: {
+    type: "integer",
+    minimum: -CAS_MAX_ROOT_REF_DELTA,
+    maximum: CAS_MAX_ROOT_REF_DELTA,
+    not: { const: 0 },
+  },
+  description: "One to 1,000 non-zero signed Root Ref deltas keyed by lowercase SHA-256 digest.",
+});
+
 export const CasRootRefUpdateSchema: z.ZodType<CasRootRefUpdate> = z.object({
-  requestId: z.string().min(1)
+  requestId: z.string().min(1).max(CAS_MAX_REQUEST_ID_LENGTH)
     .describe("Stable caller-generated idempotency identity. Retrying the same requestId with the same changes returns the original result."),
-  changes: CasRefChangesSchema.describe("Complete atomic set of Root Ref balance changes for this commit."),
+  changes: CasRefChangesSchema,
 }).readonly().meta({ id: "CasRootRefUpdate" });
 
 export const CasRootRefBalanceSchema: z.ZodType<CasRootRefBalance> = z.object({
   hash: CasHashSchema.describe("Node whose business Root Ref balance is reported."),
-  refCount: z.number().int().describe("Current balance in the capability's refDomain."),
+  refCount: z.number().int().nonnegative().describe("Current App/Space Root Ref balance."),
 }).readonly().meta({ id: "CasRootRefBalance" });
 
 export const CasRootRefsPageSchema: z.ZodType<CasRootRefsPage> = z.object({
-  refDomain: z.string().min(1).describe("Business lifecycle namespace taken from the verified capability, never from caller input."),
   revision: z.number().int().nonnegative().describe("Stable Root Ref snapshot revision represented by this page."),
   items: z.array(CasRootRefBalanceSchema).readonly().describe("Root Ref balances in this page."),
   nextCursor: z.string().min(1).nullable().describe("Opaque cursor for the next page, or null when this snapshot is exhausted."),

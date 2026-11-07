@@ -102,7 +102,7 @@ semantics.
 | **data plane** | Space 内容寻址存储的读写与生命周期操作面。 | HTTP v2 routes are scoped by both App and Space. Node, Root Ref, usage, and GC permissions are independent data-plane authorities. |
 | **capability** | 对 Principal、Space、权限和可选 Root Ref domain 进行约束的已签名授权声明。 | The HTTP v2 API uses capability `ver: 3`, one signed `spaceId`, and exact `cas:{resource}:{action}` permissions. A capability authorizes an operation; it is not a public document identifier. |
 | **issuer** | 签发并可被验证信任令牌的身份提供方。 | A registered issuer establishes App authority; verified Space claims and permissions must agree with the request path. |
-| **`refDomain`** | Root Ref 的正交审计和授权维度。 | It does not replace `appId` or `spaceId` and is not a storage partition by itself. |
+| **Root Ref revision** | App 内跨 Space 的追加审计序号。 | Replay identity remains App + Space + request ID; audit never determines GC retention. |
 | **retired Stack/Tenant identifiers** | 已退役原型合同中的 `stackId`、`tenantId` 与 `tenants:` 权限。 | Retained only in historical records, the frozen `unicas.shazhou.work` environment, negative guards, and isolated physical/audit adapters. Never reinterpret them as App/Space claims. |
 
 See [Capability Key Operations](docs/capability-key-operations.md) and
