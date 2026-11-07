@@ -2,7 +2,7 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { defineConfig, type UserConfig } from "vite";
-import type { UserConfig as VitestUserConfig } from "vitest/config";
+import type { TestUserConfig as VitestUserConfig } from "vitest/config";
 
 /**
  * The admin console is served under `/admin/` on the CAS service domain;
