@@ -10,8 +10,8 @@ workflows, and documentation by origin:
 | Origin | Audience | Owned surface |
 | --- | --- | --- |
 | `https://unicas.work` | Developers and evaluators | Product overview, quick start, and links to source, console, and docs |
-| `https://api.unicas.work` | Services, SDKs, CLIs, and agents | App/Space data API, OAuth/MCP, discovery, and health |
-| `https://console.unicas.work` | App administrators and Platform Admins | Administrator WebUI, BFF, invitations, Platform Administration, and CLI login |
+| `https://api.unicas.work` | Services and Space SDKs | App/Space data API, App/Space discovery, and health |
+| `https://console.unicas.work` | App administrators, Platform Admins, CLIs, and agents | Administrator WebUI, BFF, invitations, Platform Administration, CLI login, and control-plane MCP/OAuth discovery |
 | `https://spaces.unicas.work` | Admitted users and release automation | Separately deployed first-party file App, App OAuth issuer/JWKS, and canonical upload smoke |
 | `https://docs.unicas.work` | Developers and operators | Product, protocol, deployment, and operations documentation |
 
@@ -31,7 +31,7 @@ Each security boundary has one canonical public origin:
 
 ```text
 CAS_PUBLIC_ORIGIN=https://api.unicas.work
-MCP_PUBLIC_ORIGIN=https://api.unicas.work
+MCP_PUBLIC_ORIGIN=https://console.unicas.work
 ADMIN_PUBLIC_ORIGIN=https://console.unicas.work
 SPACES_PUBLIC_ORIGIN=https://spaces.unicas.work
 ```
@@ -56,25 +56,26 @@ this host/path matrix:
 
 | Host | Allowed paths |
 | --- | --- |
-| `api.unicas.work` | `/health`, `/.well-known/*`, `/v1/cas/*`, `/mcp`, `/oauth/*` |
-| `console.unicas.work` | `/`, `/admin/*` |
+| `api.unicas.work` | `/health`, App/Space `/.well-known/*`, `/v1/cas/*` |
+| `console.unicas.work` | `/`, `/admin/*`, `/mcp`, MCP discovery, and the exact MCP OAuth endpoints |
 | `spaces.unicas.work` | `/`, `/files*`, `/auth/google/*`, `/api/*`, `/.well-known/*` |
 
 Wrong-host requests fail closed. Do not rely on redirects for
 capability-bearing writes. The console and Admin BFF remain same-origin.
 Administrator cookies are host-only and are not authentication on the API
-origin.
+origin. MCP ingress strips administrator cookies even though it shares the
+console origin.
 
 `docs.unicas.work` is never routed to the API Worker. Exact custom domains do
 not imply wildcard ownership of subdomains.
 
 ## OAuth callbacks
 
-The production Google OAuth client registers both callbacks:
+The production Google OAuth configuration registers these callbacks:
 
 ```text
-https://console.unicas.work/admin/auth/callback
-https://api.unicas.work/oauth/google/callback
+https://console.unicas.work/admin/auth/callback/google
+https://console.unicas.work/oauth/callback/google
 https://spaces.unicas.work/auth/google/callback
 ```
 
