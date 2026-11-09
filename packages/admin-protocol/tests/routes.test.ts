@@ -23,10 +23,9 @@ describe("App admin routes", () => {
     ["GET", appAdminRoutes.oauthIssuer({ appId: "app/a" }), "getOAuthIssuer"],
     ["PUT", appAdminRoutes.oauthIssuer({ appId: "app/a" }), "activateOAuthIssuer"],
     ["POST", appAdminRoutes.oauthIssuerInspections({ appId: "app/a" }), "inspectOAuthIssuer"],
-    ["GET", appAdminRoutes.refDomains({ appId: "app/a" }), "listRefDomains"],
     ["GET", appAdminRoutes.controlAuditEvents({ appId: "app/a" }), "listControlAuditEvents"],
-    ["GET", appAdminRoutes.rootDomainRefs({ appId: "app/a", refDomain: "doc" }), "listRootDomainRefs"],
-    ["GET", appAdminRoutes.rootDomainEvents({ appId: "app/a", refDomain: "doc" }), "listRootDomainEvents"],
+    ["GET", appAdminRoutes.rootRefs({ appId: "app/a" }), "listRootRefs"],
+    ["GET", appAdminRoutes.rootEvents({ appId: "app/a" }), "listRootEvents"],
     ["GET", appAdminRoutes.platformInvitations(), "listPlatformInvitations"],
     ["POST", appAdminRoutes.platformInvitations(), "createPlatformInvitation"],
     ["DELETE", appAdminRoutes.platformInvitation({ invitationId: "invite/1" }), "revokePlatformInvitation"],
@@ -43,15 +42,16 @@ describe("App admin routes", () => {
   });
 
   test("encodes App path segments and returns appId", () => {
-    const path = appAdminRoutes.rootDomainRefs({ appId: "app/a", refDomain: "doc:md" });
-    expect(path).toBe("/admin/apps/app%2Fa/root-ref-domains/doc%3Amd/refs");
+    const path = appAdminRoutes.rootRefs({ appId: "app/a" });
+    expect(path).toBe("/admin/apps/app%2Fa/root-refs");
     expect(matchAppAdminRoute("GET", path)).toMatchObject({
       appId: "app/a",
-      refDomain: "doc:md",
     });
   });
 
   test("rejects retired Stack administrator paths", () => {
+    expect(matchAppAdminRoute("GET", "/admin/apps/a/ref-domains")).toBeNull();
+    expect(matchAppAdminRoute("GET", "/admin/apps/a/root-ref-domains/doc/refs")).toBeNull();
     expect(matchAppAdminRoute("GET", "/admin/stacks/scope-a")).toBeNull();
     expect(matchAppAdminRoute("GET", "/admin/stacks/scope-a/members")).toBeNull();
   });

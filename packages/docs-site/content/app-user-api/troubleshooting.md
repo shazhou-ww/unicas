@@ -11,7 +11,7 @@ Verify Node.js 24+ and TypeScript 5.9+ before diagnosing declaration errors.
 ## `401` or `403`
 
 Obtain a fresh short-lived Space capability through the App's authenticated
-flow. Check the exact App, Space, audience, permission, and `refDomain`.
+flow. Check the exact App, Space, audience, and permission.
 Administrator sessions and credentials do not authorize App-user Space calls.
 The client never broadens permissions. It may ask the configured provider for
 a replacement after `401 invalid_token`, but the provider must still return
@@ -23,8 +23,8 @@ metadata satisfying the exact requested Space and permission.
 `INVALID_CAPABILITY_METADATA`, and
 `UNSATISFIED_CAPABILITY_REQUIREMENT`. Confirm that provider metadata uses
 Unix seconds, remains outside the protocol clock-skew window, contains one
-grant whose selector and permission both match the requirement, and includes
-`refDomain` for Root Ref operations. Metadata is an App-provided description
+grant whose selector and permission both match the requirement. No additional
+Root Ref namespace is needed. Metadata is an App-provided description
 of the opaque token, not a substitute for server authorization.
 
 ## A blob disappears after upload

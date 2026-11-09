@@ -12,7 +12,6 @@ import { fileURLToPath } from "node:url";
 import { appAuditCommand } from "./commands/app-audit.js";
 import { appMembersCommand } from "./commands/app-members.js";
 import { appOAuthIssuerCommand } from "./commands/app-oauth-issuer.js";
-import { appRefDomainsCommand } from "./commands/app-refdomains.js";
 import { appsCommand } from "./commands/apps.js";
 import { createContext } from "./commands/common.js";
 import { loginCommand } from "./commands/login.js";
@@ -48,10 +47,9 @@ Usage:
   unicas app-oauth-issuer inspect <appId> <issuer>
   unicas app-oauth-issuer activate <appId> <inspectionId> --activation-proof <jws> [--etag E]
 
-  unicas app-ref-domains list <appId>
   unicas app-audit control <appId> [--actor-account-id ID] [--target-account-id ID] [--limit N] [--cursor C] [--after ID]
-  unicas app-audit root-domain-refs <appId> <refDomain> [--space-id S] [--limit N] [--cursor C]
-  unicas app-audit root-domain-events <appId> <refDomain> [--space-id S] [--after N] [--limit N]
+  unicas app-audit root-refs <appId> [--space-id S] [--limit N] [--cursor C]
+  unicas app-audit root-events <appId> [--space-id S] [--after N] [--limit N]
 
   unicas platform-invitations list [--query Q] [--status pending|accepted|expired|revoked] [--limit N] [--cursor C]
   unicas platform-invitations create <email> --authority platform.admin|apps.create [--authority ...] [--idempotency-key K]
@@ -102,11 +100,6 @@ export async function main(argv: readonly string[]): Promise<void> {
     case "app-oauth-issuer": {
       const [subcommand, ...subArgs] = rest;
       await appOAuthIssuerCommand(ctx, subcommand, subArgs);
-      return;
-    }
-    case "app-ref-domains": {
-      const [subcommand, ...subArgs] = rest;
-      await appRefDomainsCommand(ctx, subcommand, subArgs);
       return;
     }
     case "app-audit": {

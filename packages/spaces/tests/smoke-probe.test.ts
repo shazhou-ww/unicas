@@ -39,7 +39,6 @@ describe("verifySmokeIsolation", () => {
         provider: "google",
         appId: "app-a",
         spaceId: "/space-a",
-        refDomain: "spaces",
       },
       fetchImpl,
     })).resolves.toEqual({
@@ -65,7 +64,6 @@ describe("verifySmokeIsolation", () => {
         provider: "google",
         appId: "app-a",
         spaceId: "/space-a",
-        refDomain: "spaces",
       },
       fetchImpl: vi.fn(async () => Response.json({ error: "invalid_token" }, { status: 401 })),
     })).rejects.toThrow("expected 403 insufficient_permission");

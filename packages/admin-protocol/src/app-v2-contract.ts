@@ -12,7 +12,6 @@ import {
   AppMembershipSchema,
   AppOAuthIssuerInspectionSchema,
   AppOAuthIssuerSchema,
-  AppRefDomainSchema,
   AppSchema,
   AppUsageSchema,
   CasHashSchema,
@@ -72,9 +71,6 @@ const createHeaders = z.object({
   "idempotency-key": z.string().min(1).optional(),
 }).readonly();
 const mutationHeaders = z.object({ "if-match": RevisionSchema }).readonly();
-const rootDomainParams = appParams.unwrap().extend({
-  refDomain: z.string().min(1),
-}).readonly();
 
 export const PatchAppRequestSchema = z.object({
   displayName: z.string().min(1).optional(),
@@ -355,11 +351,6 @@ export const activateAppOAuthIssuerContract = appProcedure
   .input(z.object({ params: appParams, headers: AppIssuerPreconditionSchema, body: ActivateAppIssuerRequestSchema }).readonly())
   .output(z.object({ headers: z.object({ ETag: z.string().regex(/^"(0|[1-9][0-9]*)"$/) }).readonly() }).readonly());
 
-export const listAppRefDomainsContract = appProcedure
-  .route({ method: "GET", path: `${AppAdminApiBasePath}/{appId}/ref-domains`, operationId: "listAppRefDomains", summary: "List observed refDomains", inputStructure: "detailed", tags: ["Root Ref Audit"] })
-  .input(z.object({ params: appParams }).readonly())
-  .output(z.object({ domains: z.array(AppRefDomainSchema).readonly() }).readonly());
-
 export const AppAccountAuditQuerySchema = pageQuery.unwrap().extend({
   after: z.string().optional(),
   actorAccountId: AccountIdSchema.optional(),
@@ -371,14 +362,14 @@ export const listAppControlAuditEventsContract = appProcedure
   .input(z.object({ params: appParams, query: AppAccountAuditQuerySchema.optional() }).readonly())
   .output(pageSchema(AppControlAuditEventSchema));
 
-export const listSpaceRootDomainRefsContract = appProcedure
-  .route({ method: "GET", path: `${AppAdminApiBasePath}/{appId}/root-ref-domains/{refDomain}/refs`, operationId: "listSpaceRootDomainRefs", summary: "List Space Root Ref balances", inputStructure: "detailed", tags: ["Root Ref Audit"] })
-  .input(z.object({ params: rootDomainParams, query: z.object({ spaceId: z.string().optional(), limit: z.number().int().positive().optional(), cursor: z.string().optional() }).readonly().optional() }).readonly())
+export const listAppRootRefsContract = appProcedure
+  .route({ method: "GET", path: `${AppAdminApiBasePath}/{appId}/root-refs`, operationId: "listAppRootRefs", summary: "List App Root Ref balances across Spaces", inputStructure: "detailed", tags: ["Root Ref Audit"] })
+  .input(z.object({ params: appParams, query: z.object({ spaceId: z.string().optional(), limit: z.number().int().positive().optional(), cursor: z.string().optional() }).readonly().optional() }).readonly())
   .output(z.object({ revision: RevisionSchema, refs: z.array(SpaceRootRefBalanceSchema).readonly(), nextCursor: z.string().nullable() }).readonly());
 
-export const listSpaceRootDomainEventsContract = appProcedure
-  .route({ method: "GET", path: `${AppAdminApiBasePath}/{appId}/root-ref-domains/{refDomain}/events`, operationId: "listSpaceRootDomainEvents", summary: "List Space Root Ref events", inputStructure: "detailed", tags: ["Root Ref Audit"] })
-  .input(z.object({ params: rootDomainParams, query: z.object({ spaceId: z.string().optional(), after: RevisionSchema.optional(), limit: z.number().int().positive().optional() }).readonly().optional() }).readonly())
+export const listAppRootEventsContract = appProcedure
+  .route({ method: "GET", path: `${AppAdminApiBasePath}/{appId}/root-ref-events`, operationId: "listAppRootEvents", summary: "List App-global Root Ref events", inputStructure: "detailed", tags: ["Root Ref Audit"] })
+  .input(z.object({ params: appParams, query: z.object({ spaceId: z.string().optional(), after: RevisionSchema.optional(), limit: z.number().int().positive().optional() }).readonly().optional() }).readonly())
   .output(z.object({ events: z.array(SpaceRootRefEventSchema).readonly(), latestRevision: RevisionSchema, nextAfter: RevisionSchema }).readonly());
 
 const PlatformInvitationSchema = z.object({
@@ -522,10 +513,9 @@ export const appAdminApiContract = {
     activate: activateAppOAuthIssuerContract,
   },
   audit: {
-    listRefDomains: listAppRefDomainsContract,
     listControlEvents: listAppControlAuditEventsContract,
-    listRootRefs: listSpaceRootDomainRefsContract,
-    listRootEvents: listSpaceRootDomainEventsContract,
+    listRootRefs: listAppRootRefsContract,
+    listRootEvents: listAppRootEventsContract,
   },
   platform: {
     listPeople: listPlatformPeopleContract,

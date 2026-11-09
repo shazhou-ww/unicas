@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, test } from "vitest";
+import ts from "typescript";
 import {
   deploymentPlan,
   parseArgs,
@@ -30,7 +31,8 @@ import {
   validateResetInventory,
 } from "../release/service/reset-smoke.mjs";
 import { CONTROL_SCHEMA_MIGRATIONS } from "../packages/service-cloudflare/src/control-schema.ts";
-import { normalizeSmokeBaseUrl } from "../release/service/smoke-target.mjs";
+import { normalizeSmokeBaseUrl, resolveSmokeKeyPath } from "../release/service/smoke-target.mjs";
+import { cleanupSmokeRoots, runCrossSpaceRootRefSmoke } from "../release/service/root-ref-smoke.mjs";
 import {
   fetchWorkflowCreatedAt,
   tagProductionDeployment,
@@ -172,6 +174,123 @@ function git(cwd, args) {
   expect(result.status, result.stderr).toBe(0);
   return result.stdout.trim();
 }
+
+describe("cross-Space production Root Ref smoke", () => {
+  const hash = "a".repeat(64);
+  const foreignHash = "b".repeat(64);
+  const spaceIds = ["/one", "/two"];
+  const assert = (condition, message) => expect(condition, message).toBe(true);
+
+  function fixture(globalRequests = false) {
+    let revision = 10;
+    const requests = new Map();
+    const balances = new Map(spaceIds.map((spaceId, index) => [
+      spaceId, new Map([[hash, index === 0 ? 1 : 0], [foreignHash, 3]]),
+    ]));
+    const calls = [];
+    const client = {
+      async listRootRefs(spaceId) {
+        return {
+          revision,
+          items: [...balances.get(spaceId)].filter(([, count]) => count > 0)
+            .map(([hash, refCount]) => ({ hash, refCount })),
+        };
+      },
+      async updateRootRefs(spaceId, update) {
+        calls.push({ spaceId, update });
+        const key = globalRequests ? update.requestId : JSON.stringify([spaceId, update.requestId]);
+        const payload = JSON.stringify(update.changes);
+        const existing = requests.get(key);
+        if (existing) {
+          if (existing.payload !== payload) {
+            throw Object.assign(new Error("different payload"), { status: 409, code: "IDEMPOTENCY_CONFLICT" });
+          }
+          return { success: true, idempotent: true, revision: existing.revision };
+        }
+        for (const [hash, delta] of Object.entries(update.changes)) {
+          const refs = balances.get(spaceId);
+          refs.set(hash, (refs.get(hash) ?? 0) + delta);
+        }
+        revision++;
+        requests.set(key, { payload, revision });
+        return { success: true, idempotent: false, revision };
+      },
+    };
+    return { client, balances, calls };
+  }
+
+  test("verifies independent replay, App-global revisions, conflicts and scoped cleanup", async () => {
+    const run = fixture();
+    await runCrossSpaceRootRefSmoke({
+      client: run.client, hash, spaceIds, requestId: "cross", assert,
+    });
+    expect(run.balances.get(spaceIds[0]).get(hash)).toBe(2);
+    expect(run.balances.get(spaceIds[1]).get(hash)).toBe(1);
+    await cleanupSmokeRoots({
+      client: run.client, hashes: [hash], spaceIds, requestId: "cleanup", assert,
+    });
+    for (const refs of run.balances.values()) {
+      expect(refs.get(hash)).toBe(0);
+      expect(refs.get(foreignHash)).toBe(3);
+    }
+    expect((await run.client.listRootRefs(spaceIds[0])).revision).toBe(14);
+  });
+
+  test("rejects requestId deduplication that accidentally crosses Space boundaries", async () => {
+    const run = fixture(true);
+    await expect(runCrossSpaceRootRefSmoke({
+      client: run.client, hash, spaceIds, requestId: "cross", assert,
+    })).rejects.toThrow("same requestId applies independently");
+  });
+
+  test.each(["accepted", "server-error"])("fails explicitly for an invalid conflict outcome: %s", async outcome => {
+    const run = fixture();
+    const update = run.client.updateRootRefs;
+    run.client.updateRootRefs = async (spaceId, request) => {
+      if (request.changes[hash] === 2) {
+        if (outcome === "accepted") return { success: true, idempotent: false, revision: 99 };
+        throw Object.assign(new Error("unavailable"), { status: 503, code: "UNAVAILABLE" });
+      }
+      return update(spaceId, request);
+    };
+    await expect(runCrossSpaceRootRefSmoke({
+      client: run.client, hash, spaceIds, requestId: "cross", assert,
+    })).rejects.toThrow(outcome === "accepted"
+      ? "different payload replay is rejected" : "409 IDEMPOTENCY_CONFLICT");
+  });
+
+  test("rejects revisions that remain Space-local", async () => {
+    const run = fixture();
+    const update = run.client.updateRootRefs;
+    run.client.updateRootRefs = async (spaceId, request) => {
+      const result = await update(spaceId, request);
+      return spaceId === spaceIds[1] ? { ...result, revision: 11 } : result;
+    };
+    await expect(runCrossSpaceRootRefSmoke({
+      client: run.client, hash, spaceIds, requestId: "cross", assert,
+    })).rejects.toThrow("one App-global revision");
+  });
+
+  test("attempts both Space cleanups after a lost response and preserves the failure", async () => {
+    const run = fixture();
+    await runCrossSpaceRootRefSmoke({
+      client: run.client, hash, spaceIds, requestId: "cross", assert,
+    });
+    const update = run.client.updateRootRefs;
+    run.client.updateRootRefs = async (spaceId, request) => {
+      const result = await update(spaceId, request);
+      if (spaceId === spaceIds[0]) throw new Error("lost cleanup response");
+      return result;
+    };
+    await expect(cleanupSmokeRoots({
+      client: run.client, hashes: [hash], spaceIds, requestId: "cleanup", assert,
+    })).rejects.toThrow(AggregateError);
+    for (const refs of run.balances.values()) {
+      expect(refs.get(hash)).toBe(0);
+      expect(refs.get(foreignHash)).toBe(3);
+    }
+  });
+});
 
 describe("standalone deployment plan", () => {
   test("discovers the repository observability skill and keeps its safety gate aligned", () => {
@@ -988,6 +1107,11 @@ describe("standalone deployment plan", () => {
     expect(job).toContain("if: ${{ always() }}");
     expect(cleanup).toBeGreaterThan(service);
     expect(cleanup).toBeLessThan(site);
+    expect(resolveSmokeKeyPath("github-actions-smoke-key.pem"))
+      .toBe(join(ROOT, ".wrangler", "cas-deploy", "github-actions-smoke-key.pem"));
+    const smoke = readFileSync(join(ROOT, "release/service/cas-app-space-smoke.mjs"), "utf8");
+    expect(smoke).toContain('readFile(resolveSmokeKeyPath(KEY_FILE), "utf8")');
+    expect(smoke).not.toContain("const KEY_DIR");
   });
 
   test("checks every public production origin after all deployments", () => {
@@ -1153,6 +1277,12 @@ describe("standalone deployment plan", () => {
     expect(appSpaceSmoke).toContain("SpaceCapabilityVersion");
     expect(appSpaceSmoke).not.toContain("space-protocol/dist/v1.js");
     expect(appSpaceSmoke).toContain("createAppCasClient");
+    expect(appSpaceSmoke).toContain("lease synthetic child in the isolation Space");
+    expect(appSpaceSmoke).toContain("runCrossSpaceRootRefSmoke({");
+    expect(appSpaceSmoke).toContain("cleanupSmokeRoots({");
+    expect(appSpaceSmoke).toContain("spaceIds: [SPACE_ID, ISOLATION_SPACE_ID]");
+    expect(appSpaceSmoke).toContain('const ISOLATION_SPACE_ID = `${SPACE_ID}-isolation-${RUN}`;');
+    expect(appSpaceSmoke.indexOf("const RUN =")).toBeLessThan(appSpaceSmoke.indexOf("const ISOLATION_SPACE_ID ="));
     expect(appSpaceSmoke).toContain("GC keeps current leased nodes");
     expect(appSpaceSmoke).not.toContain("gc.deleted === 0");
     expect(appSpaceSmoke).toContain("cross-Space read");
@@ -1164,6 +1294,35 @@ describe("standalone deployment plan", () => {
     expect(appSpaceSmoke).toContain("App/Space token on retired route");
     expect(packageJson.scripts["smoke:v1"]).toBeUndefined();
   });
+
+  test("the complete smoke script has no undefined identifiers", () => {
+    const filename = join(ROOT, "release/service/cas-app-space-smoke.mjs");
+    const program = ts.createProgram([filename], {
+      allowJs: true, checkJs: true, noEmit: true,
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.NodeNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeNext,
+      skipLibCheck: true,
+    });
+    const source = program.getSourceFile(filename);
+    expect(source).toBeDefined();
+    const unbound = program.getSemanticDiagnostics(source)
+      .filter(diagnostic => diagnostic.code === 2304)
+      .map(diagnostic => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"));
+    expect(unbound).toEqual([]);
+    const regression = ts.createSourceFile(filename,
+      source.text.replace(/^\s*const token = await issueSpace\(SPACE_ID\);\r?\n/m, ""),
+      ts.ScriptTarget.ES2022, true, ts.ScriptKind.JS);
+    const host = ts.createCompilerHost(program.getCompilerOptions());
+    const readSource = host.getSourceFile;
+    host.getSourceFile = (name, ...args) => name === source.fileName
+      ? regression : program.getSourceFile(name) ?? readSource(name, ...args);
+    const broken = ts.createProgram([filename], program.getCompilerOptions(), host);
+    expect(broken.getSemanticDiagnostics(broken.getSourceFile(filename))
+      .filter(diagnostic => diagnostic.code === 2304)
+      .map(diagnostic => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")))
+      .toContain("Cannot find name 'token'.");
+  }, 30_000);
 
   test("the smoke reset requires an explicit target and backup or waiver", () => {
     expect(parseResetArgs([])).toEqual({
@@ -1301,8 +1460,8 @@ describe("standalone deployment plan", () => {
 
   test("the smoke reset bounds compound inventory queries for remote D1", () => {
     const queries = [...SCOPED_INVENTORY_QUERIES.control, ...SCOPED_INVENTORY_QUERIES.data];
-    expect(queries).toHaveLength(5);
-    expect(queries.map(query => query.match(/\bSELECT\b/g)?.length)).toEqual([4, 3, 4, 4, 1]);
+    expect(queries).toHaveLength(6);
+    expect(queries.map(query => query.match(/\bSELECT\b/g)?.length)).toEqual([4, 3, 4, 4, 4, 1]);
     const catalog = queries.join("\n");
     for (const table of [
       "cas_apps",
@@ -1310,6 +1469,10 @@ describe("standalone deployment plan", () => {
       "cas_nodes",
       "cas_direct_upload_sessions",
       "cas_space_usage",
+      "cas_app_root_refs",
+      "cas_app_root_events",
+      "cas_app_root_requests",
+      "cas_app_root_revisions",
     ]) expect(catalog).toContain(table);
   });
 

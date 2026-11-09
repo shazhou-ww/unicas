@@ -1,8 +1,8 @@
 /**
- * Root Ref domain Durable Object — the single writer for one
- * `(appId, refDomain)` event log.
+ * App Root Ref Durable Object — the single writer for one App event log.
+ * The exported class/binding name is retained for Cloudflare migration safety.
  *
- * Serializes writes from different Spaces in the same domain and executes the
+ * Orders writes from different Spaces in the same App and executes the
  * atomic D1 transaction (idempotency, revision allocation, aggregate updates,
  * event append, projection update, idempotency insert). Receives ONLY the
  * canonical command forwarded by the CAS DO; never accepts identity headers
@@ -11,8 +11,7 @@
  */
 
 import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
-import { canonicalizeRootRefsUpdate, executeDomainUpdate, withDomainRetry } from "./root-refs.js";
-import { canonicalComposite } from "./do-names.js";
+import { canonicalizeRootRefsUpdate, executeRootRefsUpdate, withRootRefsRetry } from "./root-refs.js";
 import { RootRefsErrorCodes, RootRefsValidationError } from "./root-refs.js";
 import { traceRootRefCommit } from "./observability.js";
 import { scheduleTraceFlush } from "./runtime-tracing.js";
@@ -41,23 +40,21 @@ export class RootRefDomainDurableObject {
   async fetch(request: Request): Promise<Response> {
     let appId: string;
     let spaceId: string;
-    let refDomain: string;
     try {
       appId = requireHeader(request, "X-CAS-App-Id");
       spaceId = requireHeader(request, "X-CAS-Space-Id");
-      refDomain = requireHeader(request, "X-CAS-Ref-Domain");
     } catch (error) {
       if (error instanceof RootRefsValidationError) {
         return errorResponse(error.status, error.code, error.message);
       }
-      return errorResponse(400, RootRefsErrorCodes.INVALID_REQUEST, "domain command headers are invalid");
+      return errorResponse(400, RootRefsErrorCodes.INVALID_REQUEST, "Root Ref command headers are invalid");
     }
     const traceSession = await createConfiguredManualTraceContinuation({
       environment: this.#env,
       internalContext: request.headers.get(InternalTraceContextHeader),
       internalContextAudience: createInternalTraceAudience(
         "root_ref_domain_do",
-        canonicalComposite(appId, refDomain),
+        `app-root-refs:${encodeURIComponent(appId)}`,
         request.method,
         new URL(request.url).pathname,
       ),
@@ -68,7 +65,7 @@ export class RootRefDomainDurableObject {
       body = (await request.json()) as { requestId?: unknown; changes?: unknown };
     } catch {
       return finishDomainTrace(
-        errorResponse(400, RootRefsErrorCodes.INVALID_REQUEST, "domain command body is not valid JSON"),
+        errorResponse(400, RootRefsErrorCodes.INVALID_REQUEST, "Root Ref command body is not valid JSON"),
         traceSession,
       );
     }
@@ -76,17 +73,15 @@ export class RootRefDomainDurableObject {
       const canonical = await canonicalizeRootRefsUpdate({
         requestId: body.requestId,
         changes: body.changes,
-        refDomain,
       });
       let retryCount = 0;
       const result = await traceRootRefCommit(traceSession.tracing, canonical.entries.length, () =>
-        withDomainRetry(
-          () => executeDomainUpdate({
+        withRootRefsRetry(
+          () => executeRootRefsUpdate({
             db: this.#env.CAS_DB,
             bucket: this.#env.CAS_R2,
             appId: appId,
             spaceId: spaceId,
-            refDomain,
             canonical,
           }),
           {

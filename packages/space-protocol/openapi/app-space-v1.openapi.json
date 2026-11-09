@@ -17,7 +17,7 @@
     },
     {
       "name": "Root Refs",
-      "description": "Read and atomically update business-root balances in the verified capability's refDomain."
+      "description": "Read and atomically update App/Space root balances with App-global audit revisions."
     },
     {
       "name": "Operations",
@@ -136,9 +136,6 @@
               ],
               "additionalProperties": false
             }
-          },
-          "refDomain": {
-            "type": "string"
           }
         },
         "required": [
@@ -153,12 +150,6 @@
           "grants"
         ],
         "additionalProperties": {}
-      },
-      "SpaceRefDomainClaim": {
-        "type": "string",
-        "maxLength": 64,
-        "pattern": "^[a-z][a-z0-9]*(?::[a-z0-9]+)*$",
-        "description": "Root Ref business namespace required by Root Ref operations."
       }
     }
   },
@@ -433,7 +424,8 @@
                         "NODE_CONFLICT",
                         "NODE_NOT_READY",
                         "NEGATIVE_AGGREGATE",
-                        "IDEMPOTENCY_CONFLICT"
+                        "IDEMPOTENCY_CONFLICT",
+                        "ROOT_REF_SNAPSHOT_CHANGED"
                       ]
                     },
                     "message": {
@@ -816,7 +808,8 @@
                         "NODE_CONFLICT",
                         "NODE_NOT_READY",
                         "NEGATIVE_AGGREGATE",
-                        "IDEMPOTENCY_CONFLICT"
+                        "IDEMPOTENCY_CONFLICT",
+                        "ROOT_REF_SNAPSHOT_CHANGED"
                       ]
                     },
                     "message": {
@@ -1306,7 +1299,8 @@
                         "NODE_CONFLICT",
                         "NODE_NOT_READY",
                         "NEGATIVE_AGGREGATE",
-                        "IDEMPOTENCY_CONFLICT"
+                        "IDEMPOTENCY_CONFLICT",
+                        "ROOT_REF_SNAPSHOT_CHANGED"
                       ]
                     },
                     "message": {
@@ -1615,7 +1609,8 @@
                         "NODE_CONFLICT",
                         "NODE_NOT_READY",
                         "NEGATIVE_AGGREGATE",
-                        "IDEMPOTENCY_CONFLICT"
+                        "IDEMPOTENCY_CONFLICT",
+                        "ROOT_REF_SNAPSHOT_CHANGED"
                       ]
                     },
                     "message": {
@@ -1919,7 +1914,8 @@
                         "NODE_CONFLICT",
                         "NODE_NOT_READY",
                         "NEGATIVE_AGGREGATE",
-                        "IDEMPOTENCY_CONFLICT"
+                        "IDEMPOTENCY_CONFLICT",
+                        "ROOT_REF_SNAPSHOT_CHANGED"
                       ]
                     },
                     "message": {
@@ -2021,7 +2017,7 @@
       "get": {
         "operationId": "listRootRefs",
         "summary": "List Space Root Ref balances",
-        "description": "Returns a revision-stable page for the refDomain in the verified capability. Requires cas:root-refs:read and a valid signed refDomain.",
+        "description": "Returns a revision-stable App/Space Root Ref page. Requires the exact cas:root-refs:read permission for this Space.",
         "tags": [
           "Root Refs"
         ],
@@ -2083,11 +2079,6 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "refDomain": {
-                      "type": "string",
-                      "minLength": 1,
-                      "description": "Business lifecycle namespace from the verified capability."
-                    },
                     "revision": {
                       "type": "integer",
                       "minimum": 0,
@@ -2131,7 +2122,6 @@
                     }
                   },
                   "required": [
-                    "refDomain",
                     "revision",
                     "items",
                     "nextCursor"
@@ -2259,7 +2249,8 @@
                         "NODE_CONFLICT",
                         "NODE_NOT_READY",
                         "NEGATIVE_AGGREGATE",
-                        "IDEMPOTENCY_CONFLICT"
+                        "IDEMPOTENCY_CONFLICT",
+                        "ROOT_REF_SNAPSHOT_CHANGED"
                       ]
                     },
                     "message": {
@@ -2352,18 +2343,14 @@
           "capabilityVersion": 2,
           "requiredPermission": "cas:root-refs:read",
           "requiredClaims": [
-            "grants",
-            "refDomain"
-          ],
-          "claimSchemas": {
-            "refDomain": "#/components/schemas/SpaceRefDomainClaim"
-          }
+            "grants"
+          ]
         }
       },
       "post": {
         "operationId": "updateRootRefs",
         "summary": "Apply Space Root Ref changes",
-        "description": "Atomically applies signed Root Ref deltas in the capability's refDomain. Requires cas:root-refs:update and a valid signed refDomain.",
+        "description": "Atomically applies App/Space Root Ref deltas with an App-global audit revision. Requires the exact cas:root-refs:update permission for this Space.",
         "tags": [
           "Root Refs"
         ],
@@ -2584,7 +2571,8 @@
                         "NODE_CONFLICT",
                         "NODE_NOT_READY",
                         "NEGATIVE_AGGREGATE",
-                        "IDEMPOTENCY_CONFLICT"
+                        "IDEMPOTENCY_CONFLICT",
+                        "ROOT_REF_SNAPSHOT_CHANGED"
                       ]
                     },
                     "message": {
@@ -2677,12 +2665,8 @@
           "capabilityVersion": 2,
           "requiredPermission": "cas:root-refs:update",
           "requiredClaims": [
-            "grants",
-            "refDomain"
-          ],
-          "claimSchemas": {
-            "refDomain": "#/components/schemas/SpaceRefDomainClaim"
-          }
+            "grants"
+          ]
         }
       }
     }

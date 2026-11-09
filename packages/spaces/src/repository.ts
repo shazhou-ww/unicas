@@ -12,7 +12,6 @@ export interface PrincipalContext {
   readonly provider: IdentityProvider | "smoke";
   readonly appId: string;
   readonly spaceId: string;
-  readonly refDomain: string;
 }
 
 export interface OAuthAttempt {
@@ -48,7 +47,6 @@ interface PrincipalRow {
   readonly provider: IdentityProvider | null;
   readonly app_id: string;
   readonly space_id: string;
-  readonly ref_domain: string;
 }
 
 interface SessionRow extends PrincipalRow {
@@ -102,7 +100,7 @@ export class SpacesRepository {
   ): Promise<PrincipalContext | null> {
     const row = await this.#db.prepare(`
       SELECT p.principal_id, p.status, p.display_name, i.provider,
-             m.app_id, m.space_id, m.ref_domain
+             m.app_id, m.space_id
       FROM spaces_external_identities i
       JOIN spaces_principals p ON p.principal_id = i.principal_id
       JOIN spaces_principal_spaces m ON m.principal_id = p.principal_id
@@ -114,7 +112,7 @@ export class SpacesRepository {
   async readPrincipal(principalId: string): Promise<PrincipalContext | null> {
     const row = await this.#db.prepare(`
       SELECT p.principal_id, p.status, p.display_name, i.provider,
-             m.app_id, m.space_id, m.ref_domain
+             m.app_id, m.space_id
       FROM spaces_principals p
       LEFT JOIN spaces_external_identities i ON i.principal_id = p.principal_id
       JOIN spaces_principal_spaces m ON m.principal_id = p.principal_id
@@ -149,7 +147,7 @@ export class SpacesRepository {
     const sessionIdHash = await sha256Hex(sessionId);
     const row = await this.#db.prepare(`
       SELECT p.principal_id, p.status, p.display_name, i.provider,
-             m.app_id, m.space_id, m.ref_domain,
+             m.app_id, m.space_id,
              s.csrf_token_hash, s.expires_at, s.last_seen_at,
              r.root_id, r.name AS root_name, r.manifest_hash,
              r.revision AS root_revision, r.created_at AS root_created_at,
@@ -329,7 +327,7 @@ export class SpacesRepository {
               WHERE i.principal_id = p.principal_id
               ORDER BY CASE i.provider WHEN 'google' THEN 0 WHEN 'microsoft' THEN 1 ELSE 2 END
               LIMIT 1) AS provider,
-             m.app_id, m.space_id, m.ref_domain
+             m.app_id, m.space_id
       FROM spaces_principals p
       JOIN spaces_principal_spaces m ON m.principal_id = p.principal_id
       WHERE EXISTS (
@@ -359,7 +357,6 @@ function toPrincipalContext(row: PrincipalRow): PrincipalContext {
     provider: row.provider ?? "smoke",
     appId: row.app_id,
     spaceId: row.space_id,
-    refDomain: row.ref_domain,
   };
 }
 

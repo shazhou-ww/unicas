@@ -47,11 +47,11 @@
   "dependencies": {
     "@unicas/space-blob-client": "workspace:*",
     "@unicas/space-client": "workspace:*",
-    "cborg": "^6.1.1"
+    "cborg": "^6.2.0"
   },
   "devDependencies": {
     "typescript": "^5.9.0",
-    "vitest": "^3.2.0"
+    "vitest": "^5.0.5"
   },
   "publishConfig": {
     "access": "public",

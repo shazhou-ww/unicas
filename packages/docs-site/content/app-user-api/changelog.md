@@ -4,6 +4,14 @@ All six public App-user SDK packages share each version.
 
 ## 0.2.0 - Unreleased
 
+- Updates production dependencies while retaining the published inline
+  capability-claims OpenAPI component across Zod schema-export changes.
+
+- Removes the Root Ref domain dimension throughout capability metadata,
+  authorization, responses and admin APIs. Revisions are App-global;
+  replay keys include App and Space. See the breaking
+  [migration and rollback boundary](./migration-root-refs.md).
+
 - Replaces the Space-bound client with `AppCasClient` and
   `createAppCasClient`; every CAS operation receives `spaceId` first.
 - Replaces `getToken` with a metadata-aware capability provider and bounded

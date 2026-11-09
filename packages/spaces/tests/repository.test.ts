@@ -101,7 +101,6 @@ describe("SpacesRepository", () => {
       provider: "google",
       appId: "app-a",
       spaceId: "/space-a",
-      refDomain: "spaces",
     });
     await expect(repository.resolveExternalIdentity("google", "unknown")).resolves.toBeNull();
     await expect(repository.resolveExternalIdentity("github", "google-subject")).resolves.toBeNull();

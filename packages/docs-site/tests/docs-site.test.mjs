@@ -61,6 +61,7 @@ describe("documentation static site", () => {
       "/app-user-api/http-api/",
       "/app-user-api/authorization/",
       "/app-user-api/migration-space-grants/",
+      "/app-user-api/migration-root-refs/",
       "/cas-architecture/",
       "/cas-binary-format/",
       "/cas-state-protection-and-gc/",
@@ -136,6 +137,49 @@ describe("documentation static site", () => {
     const report = JSON.parse(await readFile(join(outputDir, "link-check.json"), "utf8"));
     expect(report.pages).toBe(PAGE_INVENTORY.length);
     expect(report.failures).toEqual([]);
+  });
+
+  test("documents App-scoped Root Refs without retired authorization or storage dimensions", async () => {
+    const sources = [
+      "app-user-api/README.md",
+      "app-user-api/authorization.md",
+      "app-user-api/scenarios.md",
+      "app-user-api/migration-space-grants.md",
+      "app-user-api/http-api.md",
+      "cas-architecture.md",
+      "cas-state-protection-and-gc.md",
+    ];
+    const documents = new Map(await Promise.all(sources.map(async source => {
+      /** @type {[string, string]} */
+      const entry = [source, await readFile(join(CONTENT_ROOT, source), "utf8")];
+      return entry;
+    })));
+    const obsoleteContract = /\brefDomain\b|SpaceRefDomainClaim|`_legacy`|\/_internal\/root-refs|Root Ref domain|domain revision|App-domain revision|domain balance projection|Domain audit balances may expose negative/i;
+    for (const [source, text] of documents) {
+      expect(text, source).not.toMatch(obsoleteContract);
+    }
+
+    expect(documents.get("app-user-api/README.md")).toContain("one App-global revision stream");
+    expect(documents.get("app-user-api/authorization.md")).toContain("Commit roots in one selected Space:");
+    expect(documents.get("app-user-api/scenarios.md")).toContain("App-global revision");
+    expect(documents.get("app-user-api/http-api.md")).toContain("`ROOT_REF_SNAPSHOT_CHANGED`");
+    const architecture = documents.get("cas-architecture.md");
+    expect(architecture).toContain("`(appId, spaceId, requestId)`");
+    expect(architecture).toContain("App/Space/hash projection");
+    expect(architecture).toContain("zero projection rows are omitted");
+    expect(architecture).toContain("There is no compatibility route or hidden namespace");
+    expect(documents.get("cas-state-protection-and-gc.md")).toContain("projection counts match the non-negative aggregate");
+    await expect(page("cas-architecture")).resolves.not.toMatch(/refDomain|_legacy|\/_internal\/root-refs/);
+
+    const [migration, observability] = await Promise.all([
+      readFile(join(CONTENT_ROOT, "app-user-api/migration-root-refs.md"), "utf8"),
+      readFile(join(CONTENT_ROOT, "observability.md"), "utf8"),
+    ]);
+    expect(migration).toContain("legacy `refDomain`");
+    expect(migration).toContain("read-only archive");
+    expect(migration).toContain("checkpoint");
+    expect(observability).toContain("`root_ref_domain`");
+    expect(observability).toMatch(/historical telemetry label for the App-scoped Root Ref actor, not a business\s+namespace/);
   });
 
   test("emits classified, non-secret artifact metadata for the exact OpenAPI bytes", async () => {

@@ -3,397 +3,144 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
 import { migrateAppSpaceSchema } from "../src/schema.js";
 import {
-  canonicalizeRootRefsUpdate,
-  executeDomainUpdate,
-  listRootRefs,
-  parseRootRefsBody,
-  withDomainRetry,
-  RootRefsErrorCodes,
-  RootRefsRetryableError,
-  RootRefsValidationError,
+  CloudflareRootRefRepository, canonicalizeRootRefsUpdate, executeRootRefsUpdate,
+  listRootRefs, parseRootRefsBody, withRootRefsRetry, RootRefsValidationError,
 } from "../src/root-refs.js";
 import { appCanonicalNodeKey } from "../src/do-names.js";
 
-let miniflare: Miniflare | undefined;
-let db: D1Database | undefined;
-let bucket: R2Bucket | undefined;
-
-afterEach(async () => {
-  await miniflare?.dispose();
-  miniflare = undefined;
-  db = undefined;
-  bucket = undefined;
-});
-
-async function createStore(): Promise<void> {
-  miniflare = new Miniflare(convertV4MiniflareOptions({
-    workers: [{
-      name: "root-refs-test",
-      modules: true,
-      script: "export default { fetch() { return new Response('ok'); } };",
-      compatibilityDate: "2025-08-17",
-      d1Databases: { DB: "root-refs-test-db" },
-      r2Buckets: { BUCKET: "root-refs-test-bucket" },
-    }],
-  }));
-  await miniflare.ready;
-  db = await miniflare.getD1Database("DB", "root-refs-test");
-  bucket = await miniflare.getR2Bucket("BUCKET", "root-refs-test");
+let mf: Miniflare | undefined;
+let db: D1Database;
+let bucket: R2Bucket;
+const APP = "test-app", SPACE = "/one";
+const H1 = "a".repeat(64), H2 = "b".repeat(64);
+afterEach(async () => { await mf?.dispose(); mf = undefined; });
+async function setup() {
+  mf = new Miniflare(convertV4MiniflareOptions({ workers: [{
+    name: "test", modules: true, script: "export default { fetch() { return new Response('ok'); } };",
+    compatibilityDate: "2025-08-17", d1Databases: { DB: "root-test" }, r2Buckets: { BUCKET: "root-test" },
+  }] }));
+  await mf.ready;
+  db = await mf.getD1Database("DB", "test");
+  bucket = await mf.getR2Bucket("BUCKET", "test");
   await migrateAppSpaceSchema(db);
 }
-
-const STACK = "cas_stack_a";
-const TENANT = "tenant-1";
-const DOMAIN = "doc";
-const H1 = "a".repeat(64);
-const H2 = "b".repeat(64);
-const H3 = "c".repeat(64);
-
-async function seedNode(hash: string, rootRefCount = 0, ready = true): Promise<void> {
-  await db!.prepare(
-    "INSERT INTO cas_nodes (app_id, space_id, hash, content_size, content_type, lease_started_at, lease_expires_at, child_ref_count, root_ref_count) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)",
-  ).bind(STACK, TENANT, hash, 10, "text/plain", ready ? 1 : 0, ready ? 1 : 0, rootRefCount).run();
-  if (ready) {
-    await bucket!.put(appCanonicalNodeKey(STACK, TENANT, hash), new TextEncoder().encode("content"));
-  }
+async function seed(hash: string, count = 0, space = SPACE, ready = true) {
+  await db.prepare(`INSERT INTO cas_nodes
+    (app_id,space_id,hash,content_size,content_type,root_ref_count)
+    VALUES (?,?,?,1,'text/plain',?)`).bind(APP, space, hash, count).run();
+  if (count) await db.prepare("INSERT INTO cas_app_root_refs VALUES (?,?,?,?)").bind(APP, space, hash, count).run();
+  if (ready) await bucket.put(appCanonicalNodeKey(APP, space, hash), "content");
+}
+async function run(id: string, changes: Record<string, number>, space = SPACE) {
+  const canonical = await canonicalizeRootRefsUpdate({ requestId: id, changes });
+  return withRootRefsRetry(() => executeRootRefsUpdate({ db, bucket, appId: APP, spaceId: space, canonical }),
+    { maxAttempts: 10, sleep: async () => undefined });
+}
+async function count(table: string) {
+  return (await db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first<{ n: number }>())!.n;
+}
+async function aggregate(hash = H1, space = SPACE) {
+  return (await db.prepare("SELECT root_ref_count AS n FROM cas_nodes WHERE app_id=? AND space_id=? AND hash=?")
+    .bind(APP, space, hash).first<{ n: number }>())!.n;
 }
 
-async function runUpdate(input: {
-  requestId: string;
-  changes: Record<string, number>;
-  spaceId?: string;
-  refDomain?: string;
-}): Promise<{ status: number; body: Record<string, unknown> }> {
-  try {
-    const canonical = await canonicalizeRootRefsUpdate({
-      requestId: input.requestId,
-      changes: input.changes,
-      refDomain: input.refDomain ?? DOMAIN,
-    });
-    const result = await executeDomainUpdate({
-      db: db!,
-      bucket: bucket!,
-      appId: STACK,
-      spaceId: input.spaceId ?? TENANT,
-      refDomain: input.refDomain ?? DOMAIN,
-      canonical,
-    });
-    return { status: 200, body: { success: true, idempotent: result.idempotent, revision: result.revision } };
-  } catch (error) {
-    if (error instanceof RootRefsValidationError) {
-      return { status: error.status, body: { error: error.code, message: error.message } };
-    }
-    throw error;
-  }
-}
-
-async function eventCount(): Promise<number> {
-  const row = await db!.prepare(
-    "SELECT COUNT(*) AS count FROM cas_root_domain_events WHERE app_id = ? AND ref_domain = ?",
-  ).bind(STACK, DOMAIN).first<{ count: number }>();
-  return row?.count ?? 0;
-}
-
-async function aggregate(hash: string): Promise<number> {
-  const row = await db!.prepare(
-    "SELECT root_ref_count FROM cas_nodes WHERE app_id = ? AND space_id = ? AND hash = ?",
-  ).bind(STACK, TENANT, hash).first<{ root_ref_count: number }>();
-  return row?.root_ref_count ?? -1;
-}
-
-describe("atomic Root Refs update", () => {
-  test("lists only the requested tenant domain with hash cursor pagination", async () => {
-    await createStore();
-    await seedNode(H1);
-    await seedNode(H2);
-    await runUpdate({ requestId: "r1", changes: { [H1]: 1, [H2]: 2 } });
-    await db!.prepare(
-      "INSERT INTO cas_root_domain_refs (app_id, ref_domain, space_id, hash, ref_count) VALUES (?, ?, ?, ?, ?)",
-    ).bind(STACK, "other", TENANT, H3, 9).run();
-
-    const first = await listRootRefs({
-      db: db!, appId: STACK, spaceId: TENANT, refDomain: DOMAIN, limit: 1, cursor: "",
-    });
-    expect(first).toEqual({
-      refDomain: DOMAIN,
-      revision: 1,
-      items: [{ hash: H1, refCount: 1 }],
-      nextCursor: H1,
-    });
-    await expect(listRootRefs({
-      db: db!, appId: STACK, spaceId: TENANT, refDomain: DOMAIN, limit: 1, cursor: H1,
-    })).resolves.toEqual({
-      refDomain: DOMAIN,
-      revision: 1,
-      items: [{ hash: H2, refCount: 2 }],
-      nextCursor: null,
-    });
-  });
-
-  test("applies deltas, appends one event, updates projection and idempotency", async () => {
-    await createStore();
-    await seedNode(H1, 3);
-    await seedNode(H2, 1);
-    const result = await runUpdate({
-      requestId: "session:s1:commit:1",
-      changes: { [H1]: 1, [H2]: -1 },
-    });
-    expect(result).toMatchObject({ status: 200, body: { success: true, idempotent: false, revision: 1 } });
-    expect(await aggregate(H1)).toBe(4);
+describe("App Root Ref atomic storage", () => {
+  test("deltas, projection, event and replay are atomic and payload-bound", async () => {
+    await setup(); await seed(H1, 3); await seed(H2, 1);
+    expect(await run("r", { [H1]: 1, [H2]: -1 })).toEqual({ idempotent: false, revision: 1 });
+    expect(await aggregate()).toBe(4);
     expect(await aggregate(H2)).toBe(0);
-    expect(await eventCount()).toBe(1);
-    const projection = await db!.prepare(
-      "SELECT hash, ref_count FROM cas_root_domain_refs WHERE app_id = ? AND ref_domain = ? AND space_id = ? ORDER BY hash",
-    ).bind(STACK, DOMAIN, TENANT).all<{ hash: string; ref_count: number }>();
-    // The projection starts at zero (pre-existing aggregates have no domain
-    // attribution): H1 +1 -> 1, H2 -1 -> -1 (negative balances kept).
-    expect(projection.results).toEqual([
-      { hash: H1, ref_count: 1 },
-      { hash: H2, ref_count: -1 },
-    ]);
-    const idem = await db!.prepare(
-      "SELECT revision, payload_hash FROM cas_root_ref_requests WHERE app_id = ? AND space_id = ? AND ref_domain = ? AND request_id = ?",
-    ).bind(STACK, TENANT, DOMAIN, "session:s1:commit:1").first<{ revision: number; payload_hash: string }>();
-    expect(idem?.revision).toBe(1);
-    expect(idem?.payload_hash).toHaveLength(64);
-  }, 10_000);
-
-  test("idempotent retries return the original revision and mutate nothing", async () => {
-    await createStore();
-    await seedNode(H1, 3);
-    const first = await runUpdate({ requestId: "r1", changes: { [H1]: 1 } });
-    expect(first.body.revision).toBe(1);
-    const second = await runUpdate({ requestId: "r1", changes: { [H1]: 1 } });
-    expect(second).toMatchObject({ status: 200, body: { success: true, idempotent: true, revision: 1 } });
-    expect(await aggregate(H1)).toBe(4); // applied once
-    expect(await eventCount()).toBe(1);
+    expect(await count("cas_app_root_refs")).toBe(1);
+    expect(await run("r", { [H2]: -1, [H1]: 1 })).toEqual({ idempotent: true, revision: 1 });
+    await expect(run("r", { [H1]: 2 })).rejects.toMatchObject({ status: 409, code: "IDEMPOTENCY_CONFLICT" });
+    expect(await count("cas_app_root_events")).toBe(1);
+    expect(await count("cas_app_root_requests")).toBe(1);
   });
-
-  test("requestId reuse with a different payload conflicts", async () => {
-    await createStore();
-    await seedNode(H1, 3);
-    await runUpdate({ requestId: "r1", changes: { [H1]: 1 } });
-    const conflict = await runUpdate({ requestId: "r1", changes: { [H1]: 2 } });
-    expect(conflict.status).toBe(409);
-    expect(conflict.body.error).toBe(RootRefsErrorCodes.IDEMPOTENCY_CONFLICT);
+  test("cross-Space same IDs are safe and concurrent events have one App order", async () => {
+    await setup(); await seed(H1); await seed(H1, 0, "/two");
+    const results = await Promise.all([run("shared", { [H1]: 1 }), run("shared", { [H1]: 2 }, "/two")]);
+    expect(results.map(r => r.revision).sort()).toEqual([1, 2]);
+    expect(await aggregate()).toBe(1);
+    expect(await aggregate(H1, "/two")).toBe(2);
+    const replay = await run("shared", { [H1]: 2 }, "/two");
+    expect(replay).toEqual({ idempotent: true, revision: results[1]!.revision });
   });
-
-  test("validation: unknown hash, negative aggregate, zero delta, oversized delta", async () => {
-    await createStore();
-    await seedNode(H1, 1);
-    await seedNode(H2, 0);
-
-    const unknown = await runUpdate({ requestId: "u1", changes: { [H3]: 1 } });
-    expect(unknown.status).toBe(404);
-    expect(unknown.body.error).toBe(RootRefsErrorCodes.NODE_NOT_FOUND);
-
-    const negative = await runUpdate({ requestId: "u2", changes: { [H2]: -1 } });
-    expect(negative.status).toBe(409);
-    expect(negative.body.error).toBe(RootRefsErrorCodes.NEGATIVE_AGGREGATE);
-
-    const zero = await runUpdate({ requestId: "u3", changes: { [H1]: 0 } });
-    expect(zero.status).toBe(400);
-
-    const oversized = await runUpdate({ requestId: "u4", changes: { [H1]: 2_000_000 } });
-    expect(oversized.status).toBe(400);
-
-    const empty = await runUpdate({ requestId: "u5", changes: {} });
-    expect(empty.status).toBe(400);
-
-    // None of the rejected requests created events or idempotency rows.
-    expect(await eventCount()).toBe(0);
-    const idem = await db!.prepare("SELECT COUNT(*) AS count FROM cas_root_ref_requests").first<{ count: number }>();
-    expect(idem?.count).toBe(0);
+  test("real lost revision CAS rolls back every delta and insert", async () => {
+    await setup(); await seed(H1);
+    await run("first", { [H1]: 1 });
+    const canonical = await canonicalizeRootRefsUpdate({ requestId: "stale", changes: { [H1]: 1 } });
+    const repository = new CloudflareRootRefRepository(db, bucket);
+    await expect(repository.commit({
+      scope: { appId: APP, spaceId: SPACE }, ...canonical, expectedRevision: 0,
+      revision: 1, projections: [{ hash: H1, refCount: 2 }], appliedAt: 123,
+    })).rejects.toThrow();
+    expect(await aggregate()).toBe(1);
+    expect(await count("cas_app_root_events")).toBe(1);
+    expect(await count("cas_app_root_requests")).toBe(1);
   });
-
-  test("positive targets must be ready; non-ready is rejected", async () => {
-    await createStore();
-    await seedNode(H1, 0, false); // row exists, no R2 content
-    const notReady = await runUpdate({ requestId: "r1", changes: { [H1]: 1 } });
-    expect(notReady.status).toBe(409);
-    expect(notReady.body.error).toBe(RootRefsErrorCodes.NODE_NOT_READY);
+  test("failure late in the batch rolls back revision, projection and aggregate", async () => {
+    await setup(); await seed(H1);
+    await db.exec("CREATE TRIGGER reject_event BEFORE INSERT ON cas_app_root_events BEGIN SELECT RAISE(ABORT,'injected'); END");
+    await expect(run("failed", { [H1]: 1 })).rejects.toThrow();
+    expect(await aggregate()).toBe(0);
+    expect(await count("cas_app_root_refs")).toBe(0);
+    expect(await count("cas_app_root_revisions")).toBe(0);
+    expect(await count("cas_app_root_requests")).toBe(0);
   });
-
-  test("positive root refs accept canonical-v1 nodes", async () => {
-    await createStore();
-    await seedNode(H1, 0, true, 2);
-    const result = await runUpdate({ requestId: "canonical", changes: { [H1]: 1 } });
-    expect(result.status).toBe(200);
-    expect(await aggregate(H1)).toBe(1);
+  test("lost response replay does not apply the delta twice", async () => {
+    await setup(); await seed(H1);
+    const canonical = await canonicalizeRootRefsUpdate({ requestId: "lost", changes: { [H1]: 1 } });
+    await executeRootRefsUpdate({ db, bucket, appId: APP, spaceId: SPACE, canonical });
+    expect(await run("lost", { [H1]: 1 })).toEqual({ idempotent: true, revision: 1 });
+    expect(await aggregate()).toBe(1);
   });
-
-  test("negative domain balances are allowed while the aggregate stays valid", async () => {
-    await createStore();
-    await seedNode(H1, 2);
-    await seedNode(H2, 5);
-    // Establish a domain balance of +5 on H2, then release 7: aggregate 5-7 = -2? no — aggregate H2 is 5, release 7 → -2 < 0 rejected. So first grow the aggregate.
-    await runUpdate({ requestId: "grow", changes: { [H2]: 3 } }); // aggregate 8
-    const release = await runUpdate({ requestId: "release", changes: { [H2]: -7 } });
-    expect(release.status).toBe(200);
-    expect(await aggregate(H2)).toBe(1); // 8 - 7
-    const projection = await db!.prepare(
-      "SELECT ref_count FROM cas_root_domain_refs WHERE app_id = ? AND ref_domain = ? AND space_id = ? AND hash = ?",
-    ).bind(STACK, DOMAIN, TENANT, H2).first<{ ref_count: number }>();
-    expect(projection?.ref_count).toBe(-4); // domain balance went negative (3 - 7)
+  test("cutover bridges an old request to its original revision without fabricating events", async () => {
+    await setup(); await seed(H1, 2);
+    const canonical = await canonicalizeRootRefsUpdate({ requestId: "old", changes: { [H1]: 2 } });
+    await db.prepare("INSERT INTO cas_app_root_revisions (app_id,revision,checkpoint) VALUES (?,7,7)").bind(APP).run();
+    await db.prepare("INSERT INTO cas_app_root_requests VALUES (?,?,?,?,?,?)")
+      .bind(APP, SPACE, "old", canonical.payloadHash, 3, 100).run();
+    await db.prepare("INSERT INTO cas_app_root_cutover VALUES (1,'synthetic',200)").run();
+    expect(await run("old", { [H1]: 2 })).toEqual({ idempotent: true, revision: 3 });
+    await expect(run("old", { [H1]: 1 })).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+    expect(await count("cas_app_root_events")).toBe(0);
+    expect(await run("new", { [H1]: 1 })).toEqual({ idempotent: false, revision: 8 });
+    expect(await aggregate()).toBe(3);
+    expect(await count("cas_app_root_events")).toBe(1);
   });
-
-  test("revisions are monotonic per domain and independent across domains", async () => {
-    await createStore();
-    await seedNode(H1, 0);
-    await seedNode(H2, 0);
-    await db!.prepare(
-      "INSERT INTO cas_nodes (app_id, space_id, hash, content_size, content_type, lease_started_at, lease_expires_at, child_ref_count, root_ref_count) VALUES (?, 'tenant-2', ?, 10, 'text/plain', 1, 1, 0, 0)",
-    ).bind(STACK, H1).run();
-    await bucket!.put(appCanonicalNodeKey(STACK, "tenant-2", H1), new TextEncoder().encode("content"));
-
-    // tenant-1 then tenant-2 in the same domain: revisions 1, 2.
-    const a = await runUpdate({ requestId: "a", changes: { [H1]: 1 } });
-    const b = await runUpdate({ requestId: "b", changes: { [H1]: 1 }, spaceId: "tenant-2" });
-    expect(a.body.revision).toBe(1);
-    expect(b.body.revision).toBe(2);
-
-    // A different domain starts its own revision sequence.
-    const c = await runUpdate({ requestId: "c", changes: { [H2]: 1 }, refDomain: "asset" });
-    expect(c.body.revision).toBe(1);
+  test("missing/unready/negative nodes and projection drift fail closed", async () => {
+    await setup(); await seed(H1, 0, SPACE, false);
+    await expect(run("missing", { [H2]: 1 })).rejects.toMatchObject({ code: "NODE_NOT_FOUND" });
+    await expect(run("unready", { [H1]: 1 })).rejects.toMatchObject({ code: "NODE_NOT_READY" });
+    await expect(run("negative", { [H1]: -1 })).rejects.toMatchObject({ code: "NEGATIVE_AGGREGATE" });
+    await bucket.put(appCanonicalNodeKey(APP, SPACE, H1), "ready");
+    await db.prepare("UPDATE cas_nodes SET root_ref_count=1").run();
+    await expect(run("drift", { [H1]: 1 })).rejects.toMatchObject({ code: "ROOT_REF_BUSY" });
+    expect(await aggregate()).toBe(1);
+    expect(await count("cas_app_root_events")).toBe(0);
   });
-
-  test("validation never reads the audit event log", async () => {
-    await createStore();
-    await seedNode(H1, 1);
-    const queries: string[] = [];
-    const loggingDb = new Proxy(db!, {
-      get(target, prop, receiver) {
-        if (prop === "prepare") {
-          return (sql: string) => {
-            queries.push(sql);
-            return Reflect.get(target, prop, receiver).call(target, sql);
-          };
-        }
-        return Reflect.get(target, prop, receiver);
-      },
-    });
-    const canonical = await canonicalizeRootRefsUpdate({ requestId: "q1", changes: { [H1]: 1 }, refDomain: DOMAIN });
-    await executeDomainUpdate({
-      db: loggingDb,
-      bucket: bucket!,
-      appId: STACK,
-      spaceId: TENANT,
-      refDomain: DOMAIN,
-      canonical,
-    });
-    const reads = queries.filter((sql) => /^\s*SELECT/i.test(sql));
-    expect(reads.every((sql) => !sql.includes("cas_root_domain_events"))).toBe(true);
-    expect(reads.some((sql) => sql.includes("cas_nodes"))).toBe(true);
+  test("unmigrated legacy state blocks new writes", async () => {
+    await setup(); await seed(H1);
+    await db.prepare("INSERT INTO cas_root_domain_revisions VALUES (?, 'old', 1)").bind(APP).run();
+    await expect(run("blocked", { [H1]: 1 })).rejects.toThrow();
+    expect(await aggregate()).toBe(0);
   });
-});
-
-describe("retry policy", () => {
-  test("a revision-allocation conflict is retried with backoff and succeeds", async () => {
-    await createStore();
-    await seedNode(H1, 1);
-    let conflictInjected = false;
-    const wrappingDb = new Proxy(db!, {
-      get(target, prop, receiver) {
-        if (prop === "batch") {
-          return async (statements: unknown[]) => {
-            if (!conflictInjected) {
-              conflictInjected = true;
-              // Simulate the revision CAS losing the conflict WITHOUT the
-              // transaction committing: return 0 changes for the CAS
-              // statement; the whole batch aborts (real D1 atomicity).
-              return [{ meta: { changes: 0 } }, ...statements.slice(1).map(() => ({ meta: { changes: 1 } }))];
-            }
-            return Reflect.get(target, prop, receiver).call(target, statements);
-          };
-        }
-        return Reflect.get(target, prop, receiver);
-      },
-    });
-    const canonical = await canonicalizeRootRefsUpdate({ requestId: "conflict", changes: { [H1]: 1 }, refDomain: DOMAIN });
-    const result = await withDomainRetry(
-      () => executeDomainUpdate({
-        db: wrappingDb,
-        bucket: bucket!,
-        appId: STACK,
-        spaceId: TENANT,
-        refDomain: DOMAIN,
-        canonical,
-      }),
-      { maxAttempts: 3, sleep: async () => undefined },
-    );
-    expect(result).toEqual({ idempotent: false, revision: 1 });
-    expect(await aggregate(H1)).toBe(2);
+  test("data pages bind revision and scope, and reject stale cursors", async () => {
+    await setup(); await seed(H1); await seed(H2);
+    await run("r", { [H1]: 1, [H2]: 2 });
+    const first = await listRootRefs({ db, appId: APP, spaceId: SPACE, limit: 1, cursor: "" });
+    expect(first).toMatchObject({ revision: 1, items: [{ hash: H1, refCount: 1 }] });
+    expect(first.nextCursor).toBeTypeOf("string");
+    expect(await listRootRefs({ db, appId: APP, spaceId: SPACE, limit: 1, cursor: first.nextCursor! }))
+      .toMatchObject({ items: [{ hash: H2, refCount: 2 }], nextCursor: null });
+    await run("change", { [H1]: 1 });
+    await expect(listRootRefs({ db, appId: APP, spaceId: SPACE, limit: 1, cursor: first.nextCursor! }))
+      .rejects.toMatchObject({ code: "ROOT_REF_SNAPSHOT_CHANGED" });
   });
-
-  test("a transient batch failure is retried and then succeeds", async () => {
-    await createStore();
-    await seedNode(H1, 1);
-    let failures = 1;
-    const flakyDb = new Proxy(db!, {
-      get(target, prop, receiver) {
-        if (prop === "batch") {
-          return async (statements: unknown[]) => {
-            if (failures > 0) {
-              failures -= 1;
-              throw new Error("transient D1 failure");
-            }
-            return Reflect.get(target, prop, receiver).call(target, statements);
-          };
-        }
-        return Reflect.get(target, prop, receiver);
-      },
-    });
-    const canonical = await canonicalizeRootRefsUpdate({ requestId: "flaky", changes: { [H1]: 1 }, refDomain: DOMAIN });
-    const result = await withDomainRetry(
-      () => executeDomainUpdate({
-        db: flakyDb,
-        bucket: bucket!,
-        appId: STACK,
-        spaceId: TENANT,
-        refDomain: DOMAIN,
-        canonical,
-      }),
-      { maxAttempts: 3, sleep: async () => undefined },
-    );
-    expect(result.revision).toBe(1);
-  });
-
-  test("bounded backoff exhaustion fails without partial mutation", async () => {
-    await createStore();
-    await seedNode(H1, 1);
-    const brokenDb = new Proxy(db!, {
-      get(target, prop, receiver) {
-        if (prop === "batch") {
-          return async () => {
-            throw new Error("D1 unavailable");
-          };
-        }
-        return Reflect.get(target, prop, receiver);
-      },
-    });
-    const canonical = await canonicalizeRootRefsUpdate({ requestId: "exhaust", changes: { [H1]: 1 }, refDomain: DOMAIN });
-    let attempts = 0;
-    await expect(withDomainRetry(
-      () => {
-        attempts += 1;
-        return executeDomainUpdate({
-          db: brokenDb,
-          bucket: bucket!,
-          appId: STACK,
-          spaceId: TENANT,
-          refDomain: DOMAIN,
-          canonical,
-        });
-      },
-      { maxAttempts: 3, sleep: async () => undefined },
-    )).rejects.toThrow(/D1 unavailable/);
-    expect(attempts).toBe(3);
-    expect(await aggregate(H1)).toBe(1); // untouched
-    expect(await eventCount()).toBe(0);
-  });
-
-  test("duplicate JSON keys are rejected at parse", () => {
-    const text = `{"requestId":"r","changes":{"${H1}":1,"${H1}":2}}`;
-    expect(() => parseRootRefsBody(text)).toThrow(RootRefsValidationError);
+  test("duplicate keys and invalid deltas are rejected", async () => {
+    expect(() => parseRootRefsBody(`{"requestId":"x","changes":{"${H1}":1,"${H1}":2}}`)).toThrow(RootRefsValidationError);
+    for (const changes of [{}, { [H1]: 0 }, { [H1]: 2_000_000 }]) {
+      await expect(canonicalizeRootRefsUpdate({ requestId: "x", changes })).rejects.toThrow(RootRefsValidationError);
+    }
   });
 });

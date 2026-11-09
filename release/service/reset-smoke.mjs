@@ -77,6 +77,11 @@ const CONTROL_TABLES = [
 ];
 
 const TENANT_TABLES = [
+  "cas_app_root_requests",
+  "cas_app_root_events",
+  "cas_app_root_refs",
+  "cas_app_root_revisions",
+  "cas_app_root_cutover",
   "cas_usage_projection_migrations",
   "cas_space_usage",
   "cas_edges",
@@ -110,6 +115,10 @@ export const SCOPED_INVENTORY_QUERIES = {
      UNION ALL SELECT 'cas_control_audit_events', app_id FROM cas_control_audit_events WHERE app_id IS NOT NULL GROUP BY app_id`,
   ],
   data: [
+    `SELECT 'cas_app_root_refs' AS source, app_id AS stack_id, space_id AS tenant_id FROM cas_app_root_refs GROUP BY app_id, space_id
+     UNION ALL SELECT 'cas_app_root_events', app_id, space_id FROM cas_app_root_events GROUP BY app_id, space_id
+     UNION ALL SELECT 'cas_app_root_requests', app_id, space_id FROM cas_app_root_requests GROUP BY app_id, space_id
+     UNION ALL SELECT 'cas_app_root_revisions', app_id, NULL FROM cas_app_root_revisions GROUP BY app_id`,
     `SELECT 'cas_nodes' AS source, app_id AS stack_id, space_id AS tenant_id FROM cas_nodes GROUP BY app_id, space_id
      UNION ALL SELECT 'cas_edges', app_id, space_id FROM cas_edges GROUP BY app_id, space_id
      UNION ALL SELECT 'cas_root_ref_requests', app_id, space_id FROM cas_root_ref_requests GROUP BY app_id, space_id

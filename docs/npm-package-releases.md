@@ -56,7 +56,11 @@ runs the public IndexedDB browser quickstart in Chromium, Firefox, and WebKit.
 It also compares generated declarations with the committed API baseline.
 Before hashing or retaining an archive, it normalizes the advisory gzip OS
 header to the Linux publication runner value so Windows and Linux produce
-byte-identical tarballs.
+byte-identical tarballs. It also requires the root `LICENSE` to use the LF
+checkout bytes mandated by `.gitattributes` before building or packing.
+An older checkout can retain CRLF bytes after attributes change; matching its
+own packed license is not sufficient proof of cross-platform reproducibility.
+Use a checkout matching those attributes when refreshing release evidence.
 
 Tarballs are temporary. Never commit or manually patch them.
 

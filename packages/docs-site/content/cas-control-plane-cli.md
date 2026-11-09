@@ -59,7 +59,7 @@ Alternatively, skip MCP entirely and have DSH run plain shell commands
 
 | Group | Commands |
 | --- | --- |
-| Read (`control:read`) | `account`, `apps list/get`, `app-members list`, `app-oauth-issuer get`, `app-ref-domains list`, `app-audit control/root-domain-refs/root-domain-events` |
+| Read (`control:read`) | `account`, `apps list/get`, `app-members list`, `app-oauth-issuer get`, `app-audit control/root-refs/root-events` |
 | Write (`control:write`) | `apps create` (idempotency key), `apps update` (ETag) |
 | Security (`control:security`) | `app-members invite/remove/invitations/revoke-invitation`, `app-oauth-issuer inspect/activate` |
 

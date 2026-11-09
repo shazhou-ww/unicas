@@ -17,6 +17,11 @@ custom logs. The assets-only `unicas-site` and `unicas-docs` Workers remain
 excluded. Built-in Workers metrics remain available independently of Workers
 Logs.
 
+The manual tracing implementation retains the OpenTelemetry 2.x SDK/resources,
+0.222.x exporter, and 1.9.x API compatibility family. Upgrade these together:
+the 2.x SDK excludes API 1.10, while the 3.x resources/exporter require it.
+Dependency maintenance does not enable production sampling or exports.
+
 Never persist or export bearer capabilities, cookies, CSRF tokens, OAuth codes
 or state, private keys, client secrets, presigned upload URLs, request bodies,
 node/file content, raw exceptions, storage keys, or SQL bindings.
@@ -154,15 +159,17 @@ span names and attributes can pass the repository allowlist:
 | `unicas.fetch` | Reviewed provider, UniCAS API, or presigned-upload fetch | peer enum, status class, outcome |
 | `unicas.d1` | Allowlisted repository timing operation | operation, rows read/written, outcome |
 | `unicas.r2` | Allowlisted object operation | operation, outcome |
-| `unicas.do.dispatch` | Space or Root Ref domain actor dispatch | actor kind, outcome |
+| `unicas.do.dispatch` | Space or App-scoped Root Ref actor dispatch | actor kind, outcome |
 
 `unicas.outcome` is one of `ok`, `rejected`, or `failed`. Fetch peers are
 `issuer_metadata`, `jwks`, `oauth_token`, `unicas_api`, or `r2_upload`.
-Durable Object kinds are `space` or `root_ref_domain`. Unknown span names,
-attribute names, unsafe strings, and unbounded values are dropped.
+Durable Object kinds are `space` or `root_ref_domain`. The latter is a retained
+historical telemetry label for the App-scoped Root Ref actor, not a business
+namespace or an authorization, audit-stream, or idempotency dimension.
+Unknown span names, attribute names, unsafe strings, and unbounded values are dropped.
 
 No span contains a URL, query string, OAuth value, header, body, App, Space,
-Principal, Account, issuer, capability `jti`, hash, Root Ref domain, object
+Principal, Account, issuer, capability `jti`, hash, legacy namespace, object
 key, path, filename, SQL, binding, error message, stack trace, or content.
 Export buffers at most 16 spans per invocation. The vocabulary and value sizes
 are fixed; a maximum-shape regression test sends that structure through the
@@ -277,9 +284,8 @@ those records through authenticated control-plane surfaces:
 
 ```powershell
 unicas app-audit control <appId> --limit 50
-unicas app-ref-domains list <appId>
-unicas app-audit root-domain-refs <appId> <refDomain> [--space-id S] --limit 50
-unicas app-audit root-domain-events <appId> <refDomain> [--space-id S] --limit 50
+unicas app-audit root-refs <appId> [--space-id S] --limit 50
+unicas app-audit root-events <appId> [--space-id S] --limit 50
 ```
 
 Use returned cursors unchanged. The private `/_internal/audit/*` adapter RPCs

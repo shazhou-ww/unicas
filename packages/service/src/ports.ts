@@ -53,5 +53,5 @@ export interface ServicePlatform {
   readonly spaceDatabase: SqlDatabase;
   readonly blobs: BlobStore;
   readonly spaceActors: KeyedActorPort;
-  readonly refDomainActors: KeyedActorPort;
+  readonly rootRefActors: KeyedActorPort;
 }

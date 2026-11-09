@@ -198,12 +198,6 @@ export interface AppOAuthIssuerInspection {
   readonly keys: readonly { readonly kid: string; readonly algorithm: string }[];
 }
 
-export interface AppRefDomain {
-  readonly appId: AppId;
-  readonly refDomain: string;
-  readonly revision: number;
-}
-
 export interface AppControlAuditEvent {
   readonly eventId: string;
   readonly appId: AppId | null;
@@ -232,6 +226,7 @@ export interface SpaceRootRefEvent {
   readonly revision: number;
   readonly spaceId: string;
   readonly requestId: string;
+  readonly payloadHash: string;
   readonly changes: CasRefChanges;
   readonly appliedAt: number;
 }

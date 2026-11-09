@@ -124,9 +124,9 @@ class MemoryCas implements AppCasClient, HttpFetcher {
 
   async listRootRefs(
     spaceId: string,
-  ): Promise<{ refDomain: string; revision: number; items: []; nextCursor: null }> {
+  ): Promise<{ revision: number; items: []; nextCursor: null }> {
     assert.equal(spaceId, SPACE_ID);
-    return { refDomain: "docs", revision: this.rootRefUpdates.length, items: [], nextCursor: null };
+    return { revision: this.rootRefUpdates.length, items: [], nextCursor: null };
   }
 
   async usage(spaceId: string): Promise<CasUsage> {
@@ -198,7 +198,6 @@ const transport = createAppCasClient({
           version: 2,
           expiresAt: Math.floor(Date.now() / 1000) + 300,
           grants: [{ selector: selector.selector, permissions: [requirement.permission] }],
-          refDomain: "docs",
         },
       };
     },

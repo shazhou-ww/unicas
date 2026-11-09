@@ -27,8 +27,6 @@ minimumReleaseAgeExclude:
   - '@tanstack/virtual-core'
   - '@tanstack/vue-virtual'
   - silvermoon@0.3.0
-overrides:
-  '@jridgewell/sourcemap-codec': 1.5.5
 allowBuilds:
   esbuild: true
   workerd: true

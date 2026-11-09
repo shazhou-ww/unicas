@@ -20,26 +20,6 @@ export interface CapabilityProtectedHeader extends JWTHeaderParameters {
   readonly typ: typeof CapabilityTokenType;
 }
 
-export const REF_DOMAIN_MAX_LENGTH = 64;
-export const REF_DOMAIN_PATTERN = /^[a-z][a-z0-9]*(?::[a-z0-9]+)*$/;
-
-export function isReservedRefDomain(domain: string): boolean {
-  return domain === "_legacy" || domain.startsWith("_");
-}
-
-export function validateRefDomainClaim(value: unknown): string | null {
-  if (typeof value !== "string") return "refDomain must be a string";
-  if (value.length === 0) return "refDomain must not be empty";
-  if (value.length > REF_DOMAIN_MAX_LENGTH) {
-    return `refDomain must be at most ${REF_DOMAIN_MAX_LENGTH} characters`;
-  }
-  if (!REF_DOMAIN_PATTERN.test(value)) {
-    return "refDomain must be lowercase segments of letters/digits joined by ':'";
-  }
-  if (isReservedRefDomain(value)) return `refDomain '${value}' is reserved`;
-  return null;
-}
-
 export type CapabilityErrorCode =
   | "invalid_token"
   | "missing_token"

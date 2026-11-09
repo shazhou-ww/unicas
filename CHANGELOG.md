@@ -14,7 +14,7 @@ This changelog covers the unified release set: `@unicas/codec`,
   Spaces.
 - Replaced `getToken` with a metadata-aware capability provider, fixed
   credential classes, concurrent acquisition coalescing, expiry replacement,
-  Root Ref domain pinning, and bounded safe-read refresh after
+  and bounded safe-read refresh after
   `401 invalid_token`.
 - Updated blob and file factories to receive a shared App client and explicit
   Space while preserving workflow and browser-cache isolation.
@@ -26,6 +26,14 @@ This changelog covers the unified release set: `@unicas/codec`,
 - Removed `SpaceCasClient`, `SpaceCasClientConfig`,
   `SpaceCasNodeCacheKey`, and `createSpaceCasClient` without compatibility
   aliases.
+- Removed the Root Ref domain dimension from capability metadata, authorization,
+  responses and admin APIs/CLI/MCP. Balances now use App/Space/hash; revisions
+  are App-global and request replay is App/Space/requestId scoped.
+- Removed domain discovery and domain-specific admin routes without aliases.
+  Existing v2 tokens may temporarily carry ignored extra claims. Migration
+  requires fenced aggregate reconciliation, explicit request-collision checks,
+  a checkpoint and read-only legacy archive; see the
+  [migration guide](packages/docs-site/content/app-user-api/migration-root-refs.md).
 
 This entry describes an unreleased candidate. It does not authorize an npm tag,
 dist-tag change, GitHub Release, or publication.

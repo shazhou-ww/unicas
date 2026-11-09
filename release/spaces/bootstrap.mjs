@@ -15,7 +15,6 @@ import {
   spaceNodeReadPermission,
   spaceRootRefsReadPermission,
   spaceRootRefsUpdatePermission,
-  validateRefDomainClaim,
 } from "@unicas/space-protocol";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -43,9 +42,6 @@ export function readBootstrapConfig(mode, environment = process.env) {
   if (mode === "google") requiredNames.push("SPACES_BOOTSTRAP_GOOGLE_SUBJECT", "SPACES_BOOTSTRAP_KEY_FILE");
   const missing = requiredNames.filter((name) => !environment[name]);
   if (missing.length > 0) throw new Error(`Spaces bootstrap configuration is missing: ${missing.join(", ")}`);
-  const refDomain = environment.SPACES_BOOTSTRAP_REF_DOMAIN ?? (mode === "smoke" ? "spaces:smoke" : "spaces:files");
-  const refDomainError = validateRefDomainClaim(refDomain);
-  if (refDomainError) throw new Error(`SPACES_BOOTSTRAP_REF_DOMAIN: ${refDomainError}`);
   const spaceId = boundedText(environment.SPACES_BOOTSTRAP_SPACE_ID, "SPACES_BOOTSTRAP_SPACE_ID");
   const selector = parseSpaceSelector(spaceId);
   if (!selector || selector.kind !== "exact") {
@@ -60,7 +56,6 @@ export function readBootstrapConfig(mode, environment = process.env) {
     googleSubject: mode === "google"
       ? boundedText(environment.SPACES_BOOTSTRAP_GOOGLE_SUBJECT, "SPACES_BOOTSTRAP_GOOGLE_SUBJECT")
       : null,
-    refDomain,
     issuer: environment.SPACES_ISSUER ?? "https://spaces.unicas.work",
     audience: environment.SPACES_UNICAS_AUDIENCE,
     keyId: environment.SPACES_SIGNING_KID,
@@ -79,7 +74,6 @@ export function bootstrapStateQuery(config) {
     (SELECT display_name FROM spaces_principals WHERE principal_id = ${sql(config.principalId)}) AS display_name,
     (SELECT app_id FROM spaces_principal_spaces WHERE principal_id = ${sql(config.principalId)}) AS app_id,
     (SELECT space_id FROM spaces_principal_spaces WHERE principal_id = ${sql(config.principalId)}) AS space_id,
-    (SELECT ref_domain FROM spaces_principal_spaces WHERE principal_id = ${sql(config.principalId)}) AS ref_domain,
     (SELECT root_id FROM spaces_file_system_roots WHERE principal_id = ${sql(config.principalId)}) AS root_id,
     (SELECT COUNT(*) FROM spaces_external_identities WHERE principal_id = ${sql(config.principalId)}) AS identity_count,
     ${identityOwner} AS identity_owner,
@@ -89,7 +83,7 @@ export function bootstrapStateQuery(config) {
 export function bootstrapInsertSql(config, root, now) {
   const statements = [
     `INSERT INTO spaces_principals (principal_id, status, display_name, created_at, updated_at) VALUES (${sql(config.principalId)}, 'active', ${sql(config.displayName)}, ${now}, ${now});`,
-    `INSERT INTO spaces_principal_spaces (principal_id, app_id, space_id, ref_domain, created_at, updated_at) VALUES (${sql(config.principalId)}, ${sql(config.appId)}, ${sql(config.spaceId)}, ${sql(config.refDomain)}, ${now}, ${now});`,
+    `INSERT INTO spaces_principal_spaces (principal_id, app_id, space_id, created_at, updated_at) VALUES (${sql(config.principalId)}, ${sql(config.appId)}, ${sql(config.spaceId)}, ${now}, ${now});`,
   ];
   if (config.googleSubject !== null) {
     statements.push(`INSERT INTO spaces_external_identities (provider, provider_subject, principal_id, display_email, created_at, updated_at) VALUES ('google', ${sql(config.googleSubject)}, ${sql(config.principalId)}, NULL, ${now}, ${now});`);
@@ -121,7 +115,6 @@ export function classifyBootstrapState(config, row) {
     && row.display_name == null
     && row.app_id == null
     && row.space_id == null
-    && row.ref_domain == null
     && row.root_id == null
     && row.identity_owner == null
     && row.space_owner == null
@@ -135,7 +128,6 @@ export function classifyBootstrapState(config, row) {
     && row.display_name === config.displayName
     && row.app_id === config.appId
     && row.space_id === config.spaceId
-    && row.ref_domain === config.refDomain
     && rootMatches
     && identityMatches
     && row.space_owner === config.principalId) {
@@ -167,7 +159,6 @@ export async function bootstrapSpacesPrincipal(config, execute = executeD1) {
         spaceRootRefsUpdatePermission(),
       ],
     }],
-    refDomain: config.refDomain,
   })
     .setProtectedHeader({ alg: CapabilityAlgorithm, kid: config.keyId, typ: CapabilityTokenType })
     .setIssuer(config.issuer)
@@ -196,7 +187,6 @@ export async function bootstrapSpacesPrincipal(config, execute = executeD1) {
               spaceRootRefsUpdatePermission(),
             ],
           }],
-          refDomain: config.refDomain,
         },
       }),
     },

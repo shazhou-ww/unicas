@@ -2,7 +2,7 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { defineConfig, type UserConfig } from "vite";
-import type { UserConfig as VitestUserConfig } from "vitest/config";
+import type { InlineConfig } from "vitest/node";
 
 /**
  * The admin console is served under `/admin/` on the CAS service domain;
@@ -10,7 +10,7 @@ import type { UserConfig as VitestUserConfig } from "vitest/config";
  * Vite serves the SPA and proxies every other `/admin` path (API + OIDC) to
  * the local BFF Worker (see scripts/local).
  */
-const config: UserConfig & { test: VitestUserConfig["test"] } = {
+const config: UserConfig & { test: InlineConfig } = {
   base: "/admin/",
   plugins: [react(), tailwindcss()],
   resolve: {

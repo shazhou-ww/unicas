@@ -38,8 +38,8 @@ describe("cross-plane separation", () => {
       appAdminRoutes.app({ appId: "a" }),
       appAdminRoutes.usage({ appId: "a" }),
       appAdminRoutes.members({ appId: "a" }),
-      appAdminRoutes.rootDomainRefs({ appId: "a", refDomain: "doc" }),
-      appAdminRoutes.rootDomainEvents({ appId: "a", refDomain: "doc" }),
+      appAdminRoutes.rootRefs({ appId: "a" }),
+      appAdminRoutes.rootEvents({ appId: "a" }),
       appAdminRoutes.controlAuditEvents({ appId: "a" }),
     ];
     for (const path of adminPaths) {
