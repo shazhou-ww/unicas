@@ -119,7 +119,7 @@ export function createControlPlaneMcpWorker(
     },
   };
 
-  return new OAuthProvider<Env>({
+  const provider = new OAuthProvider<Env>({
     apiRoute: CONTROL_PLANE_MCP_PATH,
     apiHandler: mcpApiHandler,
     defaultHandler: createOAuthAuthorizationHandler({
@@ -155,5 +155,16 @@ export function createControlPlaneMcpWorker(
       resource_name: "UniCAS control plane",
     },
   });
+  return {
+    async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+      const url = new URL(request.url);
+      // Provider 1.x serves only resource-specific metadata; retain the root alias.
+      if (url.pathname === "/.well-known/oauth-protected-resource") {
+        url.pathname = "/.well-known/oauth-protected-resource/mcp";
+        request = new Request(url, request);
+      }
+      return provider.fetch(request, env, ctx);
+    },
+  };
 }
 export { mcpConfigFromEnv } from "./config.js";

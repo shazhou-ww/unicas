@@ -85,6 +85,21 @@ describe("production MCP OAuth discovery", () => {
   });
 
   test.each([
+    ["HEAD", 200],
+    ["OPTIONS", 204],
+    ["POST", 405],
+  ])("preserves metadata method handling for %s on both discovery paths", async (method, status) => {
+    for (const path of [
+      "/.well-known/oauth-protected-resource",
+      "/.well-known/oauth-protected-resource/mcp",
+    ]) {
+      const response = await provider.fetch(new Request(`${origin}${path}`, { method }), env, ctx);
+      expect(response.status).toBe(status);
+      expect(await response.text()).toBe("");
+    }
+  });
+
+  test.each([
     "https://dash.cloudflare.com/92c3c4fdcc84a1590555bccf4f111de2/one/access-controls/ai-controls/mcp-server/oauth-callback/unicas",
     "https://mcp.shazhou.work/servers-callback",
   ])("accepts DCR and exact authorization callback matching for %s", async redirectUri => {
