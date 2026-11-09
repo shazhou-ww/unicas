@@ -147,6 +147,36 @@ describe("release-gated workflow triggers", () => {
       "security-events": "write",
     });
   });
+
+  test("keeps CodeQL steps on one revision and groups their dependency updates", () => {
+    const actions = security.jobs.codeql.steps
+      .map(step => step.uses)
+      .filter(uses => uses?.startsWith("github/codeql-action/"));
+    expect(actions.map(uses => uses.split("@")[0]).sort()).toEqual([
+      "github/codeql-action/analyze",
+      "github/codeql-action/init",
+    ]);
+    expect(new Set(actions.map(uses => uses.split("@")[1])).size).toBe(1);
+    const dependabot = parseYaml(
+      readFileSync(join(ROOT, ".github", "dependabot.yml"), "utf8"),
+    );
+    const updates = dependabot.updates.find(
+      update => update["package-ecosystem"] === "github-actions",
+    );
+    expect(updates.groups.codeql.patterns).toEqual(["github/codeql-action/*"]);
+  });
+
+  test("keeps npm major upgrades out of minor and patch dependency groups", () => {
+    const dependabot = parseYaml(
+      readFileSync(join(ROOT, ".github", "dependabot.yml"), "utf8"),
+    );
+    const updates = dependabot.updates.find(
+      update => update["package-ecosystem"] === "npm",
+    );
+    for (const group of Object.values(updates.groups)) {
+      expect(group["update-types"]).toEqual(["minor", "patch"]);
+    }
+  });
 });
 
 describe("main pre-push validation", () => {

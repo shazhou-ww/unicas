@@ -11,10 +11,16 @@ updates:
     groups:
       production-dependencies:
         dependency-type: production
+        update-types:
+          - minor
+          - patch
         patterns:
           - "*"
       development-dependencies:
         dependency-type: development
+        update-types:
+          - minor
+          - patch
         patterns:
           - "*"
   - package-ecosystem: github-actions
@@ -25,3 +31,7 @@ updates:
       time: "03:30"
       timezone: Etc/UTC
     open-pull-requests-limit: 10
+    groups:
+      codeql:
+        patterns:
+          - "github/codeql-action/*"

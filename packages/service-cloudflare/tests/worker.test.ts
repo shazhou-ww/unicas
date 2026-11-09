@@ -162,7 +162,7 @@ describe("service-cloudflare public routing", () => {
     const splitEnv = {
       ...env,
       CAS_PUBLIC_ORIGIN: "https://api.example",
-      MCP_PUBLIC_ORIGIN: "https://api.example",
+      MCP_PUBLIC_ORIGIN: "https://console.example",
       ADMIN_PUBLIC_ORIGIN: "https://console.example",
       PUBLIC_ORIGIN: "https://legacy.example",
     } as Env;
@@ -173,9 +173,35 @@ describe("service-cloudflare public routing", () => {
     expect(consoleRoot.status).toBe(302);
     expect(consoleRoot.headers.get("Location")).toBe("https://console.example/admin/");
 
+    for (const [method, path] of [
+      ["GET", "/mcp"],
+      ["GET", "/.well-known/oauth-protected-resource"],
+      ["GET", "/.well-known/oauth-protected-resource/mcp"],
+      ["GET", "/.well-known/oauth-authorization-server"],
+      ["GET", "/oauth/authorize"],
+      ["GET", "/oauth/callback/google"],
+      ["GET", "/oauth/callback/microsoft"],
+      ["GET", "/oauth/callback/github"],
+      ["POST", "/oauth/authorize"],
+      ["POST", "/oauth/token"],
+      ["POST", "/oauth/register"],
+    ]) {
+      const response = await worker.fetch(
+        new Request(`https://console.example${path}`, { method }),
+        splitEnv,
+        ctx,
+      );
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe("mcp");
+      expect((await worker.fetch(
+        new Request(`https://api.example${path}`, { method }),
+        splitEnv,
+        ctx,
+      )).status).toBe(404);
+    }
+
     for (const url of [
       "https://console.example/health",
-      "https://console.example/mcp",
       "https://api.example/admin/me",
       "https://api.example/",
       "https://legacy.example/health",

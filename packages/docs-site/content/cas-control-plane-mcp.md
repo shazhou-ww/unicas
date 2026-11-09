@@ -4,7 +4,7 @@ The `@unicas/service-cloudflare` Worker exposes the UniCAS control plane to
 GitHub Copilot and other remote MCP clients at:
 
 ```text
-https://api.unicas.work/mcp
+https://console.unicas.work/mcp
 ```
 
 The unified Worker accepts an exact allowlist of `/mcp`, OAuth discovery,
@@ -22,7 +22,7 @@ No API key or OAuth client secret belongs in MCP configuration:
   "servers": {
     "unicas-control-plane": {
       "type": "http",
-      "url": "https://api.unicas.work/mcp"
+      "url": "https://console.unicas.work/mcp"
     }
   }
 }
@@ -32,6 +32,36 @@ On first use, the client discovers UniCAS OAuth, offers the configured Google,
 personal Microsoft, and GitHub methods, and shows the UniCAS consent page.
 The resulting access and refresh tokens are UniCAS tokens. Provider tokens are
 discarded after identity verification and are never accepted by `/mcp`.
+The OAuth provider supports only authorization-code responses with S256 PKCE;
+implicit flow and plain PKCE are not supported. Provider 1.2 enforces this
+without the removed `allowImplicitFlow` and `allowPlainPKCE` options.
+
+## Cloudflare MCP Portal
+
+Register `https://console.unicas.work/mcp` with OAuth authentication. Keep
+`MCP_PUBLIC_ORIGIN` on the same origin: the Worker rejects wrong-host MCP and
+OAuth requests before discovery or registration.
+
+An unauthenticated MCP request returns `401` with `WWW-Authenticate` pointing
+to `https://console.unicas.work/.well-known/oauth-protected-resource/mcp`.
+Both that path and `/.well-known/oauth-protected-resource` publish the same
+resource and authorization server. Authorization server discovery at
+`/.well-known/oauth-authorization-server` advertises `/oauth/authorize`,
+`/oauth/token`, and the dynamic client registration endpoint `/oauth/register`,
+all on the console origin.
+
+Automatic/DCR administrator registration uses
+`https://dash.cloudflare.com/<account-tag>/one/access-controls/ai-controls/mcp-server/oauth-callback/<server-id>`.
+With per-user OAuth enabled, the user callback is
+`https://<portal-hostname>/servers-callback`. Administrator OAuth enables
+catalog synchronization; it does not replace each user's tool-call OAuth.
+These are MCP client callbacks, distinct from the identity-provider callbacks
+configured below. Client authorization must exactly match a registered URI.
+
+Before rollout, verify discovery is JSON rather than an Access login page,
+HTML error, or redirect. A Cloudflare edge denial does not establish an OAuth
+application failure: inspect the specific request's rule and Ray ID without
+disabling security controls or retrying a response that forbids retries.
 
 ## Authorization scopes
 
@@ -170,7 +200,7 @@ CAS_AUDIT_READER_KEY        shared key for the private audit-reader RPC
 Variables (non-secret; `OAUTH_GOOGLE_CLIENT_ID` is a var, not a secret):
 
 ```text
-MCP_PUBLIC_ORIGIN=https://api.unicas.work
+MCP_PUBLIC_ORIGIN=https://console.unicas.work
 MCP_MUTATIONS_ENABLED=true
 MCP_ALLOWED_ORIGIN_HOSTNAMES=
 OIDC_ISSUER=...                 optional, defaults to Google
@@ -181,8 +211,8 @@ OAUTH_GITHUB_CLIENT_ID=...      optional GitHub provider
 
 Enable optional providers with their matching `OAUTH_MICROSOFT_CLIENT_SECRET`
 and `OAUTH_GITHUB_CLIENT_SECRET` Worker secrets. Register the fixed MCP callback
-URLs `/oauth/google/callback`, `/oauth/microsoft/callback`, and
-`/oauth/github/callback` on `MCP_PUBLIC_ORIGIN`, alongside the corresponding
+URLs `/oauth/callback/google`, `/oauth/callback/microsoft`, and
+`/oauth/callback/github` on `MCP_PUBLIC_ORIGIN`, alongside the corresponding
 Console callbacks. Keep the same Microsoft application ID across both surfaces
 because Microsoft `sub` is pairwise. Configure exact GitHub callback URLs and
 disable unnecessary wildcard matching. Microsoft invitation email verification
@@ -232,8 +262,8 @@ Account and presses Enter.
 
 1. Create the dedicated production OAuth KV namespace and replace its binding ID.
 2. Register `https://console.unicas.work/admin/auth/callback/{provider}` and
-  `https://api.unicas.work/oauth/callback/{provider}` for each configured
-  provider before enabling split-origin administrator or MCP login.
+  `https://console.unicas.work/oauth/callback/{provider}` for each configured
+  provider before enabling administrator or MCP login.
 3. Set Worker secrets and deploy `@unicas/service-cloudflare` with mutations disabled.
 4. Validate OAuth discovery and read tools from GitHub Copilot.
 5. Observe authorization failures, scope/member denials, D1/KV errors, and audit
