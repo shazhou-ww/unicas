@@ -24,7 +24,7 @@
     "clean": "rimraf --glob dist \"*.tsbuildinfo\""
   },
   "dependencies": {
-    "jose": "^6.2.14"
+    "jose": "^6.2.17"
   },
   "devDependencies": {
     "typescript": "^5.9.0",
