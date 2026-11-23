@@ -18,8 +18,8 @@
     "@unicas/space-client": "workspace:*",
     "@unicas/space-file-client": "workspace:*",
     "@unicas/space-protocol": "workspace:*",
-    "jose": "^6.2.14",
-    "lucide-react": "^1.64.0",
+    "jose": "^6.2.18",
+    "lucide-react": "^1.76.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },

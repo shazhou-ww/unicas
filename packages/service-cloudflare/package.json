@@ -32,14 +32,14 @@
     "@unicas/observability": "workspace:*",
     "@unicas/service": "workspace:*",
     "@unicas/space-protocol": "workspace:*",
-    "agents": "0.32.0",
+    "agents": "0.33.0",
     "aws4fetch": "^1.0.20",
-    "jose": "^6.2.14",
+    "jose": "^6.2.18",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261030.1",
-    "jose": "^6.2.14",
+    "jose": "^6.2.18",
     "miniflare": "5.20260811.1-alpha",
     "typescript": "^5.9.0",
     "vitest": "^5.0.5",
